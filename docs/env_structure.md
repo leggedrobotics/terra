@@ -20,19 +20,14 @@ It takes as input the agent actions, and outputs the updated state of the action
 ## Maps
 The environment includes multiple maps:
 - the target map
-    - immutable height map used as goal
+    - immutable height map used as goal (-X for did, +1 for dumpable tile)
     - type: (NxM) int32 tensor
 - the action map
     - mutable height map used in the RL loop
     - type: (NxM) int32 tensor
-- the dumpable area mask map
-    - immutable map indicating if the robot can or can't dump on a given tile
-    - type: (NxM) int32 tensor (only 0 and 1 allowed)
 - the traversability mask map
     - mutable map to indicate if the robot can or can't traverse a given tile
     - type: (NxM) int32 tensor (only 0 and 1 allowed)
-- the target dumpable area mask map (optional)
-    - immutable map indicating if the robot can or can't leave the dumped dirt at the end of the episode
 
 The maps are rectangular 2D maps. The side length is ranging from 8 to 128.
 The (0, 0) coordinate is at the top left.
@@ -45,26 +40,54 @@ In the mask maps, 1 means dumpable/traversable.
 
 ## Agent
 The agent has fixed properties as:
-- base dimensions (in number of tiles)
+- X base dimension (in number of tiles)
+- Y base dimension (in number of tiles)
 - arm length (in number of tiles)
     - determines which tiles are reachable
 
 Regulating the robot's dimensions with respect to the tile size in the map, will have the effect of scaling up/down the granularity of the map. This way we can go from one map tile being of the same size as the robot's shovel, to one tile being e.g. 5x the shovel.
 
 ## Agent State
+We define two types of agents:
+- wheeled
+- tracked
+
+The state space of the agents is the same, but their action space differs.
+
 The state of the agent is defined as:
 - (X, Y) of the geometric center of the base
 - angle of the base (4 discrete values)
-- angle of the cabin (8 discrete values values)
+- angle of the cabin ([2X_base + 2Y_base + 4*(2*E -1)] discrete values)
+    - where E>=1 is the length of the arm
+
+## Observation
+The system is fully observable, so the observation is the current state of the maps and the agent state.
+
+Alternative observations (as first person view), will be implemented as a wrapper around the environment, allowing a case-by-case use.
 
 ## Actions
-The agent actions are defined as:
+The *wheeled* agent actions are defined as:
+- base forward
+- base backward
+- rotate base clockwise + forward
+- rotate base clockwise + backward
+- rotate base anti-clockwise + forward
+- rotate base anti-clockwise + backward
+- rotate cabin clockwise
+- rotate cabin anti-clockwise
+- extend arm
+- retract arm
+- do (dig if empty, dump if full)
+
+The *tracked* agent actions are defined as:
 - base forward
 - base backward
 - rotate base clockwise
 - rotate base anti-clockwise
 - rotate cabin clockwise
 - rotate cabin anti-clockwise
+- extend arm
+- retract arm
 - do (dig if empty, dump if full)
 
 ## Rewards
@@ -80,7 +103,6 @@ Negative rewards are given for:
 - traversing a tile forbidden by the traversability map
 - moving the base on an unaccessible tile (any tile that is not at 0 height level)
 - dumping in a digged tile (?)
-- visiting the same state visited before (in terms of map & agent combined state) (?)
 
 Positive rewards are given for:
 - a dig action in one of the right tiles
