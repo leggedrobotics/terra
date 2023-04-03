@@ -59,6 +59,8 @@ The state of the agent is defined as:
 - angle of the base (4 discrete values)
 - angle of the cabin ([2X_base + 2Y_base + 4*(2*E -1)] discrete values)
     - where E>=1 is the length of the arm
+- extension of the arm
+- loaded (collected dirt and not deposited it yet, or not)
 
 ## Observation
 The system is fully observable, so the observation is the current state of the maps and the agent state.
@@ -144,4 +146,10 @@ This model needs to use the same logic implemented in the Terra training environ
 # Implementation
 Terra will be GPU-accelerated and based on Pytorch 2.
 
-TODO
+A few points on the implementation:
+1. Terra follows a functional programming style: no state is retained but every time a change of state happens, the state is recreated.
+2. The environment has a frontend and a backend. The frontend exposes an API easy to use from the agent policy side, whereas the backend converts every datatype to tensors and takes care of parallelizing the computation.
+
+## Notes on JUX
+1. Conversion from/to the Lux interface with the functions `from_lux` `to_lux`.
+
