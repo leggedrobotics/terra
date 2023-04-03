@@ -27,3 +27,12 @@ class AgentFrontend:
 
 class StateFrontend:
     pass
+
+class ActionFrontend:
+    pass
+
+class WheeledActionFrontend(ActionFrontend):
+    pass
+
+class TrackedActionFrontend(ActionFrontend):
+    pass
