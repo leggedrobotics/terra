@@ -3,6 +3,7 @@ from typing import NamedTuple
 from config import EnvConfig, BufferConfig
 from map import GridWorld
 from agent import Agent
+from frontend import StateFrontend
 
 class State(NamedTuple):
     """
@@ -12,11 +13,16 @@ class State(NamedTuple):
     env_cfg: EnvConfig
     seed: torch.int32
 
-    target_map: GridWorld
-    action_map: GridWorld
-    traversability_mask_map: GridWorld
+    world: GridWorld
     agent: Agent
 
     @classmethod
     def new(cls, seed: int, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "State":
+        pass
+
+    @classmethod
+    def from_frontend(cls, state_frontend: StateFrontend, buf_cfg: BufferConfig = BufferConfig()) -> "State":
+        pass
+
+    def to_frontend(self) -> StateFrontend:
         pass
