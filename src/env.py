@@ -63,7 +63,7 @@ class TerraEnvBatch:
         self.terra_env = TerraEnv(env_cfg, buf_cfg)
 
     # TODO JIT
-    def reset(self, seeds: torch.Tensor) -> Tuple[State, Tuple[Dict, int, bool, Dict]]:
+    def reset(self, seeds: torch.Tensor) -> State:
         pass
 
     # TODO JIT
