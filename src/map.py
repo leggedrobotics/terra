@@ -6,6 +6,7 @@ from config import BufferConfig, EnvConfig
 
 class GridMap(NamedTuple):
     dims: torch.Tensor
+    map: torch.Tensor
 
     @property
     def width(self) -> int:
