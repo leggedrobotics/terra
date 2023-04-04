@@ -1,4 +1,5 @@
-from env import TerraEnv
+import torch
+from src.env import TerraEnv
 from typing import Tuple, Generator, Dict
 
 def load_replay(replay: str) -> Tuple[TerraEnv, Generator[Dict, None, None]]:

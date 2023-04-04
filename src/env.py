@@ -1,7 +1,7 @@
 import torch
 from typing import Tuple, Dict
-from config import EnvConfig, BufferConfig
-from state import State
+from src.config import EnvConfig, BufferConfig
+from src.state import State
 
 from frontend import TerraEnvFrontend
 

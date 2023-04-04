@@ -1,18 +1,18 @@
 import torch
 from enum import IntEnum
 from typing import NamedTuple, List, Tuple
-from frontend import WheeledActionFrontend, TrackedActionFrontend, ActionFrontend
+from src.frontend import WheeledActionFrontend, TrackedActionFrontend, ActionFrontend
 
-class ActionType(IntEnum):
-    """
-    Base class for actions.
-    """
+def tree_map_repeat(tensor, capacity):
+    return torch.repeat_interleave(tensor.unsqueeze(0), capacity, dim=0)
 
+ActionType = IntEnum
 
 class WheeledActionType(ActionType):
     """
     Wheeled robot specific actions.
     """
+    DO_NOTHING = -1
     FORWARD = 0
     BACKWARD = 1
     CLOCK_FORWARD = 2
@@ -30,6 +30,7 @@ class TrackedActionType(ActionType):
     """
     Tracked robot specific actions.
     """
+    DO_NOTHING = -1
     FORWARD = 0
     BACKWARD = 1
     CLOCK = 2
@@ -40,17 +41,20 @@ class TrackedActionType(ActionType):
     RETRACT_ARM = 7
     DO = 8
 
-
-class Action(NamedTuple):
-    pass
-    
+Action = NamedTuple
 
 class WheeledAction(Action):
-    action: torch.Tensor
+    action: torch.Tensor = torch.tensor([WheeledActionType.DO_NOTHING], dtype=torch.int)
 
     @classmethod
-    def new(cls, action_type: WheeledActionType) -> "WheeledAction":
-        pass
+    def new(cls, agent_type: WheeledActionType) -> "WheeledAction":
+        return WheeledAction(
+            action=torch.tensor(agent_type)
+        )
+
+    @classmethod
+    def do_nothing(cls):
+        return cls.new(WheeledActionType.DO_NOTHING)
 
     @classmethod
     def forward(cls):
@@ -105,11 +109,17 @@ class WheeledAction(Action):
 
 
 class TrackedAction(Action):
-    action: torch.Tensor
+    action: torch.Tensor = torch.tensor([TrackedActionType.DO_NOTHING], dtype=torch.int)
 
     @classmethod
-    def new(cls, action_type: TrackedActionType) -> "TrackedAction":
-        pass
+    def new(cls, action: TrackedActionType) -> "TrackedAction":
+        return TrackedAction(
+            action=torch.tensor(action)
+        )
+
+    @classmethod
+    def do_nothing(cls):
+        return cls.new(TrackedActionType.DO_NOTHING)
 
     @classmethod
     def forward(cls):
@@ -160,13 +170,26 @@ class ActionQueue(NamedTuple):
     Defines a FIFO queue of actions in an attribute-first fashion.
     """
     data: Action
-    front: torch.Tensor
-    rear: torch.Tensor
-    count: torch.Tensor
+    front: torch.Tensor = torch.zeros((1,), dtype=torch.int)
+    rear: torch.Tensor = torch.zeros((1,), dtype=torch.int)
+    count: torch.Tensor = torch.zeros((1,), dtype=torch.int)
 
     @staticmethod
-    def empty(capacity: int) -> "ActionQueue":
-        pass
+    def empty(capacity: int, agent_type: str) -> "ActionQueue":
+
+        # TODO make this more elegant
+        
+        # TODO check that the following is actually equivalent to:
+        """
+        data = jax.tree_map(lambda x: x[None].repeat(capacity), UnitAction.do_nothing())
+        """
+
+        if agent_type == "WHEELED":
+            data = tree_map_repeat(torch.tensor(WheeledAction.do_nothing()), capacity)
+        elif agent_type == "TRACKED":
+            data = tree_map_repeat(torch.tensor(TrackedAction.do_nothing()), capacity)
+
+        return ActionQueue(data)
 
     @classmethod
     def from_frontend(cls, actions: List[ActionFrontend], max_queue_size: int) -> "ActionQueue":

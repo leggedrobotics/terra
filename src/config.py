@@ -26,6 +26,9 @@ class EnvConfig(NamedTuple):
     action_map: MapConfig
     traversability_mask_map: MapConfig
 
+    agent_type: str
+    action_queue_capacity: int
+
 
 class BufferConfig(NamedTuple):
     pass
