@@ -5,16 +5,15 @@ from config import BufferConfig, EnvConfig
 
 
 class GridMap(NamedTuple):
-    dims: torch.Tensor
     map: torch.Tensor
 
     @property
     def width(self) -> int:
-        return self.dims[0]
+        pass
     
     @property
     def height(self) -> int:
-        return self.dims[1]
+        pass
     
     @staticmethod
     def new(dims: torch.Tensor) -> "GridMap":
