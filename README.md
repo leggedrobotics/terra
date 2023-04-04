@@ -6,5 +6,5 @@ Terra is designed with a grid world environment that abstracts away the complexi
 ## Tests
 The tests have to be run using the module option, for example:
 ~~~
-python3 -m test.test_agent
+python3 -m tests.test_agent
 ~~~
