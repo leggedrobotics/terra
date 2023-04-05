@@ -15,12 +15,15 @@ class State(NamedTuple):
     world: GridWorld
     agent: Agent
 
+    env_steps: int
+
     @classmethod
     def new(cls, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "State":
         world = GridWorld.new(env_cfg, buf_cfg)
         agent = Agent.new(env_cfg)
 
-        # TODO: in JUX they do this (their Unit is out Agent):
+        # TODO: in JUX they do this to expand to the max number of units and to 2 players 
+        #   (their Unit is out Agent), I don't think we need that as we'll always have 1 agent:
         """
         empty_unit = Unit.empty(env_cfg)
         empty_unit = jax.tree_map(lambda x: x if isinstance(x, Array) else np.array(x), empty_unit)
@@ -30,7 +33,8 @@ class State(NamedTuple):
         return State(
             env_cfg=env_cfg,
             world=world,
-            agent=agent
+            agent=agent,
+            env_steps=0  # in JUX: State.__annotations__["env_steps"](0)
         )
 
     @classmethod
