@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import gymnasium as gym
+import time
+import numpy as np
 
-torch.autograd.set_detect_anomaly(True)
-
+# torch.autograd.set_detect_anomaly(True)
+torch.manual_seed(30)
 
 class Line(gym.Env):
     def __init__(self, batch_size: int, device: str, reward_l: int = 5) -> None:
@@ -38,33 +40,45 @@ class Line(gym.Env):
     def close(self):
         pass
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.01):
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
 class Policy(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, device: str) -> None:
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(1, 8),
+            layer_init(nn.Linear(1, 8)),
             nn.ReLU(),
-            nn.Linear(8, 8),
+            layer_init(nn.Linear(8, 8)),
             nn.ReLU(),
-            nn.Linear(8, 2),
+            layer_init(nn.Linear(8, 2)),
             nn.Softmax(dim=-1)
-        )
+        ).to(device=device)
     
     def forward(self, input):
         return self.net(input)
 
 
 if __name__ == "__main__":
-    batch_size = 10
-    epochs = 3
+    batch_size = 3000000
+    epochs = 10
     max_rollout = 50
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
     device = "cpu"
+    # device = "cuda"
+    print(f"Using {device}")
+    print(f"{batch_size=}")
+    print(f"{epochs=}")
+    print(f"{max_rollout=}")
 
     env = Line(batch_size, device)
-    policy = Policy()
+    policy = Policy(device)
 
     optimizer = torch.optim.SGD(policy.parameters(), 0.001)
+
+    s = time.time()
 
     for i in range(epochs):
         cum_rewards = 0
@@ -97,7 +111,7 @@ if __name__ == "__main__":
 
             probs = probs / torch.where(probs == 0, 1, probs)
 
-            u = probs @ torch.tensor([-1, 1], dtype=torch.float)
+            u = probs @ torch.tensor([-1, 1], dtype=torch.float, device=device)
 
             u = u.unsqueeze(-1)
 
@@ -107,8 +121,12 @@ if __name__ == "__main__":
             if dones.sum().item() == batch_size:
                 break
 
-        env.render()
+        # env.render()
 
         optimizer.zero_grad()
         cum_rewards.backward()
         optimizer.step()
+
+    e = time.time()
+
+    print(f"Duration = {e - s} seconds.")
