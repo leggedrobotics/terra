@@ -1,3 +1,27 @@
+"""
+Benchmark:
+
+batch 100
+CPU 0.6
+GPU 1.1
+
+batch 10k
+CPU 0.7
+GPU 1.1
+
+batch 100k
+CPU 1.0
+GPU 1.1
+
+batch 1M
+CPU 5.4
+GPU 1.1
+
+batch 10M
+CPU 84
+GPU 1.5
+"""
+
 import os
 import jax
 import jax.numpy as jnp
