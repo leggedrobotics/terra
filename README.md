@@ -8,3 +8,6 @@ The tests have to be run using the module option, for example:
 ~~~
 python3 -m tests.test_agent
 ~~~
+
+## Installation
+To install the required JAX dependencies, follow [this link](https://github.com/google/jax#pip-installation-gpu-cuda-installed-via-pip-easier).

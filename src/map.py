@@ -1,97 +1,46 @@
-import torch
+import jax
+import jax.numpy as jnp
+from jax import Array
 from typing import NamedTuple, Type
-from src.frontend import GridMapFrontend, GridWorldFrontend, FrontendConfig, AgentFrontend
 from src.config import BufferConfig, EnvConfig
+from src.utils import IntMap, INTMAP_MAX
 
 
 class GridMap(NamedTuple):
-    map: torch.Tensor
+    map: IntMap
 
     @property
     def width(self) -> int:
-        pass
+        return self.map.shape[0]
     
     @property
     def height(self) -> int:
-        pass
+        self.map.shape[1]
     
     @staticmethod
-    def new(map: torch.Tensor) -> "GridMap":
+    def new(map: Array) -> "GridMap":
         assert len(map.shape) == 2
         
         return GridMap(
-            GridMap.__annotations__["map"](map)
+            map=map  # GridMap.__annotations__["map"](map)
         )
 
     @staticmethod
-    def random_map(dims: torch.Tensor, low: int, high: int) -> "GridMap":
-        assert len(dims.shape) == 1
-        assert dims.shape[0] == 2
-        dims = dims.to(dtype=torch.int)
+    def random_map_one_dig(seed: int, width: int, height: int) -> "GridMap":
+        map = jnp.zeros((width, height))
+        key = jax.random.PRNGKey(seed)
+        x = jax.random.randint(key, (1, ), minval=0, maxval=width - 1)
 
-        return GridMap.new(torch.randint(low=low, high=high, size=(dims[0], dims[1])))
+        key, _ = jax.random.split(key)
+        y = jax.random.randint(key, (1, ), minval=0, maxval=height - 1)
 
-    @classmethod
-    def from_frontend(cls: Type['GridMap'], lux_map: GridMapFrontend) -> "GridMap":
-        pass
-
-    def to_frontend(self) -> GridMapFrontend:
-        pass
-
-
-class HeightMap(GridMap):
-    pass
-
-
-class MaskMap(GridMap):
-    pass
-
-
-class HeightMapSingleHole(HeightMap):
-    """
-    This map has a single cell with value -1, and all the rest 0.
-    """
-    @staticmethod
-    def create(dims: torch.Tensor) -> "HeightMapSingleHole":
-        assert len(dims.shape) == 1
-        assert dims.shape[0] == 2
-        dims = dims.to(dtype=torch.int)
-
-        map = torch.zeros((dims[0].item(), dims[1].item()), dtype=torch.int)
-        map[torch.randint(high=dims[0], size=(1,)), torch.randint(high=dims[1], size=(1,))] = -1
-        return HeightMapSingleHole.new(map)
-
-
-class ZeroHeightMap(HeightMap):
-    """
-    This map has all the cells with value 0.
-    """
-    @staticmethod
-    def create(dims: torch.Tensor) -> "ZeroHeightMap":
-        assert len(dims.shape) == 1
-        assert dims.shape[0] == 2
-        dims = dims.to(dtype=torch.int)
-
-        return ZeroHeightMap.new(torch.zeros((dims[0].item(), dims[1].item()), dtype=torch.int))
-
-
-class FreeTraversabilityMaskMap(MaskMap):
-    """
-    This traversability map has all the cells = 0 (meaning no obstacles).
-    """
-    @staticmethod
-    def create(dims: torch.Tensor) -> "FreeTraversabilityMaskMap":
-        assert len(dims.shape) == 1
-        assert dims.shape[0] == 2
-        dims = dims.to(dtype=torch.int)
-
-        return FreeTraversabilityMaskMap.new(torch.zeros((dims[0].item(), dims[1].item()), dtype=torch.int))
+        map = map.at[x, y].set(-1)
+        return GridMap.new(map)
 
 
 class GridWorld(NamedTuple):
-    target_map: HeightMap
-    action_map: HeightMap
-    traversability_mask_map: MaskMap
+    target_map: GridMap
+    action_map: GridMap
 
     @property
     def width(self) -> int:
@@ -137,12 +86,3 @@ class GridWorld(NamedTuple):
             GridWorld.__annotations__["action_map"](action_map),
             GridWorld.__annotations__["traversability_mask_map"](traversability_mask_map)
         )
-
-
-    @classmethod
-    def from_frontend(cls: Type["GridWorld"], grid_world: GridWorldFrontend, buf_cfg: BufferConfig) -> "GridWorld":
-        pass
-
-    def to_frontend(self, frontend_cfg: FrontendConfig, agent_frontend: AgentFrontend) -> GridWorldFrontend:
-        pass
-    

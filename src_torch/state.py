@@ -1,7 +1,9 @@
+import torch
 from typing import NamedTuple
 from src.config import EnvConfig, BufferConfig
 from src.map import GridWorld
 from src.agent import Agent
+from src.frontend import StateFrontend
 
 class State(NamedTuple):
     """
@@ -28,10 +30,16 @@ class State(NamedTuple):
         units = jax.tree_map(lambda x: x[None].repeat(buf_cfg.MAX_N_UNITS, axis=0), empty_unit)
         units = jax.tree_map(lambda x: x[None].repeat(2, axis=0), units)
         """
-        # return State(
-        #     env_cfg=env_cfg,
-        #     world=world,
-        #     agent=agent,
-        #     env_steps=0  # in JUX: State.__annotations__["env_steps"](0)
-        # )
+        return State(
+            env_cfg=env_cfg,
+            world=world,
+            agent=agent,
+            env_steps=0  # in JUX: State.__annotations__["env_steps"](0)
+        )
+
+    @classmethod
+    def from_frontend(cls, state_frontend: StateFrontend, buf_cfg: BufferConfig = BufferConfig()) -> "State":
+        pass
+
+    def to_frontend(self) -> StateFrontend:
         pass
