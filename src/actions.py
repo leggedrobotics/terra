@@ -1,6 +1,6 @@
 import jax
 from enum import IntEnum
-from typing import NamedTuple, List, Tuple
+from typing import NamedTuple
 from src.utils import IntLowDim
 
 ActionType = IntEnum
@@ -72,20 +72,20 @@ class TrackedAction(Action):
         return cls.new(TrackedActionType.DO)
 
 
-class ActionBatch(NamedTuple):
-    """
-    Add the batch dimension to the actions.
-    """
-    data: TrackedAction  # TODO change to Action when implement also WheeledAction  # Action[BATCH_SIZE, N_ACTIONS]
+# class ActionBatch(NamedTuple):
+#     """
+#     Add the batch dimension to the actions.
+#     """
+#     data: Action  # Action[capacity, 1]
 
-    @staticmethod
-    def empty(capacity: int) -> "ActionBatch":
-        # 1. Generate a TrackedAction where action=-1 (do nothing)
-        # 2. unsqueeze and expand to capacity every member of TrackedAction (action)
-        # 3. store this in data
-        data = jax.tree_map(lambda x: x[None].repeat(capacity), TrackedAction.do_nothing())
+#     @staticmethod
+#     def empty(capacity: int) -> "ActionBatch":
+#         # 1. Generate a TrackedAction where action=-1 (do nothing)
+#         # 2. unsqueeze and expand to capacity every member of TrackedAction (action)
+#         # 3. store this in data
+#         data = jax.tree_map(lambda x: x[None].repeat(capacity), TrackedAction.do_nothing())
 
-        return ActionBatch(data=data)
+#         return ActionBatch(data=data)
 
 
 # class WheeledActionType(ActionType):

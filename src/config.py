@@ -3,21 +3,26 @@ from typing import NamedTuple
 MapConfig = NamedTuple
 
 class TargetMapConfig(MapConfig):
-    width: int = 3
-    height: int = 4
+    width: int = 5
+    height: int = 6
 
 
 class ActionMapConfig(MapConfig):
+    width: int = 5
+    height: int = 6
+
+
+class AgentConfig(NamedTuple):
     width: int = 3
-    height: int = 4
+    height: int = 2
 
 
 class EnvConfig(NamedTuple):
+    agent: AgentConfig = AgentConfig()
+
     target_map: MapConfig = TargetMapConfig()
     action_map: MapConfig = ActionMapConfig()
 
-    action_batch_capacity: int = 10
 
-
-class BufferConfig(NamedTuple):
-    pass
+# class BufferConfig(NamedTuple):
+#     pass

@@ -1,17 +1,16 @@
 import unittest
 import jax.numpy as jnp
-from src.actions import ActionBatch
+from src.actions import TrackedAction, TrackedActionType
 
 
 class TestActions(unittest.TestCase):
 
-    def test_action_batch(self):
-        capacity = 5
-        action_batch = ActionBatch.empty(capacity)
+    def test_tracked_action(self):
+        action = TrackedAction.new(TrackedActionType.DO)
 
-        self.assertTrue(action_batch.data.action.shape[0] == capacity)
-        self.assertTrue(action_batch.data.action.sum() == -capacity)
+        self.assertTrue(action.action.item() == TrackedActionType.DO)
 
+        # print(action)
 
 if __name__ == "__main__":
     unittest.main()

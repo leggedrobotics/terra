@@ -39,6 +39,8 @@ class GridMap(NamedTuple):
 
 
 class GridWorld(NamedTuple):
+    seed: jnp.uint32
+
     target_map: GridMap
     action_map: GridMap
 
@@ -51,7 +53,7 @@ class GridWorld(NamedTuple):
         return self.target_map.height
 
     @classmethod
-    def new(cls, seed: int, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "GridWorld":
+    def new(cls, seed: int, env_cfg: EnvConfig) -> "GridWorld":
         assert env_cfg.target_map.width == env_cfg.action_map.width
         assert env_cfg.target_map.height == env_cfg.action_map.height
 

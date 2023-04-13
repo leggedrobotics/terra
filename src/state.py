@@ -1,13 +1,20 @@
+import jax
+import jax.numpy as jnp
+from jax import Array
 from typing import NamedTuple
-from src.config import EnvConfig, BufferConfig
+from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
+from src.actions import Action
+from src.utils import Float
 
 class State(NamedTuple):
     """
     Stores the current state of the environment.
     Given perfect information, the observation corresponds to the state.
     """
+    seed: jnp.uint32
+
     env_cfg: EnvConfig
 
     world: GridWorld
@@ -16,22 +23,29 @@ class State(NamedTuple):
     env_steps: int
 
     @classmethod
-    def new(cls, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "State":
-        world = GridWorld.new(env_cfg, buf_cfg)
-        agent = Agent.new(env_cfg)
+    def new(cls, seed: int, env_cfg: EnvConfig) -> "State":
+        key = jax.random.PRNGKey(seed)
+        world = GridWorld.new(jnp.uint32(seed), env_cfg)
 
-        # TODO: in JUX they do this to expand to the max number of units and to 2 players 
-        #   (their Unit is out Agent), I don't think we need that as we'll always have 1 agent:
-        """
-        empty_unit = Unit.empty(env_cfg)
-        empty_unit = jax.tree_map(lambda x: x if isinstance(x, Array) else np.array(x), empty_unit)
-        units = jax.tree_map(lambda x: x[None].repeat(buf_cfg.MAX_N_UNITS, axis=0), empty_unit)
-        units = jax.tree_map(lambda x: x[None].repeat(2, axis=0), units)
-        """
-        # return State(
-        #     env_cfg=env_cfg,
-        #     world=world,
-        #     agent=agent,
-        #     env_steps=0  # in JUX: State.__annotations__["env_steps"](0)
-        # )
+        key, subkey = jax.random.split(key)
+
+        agent = Agent.new(env_cfg)
+        agent = jax.tree_map(lambda x: x if isinstance(x, Array) else jnp.array(x), agent)
+        # TODO: implement here multiple agents if required (see JUX)
+
+        return State(
+            seed=jnp.uint32(seed),
+            env_cfg=env_cfg,
+            world=world,
+            agent=agent,
+            env_steps=0
+        )
+
+    def _step(self, action: Action) -> "State":
+        pass
+
+    def _get_reward(self) -> Float:
+        pass
+
+    def _is_done(self) -> jnp.bool_:
         pass
