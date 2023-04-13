@@ -27,7 +27,7 @@ class GridMap(NamedTuple):
 
     @staticmethod
     def random_map_one_dig(seed: int, width: int, height: int) -> "GridMap":
-        map = jnp.zeros((width, height))
+        map = jnp.zeros((width, height), dtype=IntMap)
         key = jax.random.PRNGKey(seed)
         x = jax.random.randint(key, (1, ), minval=0, maxval=width - 1)
 
@@ -49,40 +49,23 @@ class GridWorld(NamedTuple):
     @property
     def height(self) -> int:
         return self.target_map.height
-    
+
     @classmethod
-    def new(cls, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "GridWorld":
-        assert env_cfg.target_map.dims == env_cfg.action_map.dims
-        assert env_cfg.traversability_mask_map.dims == env_cfg.action_map.dims
+    def new(cls, seed: int, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> "GridWorld":
+        assert env_cfg.target_map.width == env_cfg.action_map.width
+        assert env_cfg.target_map.height == env_cfg.action_map.height
 
-        # TODO make the following more elegant (remove if statements)
-
-        # Target map
-        if env_cfg.target_map.type == "HeightMapSingleHole":
-            target_map = HeightMapSingleHole.create(torch.tensor(env_cfg.target_map.dims))
-        elif env_cfg.target_map.type == "HeightMap":
-            target_map = HeightMap.random_map(
-                torch.tensor(env_cfg.target_map.dims),
-                env_cfg.target_map.low,
-                env_cfg.target_map.high
-                )
-        else:
-            raise ValueError(f"Map type {env_cfg.target_map.type} is not supported.")
-
-        # Action map
-        if env_cfg.action_map.type == "ZeroHeightMap":
-            action_map = ZeroHeightMap.create(torch.tensor(env_cfg.action_map.dims))
-        else:
-            raise ValueError(f"Map type {env_cfg.action_map.type} is not supported.")
+        target_map = GridMap.random_map_one_dig(
+            seed=seed,
+            width=env_cfg.target_map.width,
+            height=env_cfg.target_map.height
+        )
         
-        # Traversability mask map
-        if env_cfg.traversability_mask_map.type == "FreeTraversabilityMaskMap":
-            traversability_mask_map = FreeTraversabilityMaskMap.create(
-                torch.tensor(env_cfg.traversability_mask_map.dims)
-                )
-
+        action_map = GridMap.new(
+            map=jnp.zeros((env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap)
+        )
+        
         return GridWorld(
-            GridWorld.__annotations__["target_map"](target_map),
-            GridWorld.__annotations__["action_map"](action_map),
-            GridWorld.__annotations__["traversability_mask_map"](traversability_mask_map)
+            target_map=target_map,
+            action_map=action_map
         )

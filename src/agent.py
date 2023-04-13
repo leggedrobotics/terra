@@ -1,10 +1,9 @@
 import jax.numpy as jnp
-from jax import Array
 from typing import NamedTuple
-from enum import IntEnum
 from src.actions import ActionBatch
 from src.config import EnvConfig
 from src.utils import IntLowDim, INTLOWDIM_MAX, IntMap, INTMAP_MAX
+
 
 class AgentState(NamedTuple):
     pos_base: IntMap = jnp.full((2, ), fill_value=INTMAP_MAX, dtype=IntMap)
@@ -18,13 +17,13 @@ class Agent(NamedTuple):
     """
     Defines the state and type of the agent.
     """
-    # agent_type:
+    # agent_type  # TODO implement later on
     action_batch: ActionBatch  # in JUX an ActionQueue is used
     agent_state: AgentState
 
     @staticmethod
-    def new() -> "Agent":
+    def new(env_cfg: EnvConfig) -> "Agent":
         return Agent(
-            action_batch=ActionBatch.empty(),
+            action_batch=ActionBatch.empty(env_cfg.action_batch_capacity),
             agent_state=AgentState()
         )
