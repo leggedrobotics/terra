@@ -13,16 +13,16 @@ class TestAgent(unittest.TestCase):
 
         # print(state)
     
-    def test_step_forward(self):
+    def test_call_step_forward(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        # print(state)
+        # print(state.agent.agent_state)
 
         action = TrackedActionType.FORWARD
         state = state._step(action)
 
-        # print(state)
+        # print(state.agent.agent_state)
 
 
 if __name__ == "__main__":

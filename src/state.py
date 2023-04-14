@@ -76,8 +76,6 @@ class State(NamedTuple):
         map_height = self.world.height
         new_pos_base = self.agent.agent_state.pos_base
 
-        print(f"{self.agent.agent_state.pos_base=}")
-
         if base_orientation.item() == 0:
             # positive y
             if new_pos_base[1] + agent_occupancy_y < map_height:
@@ -95,8 +93,6 @@ class State(NamedTuple):
             if new_pos_base[0] - agent_occupancy_x >= 0:
                 new_pos_base = new_pos_base.at[0].add(-move_tiles)
         
-        print(f"{new_pos_base=}")
-
         assert 0 <= new_pos_base[0] < map_width
         assert 0 <= new_pos_base[1] < map_height
         

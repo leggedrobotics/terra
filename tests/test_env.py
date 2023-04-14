@@ -1,40 +1,60 @@
 import unittest
-from src.env import TerraEnv
-from src.config import (
-    HeightMapSingleHoleConfig,
-    ZeroHeightMapConfig,
-    FreeTraversabilityMaskMapConfig,
-    EnvConfig,
-    BufferConfig
-)
+import jax.numpy as jnp
+from src.env import TerraEnv, TerraEnvBatch
+from src.config import EnvConfig
+from src.actions import TrackedActionType
 
-class EnvTest(unittest.TestCase):
 
-    def test_env_init(self):
-        tm_config = HeightMapSingleHoleConfig(dims=(3, 2))
-        am_config = ZeroHeightMapConfig(dims=(3, 2))
-        travmask_config = FreeTraversabilityMaskMapConfig(dims=(3, 2))
-        env_cfg = EnvConfig(
-            target_map=tm_config,
-            action_map=am_config,
-            traversability_mask_map=travmask_config,
-            agent_type="TRACKED",
-            action_queue_capacity=10
-        )
-        buf_cfg = BufferConfig()
-        env = TerraEnv(env_cfg, buf_cfg)
+class TestEnv(unittest.TestCase):
 
-        s1 = env.reset()
-        s2 = env.reset()
+    def test_create_env(self):
+        seed = 27
+        env = TerraEnv(env_cfg=EnvConfig())
+        state = env.reset(seed)
 
-        self.assertEqual(s1, s2)
+        # print(state)
 
-    def test_env_step(self):
-        pass
+    def test_step_env(self):
+        seed = 29
+        env = TerraEnv(env_cfg=EnvConfig())
+        state = env.reset(seed)
 
-    def test_env_close(self):
-        pass
+        # print(state)
+        action = TrackedActionType.FORWARD
+        _, (state1, reward, dones, infos) = env.step(state, action)
 
+        # print(state)
+
+        # self.assertFalse(state == state1)  # TODO implement __eq__
+
+
+class TestEnvBatch(unittest.TestCase):
+
+    def test_create_env_batch(self):
+        batch_size = 2
+        seeds = jnp.arange(batch_size)
+        env_batch = TerraEnvBatch(env_cfg=EnvConfig())
+        states = env_batch.reset(seeds)
+
+        # print(states)
+
+    def test_step_env_batch(self):
+        batch_size = 2
+        seeds = jnp.arange(batch_size)
+        env_batch = TerraEnvBatch(env_cfg=EnvConfig())
+        states = env_batch.reset(seeds)
+
+        actions = jnp.array([TrackedActionType.FORWARD])[None].repeat(batch_size)
+
+        print(f"{actions=}")
+
+        # print(states)
+
+        _, (states1, reward, dones, infos) = env_batch.step(states, actions)
+
+        print(states1)
+
+        # self.assertFalse(states == states1)  # TODO implement __eq__
 
 if __name__ == "__main__":
     unittest.main()

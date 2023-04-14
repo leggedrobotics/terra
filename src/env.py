@@ -1,3 +1,4 @@
+import jax
 from jax import Array
 from src.config import EnvConfig
 from src.state import State
@@ -90,8 +91,9 @@ class TerraEnvBatch:
 
     # TODO JIT
     def reset(self, seeds: Array) -> State:
-        pass
+        return jax.vmap(self.terra_env.reset)(seeds)
 
     # TODO JIT
-    def step(self, state: State, actions: Array) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
-        pass
+    def step(self, states: State, actions: Array) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
+        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(states, actions)
+        return states, (states, rewards, dones, infos)
