@@ -1,13 +1,17 @@
 from jax import Array
-from src.config import EnvConfig, BufferConfig
+from src.config import EnvConfig
 from src.state import State
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional
+from viz.window import Window
+
 
 
 class TerraEnv:
-    def __init__(self, env_cfg: EnvConfig, buf_cfg: BufferConfig) -> None:
+    def __init__(self, env_cfg: EnvConfig) -> None:
         self.env_cfg = env_cfg
-        self.buf_cfg = buf_cfg
+
+        # TODO remove following
+        self.window = Window("Terra")
 
     def reset(self, seed: int) -> State:
         """
@@ -15,12 +19,21 @@ class TerraEnv:
         """
         return State.new(seed, self.env_cfg, self.buf_cfg)
 
-    def render(self, state: State):
+    def render(self, state: State,
+               key_handler: Optional[function],
+               mode: str = "human",
+               block=False) -> Array:
         """
         Renders the environment at a given state.
         """
-        # TODO define return
-        pass
+        img = state.world.action_map
+        if key_handler:
+            if mode == "human":
+                self.window.show_img(img)
+                self.window.reg_key_handler(key_handler)
+                self.window.show(block)
+
+        
 
     # TODO JIT
     def step(self, state: State, action: int) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
@@ -59,8 +72,8 @@ class TerraEnvBatch:
     Takes care of the parallelization of the environment.
     """
 
-    def __init__(self, env_cfg: EnvConfig = EnvConfig(), buf_cfg: BufferConfig = BufferConfig()) -> None:
-        self.terra_env = TerraEnv(env_cfg, buf_cfg)
+    def __init__(self, env_cfg: EnvConfig = EnvConfig()) -> None:
+        self.terra_env = TerraEnv(env_cfg)
 
     # TODO JIT
     def reset(self, seeds: Array) -> State:

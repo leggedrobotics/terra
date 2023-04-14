@@ -17,12 +17,12 @@ class TestAgent(unittest.TestCase):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        print(state)
+        # print(state)
 
         action = TrackedActionType.FORWARD
         state = state._step(action)
 
-        print(state)
+        # print(state)
 
 
 if __name__ == "__main__":
