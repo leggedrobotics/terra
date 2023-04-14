@@ -48,6 +48,7 @@ class Window:
         if self.imshow_obj is None:
             self.imshow_obj = self.ax.imshow(img, interpolation='bilinear')
 
+        print(f"{img.shape=}")
         self.imshow_obj.set_data(img)
         self.fig.canvas.draw()
 

@@ -7,36 +7,41 @@ from src.config import EnvConfig
 
 
 def redraw():
+    global state
     # if not args.agent_view:
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
-    img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
+    # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
+    img = env.render(state=state, mode="human", tile_size=32, key_handler=key_handler)
 
     env.window.show_img(img)
     # env.window_target.show_img(img_target)
 
 
-def reset():
-    env.reset()
-    # env.level_up()
-    # if args.seed != -1:
-    #     env.seed(args.seed)
+# def reset():
+#     env.reset()
+#     # env.level_up()
+#     # if args.seed != -1:
+#     #     env.seed(args.seed)
 
-    # if hasattr(env, "mission"):
-    #     print("Mission: %s" % env.mission)
-    #     env.window.set_caption(env.mission)
+#     # if hasattr(env, "mission"):
+#     #     print("Mission: %s" % env.mission)
+#     #     env.window.set_caption(env.mission)
 
-    redraw()
+#     redraw()
 
-def key_handler(event, state):
+def key_handler(event):
+
+    global state
+
     print("pressed", event.key)
 
     if event.key == "escape":
         env.window.close()
         # env.window_target.close()
 
-    if event.key == "backspace":
-        reset()
+    # if event.key == "backspace":
+    #     reset()
 
     # if event.key == "left":
     #     obs, reward, done, info = env.step(env.actions.rotate_base_counter)
@@ -67,16 +72,16 @@ def key_handler(event, state):
     #     parse_step(obs, reward, done, info)
     #     return
 
-    if event.key == "backspace":
-        print("resetting")
-        parse_step(0, 0, 0, 0)
+    # if event.key == "backspace":
+    #     print("resetting")
+    #     parse_step(0, 0, 0, 0)
 
-    if event.key == "enter":
-        # obs, reward, done, info =  (env.actions.done)
-        print("resetting")
-        env.reset()
-        redraw()
-        return
+    # if event.key == "enter":
+    #     # obs, reward, done, info =  (env.actions.done)
+    #     print("resetting")
+    #     state = env.reset()
+    #     redraw()
+    #     return
 
 
 def parse_step(obs, reward, done, info):
@@ -134,7 +139,9 @@ state = env.reset(seed=seed)
 # env = ImgObsWrapper(env)
 
 # window = Window('heightgrid - ' + args.env)
-env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
+# env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
+env.render(state=state, key_handler=key_handler, block=True)
+
 # env.window.reg_key_handler(key_handler)
 # env.window_target.reg_key_handler(key_handler)
 
