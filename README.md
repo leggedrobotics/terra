@@ -11,3 +11,10 @@ python3 -m tests.test_agent
 
 ## Installation
 To install the required JAX dependencies, follow [this link](https://github.com/google/jax#pip-installation-gpu-cuda-installed-via-pip-easier).
+
+## Visualization
+If you want to render the environment, you are going to need the following Python modules:
+~~~
+matplotlib
+PyQt5
+~~~

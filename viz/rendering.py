@@ -1,7 +1,6 @@
-
 import math
 import numpy as np
-
+from abc import abstractmethod, ABCMeta
 
 def downsample(img, factor):
     """
@@ -129,197 +128,262 @@ def highlight_img(img, color=(255, 255, 255), alpha=0.30):
     img[:, :, :] = blend_img
 
 
-@classmethod
-def render_tile(
-        cls, obj, height, base_dir=None, cabin_dir=None, tile_size=SIZE_TILE_PIXELS, subdivs=3
-):
-    """
-    Render a tile and cache the result
-    """
+OBJECT_TO_IDX = {
+    "empty": 0,
+    "goal": -1,
+    "wall": 2,
+    "ramp": 3,
+    "agent": 1,
+}
 
-    # Hash map lookup key for the cache
+COLOR_TO_IDX = {"red": 0, "green": 1, "blue": 2, "purple": 3, "yellow": 4, "grey": 5}
 
-    key = str(tile_size) + "h" + str(height)
-    key = obj.type + key if obj else key
-    # key = obj.encode() if obj else key
+IDX_TO_COLOR = dict(zip(COLOR_TO_IDX.values(), COLOR_TO_IDX.keys()))
 
-    if key in cls.tile_cache and obj is None:
-        return cls.tile_cache[key]
 
-    img = np.zeros(
-        shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
-    )
+class GridObject(metaclass=ABCMeta):
+    """Base class for objects are present in the environment"""
 
-    # Draw the grid lines (top and left edges)
+    def __init__(self, type, color):
+        assert type in OBJECT_TO_IDX, type
+        assert color in COLOR_TO_IDX, color
 
-    # if obj != None:
-    #     obj.render(img)
-    # else:
-    fill_coords(
-        img,
-        point_in_rect(0, 1, 0, 1),
-        np.array([255, 255, 255]) * (height + 3) / 7,
-    )
-    fill_coords(
-        img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100)
-    )
-    fill_coords(
-        img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
-    )
+        self.type = type
+        self.color = color
+        self.orientable = False
+        self.current_pos = None
 
-    # Overlay the agent on top
-    if base_dir is not None and cabin_dir is not None:
-        # draw the base a yellow rectangle with one side longer than the other
-        # to make it easier to see the direction
-        back_base_fn = point_in_rect(
-            0.25, 0.75, 0.0, 0.25
+    @abstractmethod
+    def can_overlap(self):
+        raise NotImplementedError
+
+    def encode(self):
+        """Encode the object type into and integer"""
+        return (
+            OBJECT_TO_IDX[self.type],
+            IDX_TO_COLOR[OBJECT_TO_IDX[self.type] % 10],
+            32,
         )
 
-        back_base_fn = rotate_fn(
-            back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+
+class RenderingEngine:
+    def __init__(self, x_dim, y_dim) -> None:
+        self.tile_cache = {}
+        self.x_dim = x_dim
+        self.y_dim = y_dim
+        self.grid_object = [None] * (self.x_dim * self.y_dim)
+
+    # @classmethod
+    def render_tile(
+            self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
+    ):
+        """
+        Render a tile and cache the result
+        """
+
+        # Hash map lookup key for the cache
+
+        key = str(tile_size) + "h" + str(height)
+        key = obj.type + key if obj else key
+        # key = obj.encode() if obj else key
+
+        if key in self.tile_cache and obj is None:
+            return self.tile_cache[key]
+
+        img = np.zeros(
+            shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
         )
-        # render in black
+
+        # Draw the grid lines (top and left edges)
+
+        # if obj != None:
+        #     obj.render(img)
+        # else:
         fill_coords(
-            img, back_base_fn, (0, 0, 0))
-
-        base_fn = point_in_rect(
-            0.25, 0.75, 0.25, 1
+            img,
+            point_in_rect(0, 1, 0, 1),
+            np.array([255, 255, 255]) * (height + 3) / 7,
+        )
+        fill_coords(
+            img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100)
+        )
+        fill_coords(
+            img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
         )
 
-        base_fn = rotate_fn(
-            base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
-        )
-
-        fill_coords(img, base_fn, (255, 255, 0))
-
-        tri_fn = point_in_triangle(
-            (0.12, 0.81),
-            (0.12, 0.19),
-            (0.87, 0.50),
-        )
-
-        # Rotate the agent based on its direction
-        tri_fn = rotate_fn(
-            tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir
-        )
-        fill_coords(img, tri_fn, (255, 0, 0))
-
-    # Downsample the image to perform supersampling/anti-aliasing
-    img = downsample(img, subdivs)
-
-    # Cache the rendered tile
-
-    cls.tile_cache[key] = img
-
-    return img
-
-def render_grid(
-        self,
-        tile_size,
-        height_grid,
-        agent_pos=None,
-        base_dir=None,
-        cabin_dir=None,
-        render_objects=True,
-        target_height=False
-):
-    """
-    Render this grid at a given scale
-    :param r: target renderer object
-    :param tile_size: tile size in pixels
-    """
-    # Compute the total grid size
-    width_px = self.x_dim * tile_size
-    height_px = self.y_dim * tile_size
-
-    img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
-
-    # Render the grid
-    for j in range(0, self.x_dim):
-        for i in range(0, self.y_dim):
-
-            if render_objects:
-                cell = self.get(i, j)
-            else:
-                cell = None
-
-            if target_height:
-                agent_here = False
-            else:
-                agent_here = np.array_equal(agent_pos, (i, j))
-
-            tile_img = self.render_tile(
-                cell,
-                height_grid[i, j],
-                base_dir=base_dir if agent_here else None,
-                cabin_dir=cabin_dir if agent_here else None,
-                tile_size=tile_size,
+        # Overlay the agent on top
+        if base_dir is not None and cabin_dir is not None:
+            # draw the base a yellow rectangle with one side longer than the other
+            # to make it easier to see the direction
+            back_base_fn = point_in_rect(
+                0.25, 0.75, 0.0, 0.25
             )
 
-            ymin = j * tile_size
-            ymax = (j + 1) * tile_size
-            xmin = i * tile_size
-            xmax = (i + 1) * tile_size
-            img[ymin:ymax, xmin:xmax, :] = tile_img
+            back_base_fn = rotate_fn(
+                back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+            )
+            # render in black
+            fill_coords(
+                img, back_base_fn, (0, 0, 0))
 
-    return img.transpose(0, 1, 2)
+            base_fn = point_in_rect(
+                0.25, 0.75, 0.25, 1
+            )
 
-def render(
-        self,
-        mode="rgb_mode",
-        close=False,
-        block=False,
-        key_handler=None,
-        highlight=False,
-        tile_size=SIZE_TILE_PIXELS,
-):
-    """
-    Render the whole-grid human view
-    """
-    self.place_obj_at_pos(AgentObj(), self.agent_pos)
+            base_fn = rotate_fn(
+                base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+            )
 
-    if close:
-        if self.window:
-            self.window.close()
-        if self.window_target:
-            self.window_target.close()
-        return
+            fill_coords(img, base_fn, (255, 255, 0))
 
-    if mode == "rgb_mode" and not self.window:
-        self.window = heightgrid.window.Window("heightgrid")
+            tri_fn = point_in_triangle(
+                (0.12, 0.81),
+                (0.12, 0.19),
+                (0.87, 0.50),
+            )
 
-    # Render the whole grid
-    img = self.render_grid(
-        tile_size, self.image_obs[:, :, 0], self.agent_pos, self.base_dir, self.cabin_dir
-    )
+            # Rotate the agent based on its direction
+            tri_fn = rotate_fn(
+                tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir
+            )
+            fill_coords(img, tri_fn, (255, 0, 0))
 
-    img_target = self.render_grid(
-        tile_size,
-        self.image_obs[:, :, 1],
-        self.agent_pos,
-        self.base_dir,
-        self.cabin_dir,
-        render_objects=True,
-        target_height=True
-    )
+        # Downsample the image to perform supersampling/anti-aliasing
+        img = downsample(img, subdivs)
 
-    # white row of pixels
-    img_white = np.ones(shape=(tile_size * self.x_dim, tile_size, 3), dtype=np.uint8) * 255
+        # Cache the rendered tile
 
-    img = np.concatenate((img_white, img, img_white, img_target), axis=1)
-    # add a row of white pixels at the bottom
-    white_row = np.ones(shape=(tile_size, tile_size * self.y_dim * 2 + 2 * tile_size, 3), dtype=np.uint8) * 255
-    img = np.concatenate((img, white_row), axis=0)
+        self.tile_cache[key] = img
 
-    if key_handler:
-        if mode == "rgb_mode":
-            # self.window.set_caption(self.mission)
-            self.window.show_img(img)
-            # self.window_target.show_img(img_target)
-            # manually controlled
-            self.window.reg_key_handler(key_handler)
-            # self.window_target.reg_key_handler(key_handler)
-            self.window.show(block=block)
-            # self.window_target.show(block=block)
+        return img
+    
+    def get(self, i: int, j: int) -> GridObject:
+        """Retrieve object at location (i, j)
 
-    return img
+        Args:
+            i (int): index of the x location
+            j (int): index of the y location
+        """
+        assert i <= self.x_dim, "Grid index i out of bound"
+        assert j <= self.y_dim, "Grid index j out of boudns"
+        return self.grid_object[i + self.x_dim * j]
+
+    def render_grid(
+            self,
+            tile_size,
+            height_grid,
+            agent_pos=None,
+            base_dir=None,
+            cabin_dir=None,
+            render_objects=True,
+            target_height=False
+    ):
+        """
+        Render this grid at a given scale
+        :param r: target renderer object
+        :param tile_size: tile size in pixels
+        """
+        # Compute the total grid size
+        width_px = self.x_dim * tile_size
+        height_px = self.y_dim * tile_size
+
+        # img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
+        img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint8)
+
+        # Render the grid
+        for i in range(0, self.x_dim):
+            for j in range(0, self.y_dim):
+
+                if render_objects:
+                    cell = self.get(i, j)
+                else:
+                    cell = None
+
+                if target_height:
+                    agent_here = False
+                else:
+                    agent_here = np.array_equal(agent_pos, (i, j))
+
+                tile_img = self.render_tile(
+                    cell,
+                    height_grid[i, j],
+                    base_dir=base_dir if agent_here else None,
+                    cabin_dir=cabin_dir if agent_here else None,
+                    tile_size=tile_size,
+                )
+
+                ymin = j * tile_size
+                ymax = (j + 1) * tile_size
+                xmin = i * tile_size
+                xmax = (i + 1) * tile_size
+
+                print(f"{tile_img.shape=}")
+                print(f"{xmin=}")
+                print(f"{xmax=}")
+                print(f"{ymin=}")
+                print(f"{ymax=}")
+
+                # img[ymin:ymax, xmin:xmax, :] = tile_img
+                img[xmin:xmax, ymin:ymax, :] = tile_img
+
+        return img.transpose(0, 1, 2)
+
+# def render(
+#         self,
+#         mode="human",
+#         close=False,
+#         block=False,
+#         key_handler=None,
+#         highlight=False,
+#         tile_size=SIZE_TILE_PIXELS,
+# ):
+#     """
+#     Render the whole-grid human view
+#     """
+#     self.place_obj_at_pos(AgentObj(), self.agent_pos)
+
+#     if close:
+#         if self.window:
+#             self.window.close()
+#         if self.window_target:
+#             self.window_target.close()
+#         return
+
+#     if mode == "human" and not self.window:
+#         self.window = heightgrid.window.Window("heightgrid")
+
+#     # Render the whole grid
+#     img = self.render_grid(
+#         tile_size, self.image_obs[:, :, 0], self.agent_pos, self.base_dir, self.cabin_dir
+#     )
+
+#     img_target = self.render_grid(
+#         tile_size,
+#         self.image_obs[:, :, 1],
+#         self.agent_pos,
+#         self.base_dir,
+#         self.cabin_dir,
+#         render_objects=True,
+#         target_height=True
+#     )
+
+#     # white row of pixels
+#     img_white = np.ones(shape=(tile_size * self.x_dim, tile_size, 3), dtype=np.uint8) * 255
+
+#     img = np.concatenate((img_white, img, img_white, img_target), axis=1)
+#     # add a row of white pixels at the bottom
+#     white_row = np.ones(shape=(tile_size, tile_size * self.y_dim * 2 + 2 * tile_size, 3), dtype=np.uint8) * 255
+#     img = np.concatenate((img, white_row), axis=0)
+
+#     if key_handler:
+#         if mode == "human":
+#             # self.window.set_caption(self.mission)
+#             self.window.show_img(img)
+#             # self.window_target.show_img(img_target)
+#             # manually controlled
+#             self.window.reg_key_handler(key_handler)
+#             # self.window_target.reg_key_handler(key_handler)
+#             self.window.show(block=block)
+#             # self.window_target.show(block=block)
+
+#     return img

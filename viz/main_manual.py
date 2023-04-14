@@ -2,6 +2,7 @@
 
 from src.env import TerraEnv
 from src.actions import TrackedActionType
+from src.config import EnvConfig
 # import argparse
 
 
@@ -9,7 +10,7 @@ def redraw():
     # if not args.agent_view:
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
-    img = env.render("human", tile_size=32)
+    img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
 
     env.window.show_img(img)
     # env.window_target.show_img(img_target)
@@ -27,7 +28,7 @@ def reset():
 
     redraw()
 
-def key_handler(event):
+def key_handler(event, state):
     print("pressed", event.key)
 
     if event.key == "escape":
@@ -46,8 +47,8 @@ def key_handler(event):
     #     parse_step(obs, reward, done, info)
 
     if event.key == "up":
-        _, (obs, reward, done, info) = env.step(TrackedActionType.FORWARD)
-        parse_step(obs, reward, done, info)
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.FORWARD)
+        parse_step(state, reward, done, info)
 
     # if event.key == "down":
     #     obs, reward, done, info = env.step(env.actions.backward)
@@ -124,16 +125,16 @@ def parse_step(obs, reward, done, info):
 #            "cabin_turn_reward": -0.05, # ok
 #            "terminal_reward": 10}
 
-env = TerraEnv()
+env = TerraEnv(EnvConfig())
 print(env)
 seed = 24
-env.reset(seed=seed)
+state = env.reset(seed=seed)
 # if args.agent_view:
 #     env = FullyObsWrapper(env)
 # env = ImgObsWrapper(env)
 
 # window = Window('heightgrid - ' + args.env)
-env.render(block=True, key_handler=key_handler)
+env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
 # env.window.reg_key_handler(key_handler)
 # env.window_target.reg_key_handler(key_handler)
 
