@@ -7,6 +7,15 @@ from src.utils import IntLowDim, INTLOWDIM_MAX, IntMap, INTMAP_MAX
 
 
 class AgentState(NamedTuple):
+    """
+    Clarifications on the agent state representation.
+
+    angle_base:
+    Orientations of the agent are an integer between 0 and 3 (included),
+    where 0 means that it is aligned with the x axis, and for every positive
+    increment, 90 degrees are added in the direction of the arrow going from
+    the x axis to the y axes (anti-clockwise).
+    """
     pos_base: IntMap  # = jnp.full((2, ), fill_value=INTMAP_MAX, dtype=IntMap)
     angle_base: IntLowDim  # = jnp.full((1, ), fill_value=INTLOWDIM_MAX, dtype=IntLowDim)
     angle_cabin: IntLowDim  # = jnp.full((1, ), fill_value=INTLOWDIM_MAX, dtype=IntLowDim)
@@ -25,7 +34,7 @@ class Agent(NamedTuple):
     @staticmethod
     def new(env_cfg: EnvConfig) -> "Agent":
         agent_state = AgentState(
-            pos_base=IntMap(np.ceil([env_cfg.agent.width / 2, env_cfg.agent.height / 2])),
+            pos_base=IntMap(np.ceil([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1])),
             angle_base=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             angle_cabin=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             arm_extension=jnp.full((1, ), fill_value=0, dtype=IntLowDim),

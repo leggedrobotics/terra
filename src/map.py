@@ -2,11 +2,21 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from typing import NamedTuple, Type
-from src.config import BufferConfig, EnvConfig
+from src.config import EnvConfig
 from src.utils import IntMap, INTMAP_MAX
 
 
 class GridMap(NamedTuple):
+    """
+    Clarifications on the map representation.
+
+    The x axis corresponds to the first dimension of the map matrix.
+    The y axis to the second.
+    The origin is on the top left corner of the map matrix.
+    
+    The term "width" is associated with the x direction.
+    The term "height" is associated with the y direction.
+    """
     map: IntMap
 
     @property
@@ -15,7 +25,7 @@ class GridMap(NamedTuple):
     
     @property
     def height(self) -> int:
-        self.map.shape[1]
+        return self.map.shape[1]
     
     @staticmethod
     def new(map: Array) -> "GridMap":
@@ -68,6 +78,7 @@ class GridWorld(NamedTuple):
         )
         
         return GridWorld(
+            seed=seed,
             target_map=target_map,
             action_map=action_map
         )
