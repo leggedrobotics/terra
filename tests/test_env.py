@@ -1,5 +1,5 @@
 import unittest
-from src.state import State
+from src.env import TerraEnv
 from src.config import (
     HeightMapSingleHoleConfig,
     ZeroHeightMapConfig,
@@ -8,9 +8,9 @@ from src.config import (
     BufferConfig
 )
 
-class StateTest(unittest.TestCase):
+class EnvTest(unittest.TestCase):
 
-    def test_state_init(self):
+    def test_env_init(self):
         tm_config = HeightMapSingleHoleConfig(dims=(3, 2))
         am_config = ZeroHeightMapConfig(dims=(3, 2))
         travmask_config = FreeTraversabilityMaskMapConfig(dims=(3, 2))
@@ -18,13 +18,22 @@ class StateTest(unittest.TestCase):
             target_map=tm_config,
             action_map=am_config,
             traversability_mask_map=travmask_config,
-            agent_type="WHEELED",
+            agent_type="TRACKED",
             action_queue_capacity=10
         )
         buf_cfg = BufferConfig()
-        state = State.new(env_cfg, buf_cfg)
+        env = TerraEnv(env_cfg, buf_cfg)
 
-        self.assertEqual(state.env_steps, 0)
+        s1 = env.reset()
+        s2 = env.reset()
+
+        self.assertEqual(s1, s2)
+
+    def test_env_step(self):
+        pass
+
+    def test_env_close(self):
+        pass
 
 
 if __name__ == "__main__":
