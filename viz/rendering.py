@@ -150,8 +150,8 @@ class GridObject(metaclass=ABCMeta):
 
         self.type = type
         self.color = color
-        self.orientable = False
-        self.current_pos = None
+        # self.orientable = False
+        # self.current_pos = None
 
     @abstractmethod
     def can_overlap(self):
@@ -164,6 +164,13 @@ class GridObject(metaclass=ABCMeta):
             IDX_TO_COLOR[OBJECT_TO_IDX[self.type] % 10],
             32,
         )
+
+class AgentObject(GridObject):
+    def __init__(self, type="agent", color="red"):
+        super().__init__(type, color)
+
+    def can_overlap(self):
+        return True
 
 
 class RenderingEngine:
@@ -294,18 +301,20 @@ class RenderingEngine:
         for i in range(0, self.x_dim):
             for j in range(0, self.y_dim):
 
-                if render_objects:
-                    cell = self.get(i, j)
-                else:
-                    cell = None
+                # if render_objects:
+                #     cell = self.get(i, j)
+                # else:
+                #     cell = None
+
+                # print(f"{cell=}")
 
                 if target_height:
                     agent_here = False
                 else:
                     agent_here = np.array_equal(agent_pos, (i, j))
-
+                
                 tile_img = self.render_tile(
-                    cell,
+                    AgentObject() if agent_here else None,
                     height_grid[i, j],
                     base_dir=base_dir if agent_here else None,
                     cabin_dir=cabin_dir if agent_here else None,
@@ -316,12 +325,6 @@ class RenderingEngine:
                 ymax = (j + 1) * tile_size
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
-
-                print(f"{tile_img.shape=}")
-                print(f"{xmin=}")
-                print(f"{xmax=}")
-                print(f"{ymin=}")
-                print(f"{ymax=}")
 
                 # img[ymin:ymax, xmin:xmax, :] = tile_img
                 img[xmin:xmax, ymin:ymax, :] = tile_img

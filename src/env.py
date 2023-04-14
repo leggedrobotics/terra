@@ -30,10 +30,14 @@ class TerraEnv:
                tile_size: int = 32) -> Array:
         """
         Renders the environment at a given state.
-        """
-        img = self.rendering_engine.render_grid(tile_size=tile_size, height_grid=state.world.action_map.map,)
 
-        print(f"{img.shape=}")
+        # TODO write a cleaner rendering engine
+        """
+        img = self.rendering_engine.render_grid(tile_size=tile_size,
+                                                height_grid=state.world.action_map.map,
+                                                agent_pos=state.agent.agent_state.pos_base,
+                                                base_dir=state.agent.agent_state.angle_base,
+                                                cabin_dir=state.agent.agent_state.angle_cabin)
 
         if key_handler:
             if mode == "human":
