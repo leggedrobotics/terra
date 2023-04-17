@@ -13,7 +13,7 @@ class TestEnv(unittest.TestCase):
 
         # print(state)
 
-    def test_step_env(self):
+    def _test_step_action(self, action):
         seed = 29
         env = TerraEnv(env_cfg=EnvConfig())
         state = env.reset(seed)
@@ -25,6 +25,13 @@ class TestEnv(unittest.TestCase):
         # print(state)
 
         # self.assertFalse(state == state1)  # TODO implement __eq__
+
+    def test_step_fwd(self):
+        return self._test_step_action(TrackedActionType.FORWARD)
+    
+    def test_step_bkwd(self):
+        return self._test_step_action(TrackedActionType.BACKWARD)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -55,9 +55,9 @@ def key_handler(event):
         _, (state, reward, done, info) = env.step(state, TrackedActionType.FORWARD)
         parse_step(state, reward, done, info)
 
-    # if event.key == "down":
-    #     obs, reward, done, info = env.step(env.actions.backward)
-    #     parse_step(obs, reward, done, info)
+    if event.key == "down":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.BACKWARD)
+        parse_step(state, reward, done, info)
 
     # if event.key == "a":
     #     obs, reward, done, info = env.step(env.actions.rotate_cabin_counter)

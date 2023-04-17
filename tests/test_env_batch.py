@@ -28,11 +28,6 @@ class TestEnvBatch(unittest.TestCase):
         # actions = jnp.array([TrackedActionType.FORWARD])[None].repeat(repeats=batch_size, axis=0)
         actions = jnp.array([0, 0], dtype=IntLowDim)
 
-
-        # print(f"{actions=}")
-
-        # print(states)
-
         _, (states1, reward, dones, infos) = env_batch.step(states, actions)
 
         print(states1)

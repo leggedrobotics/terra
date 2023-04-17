@@ -118,18 +118,24 @@ class State(NamedTuple):
                 )
             )
         )
-
-
-    def _handle_move_forward(self):
+    
+    @staticmethod
+    def _base_orientation_to_one_hot_forward(base_orientation: IntLowDim):
+        return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+    
+    def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
+        fwd_to_bkwd_transformation = jnp.array([
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+        ],
+        dtype=IntLowDim)
+        orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
+        return orientation_one_hot @ fwd_to_bkwd_transformation
+    
+    def _move_on_orientation(self, orientation_vector: Array):
         base_orientation = self.agent.agent_state.angle_base
-
-        # assert (
-        #     (base_orientation[0] == 0) |
-        #     (base_orientation[0] == 1) |
-        #     (base_orientation[0] == 2) |
-        #     (base_orientation[0] == 3)
-        # )
-
         move_tiles = self.env_cfg.agent.move_tiles
         agent_width = self.env_cfg.agent.width
         agent_height = self.env_cfg.agent.height
@@ -137,8 +143,12 @@ class State(NamedTuple):
         map_height = self.world.height
         new_pos_base = self.agent.agent_state.pos_base
 
-        # One-hot encode orientation
-        orientation_vector = jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+        # assert (
+        #     (base_orientation[0] == 0) |
+        #     (base_orientation[0] == 1) |
+        #     (base_orientation[0] == 2) |
+        #     (base_orientation[0] == 3)
+        # )
 
         # Get occupancy of the agent based on its position and orientation
         orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
@@ -188,9 +198,17 @@ class State(NamedTuple):
                 )
             )
         )
+
+    def _handle_move_forward(self):
+        base_orientation = self.agent.agent_state.angle_base
+        orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
+        return self._move_on_orientation(orientation_vector)
     
     def _handle_move_backward(self):
-        return self
+        base_orientation = self.agent.agent_state.angle_base
+        orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
+        return self._move_on_orientation(orientation_vector)
+        
 
     def _get_reward(self) -> Float:
         pass
