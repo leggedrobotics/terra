@@ -114,16 +114,12 @@ class State(NamedTuple):
     def _handle_move_forward(self):
         base_orientation = self.agent.agent_state.angle_base
 
-        # print(f"{base_orientation.shape=}")
-
         # assert (
         #     (base_orientation[0] == 0) |
         #     (base_orientation[0] == 1) |
         #     (base_orientation[0] == 2) |
         #     (base_orientation[0] == 3)
         # )
-
-        # print(f"{self.agent.agent_state.pos_base.shape=}")
 
         move_tiles = self.env_cfg.agent.move_tiles
         agent_width = self.env_cfg.agent.width
@@ -132,6 +128,9 @@ class State(NamedTuple):
         map_height = self.world.height
         new_pos_base = self.agent.agent_state.pos_base
 
+        # One-hot encode orientation
+        orientation_vector = jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+
         # Get occupancy of the agent based on its position and orientation
         orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
         agent_xy_matrix = jnp.array([[agent_width, agent_height],
@@ -139,15 +138,19 @@ class State(NamedTuple):
         agent_xy = orientation_vector_xy @ agent_xy_matrix
         agent_occupancy_xy = IntLowDim(move_tiles + jnp.ceil(agent_xy / 2))
 
-        # print(f"{orientation_vector_xy=}")
-        # print(f"{agent_xy=}")
-        # print(f"{agent_occupancy_xy=}")
-
         # Compute mask (if to apply the action based on the agent occupancy vs map position)
-        # TODO compute mask and use it
+        # valid_move_mask = [1, 0] means that the move is not valid
+        # valid_move_mask = [0, 1] means that the move is valid
+        conditions = jnp.array([
+            [new_pos_base[1] + agent_occupancy_xy[0, 1] < map_height],
+            [new_pos_base[0] - agent_occupancy_xy[0, 0] >= 0],
+            [new_pos_base[1] - agent_occupancy_xy[0, 1] >= 0],
+            [new_pos_base[0] + agent_occupancy_xy[0, 0] < map_width]
+        ])
+        valid_move = orientation_vector @ conditions
+        valid_move_mask = jax.nn.one_hot(valid_move[0], 2, dtype=IntLowDim)
 
         # Propagate action
-        orientation_vector = jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
         possible_deltas_xy = jnp.array([
             [0, move_tiles],
             [-move_tiles, 0],
@@ -157,14 +160,17 @@ class State(NamedTuple):
         dtype=IntLowDim)
         delta_xy = orientation_vector @ possible_deltas_xy
 
-        # print(f"{delta_xy=}")
-
         new_pos_base = (new_pos_base + delta_xy)[0]
         
         # assert 0 <= new_pos_base[0] < map_width
         # assert 0 <= new_pos_base[1] < map_height
 
-        # print(f"{new_pos_base.shape=}")
+        # Apply mask
+        old_new_pos_base = jnp.array([
+            self.agent.agent_state.pos_base,
+            new_pos_base
+        ])
+        new_pos_base = (valid_move_mask @ old_new_pos_base)[0]
         
         return self._replace(
             agent=self.agent._replace(
