@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from typing import NamedTuple
+from typing import NamedTuple, Callable
 from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
@@ -46,16 +46,25 @@ class State(NamedTuple):
         # TrackedAction type only
 
         # The DO_NOTHING action should not be played
-        valid_action_mask = (
-            (action > TrackedActionType.DO_NOTHING) &
-            (action < TrackedActionType.DO)
+        # valid_action_mask = (
+        #     (action > TrackedActionType.DO_NOTHING) &
+        #     (action < TrackedActionType.DO)
+        # )
+
+        state = jax.lax.cond(
+            action == TrackedActionType.FORWARD,
+            self._handle_move_forward,
+            lambda: jax.lax.cond(
+                action == TrackedActionType.BACKWARD,
+                self._handle_move_backward,
+                self._do_nothing
+            )
         )
 
-        return self._handle_move_forward()
-
-        # if action == TrackedActionType.FORWARD:
-        #     return self._handle_move_forward()
+        return state
     
+    def _do_nothing(self):
+        return self
 
     def _handle_move_forward_naive(self):
         """
@@ -179,7 +188,9 @@ class State(NamedTuple):
                 )
             )
         )
-
+    
+    def _handle_move_backward(self):
+        return self
 
     def _get_reward(self) -> Float:
         pass
