@@ -43,13 +43,13 @@ def key_handler(event):
     # if event.key == "backspace":
     #     reset()
 
-    # if event.key == "left":
-    #     obs, reward, done, info = env.step(env.actions.rotate_base_counter)
-    #     parse_step(obs, reward, done, info)
+    if event.key == "left":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.ANTICLOCK)
+        parse_step(state, reward, done, info)
 
-    # if event.key == "right":
-    #     obs, reward, done, info = env.step(env.actions.rotate_base_clock)
-    #     parse_step(obs, reward, done, info)
+    if event.key == "right":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.CLOCK)
+        parse_step(state, reward, done, info)
 
     if event.key == "up":
         _, (state, reward, done, info) = env.step(state, TrackedActionType.FORWARD)

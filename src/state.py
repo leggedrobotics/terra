@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from typing import NamedTuple, Callable
+from typing import NamedTuple
 from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
 from src.actions import Action, TrackedActionType
-from src.utils import Float, IntLowDim
+from src.utils import increase_angle_circular, decrease_angle_circular, Float, IntLowDim
 
 class State(NamedTuple):
     """
@@ -57,7 +57,15 @@ class State(NamedTuple):
             lambda: jax.lax.cond(
                 action == TrackedActionType.BACKWARD,
                 self._handle_move_backward,
-                self._do_nothing
+                lambda: jax.lax.cond(
+                    action == TrackedActionType.CLOCK,
+                    self._handle_clock,
+                    lambda: jax.lax.cond(
+                        action == TrackedActionType.ANTICLOCK,
+                        self._handle_anticlock,
+                        self._do_nothing
+                    )
+                )
             )
         )
 
@@ -134,7 +142,7 @@ class State(NamedTuple):
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
     
-    def _move_on_orientation(self, orientation_vector: Array):
+    def _move_on_orientation(self, orientation_vector: Array) -> "State":
         base_orientation = self.agent.agent_state.angle_base
         move_tiles = self.env_cfg.agent.move_tiles
         agent_width = self.env_cfg.agent.width
@@ -199,16 +207,37 @@ class State(NamedTuple):
             )
         )
 
-    def _handle_move_forward(self):
+    def _handle_move_forward(self) -> "State":
         base_orientation = self.agent.agent_state.angle_base
         orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
         return self._move_on_orientation(orientation_vector)
     
-    def _handle_move_backward(self):
+    def _handle_move_backward(self) -> "State":
         base_orientation = self.agent.agent_state.angle_base
         orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
         return self._move_on_orientation(orientation_vector)
-        
+    
+    def _handle_clock(self) -> "State":
+        old_angle_base = self.agent.agent_state.angle_base
+        new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    angle_base=new_angle_base
+                )
+            )
+        )
+    
+    def _handle_anticlock(self) -> "State":
+        old_angle_base = self.agent.agent_state.angle_base
+        new_angle_base = increase_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    angle_base=new_angle_base
+                )
+            )
+        )
 
     def _get_reward(self) -> Float:
         pass

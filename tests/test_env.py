@@ -31,6 +31,12 @@ class TestEnv(unittest.TestCase):
     
     def test_step_bkwd(self):
         return self._test_step_action(TrackedActionType.BACKWARD)
+    
+    def test_step_clock(self):
+        return self._test_step_action(TrackedActionType.CLOCK)
+    
+    def test_step_anticlock(self):
+        return self._test_step_action(TrackedActionType.ANTICLOCK)
 
 
 if __name__ == "__main__":
