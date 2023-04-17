@@ -7,7 +7,7 @@ from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
 from src.actions import Action, TrackedActionType
-from src.utils import Float
+from src.utils import Float, IntLowDim
 
 class State(NamedTuple):
     """
@@ -46,15 +46,21 @@ class State(NamedTuple):
         # TrackedAction type only
 
         # The DO_NOTHING action should not be played
-        assert action in list(range(TrackedActionType.FORWARD, TrackedActionType.DO + 1))
+        valid_action_mask = (
+            (action > TrackedActionType.DO_NOTHING) &
+            (action < TrackedActionType.DO)
+        )
 
-        # if action == TrackedActionType.DO_NOTHING:
-        #     return self
-        if action == TrackedActionType.FORWARD:
-            return self._handle_move_forward()
+        return self._handle_move_forward()
+
+        # if action == TrackedActionType.FORWARD:
+        #     return self._handle_move_forward()
     
 
-    def _handle_move_forward(self):
+    def _handle_move_forward_naive(self):
+        """
+        Non-vectorized version
+        """
         base_orientation = self.agent.agent_state.angle_base
         assert base_orientation.item() in (0, 1, 2, 3)
 
@@ -95,6 +101,70 @@ class State(NamedTuple):
         
         assert 0 <= new_pos_base[0] < map_width
         assert 0 <= new_pos_base[1] < map_height
+        
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    pos_base=new_pos_base
+                )
+            )
+        )
+
+
+    def _handle_move_forward(self):
+        base_orientation = self.agent.agent_state.angle_base
+
+        # print(f"{base_orientation.shape=}")
+
+        # assert (
+        #     (base_orientation[0] == 0) |
+        #     (base_orientation[0] == 1) |
+        #     (base_orientation[0] == 2) |
+        #     (base_orientation[0] == 3)
+        # )
+
+        # print(f"{self.agent.agent_state.pos_base.shape=}")
+
+        move_tiles = self.env_cfg.agent.move_tiles
+        agent_width = self.env_cfg.agent.width
+        agent_height = self.env_cfg.agent.height
+        map_width = self.world.width
+        map_height = self.world.height
+        new_pos_base = self.agent.agent_state.pos_base
+
+        # Get occupancy of the agent based on its position and orientation
+        orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
+        agent_xy_matrix = jnp.array([[agent_width, agent_height],
+                                     [agent_height, agent_width]], dtype=IntLowDim)
+        agent_xy = orientation_vector_xy @ agent_xy_matrix
+        agent_occupancy_xy = IntLowDim(move_tiles + jnp.ceil(agent_xy / 2))
+
+        # print(f"{orientation_vector_xy=}")
+        # print(f"{agent_xy=}")
+        # print(f"{agent_occupancy_xy=}")
+
+        # Compute mask (if to apply the action based on the agent occupancy vs map position)
+        # TODO compute mask and use it
+
+        # Propagate action
+        orientation_vector = jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+        possible_deltas_xy = jnp.array([
+            [0, move_tiles],
+            [-move_tiles, 0],
+            [0, -move_tiles],
+            [move_tiles, 0]
+        ],
+        dtype=IntLowDim)
+        delta_xy = orientation_vector @ possible_deltas_xy
+
+        # print(f"{delta_xy=}")
+
+        new_pos_base = (new_pos_base + delta_xy)[0]
+        
+        # assert 0 <= new_pos_base[0] < map_width
+        # assert 0 <= new_pos_base[1] < map_height
+
+        # print(f"{new_pos_base.shape=}")
         
         return self._replace(
             agent=self.agent._replace(

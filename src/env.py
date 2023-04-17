@@ -1,5 +1,6 @@
 import jax
 from jax import Array
+from functools import partial
 from src.config import EnvConfig
 from src.state import State
 from typing import Tuple, Dict, Optional, Callable
@@ -18,6 +19,13 @@ class TerraEnv:
             y_dim=env_cfg.target_map.height
         )
 
+    def __eq__(self, __o: object) -> bool:
+        return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
+    
+    def __hash__(self) -> int:
+        return hash((TerraEnv, self.env_cfg))
+
+    @partial(jax.jit, static_argnums=(0, ))
     def reset(self, seed: int) -> State:
         """
         Resets the environment using values from config files, and a seed.
@@ -49,7 +57,7 @@ class TerraEnv:
         return img
 
 
-    # TODO JIT
+    @partial(jax.jit, static_argnums=(0, ))
     def step(self, state: State, action: int) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
         """
         Step the env given an action
@@ -89,11 +97,11 @@ class TerraEnvBatch:
     def __init__(self, env_cfg: EnvConfig = EnvConfig()) -> None:
         self.terra_env = TerraEnv(env_cfg)
 
-    # TODO JIT
+    @partial(jax.jit, static_argnums=(0, ))
     def reset(self, seeds: Array) -> State:
         return jax.vmap(self.terra_env.reset)(seeds)
 
-    # TODO JIT
+    @partial(jax.jit, static_argnums=(0, ))
     def step(self, states: State, actions: Array) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
         _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(states, actions)
         return states, (states, rewards, dones, infos)
