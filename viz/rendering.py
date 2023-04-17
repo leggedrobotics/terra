@@ -274,6 +274,10 @@ class RenderingEngine:
         assert i <= self.x_dim, "Grid index i out of bound"
         assert j <= self.y_dim, "Grid index j out of boudns"
         return self.grid_object[i + self.x_dim * j]
+    
+    # def _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir):
+    #     pass
+
 
     def render_grid(
             self,
@@ -282,6 +286,8 @@ class RenderingEngine:
             agent_pos=None,
             base_dir=None,
             cabin_dir=None,
+            agent_width=None,
+            agent_height=None,
             render_objects=True,
             target_height=False
     ):
@@ -311,6 +317,7 @@ class RenderingEngine:
                 if target_height:
                     agent_here = False
                 else:
+                    # agent_occupancy = _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir)
                     agent_here = np.array_equal(agent_pos, (i, j))
                 
                 tile_img = self.render_tile(

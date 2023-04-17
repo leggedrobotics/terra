@@ -142,11 +142,35 @@ class State(NamedTuple):
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
     
-    def _move_on_orientation(self, orientation_vector: Array) -> "State":
+    def _get_agent_corners(self, pos_base: Array):
+        """
+        Gets the coordinates of the 4 corners of the agent.
+        """
         base_orientation = self.agent.agent_state.angle_base
-        move_tiles = self.env_cfg.agent.move_tiles
         agent_width = self.env_cfg.agent.width
         agent_height = self.env_cfg.agent.height
+
+        orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
+        agent_xy_matrix = jnp.array([[agent_width, agent_height],
+                                     [agent_height, agent_width]], dtype=IntLowDim)
+        agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
+
+        x_base = pos_base[0]
+        y_base = pos_base[1]
+        x_half_dim = jnp.ceil(agent_xy_dimensions[0, 0] / 2)
+        y_half_dim = jnp.ceil(agent_xy_dimensions[0, 1] / 2)
+
+        agent_corners = jnp.array([
+            [x_base + x_half_dim, y_base + y_half_dim],
+            [x_base - x_half_dim, y_base + y_half_dim],
+            [x_base + x_half_dim, y_base - y_half_dim],
+            [x_base - x_half_dim, y_base - y_half_dim]
+        ])
+        return agent_corners
+    
+    def _move_on_orientation(self, orientation_vector: Array) -> "State":
+        
+        move_tiles = self.env_cfg.agent.move_tiles
         map_width = self.world.width
         map_height = self.world.height
         new_pos_base = self.agent.agent_state.pos_base
@@ -157,25 +181,6 @@ class State(NamedTuple):
         #     (base_orientation[0] == 2) |
         #     (base_orientation[0] == 3)
         # )
-
-        # Get occupancy of the agent based on its position and orientation
-        orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
-        agent_xy_matrix = jnp.array([[agent_width, agent_height],
-                                     [agent_height, agent_width]], dtype=IntLowDim)
-        agent_xy = orientation_vector_xy @ agent_xy_matrix
-        agent_occupancy_xy = IntLowDim(move_tiles + jnp.ceil(agent_xy / 2))
-
-        # Compute mask (if to apply the action based on the agent occupancy vs map position)
-        # valid_move_mask = [1, 0] means that the move is not valid
-        # valid_move_mask = [0, 1] means that the move is valid
-        conditions = jnp.array([
-            [new_pos_base[1] + agent_occupancy_xy[0, 1] < map_height],
-            [new_pos_base[0] - agent_occupancy_xy[0, 0] >= 0],
-            [new_pos_base[1] - agent_occupancy_xy[0, 1] >= 0],
-            [new_pos_base[0] + agent_occupancy_xy[0, 0] < map_width]
-        ])
-        valid_move = orientation_vector @ conditions
-        valid_move_mask = jax.nn.one_hot(valid_move[0], 2, dtype=IntLowDim)
 
         # Propagate action
         possible_deltas_xy = jnp.array([
@@ -189,15 +194,43 @@ class State(NamedTuple):
 
         new_pos_base = (new_pos_base + delta_xy)[0]
         
-        # assert 0 <= new_pos_base[0] < map_width
-        # assert 0 <= new_pos_base[1] < map_height
+        # Get occupancy of the agent based on its position and orientation
+        agent_corners_xy = self._get_agent_corners(new_pos_base)
+
+        # Compute mask (if to apply the action based on the agent occupancy vs map position)
+        # valid_move_mask = [1, 0] means that the move is not valid
+        # valid_move_mask = [0, 1] means that the move is valid
+
+        # conditions = jnp.array([
+        #     [new_pos_base[1] + agent_occupancy_xy[0, 1] < map_height],
+        #     [new_pos_base[0] - agent_occupancy_xy[0, 0] >= 0],
+        #     [new_pos_base[1] - agent_occupancy_xy[0, 1] >= 0],
+        #     [new_pos_base[0] + agent_occupancy_xy[0, 0] < map_width]
+        # ])
+        # valid_move = orientation_vector @ conditions
+
+        print(f"{agent_corners_xy=}")
+
+        # valid_matrix =  < jnp.array([map_width, map_height])
+        valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
+        valid_matrix_up = agent_corners_xy < jnp.array([map_width, map_height])
+
+        valid_move = jnp.all(jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0))
+
+        print(f"{valid_move=}")
+
+        valid_move_mask = jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
+
+        print(f"{valid_move_mask=}")
 
         # Apply mask
         old_new_pos_base = jnp.array([
             self.agent.agent_state.pos_base,
             new_pos_base
         ])
-        new_pos_base = (valid_move_mask @ old_new_pos_base)[0]
+        new_pos_base = (valid_move_mask @ old_new_pos_base)
+
+        print(f"{new_pos_base=}")
         
         return self._replace(
             agent=self.agent._replace(
@@ -218,8 +251,15 @@ class State(NamedTuple):
         return self._move_on_orientation(orientation_vector)
     
     def _handle_clock(self) -> "State":
+        # Rotate
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
+
+        # Check occupancy
+
+
+        # Apply or mask action
+
         return self._replace(
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(

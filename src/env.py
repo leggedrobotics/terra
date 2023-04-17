@@ -46,7 +46,9 @@ class TerraEnv:
                                                 height_grid=state.world.action_map.map,
                                                 agent_pos=state.agent.agent_state.pos_base,
                                                 base_dir=state.agent.agent_state.angle_base,
-                                                cabin_dir=state.agent.agent_state.angle_cabin)
+                                                cabin_dir=state.agent.agent_state.angle_cabin,
+                                                agent_width=self.env_cfg.agent.width,
+                                                agent_height=self.env_cfg.agent.height)
 
         if key_handler:
             if mode == "human":
