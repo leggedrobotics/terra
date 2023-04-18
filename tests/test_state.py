@@ -25,5 +25,16 @@ class TestAgent(unittest.TestCase):
         # print(state.agent.agent_state)
 
 
+    def test_get_agent_corners(self):
+        seed = 25
+        state = State.new(seed, env_cfg=EnvConfig())
+        
+        print(f"{state.agent.agent_state.pos_base=}")
+
+        corners = state._get_agent_corners(state.agent.agent_state.pos_base)
+
+        print(f"{corners=}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -157,8 +157,8 @@ class State(NamedTuple):
 
         x_base = pos_base[0]
         y_base = pos_base[1]
-        x_half_dim = jnp.ceil(agent_xy_dimensions[0, 0] / 2)
-        y_half_dim = jnp.ceil(agent_xy_dimensions[0, 1] / 2)
+        x_half_dim = jnp.floor(agent_xy_dimensions[0, 0] / 2)
+        y_half_dim = jnp.floor(agent_xy_dimensions[0, 1] / 2)
 
         agent_corners = jnp.array([
             [x_base + x_half_dim, y_base + y_half_dim],
