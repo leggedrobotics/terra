@@ -63,7 +63,15 @@ class State(NamedTuple):
                     lambda: jax.lax.cond(
                         action == TrackedActionType.ANTICLOCK,
                         self._handle_anticlock,
-                        self._do_nothing
+                        lambda: jax.lax.cond(
+                            action == TrackedActionType.CABIN_CLOCK,
+                            self._handle_cabin_clock,
+                            lambda: jax.lax.cond(
+                                action == TrackedActionType.CABIN_ANTICLOCK,
+                                self._handle_cabin_anticlock,
+                                self._do_nothing
+                            )
+                        )
                     )
                 )
             )
@@ -283,6 +291,30 @@ class State(NamedTuple):
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(
                     angle_base=new_angle_base
+                )
+            )
+        )
+    
+    def _handle_cabin_clock(self) -> "State":
+        old_angle_cabin = self.agent.agent_state.angle_cabin
+        new_angle_cabin = decrease_angle_circular(old_angle_cabin, self.env_cfg.agent.angles_cabin)
+
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    angle_cabin=new_angle_cabin
+                )
+            )
+        )
+    
+    def _handle_cabin_anticlock(self) -> "State":
+        old_angle_cabin = self.agent.agent_state.angle_cabin
+        new_angle_cabin = increase_angle_circular(old_angle_cabin, self.env_cfg.agent.angles_cabin)
+        
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    angle_cabin=new_angle_cabin
                 )
             )
         )

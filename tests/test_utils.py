@@ -13,6 +13,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(decrease_angle_circular(2, 3), 1)
         self.assertEqual(decrease_angle_circular(1, 55), 0)
         self.assertEqual(decrease_angle_circular(0, 55), 54)
+        self.assertEqual(decrease_angle_circular(0, 8), 7)
 
 
 if __name__ == "__main__":

@@ -19,24 +19,31 @@ class TestEnv(unittest.TestCase):
         state = env.reset(seed)
 
         # print(state)
-        action = TrackedActionType.FORWARD
         _, (state1, reward, dones, infos) = env.step(state, action)
 
         # print(state)
 
         # self.assertFalse(state == state1)  # TODO implement __eq__
 
+        return state1
+
     def test_step_fwd(self):
-        return self._test_step_action(TrackedActionType.FORWARD)
+        state = self._test_step_action(TrackedActionType.FORWARD)
     
     def test_step_bkwd(self):
-        return self._test_step_action(TrackedActionType.BACKWARD)
+        state = self._test_step_action(TrackedActionType.BACKWARD)
     
     def test_step_clock(self):
-        return self._test_step_action(TrackedActionType.CLOCK)
+        state = self._test_step_action(TrackedActionType.CLOCK)
     
     def test_step_anticlock(self):
-        return self._test_step_action(TrackedActionType.ANTICLOCK)
+        state = self._test_step_action(TrackedActionType.ANTICLOCK)
+    
+    def test_step_cabin_clock(self):
+        state = self._test_step_action(TrackedActionType.CABIN_CLOCK)
+    
+    def test_step_cabin_anticlock(self):
+        state = self._test_step_action(TrackedActionType.CABIN_ANTICLOCK)
 
 
 if __name__ == "__main__":
