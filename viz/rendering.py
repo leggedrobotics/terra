@@ -258,17 +258,17 @@ class RenderingEngine:
 
         fill_coords(img, base_fn, (255, 255, 0))
 
-        # tri_fn = point_in_triangle(
-        #     (0.12, 0.81),
-        #     (0.12, 0.19),
-        #     (0.87, 0.50),
-        # )
+        tri_fn = point_in_triangle(
+            (0.12, 0.81),
+            (0.12, 0.19),
+            (0.87, 0.50),
+        )
 
-        # # Rotate the agent based on its direction
-        # tri_fn = rotate_fn(
-        #     tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir
-        # )
-        # fill_coords(img, tri_fn, (255, 0, 0))
+        # Rotate the agent based on its direction
+        tri_fn = rotate_fn(
+            tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir
+        )
+        fill_coords(img, tri_fn, (255, 0, 0))
 
         return img
     

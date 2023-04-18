@@ -59,13 +59,13 @@ def key_handler(event):
         _, (state, reward, done, info) = env.step(state, TrackedActionType.BACKWARD)
         parse_step(state, reward, done, info)
 
-    # if event.key == "a":
-    #     obs, reward, done, info = env.step(env.actions.rotate_cabin_counter)
-    #     parse_step(obs, reward, done, info)
+    if event.key == "a":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_ANTICLOCK)
+        parse_step(state, reward, done, info)
 
-    # if event.key == "d":
-    #     obs, reward, done, info = env.step(env.actions.rotate_cabin_clock)
-    #     parse_step(obs, reward, done, info)
+    if event.key == "d":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_CLOCK)
+        parse_step(state, reward, done, info)
 
     # if event.key == " ":
     #     obs, reward, done, info = env.step(env.actions.do)
