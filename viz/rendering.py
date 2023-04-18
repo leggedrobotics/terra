@@ -34,6 +34,7 @@ def fill_coords(img, fn, color):
 
 
 def rotate_fn(fin, cx, cy, theta):
+    theta = -theta
     def fout(x, y):
         x = x - cx
         y = y - cy

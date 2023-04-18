@@ -33,8 +33,9 @@ class Agent(NamedTuple):
 
     @staticmethod
     def new(env_cfg: EnvConfig) -> "Agent":
+        max_center_coord = np.ceil(np.max([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1])).astype(IntMap)
         agent_state = AgentState(
-            pos_base=IntMap(np.ceil([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1])),
+            pos_base=IntMap(np.array([max_center_coord, max_center_coord])),
             angle_base=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             angle_cabin=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             arm_extension=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
