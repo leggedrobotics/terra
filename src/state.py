@@ -142,14 +142,14 @@ class State(NamedTuple):
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
     
-    def _get_agent_corners(self, pos_base: Array):
+    @staticmethod
+    def _get_agent_corners(pos_base: Array,
+                           base_orientation:IntLowDim,
+                           agent_width: IntLowDim,
+                           agent_height: IntLowDim):
         """
         Gets the coordinates of the 4 corners of the agent.
         """
-        base_orientation = self.agent.agent_state.angle_base
-        agent_width = self.env_cfg.agent.width
-        agent_height = self.env_cfg.agent.height
-
         orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
         agent_xy_matrix = jnp.array([[agent_width, agent_height],
                                      [agent_height, agent_width]], dtype=IntLowDim)
@@ -195,7 +195,11 @@ class State(NamedTuple):
         new_pos_base = (new_pos_base + delta_xy)[0]
         
         # Get occupancy of the agent based on its position and orientation
-        agent_corners_xy = self._get_agent_corners(new_pos_base)
+        agent_corners_xy = self._get_agent_corners(new_pos_base,
+                                                   base_orientation = self.agent.agent_state.angle_base,
+                                                   agent_width = self.env_cfg.agent.width,
+                                                   agent_height = self.env_cfg.agent.height,
+                                                   )
 
         # Compute mask (if to apply the action based on the agent occupancy vs map position)
         # valid_move_mask = [1, 0] means that the move is not valid
@@ -256,9 +260,11 @@ class State(NamedTuple):
         new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
 
         # Check occupancy
+        # TODO
 
 
         # Apply or mask action
+        # TODO
 
         return self._replace(
             agent=self.agent._replace(

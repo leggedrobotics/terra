@@ -31,7 +31,12 @@ class TestAgent(unittest.TestCase):
         
         print(f"{state.agent.agent_state.pos_base=}")
 
-        corners = state._get_agent_corners(state.agent.agent_state.pos_base)
+        corners = state._get_agent_corners(
+            pos_base=state.agent.agent_state.pos_base,
+            base_orientation=state.agent.agent_state.angle_base,
+            agent_width=state.env_cfg.agent.width,
+            agent_height=state.env_cfg.agent.height
+        )
 
         print(f"{corners=}")
 

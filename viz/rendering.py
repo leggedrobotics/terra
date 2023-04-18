@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from abc import abstractmethod, ABCMeta
+from src.state import State
 
 def downsample(img, factor):
     """
@@ -218,49 +219,55 @@ class RenderingEngine:
             img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
         )
 
-        # Overlay the agent on top
-        if base_dir is not None and cabin_dir is not None:
-            # draw the base a yellow rectangle with one side longer than the other
-            # to make it easier to see the direction
-            back_base_fn = point_in_rect(
-                0.25, 0.75, 0.0, 0.25
-            )
-
-            back_base_fn = rotate_fn(
-                back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
-            )
-            # render in black
-            fill_coords(
-                img, back_base_fn, (0, 0, 0))
-
-            base_fn = point_in_rect(
-                0.25, 0.75, 0.25, 1
-            )
-
-            base_fn = rotate_fn(
-                base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
-            )
-
-            fill_coords(img, base_fn, (255, 255, 0))
-
-            tri_fn = point_in_triangle(
-                (0.12, 0.81),
-                (0.12, 0.19),
-                (0.87, 0.50),
-            )
-
-            # Rotate the agent based on its direction
-            tri_fn = rotate_fn(
-                tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir
-            )
-            fill_coords(img, tri_fn, (255, 0, 0))
-
         # Downsample the image to perform supersampling/anti-aliasing
         img = downsample(img, subdivs)
 
         # Cache the rendered tile
 
         self.tile_cache[key] = img
+
+        return img
+    
+    def render_agent(self, agent_width, agent_height, tile_size, base_dir, cabin_dir = None):
+        # draw the base a yellow rectangle with one side longer than the other
+        # to make it easier to see the direction
+
+        img = np.zeros(
+            shape=(tile_size * agent_width, tile_size * agent_height, 3), dtype=np.uint8
+        )
+
+        back_base_fn = point_in_rect(
+            0.25, 0.75, 0.0, 0.25
+        )
+
+        back_base_fn = rotate_fn(
+            back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+        )
+        # render in black
+        fill_coords(
+            img, back_base_fn, (0, 0, 0))
+
+        base_fn = point_in_rect(
+            0.25, 0.75, 0.25, 1
+        )
+
+        base_fn = rotate_fn(
+            base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+        )
+
+        fill_coords(img, base_fn, (255, 255, 0))
+
+        # tri_fn = point_in_triangle(
+        #     (0.12, 0.81),
+        #     (0.12, 0.19),
+        #     (0.87, 0.50),
+        # )
+
+        # # Rotate the agent based on its direction
+        # tri_fn = rotate_fn(
+        #     tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir
+        # )
+        # fill_coords(img, tri_fn, (255, 0, 0))
 
         return img
     
@@ -317,7 +324,6 @@ class RenderingEngine:
                 if target_height:
                     agent_here = False
                 else:
-                    # agent_occupancy = _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir)
                     agent_here = np.array_equal(agent_pos, (i, j))
                 
                 tile_img = self.render_tile(
@@ -335,6 +341,38 @@ class RenderingEngine:
 
                 # img[ymin:ymax, xmin:xmax, :] = tile_img
                 img[xmin:xmax, ymin:ymax, :] = tile_img
+        
+
+        agent_corners = State._get_agent_corners(
+            pos_base=agent_pos,
+            base_orientation=base_dir,
+            agent_width=agent_width,
+            agent_height=agent_height
+        )
+
+        ay_min = np.min(agent_corners[:, 1]).astype(np.int16)
+        ax_min = np.min(agent_corners[:, 0]).astype(np.int16)
+        ay_max = np.max(agent_corners[:, 1] + 1).astype(np.int16)
+        ax_max = np.max(agent_corners[:, 0] + 1).astype(np.int16)
+
+        # print(f"{agent_corners=}")
+        # print(f"{ay_min=}")
+        # print(f"{ax_min=}")
+        # print(f"{ay_max=}")
+        # print(f"{ax_max=}")
+
+        agent_ymin = ay_min * tile_size
+        agent_ymax = ay_max * tile_size
+        agent_xmin = ax_min * tile_size
+        agent_xmax = ax_max * tile_size
+
+        # print(f"{agent_ymin=}")
+        # print(f"{agent_ymax=}")
+        # print(f"{agent_xmin=}")
+        # print(f"{agent_xmax=}")
+
+        agent_img = self.render_agent(ax_max-ax_min, ay_max-ay_min, tile_size, base_dir, cabin_dir)
+        img[agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_img
 
         return img.transpose(0, 1, 2)
 
