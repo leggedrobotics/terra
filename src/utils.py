@@ -1,4 +1,6 @@
 import jax.numpy as jnp
+from jax import Array
+import numpy as np
 
 IntMap = jnp.int16
 INTMAP_MAX = jnp.iinfo(IntMap).max
@@ -27,3 +29,15 @@ def decrease_angle_circular(angle: IntLowDim, max_angle: IntLowDim) -> IntLowDim
         max_angle: int > 0
     """
     return (angle + max_angle -1) % max_angle
+
+def apply_rot_transl(anchor_state: Array, map_global_coords: Array) -> Array:
+    pass
+
+def apply_local_cartesian_to_curv(local_coords: Array) -> Array:
+    pass
+
+def angle_idx_to_rad(angle: IntLowDim, idx_tot: IntLowDim) -> Float:
+    return 2. * np.pi * angle / (idx_tot - 1)
+
+def wrap_angle_rad(angle: Float) -> Float:
+    return angle % (2 * np.pi)

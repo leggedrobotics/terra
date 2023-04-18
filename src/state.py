@@ -7,7 +7,17 @@ from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
 from src.actions import Action, TrackedActionType
-from src.utils import increase_angle_circular, decrease_angle_circular, Float, IntLowDim
+from src.utils import (
+    apply_rot_transl,
+    increase_angle_circular,
+    decrease_angle_circular,
+    apply_local_cartesian_to_curv,
+    angle_idx_to_rad,
+    wrap_angle_rad,
+    Float,
+    IntLowDim,
+    IntMap
+)
 
 class State(NamedTuple):
     """
@@ -358,7 +368,94 @@ class State(NamedTuple):
                 )
             )
         )
+    
+    @staticmethod
+    def _get_current_pos_vector_idx(pos_base: Array, map_height: IntMap) -> IntMap:
+        """
+        If the map is flattened to an array of shape (2, N), this
+        function returns the idx of the current position on the axis=1.
 
+        Return:
+            - index of the current position in the flattened map
+        """
+        return pos_base @ jnp.array([[map_height], [1]], dtype=IntMap)
+    
+    @staticmethod
+    def _map_to_flattened_global_coords(map_width: IntMap, map_height: IntMap, tile_size: Float) -> Array:
+        """
+        Args:
+            - map_width: width dim of the map
+            - map_height: height dim of the map
+            - tile_size: the dimension of each tile of the map
+        Return:
+            - a (2, width * height) Array, where the first row are the x coords,
+                and the second row are the y coords.
+        """
+        tile_offset = tile_size / 2
+        x_row = jnp.tile(jnp.vstack(jnp.arange(map_width)), map_height).reshape(-1)
+        y_row = jnp.tile(jnp.arange(map_height), map_width)
+        flat_map = jnp.vstack([x_row, y_row])
+        flat_map = flat_map * tile_size
+        flat_map = flat_map + tile_offset
+        return flat_map
+    
+    @staticmethod
+    def _get_current_pos_from_flattened_map(flattened_map: Array, idx: IntMap) -> Array:
+        num_tiles = flattened_map.shape[1]
+        idx_one_hot = jax.nn.one_hot(idx, num_tiles, dtype=Float)
+        current_pos = flattened_map @ idx_one_hot
+        return current_pos
+
+    def _get_cabin_angle_rad(self) -> Float:
+        return angle_idx_to_rad(self.agent.agent_state.angle_cabin, self.env_cfg.agent.angles_cabin)
+    
+    def _get_base_angle_rad(self) -> Float:
+        return angle_idx_to_rad(self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base)
+    
+    def _get_arm_angle_rad(self) -> Float:
+        return wrap_angle_rad(self._get_base_angle_rad() + self._get_cabin_angle_rad())
+
+    def _get_dig_mask(map_curv_coords: Array) -> Array:
+        pass
+    
+    @staticmethod
+    def _apply_dig_mask(map: Array, dig_mask: Array) -> Array:
+        pass
+
+    def _handle_dig(self) -> "State":
+        current_pos_idx = self._get_current_pos_vector_idx(
+            pos_base=self.agent.agent_state.pos_base,
+            map_height=self.env_cfg.action_map.height
+        )
+        map_global_coords = self._map_to_flattened_global_coords(self.world.action_map)
+        current_pos = self._get_current_pos_from_flattened_map(map_global_coords, current_pos_idx)
+        current_arm_angle = self._get_arm_angle_rad()
+
+        # TODO implement following:
+        current_state = jnp.hstack((current_pos, current_arm_angle))
+        map_local_coords = apply_rot_transl(current_state, map_global_coords)
+        map_curv_coords = apply_local_cartesian_to_curv(map_local_coords)
+        dig_mask = self._get_dig_mask(map_curv_coords)
+        new_map_global_coords = self._apply_dig_mask(self.world.action_map, dig_mask)
+
+        return self._replace(
+            world=self.world._replace(
+                action_map=self.world.action_map._replace(
+                    map=new_map_global_coords
+                )
+            )
+        )
+    
+    def _handle_dump(self) -> "State":
+        pass
+    
+    def _handle_do(self) -> "State":
+        state = jax.lax.cond(
+            jnp.all(self.agent.agent_state.loaded),
+            self._handle_dump,
+            self._handle_dig
+        )
+        return state
 
     def _get_reward(self) -> Float:
         pass

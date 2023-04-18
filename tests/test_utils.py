@@ -1,5 +1,10 @@
 import unittest
-from src.utils import increase_angle_circular, decrease_angle_circular
+import numpy as np
+from src.utils import (
+    increase_angle_circular,
+    decrease_angle_circular,
+    wrap_angle_rad
+    )
 
 class TestUtils(unittest.TestCase):
 
@@ -14,6 +19,12 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(decrease_angle_circular(1, 55), 0)
         self.assertEqual(decrease_angle_circular(0, 55), 54)
         self.assertEqual(decrease_angle_circular(0, 8), 7)
+
+    def test_wrap_angle_rad(self):
+        self.assertTrue(np.allclose(wrap_angle_rad(3 * np.pi), np.pi))
+        self.assertTrue(np.allclose(wrap_angle_rad(np.pi), np.pi))
+        self.assertTrue(np.allclose(wrap_angle_rad(0), 0))
+        self.assertTrue(np.allclose(wrap_angle_rad(2 * np.pi + 1), 1.))
 
 
 if __name__ == "__main__":
