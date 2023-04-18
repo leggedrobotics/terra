@@ -318,6 +318,39 @@ class State(NamedTuple):
                 )
             )
         )
+    
+    def _handle_extend_arm(self) -> "State":
+        new_arm_extension = jnp.min(
+            jnp.array(
+                    [self.agent.agent_state.arm_extension + 1,
+                    jnp.full((1, ), fill_value=self.env_cfg.agent.max_arm_extension, dtype=IntLowDim)]
+                    ),
+                    axis=0
+        )
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    arm_extension=new_arm_extension
+                )
+            )
+        )
+    
+    def _handle_retract_arm(self) -> "State":
+        new_arm_extension = jnp.max(
+            jnp.array(
+                    [self.agent.agent_state.arm_extension - 1,
+                    jnp.full((1, ), fill_value=0, dtype=IntLowDim)]
+                    ),
+                    axis=0
+        )
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    arm_extension=new_arm_extension
+                )
+            )
+        )
+
 
     def _get_reward(self) -> Float:
         pass

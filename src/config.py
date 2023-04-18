@@ -24,6 +24,8 @@ class AgentConfig(NamedTuple):
     move_tiles: int = 2  # number of tiles of progress for every move action
     #  (to be made congruent with dig space dimensions and tile dimensions)
 
+    max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
+
 
 class EnvConfig(NamedTuple):
     agent: AgentConfig = AgentConfig()

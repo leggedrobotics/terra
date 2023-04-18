@@ -29,8 +29,6 @@ class TestAgent(unittest.TestCase):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
         
-        print(f"{state.agent.agent_state.pos_base=}")
-
         corners = state._get_agent_corners(
             pos_base=state.agent.agent_state.pos_base,
             base_orientation=state.agent.agent_state.angle_base,
@@ -38,7 +36,18 @@ class TestAgent(unittest.TestCase):
             agent_height=state.env_cfg.agent.height
         )
 
-        print(f"{corners=}")
+    def test_arm_extension(self):
+        seed = 25
+        state = State.new(seed, env_cfg=EnvConfig())
+
+        state = state._handle_extend_arm()
+        self.assertEqual(state.agent.agent_state.arm_extension, 1)
+        state = state._handle_extend_arm()
+        self.assertEqual(state.agent.agent_state.arm_extension, 1)
+        # state = state._handle_retract_arm()
+        # self.assertEqual(state.agent.agent_state.arm_extension, 0)
+        # state = state._handle_retract_arm()
+        # self.assertEqual(state.agent.agent_state.arm_extension, 0)
 
 
 if __name__ == "__main__":
