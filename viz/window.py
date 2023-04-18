@@ -48,13 +48,15 @@ class Window:
         if self.imshow_obj is None:
             self.imshow_obj = self.ax.imshow(img, interpolation='bilinear')
 
-        print(f"{img.shape=}")
         self.imshow_obj.set_data(img)
         self.fig.canvas.draw()
 
         # Let matplotlib process UI events
         # This is needed for interactive mode to work properly
         plt.pause(0.001)
+    
+    def set_title(self, title):
+        self.ax.set_title(title)
 
     def set_caption(self, text):
         """

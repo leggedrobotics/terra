@@ -52,6 +52,7 @@ class TerraEnv:
 
         if key_handler:
             if mode == "human":
+                self.window.set_title(title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}")
                 self.window.show_img(img)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)

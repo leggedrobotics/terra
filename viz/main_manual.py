@@ -67,6 +67,14 @@ def key_handler(event):
         _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_CLOCK)
         parse_step(state, reward, done, info)
 
+    if event.key == "e":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.EXTEND_ARM)
+        parse_step(state, reward, done, info)
+
+    if event.key == "r":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.RETRACT_ARM)
+        parse_step(state, reward, done, info)
+
     # if event.key == " ":
     #     obs, reward, done, info = env.step(env.actions.do)
     #     parse_step(obs, reward, done, info)
