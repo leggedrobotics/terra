@@ -130,7 +130,7 @@ def parse_step(obs, reward, done, info):
 #            "cabin_turn_reward": -0.05, # ok
 #            "terminal_reward": 10}
 
-env = TerraEnv(EnvConfig())
+env = TerraEnv(EnvConfig(), rendering=True)
 print(env)
 seed = 24
 state = env.reset(seed=seed)

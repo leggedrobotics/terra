@@ -4,20 +4,20 @@ from functools import partial
 from src.config import EnvConfig
 from src.state import State
 from typing import Tuple, Dict, Optional, Callable
-from viz.window import Window
-from viz.rendering import RenderingEngine
 
 
 class TerraEnv:
-    def __init__(self, env_cfg: EnvConfig) -> None:
-        self.env_cfg = env_cfg
+    def __init__(self, env_cfg: EnvConfig, rendering: bool = False) -> None:
+        self.env_cfg = env_cfg       
 
-        # TODO remove following
-        self.window = Window("Terra")
-        self.rendering_engine = RenderingEngine(
-            x_dim=env_cfg.target_map.width,
-            y_dim=env_cfg.target_map.height
-        )
+        if rendering:
+            from viz.window import Window
+            from viz.rendering import RenderingEngine
+            self.window = Window("Terra")
+            self.rendering_engine = RenderingEngine(
+                x_dim=env_cfg.target_map.width,
+                y_dim=env_cfg.target_map.height
+            )
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
@@ -86,9 +86,6 @@ class TerraEnv:
         dones = state._is_done()
 
         return state, (state, reward, dones, infos)
-
-    # def close(self):
-    #     return self._dummy_env.close()
 
 
 class TerraEnvBatch:
