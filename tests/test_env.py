@@ -45,6 +45,12 @@ class TestEnv(unittest.TestCase):
     def test_step_cabin_anticlock(self):
         state = self._test_step_action(TrackedActionType.CABIN_ANTICLOCK)
 
+    def test_step_extend_arm(self):
+        state = self._test_step_action(TrackedActionType.EXTEND_ARM)
+
+    def test_step_retract_arm(self):
+        state = self._test_step_action(TrackedActionType.RETRACT_ARM)
+
 
 if __name__ == "__main__":
     unittest.main()

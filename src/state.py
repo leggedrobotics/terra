@@ -69,7 +69,15 @@ class State(NamedTuple):
                             lambda: jax.lax.cond(
                                 action == TrackedActionType.CABIN_ANTICLOCK,
                                 self._handle_cabin_anticlock,
-                                self._do_nothing
+                                lambda: jax.lax.cond(
+                                    action == TrackedActionType.EXTEND_ARM,
+                                    self._handle_extend_arm,
+                                    lambda: jax.lax.cond(
+                                        action == TrackedActionType.RETRACT_ARM,
+                                        self._handle_retract_arm,
+                                        self._do_nothing
+                                    )
+                                )
                             )
                         )
                     )
