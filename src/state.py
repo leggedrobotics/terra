@@ -259,12 +259,9 @@ class State(NamedTuple):
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
 
-        # Check occupancy
-        # TODO
-
-
-        # Apply or mask action
-        # TODO
+        # TODO in case the agent can reach the limit of the map (currently not possible)
+        # 1. Check occupancy
+        # 2. Apply or mask action
 
         return self._replace(
             agent=self.agent._replace(
@@ -277,6 +274,11 @@ class State(NamedTuple):
     def _handle_anticlock(self) -> "State":
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = increase_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
+        
+        # TODO in case the agent can reach the limit of the map (currently not possible)
+        # 1. Check occupancy
+        # 2. Apply or mask action
+        
         return self._replace(
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(
