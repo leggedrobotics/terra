@@ -411,11 +411,9 @@ class State(NamedTuple):
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
         cabin_angle = self._get_cabin_angle_rad()
-        jax.debug.print("base_angle= {x}", x=base_angle)
-        jax.debug.print("cabin_angle= {x}", x=cabin_angle)
         return wrap_angle_rad(base_angle + cabin_angle)
 
-    def _get_dig_mask(self, map_cyl_coords: Array) -> Array:
+    def _get_dig_dump_mask(self, map_cyl_coords: Array) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
         
@@ -432,26 +430,15 @@ class State(NamedTuple):
         theta_max = np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
-        # jax.debug.print("map_cyl_coords[1] = {x}", x=map_cyl_coords[1].reshape(20, 22))
-
-        # jax.debug.print("tmin = {x}", x=theta_min)
-        # jax.debug.print("tmax = {x}", x=theta_max)
-        # jax.debug.print("rmin = {x}", x=r_min)
-        # jax.debug.print("rmax = {x}", x=r_max)
-
         dig_mask_r = jnp.logical_and(
             map_cyl_coords[0] >= r_min,
             map_cyl_coords[0] <= r_max
         )
 
-        jax.debug.print("dig_mask_r = {x}", x=dig_mask_r)
-
         dig_mask_theta = jnp.logical_and(
             map_cyl_coords[1] >= theta_min,
             map_cyl_coords[1] <= theta_max
         )
-
-        jax.debug.print("dig_mask_theta = {x}", x=dig_mask_theta)
         
         return jnp.logical_and(dig_mask_r, dig_mask_theta)
     
@@ -465,8 +452,19 @@ class State(NamedTuple):
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
         return flattened_map - delta_dig
-
-    def _handle_dig(self) -> "State":
+    
+    def _apply_dump_mask(self, flattened_map: Array, dump_mask: Array) -> Array:
+        """
+        Args:
+            - flattened_map: (N, ) Array flattened height map
+            - dump_mask: (N, ) Array of where to dump bools
+        Returns:
+            - new_flattened_map: (N, ) Array flattened new height map
+        """
+        delta_dig = self.env_cfg.agent.dig_depth * dump_mask.astype(IntMap)
+        return flattened_map + delta_dig
+    
+    def _build_dig_dump_mask(self) -> Array:
         current_pos_idx = self._get_current_pos_vector_idx(
             pos_base=self.agent.agent_state.pos_base,
             map_height=self.env_cfg.action_map.height
@@ -476,16 +474,15 @@ class State(NamedTuple):
                                                                  self.env_cfg.tile_size)
         current_pos = self._get_current_pos_from_flattened_map(map_global_coords, current_pos_idx)
         current_arm_angle = self._get_arm_angle_rad()
-        jax.debug.print("current_arm_angle= {x}", x=current_arm_angle)
 
-        current_state = jnp.hstack((current_pos, current_arm_angle))  # TODO fix signs here!
+        current_state = jnp.hstack((current_pos, current_arm_angle))
         map_local_coords = apply_rot_transl(current_state, map_global_coords)
 
-        jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[0].reshape(10, 12))
-        jax.debug.print("map_local_coords[1]= {x}", x=map_local_coords[1].reshape(10, 12))
-
         map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords)
-        dig_mask = self._get_dig_mask(map_cyl_coords)
+        return self._get_dig_dump_mask(map_cyl_coords)
+
+    def _handle_dig(self) -> "State":
+        dig_mask = self._build_dig_dump_mask()
         flattened_action_map = self.world.action_map.map.reshape(-1)
         new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
@@ -495,11 +492,32 @@ class State(NamedTuple):
                 action_map=self.world.action_map._replace(
                     map=new_map_global_coords
                 )
+            ),
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    loaded=jnp.full((1, ), fill_value=True, dtype=jnp.bool_)
+                )
             )
         )
     
     def _handle_dump(self) -> "State":
-        return self
+        dump_mask = self._build_dig_dump_mask()
+        flattened_action_map = self.world.action_map.map.reshape(-1)
+        new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask)
+        new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
+
+        return self._replace(
+            world=self.world._replace(
+                action_map=self.world.action_map._replace(
+                    map=new_map_global_coords
+                )
+            ),
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    loaded=jnp.full((1, ), fill_value=False, dtype=jnp.bool_)
+                )
+            )
+        )
     
     def _handle_do(self) -> "State":
         state = jax.lax.cond(
