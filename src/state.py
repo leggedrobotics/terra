@@ -409,7 +409,11 @@ class State(NamedTuple):
         return angle_idx_to_rad(self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base)
     
     def _get_arm_angle_rad(self) -> Float:
-        return wrap_angle_rad(self._get_base_angle_rad() + self._get_cabin_angle_rad())
+        base_angle = self._get_base_angle_rad()
+        cabin_angle = self._get_cabin_angle_rad()
+        jax.debug.print("base_angle= {x}", x=base_angle)
+        jax.debug.print("cabin_angle= {x}", x=cabin_angle)
+        return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_dig_mask(self, map_cyl_coords: Array) -> Array:
         """
@@ -428,7 +432,7 @@ class State(NamedTuple):
         theta_max = np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
-        # jax.debug.print("map_cyl_coords[0] = {x}", x=map_cyl_coords[0])
+        # jax.debug.print("map_cyl_coords[1] = {x}", x=map_cyl_coords[1].reshape(20, 22))
 
         # jax.debug.print("tmin = {x}", x=theta_min)
         # jax.debug.print("tmax = {x}", x=theta_max)
@@ -440,14 +444,14 @@ class State(NamedTuple):
             map_cyl_coords[0] <= r_max
         )
 
-        # jax.debug.print("dig_mask_r = {x}", x=dig_mask_r)
+        jax.debug.print("dig_mask_r = {x}", x=dig_mask_r)
 
         dig_mask_theta = jnp.logical_and(
             map_cyl_coords[1] >= theta_min,
             map_cyl_coords[1] <= theta_max
         )
 
-        # jax.debug.print("dig_mask_theta = {x}", x=dig_mask_theta)
+        jax.debug.print("dig_mask_theta = {x}", x=dig_mask_theta)
         
         return jnp.logical_and(dig_mask_r, dig_mask_theta)
     
@@ -467,24 +471,21 @@ class State(NamedTuple):
             pos_base=self.agent.agent_state.pos_base,
             map_height=self.env_cfg.action_map.height
         )
-        # jax.debug.print("current_pos_idx = {x}", x=current_pos_idx)
         map_global_coords = self._map_to_flattened_global_coords(self.world.width,
                                                                  self.world.height,
                                                                  self.env_cfg.tile_size)
-        # jax.debug.print("map_global_coords = {x}", x=map_global_coords)
         current_pos = self._get_current_pos_from_flattened_map(map_global_coords, current_pos_idx)
         current_arm_angle = self._get_arm_angle_rad()
-        jax.debug.print("current_arm_angle = {x}", x=current_arm_angle)
-        current_state = jnp.hstack((-current_pos, current_arm_angle))  # TODO fix signs here!
-        # jax.debug.print("current_state = {x}", x=current_state)
+        jax.debug.print("current_arm_angle= {x}", x=current_arm_angle)
+
+        current_state = jnp.hstack((current_pos, current_arm_angle))  # TODO fix signs here!
         map_local_coords = apply_rot_transl(current_state, map_global_coords)
-        # jax.debug.print("map_local_coords = {x}", x=map_local_coords)
+
+        jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[0].reshape(10, 12))
+        jax.debug.print("map_local_coords[1]= {x}", x=map_local_coords[1].reshape(10, 12))
+
         map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords)
-
-        # TODO test following
         dig_mask = self._get_dig_mask(map_cyl_coords)
-        # jax.debug.print("dig mask = {x}", x=dig_mask)
-
         flattened_action_map = self.world.action_map.map.reshape(-1)
         new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
