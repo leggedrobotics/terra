@@ -65,6 +65,10 @@ def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:
     Transforms the input array from local cartesian coordinates to
     cyilindrical coordinates.
 
+    Note: this function takes also care of the fact that we use an
+    unconventional reference frame (x vertical axis to the bottom,
+    y horizontal axis to the right). You can see this in the computation of theta.
+
     Args:
         - local_coords: (2, N) Array with [x, y] rows
     Returns:
@@ -78,10 +82,15 @@ def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:
     return jnp.vstack([r, theta[None]])
 
 def wrap_angle_rad(angle: Float) -> Float:
-    # TODO change to [-pi, pi]
-    # return angle % (2 * np.pi)
+    """
+    Wraps an angle in rad to the interval [-pi, pi]
+    """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 def angle_idx_to_rad(angle: IntLowDim, idx_tot: IntLowDim) -> Float:
+    """
+    Converts an angle idx (e.g. 4) to an angle in rad, given the max
+    angle idx possible (e.g. 8).
+    """
     angle = 2. * np.pi * angle / idx_tot
     return wrap_angle_rad(angle)
