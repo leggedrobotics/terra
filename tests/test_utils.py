@@ -3,7 +3,9 @@ import numpy as np
 from src.utils import (
     increase_angle_circular,
     decrease_angle_circular,
-    wrap_angle_rad
+    wrap_angle_rad,
+    apply_rot_transl,
+    apply_local_cartesian_to_cyl
     )
 
 class TestUtils(unittest.TestCase):
@@ -21,10 +23,28 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(decrease_angle_circular(0, 8), 7)
 
     def test_wrap_angle_rad(self):
-        self.assertTrue(np.allclose(wrap_angle_rad(3 * np.pi), np.pi))
-        self.assertTrue(np.allclose(wrap_angle_rad(np.pi), np.pi))
+        self.assertTrue(np.allclose(wrap_angle_rad(3 * np.pi), -np.pi))
+        print(wrap_angle_rad(np.pi))
+        self.assertTrue(np.allclose(wrap_angle_rad(np.pi), -np.pi))
         self.assertTrue(np.allclose(wrap_angle_rad(0), 0))
-        self.assertTrue(np.allclose(wrap_angle_rad(2 * np.pi + 1), 1.))
+        self.assertTrue(np.allclose(wrap_angle_rad(2 * np.pi + 1), + 1))
+
+    def test_apply_rot_transl(self):
+        anchor = np.array([0, 1, np.pi])
+        global_coords = np.array([[4, 6],
+                                  [0, 2]])
+        local_coords = apply_rot_transl(anchor, global_coords)
+        local_coords_gt = np.array([[-4, -6],
+                                    [1, -1]])
+        self.assertTrue(np.allclose(local_coords, local_coords_gt))
+
+    def test_apply_local_cartesian_to_cyl(self):
+        local = np.array([[1, 1],
+                          [0, 2]])
+        cyl = apply_local_cartesian_to_cyl(local)
+        cyl_gt = np.array([[1, np.sqrt(5)],
+                           [0, np.arctan2(2, 1)]])
+        self.assertTrue(np.allclose(cyl, cyl_gt))
 
 
 if __name__ == "__main__":

@@ -75,10 +75,10 @@ def key_handler(event):
         _, (state, reward, done, info) = env.step(state, TrackedActionType.RETRACT_ARM)
         parse_step(state, reward, done, info)
 
-    # if event.key == " ":
-    #     obs, reward, done, info = env.step(env.actions.do)
-    #     parse_step(obs, reward, done, info)
-    #     return
+    if event.key == " ":
+        _, (state, reward, done, info) = env.step(state, TrackedActionType.DO)
+        parse_step(state, reward, done, info)
+        return
 
     # if event.key == "backspace":
     #     print("resetting")

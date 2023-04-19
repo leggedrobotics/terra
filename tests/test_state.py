@@ -79,7 +79,7 @@ class TestAgent(unittest.TestCase):
         map_w = 3
         tile_size = 10.
 
-        idx = 2
+        idx = jnp.full((1,), fill_value=2)
         flat_map = State._map_to_flattened_global_coords(map_w, map_h, tile_size)
         current_pos = State._get_current_pos_from_flattened_map(flat_map, idx)
 
@@ -89,6 +89,17 @@ class TestAgent(unittest.TestCase):
         # print(f"{flat_map[0].reshape(map_w, map_h)=}")
         # print(f"{flat_map[1].reshape(map_w, map_h)=}")
         # print(f"{current_pos=}")
+
+    def test_handle_dig(self):
+        seed = 25
+        state = State.new(seed, env_cfg=EnvConfig())
+
+        # print(state.agent.agent_state)
+        # print(f"{state=}")
+        action = TrackedActionType.DO
+        state = state._step(action)
+        # print(f"{state=}")
+
 
 if __name__ == "__main__":
     unittest.main()

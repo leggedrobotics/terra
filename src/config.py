@@ -19,12 +19,15 @@ class AgentConfig(NamedTuple):
     height: int = 5
     
     angles_base: int = 4
-    angles_cabin: int = 8
+    angles_cabin: int = 4
 
     move_tiles: int = 2  # number of tiles of progress for every move action
-    #  (to be made congruent with dig space dimensions and tile dimensions)
+    #  Note: move_tiles is also used as radius of excavation
+    #       (we dig as much as move_tiles in the radial distance)
 
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
+
+    dig_depth: int = 1  # how much every dig action digs
 
 
 class EnvConfig(NamedTuple):
@@ -32,6 +35,8 @@ class EnvConfig(NamedTuple):
 
     target_map: MapConfig = TargetMapConfig()
     action_map: MapConfig = ActionMapConfig()
+
+    tile_size: float = 10.
 
 
 # class BufferConfig(NamedTuple):
