@@ -51,6 +51,17 @@ class TestEnv(unittest.TestCase):
     def test_step_retract_arm(self):
         state = self._test_step_action(TrackedActionType.RETRACT_ARM)
 
+    def test_step_do(self):
+        action = TrackedActionType.DO
+        seed = 29
+        env = TerraEnv(env_cfg=EnvConfig())
+        state = env.reset(seed)
+
+        # Dig
+        _, (state1, reward, dones, infos) = env.step(state, action)
+        # Dump
+        _, (state2, reward, dones, infos) = env.step(state1, action)
+
 
 if __name__ == "__main__":
     unittest.main()
