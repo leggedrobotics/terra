@@ -43,7 +43,7 @@ class TestUtils(unittest.TestCase):
                           [0, 2]])
         cyl = apply_local_cartesian_to_cyl(local)
         cyl_gt = np.array([[1, np.sqrt(5)],
-                           [0, np.arctan2(2, 1)]])
+                           [np.arctan2(-1, 0), np.arctan2(-1, 2)]])
         self.assertTrue(np.allclose(cyl, cyl_gt))
 
 
