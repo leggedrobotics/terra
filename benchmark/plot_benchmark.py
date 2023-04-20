@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 if __name__ == "__main__":
+    policy = "random"
+    n_steps_per_env = 100
     gpu_path = f"/home/antonio/thesis/benchmarks/terra/Benchmark_random_gpu:0_2023_04_20_14_50_44.csv"
     cpu_path = f"/home/antonio/thesis/benchmarks/terra/Benchmark_random_TFRT_CPU_0_2023_04_20_14_51_15.csv"
     
@@ -21,7 +23,7 @@ if __name__ == "__main__":
     plt.plot(batch_sizes, cpu_times.values(), c="r", label="cpu")
     plt.xlabel("number of environments")
     plt.ylabel("duration (s)")
-    plt.title("GPU vs CPU - 100 steps per environment")
+    plt.title(f"Terra - {n_steps_per_env} steps per environment - {policy} policy")
     plt.legend()
     plt.xscale("log")
     plt.show()
