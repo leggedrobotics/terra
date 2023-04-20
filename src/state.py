@@ -175,35 +175,38 @@ class State(NamedTuple):
         """
         return (~(map == 0)).astype(IntLowDim)
     
-    def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        
-        move_tiles = self.env_cfg.agent.move_tiles
+    def _build_one_hot_move_mask(self,
+                                 base_position: Array,
+                                 base_orientation: Array,
+                                 agent_width: IntLowDim,
+                                 agent_height: IntLowDim 
+                                 ) -> Array:
+        """
+        Builds a one-hot encoded 2D vector, encoding the masking or not masking of the
+        proposed move action.
+
+        - valid_move_mask [1, 0] means that the move is not valid
+        - valid_move_mask [0, 1] means that the move is valid
+
+        Args:
+            - base_position: (2, ) Array with [x, y] proposed base position
+            - base_orientation: (1, ) Array with int-based orientation encoding of the agent (e.g. 3)
+            - agent_width: width of the agent
+            - agent_height: height of the agent
+                Note: the width and height parameters can be exploited to mask out also the tiles occupied
+                    during a rotation (e.g. width = height = max(width, height)) 
+        Returns:
+            - (2, 1) Array, move mask
+        """
         map_width = self.world.width
         map_height = self.world.height
-        new_pos_base = self.agent.agent_state.pos_base
 
-        # Propagate action
-        possible_deltas_xy = jnp.array([
-            [0, move_tiles],
-            [-move_tiles, 0],
-            [0, -move_tiles],
-            [move_tiles, 0]
-        ],
-        dtype=IntLowDim)
-        delta_xy = orientation_vector @ possible_deltas_xy
-
-        new_pos_base = (new_pos_base + delta_xy)[0]
-        
         # Get occupancy of the agent based on its position and orientation
-        agent_corners_xy = self._get_agent_corners(new_pos_base,
-                                                   base_orientation = self.agent.agent_state.angle_base,
-                                                   agent_width = self.env_cfg.agent.width,
-                                                   agent_height = self.env_cfg.agent.height,
+        agent_corners_xy = self._get_agent_corners(base_position,
+                                                   base_orientation = base_orientation,
+                                                   agent_width = agent_width,
+                                                   agent_height = agent_height,
                                                    )
-
-        # Compute mask (if to apply the action based on the agent occupancy vs map position)
-        #   valid_move_mask [1, 0] means that the move is not valid
-        #   valid_move_mask [0, 1] means that the move is valid
 
         # Map size constraints
         valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
@@ -237,9 +240,30 @@ class State(NamedTuple):
         )
         valid_move_traversability = jnp.all(traversability_mask_reduced == 0)
         valid_move = jnp.logical_and(valid_move_map_size, valid_move_traversability)
-        valid_move_mask = jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
+        return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
+    
+    def _move_on_orientation(self, orientation_vector: Array) -> "State":
+        
+        move_tiles = self.env_cfg.agent.move_tiles
+        new_pos_base = self.agent.agent_state.pos_base
 
-        # Apply mask
+        # Propagate action
+        possible_deltas_xy = jnp.array([
+            [0, move_tiles],
+            [-move_tiles, 0],
+            [0, -move_tiles],
+            [move_tiles, 0]
+        ],
+        dtype=IntLowDim)
+        delta_xy = orientation_vector @ possible_deltas_xy
+
+        new_pos_base = (new_pos_base + delta_xy)[0]
+        
+        valid_move_mask = self._build_one_hot_move_mask(new_pos_base,
+                                                        self.agent.agent_state.angle_base,
+                                                        self.env_cfg.agent.width,
+                                                        self.env_cfg.agent.height)
+
         old_new_pos_base = jnp.array([
             self.agent.agent_state.pos_base,
             new_pos_base
@@ -264,14 +288,23 @@ class State(NamedTuple):
         orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
         return self._move_on_orientation(orientation_vector)
     
+    def _apply_base_rotation_mask(self,new_angle_base: Array) -> Array:
+        max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width,self.env_cfg.agent.height], dtype=IntLowDim))
+        valid_move_mask = self._build_one_hot_move_mask(self.agent.agent_state.pos_base,
+                                                        new_angle_base,
+                                                        max_agent_dim,
+                                                        max_agent_dim)
+        old_new_angle_base = jnp.array([
+            self.agent.agent_state.angle_base,
+            new_angle_base
+        ])
+        return valid_move_mask @ old_new_angle_base
+    
     def _handle_clock(self) -> "State":
         # Rotate
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
-
-        # TODO in case the agent can reach the limit of the map
-        # 1. Check occupancy
-        # 2. Apply or mask action
+        new_angle_base = self._apply_base_rotation_mask(new_angle_base)
 
         return self._replace(
             agent=self.agent._replace(
@@ -284,10 +317,7 @@ class State(NamedTuple):
     def _handle_anticlock(self) -> "State":
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = increase_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
-        
-        # TODO in case the agent can reach the limit of the map
-        # 1. Check occupancy
-        # 2. Apply or mask action
+        new_angle_base = self._apply_base_rotation_mask(new_angle_base)
         
         return self._replace(
             agent=self.agent._replace(
