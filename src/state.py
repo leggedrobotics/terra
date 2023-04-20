@@ -447,7 +447,7 @@ class State(NamedTuple):
         arm_extension = self.agent.agent_state.arm_extension
         dig_portion_radius = self.env_cfg.agent.move_tiles
         tile_size = self.env_cfg.tile_size
-        
+
         # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
         max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
         min_distance_from_agent = tile_size * max_agent_dim
@@ -560,8 +560,27 @@ class State(NamedTuple):
 
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
+    def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
+        """
+        Takes the dig mask and turns into False the elements that correspond to
+        a dumped tile.
+        """
+        dumped_mask_action_map = self.world.action_map.map > 0
+        jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
+        return dig_mask * (~dumped_mask_action_map).reshape(-1)
+    
+    def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """
+        Takes the dump mask and turns into False the elements that correspond to
+        a digged tile.
+        """
+        digged_mask_action_map = self.world.action_map.map < 0
+        jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
+        return dump_mask * (~digged_mask_action_map).reshape(-1)
+
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
+        dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         flattened_action_map = self.world.action_map.map.reshape(-1)
         new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
@@ -581,6 +600,7 @@ class State(NamedTuple):
     
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_mask()
+        dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         flattened_action_map = self.world.action_map.map.reshape(-1)
         new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
