@@ -404,8 +404,8 @@ class State(NamedTuple):
         base_angle = self._get_base_angle_rad()
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
-
-    def _get_dig_dump_mask(self, map_cyl_coords: Array) -> Array:
+    
+    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
         
@@ -433,6 +433,50 @@ class State(NamedTuple):
         )
         
         return jnp.logical_and(dig_mask_r, dig_mask_theta)
+
+    def _get_dig_dump_mask(self, map_cyl_coords: Array, map_local_coords: Array) -> Array:
+        """
+        Gets the dig dump mask usign the cylindrical coordinates local map,
+        and applies a further masking to avoid digging/dumping where the agent stands.
+
+        Args:
+            - map_cyl_coords: (2, N) Array with [r, theta] rows
+            - map_local_coords: (2, N) Array with [x, y] rows
+        Returns:
+            - dig_mask: (N, ) Array of bools, where True means dig here
+        """
+        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(map_cyl_coords)
+
+        agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
+        agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
+
+        dig_dump_mask_cart_x = map_local_coords[0].copy()  # TODO is copy necessary?
+        dig_dump_mask_cart_y = map_local_coords[1].copy()  # TODO is copy necessary?
+        
+        dig_dump_mask_cart_x = jnp.where(
+            jnp.logical_or(dig_dump_mask_cart_x >= jnp.floor(agent_width / 2), dig_dump_mask_cart_x <= -jnp.floor(agent_width / 2)),
+            1,
+            0
+        )
+        dig_dump_mask_cart_y = jnp.where(
+            jnp.logical_or(dig_dump_mask_cart_y >= jnp.floor(agent_height / 2), dig_dump_mask_cart_y <= -jnp.floor(agent_height / 2)),
+            1,
+            0
+        )
+        dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(jnp.bool_)
+
+        # jax.debug.print("agent_width= {x}", x=agent_width)
+        # jax.debug.print("agent_height= {x}", x=agent_height)
+        # jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[0])
+        # jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[1])
+        # jax.debug.print("dig_dump_mask_cart_x= {x}", x=dig_dump_mask_cart_x.reshape(self.world.action_map.map.shape))
+        # jax.debug.print("dig_dump_mask_cart_y= {x}", x=dig_dump_mask_cart_y.reshape(self.world.action_map.map.shape))
+        # jax.debug.print("dig_dump_mask_cart= {x}", x=dig_dump_mask_cart)
+
+        dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
+        jax.debug.print("cyl = {x}", x=dig_dump_mask_cyl.sum())
+        jax.debug.print("both = {x}", x=dig_dump_mask.sum())
+        return dig_dump_mask
     
     def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
         """
@@ -467,11 +511,16 @@ class State(NamedTuple):
         current_pos = self._get_current_pos_from_flattened_map(map_global_coords, current_pos_idx)
         current_arm_angle = self._get_arm_angle_rad()
 
-        current_state = jnp.hstack((current_pos, current_arm_angle))
-        map_local_coords = apply_rot_transl(current_state, map_global_coords)
+        # Local coordinates including the cabin rotation
+        current_state_arm = jnp.hstack((current_pos, current_arm_angle))
+        map_local_coords_arm = apply_rot_transl(current_state_arm, map_global_coords)
+        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
 
-        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords)
-        return self._get_dig_dump_mask(map_cyl_coords)
+        # Local coordinates excluding the cabin rotation
+        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad()))
+        map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
+
+        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
