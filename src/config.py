@@ -3,20 +3,20 @@ from typing import NamedTuple
 MapConfig = NamedTuple
 
 class TargetMapConfig(MapConfig):
-    width: int = 40
-    height: int = 50
+    width: int = 10
+    height: int = 12
 
 
 class ActionMapConfig(MapConfig):
-    width: int = 40
-    height: int = 50
+    width: int = 10
+    height: int = 12
 
 
 class AgentConfig(NamedTuple):
     # Have the following numbers odd for the COG to be the center cell of the robot
     # NOT SURE IT WILL WORK NICELY IF EVEN
-    width: int = 3
-    height: int = 5
+    width: int = 1
+    height: int = 3
     
     angles_base: int = 4
     angles_cabin: int = 8

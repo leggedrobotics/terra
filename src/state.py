@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from typing import NamedTuple
+from typing import NamedTuple, Tuple
 from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
@@ -144,6 +144,37 @@ class State(NamedTuple):
         ])
         return agent_corners
     
+    @staticmethod
+    def _get_agent_corners_xy(agent_corners: Array) -> Tuple[Array, Array]:
+        """
+        Args:
+            - agent_corners: (4, 2) Array with agent corners [x, y] column order
+        Returns:
+            - x: (2, ) Array of min and max x values as [min, max]
+            - y: (2, ) Array of min and max y values as [min, max]
+        """
+
+        x = jnp.array([
+            jnp.min(agent_corners[:, 0]),
+            jnp.max(agent_corners[:, 0])
+        ])
+        y = jnp.array([
+            jnp.min(agent_corners[:, 1]),
+            jnp.max(agent_corners[:, 1])
+        ])
+        return x, y
+    
+    @staticmethod
+    def _build_traversability_mask(map: Array) -> Array:
+        """
+        Args:
+            - map: (N, M) Array of ints
+        Returns:
+            - traversability_mask: (N, M) Array of ints
+                1 for non traversable, 0 for traversable
+        """
+        return (~(map == 0)).astype(IntLowDim)
+    
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         
         move_tiles = self.env_cfg.agent.move_tiles
@@ -173,11 +204,39 @@ class State(NamedTuple):
         # Compute mask (if to apply the action based on the agent occupancy vs map position)
         #   valid_move_mask [1, 0] means that the move is not valid
         #   valid_move_mask [0, 1] means that the move is valid
+
+        # Map size constraints
         valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
         valid_matrix_up = agent_corners_xy < jnp.array([map_width, map_height])
 
-        valid_move = jnp.all(jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0))
+        valid_move_map_size = jnp.all(jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0))
 
+        # Traversability constraints
+        traversability_mask = self._build_traversability_mask(self.world.action_map.map)
+        x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
+
+        traversability_mask_reduced = jnp.where(
+            (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(map_height, axis=1),
+            0,
+            traversability_mask
+        )
+        traversability_mask_reduced = jnp.where(
+            (jnp.arange(map_width) > x_minmax_agent[1])[:, None].repeat(map_height, axis=1),
+            0,
+            traversability_mask_reduced
+        )
+        traversability_mask_reduced = jnp.where(
+            (jnp.arange(map_height) < y_minmax_agent[0])[None].repeat(map_width, axis=0),
+            0,
+            traversability_mask_reduced
+        )
+        traversability_mask_reduced = jnp.where(
+            (jnp.arange(map_height) > y_minmax_agent[1])[None].repeat(map_width, axis=0),
+            0,
+            traversability_mask_reduced
+        )
+        valid_move_traversability = jnp.all(traversability_mask_reduced == 0)
+        valid_move = jnp.logical_and(valid_move_map_size, valid_move_traversability)
         valid_move_mask = jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
 
         # Apply mask

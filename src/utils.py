@@ -94,3 +94,10 @@ def angle_idx_to_rad(angle: IntLowDim, idx_tot: IntLowDim) -> Float:
     """
     angle = 2. * np.pi * angle / idx_tot
     return wrap_angle_rad(angle)
+
+# def dynamic_slice_2D(a: Array, x_minmax: Array, y_minmax: Array) -> Array:
+#     """
+#     Applies dynamic slicing through one-hot encoding and matrix multiplication.
+#     This makes it JIT-compatible.
+#     """
+
