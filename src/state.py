@@ -42,7 +42,6 @@ class State(NamedTuple):
 
         agent = Agent.new(env_cfg)
         agent = jax.tree_map(lambda x: x if isinstance(x, Array) else jnp.array(x), agent)
-        # TODO: implement here multiple agents if required (see JUX)
 
         return State(
             seed=jnp.uint32(seed),
@@ -53,14 +52,6 @@ class State(NamedTuple):
         )
 
     def _step(self, action: Action) -> "State":
-        # TrackedAction type only
-
-        # The DO_NOTHING action should not be played
-        # valid_action_mask = (
-        #     (action > TrackedActionType.DO_NOTHING) &
-        #     (action < TrackedActionType.DO)
-        # )
-
         state = jax.lax.cond(
             action == TrackedActionType.FORWARD,
             self._handle_move_forward,
@@ -103,65 +94,20 @@ class State(NamedTuple):
     
     def _do_nothing(self):
         return self
-
-    def _handle_move_forward_naive(self):
-        """
-        Non-vectorized version
-        """
-        base_orientation = self.agent.agent_state.angle_base
-        assert base_orientation.item() in (0, 1, 2, 3)
-
-        move_tiles = self.env_cfg.agent.move_tiles
-        agent_width = self.env_cfg.agent.width
-        agent_height = self.env_cfg.agent.height
-
-        if base_orientation.item() in (0, 2):
-            agent_x_dim = agent_width
-            agent_y_dim = agent_height
-        elif base_orientation.item() in (1, 3):
-            agent_x_dim = agent_height
-            agent_y_dim = agent_width
-        
-        agent_occupancy_x = int(move_tiles + np.ceil(agent_x_dim / 2).item())
-        agent_occupancy_y = int(move_tiles + np.ceil(agent_y_dim / 2).item())
-
-        map_width = self.world.width
-        map_height = self.world.height
-        new_pos_base = self.agent.agent_state.pos_base
-
-        if base_orientation.item() == 0:
-            # positive y
-            if new_pos_base[1] + agent_occupancy_y < map_height:
-                new_pos_base = new_pos_base.at[1].add(move_tiles)
-        elif base_orientation.item() == 2:
-            # negative y
-            if new_pos_base[1] - agent_occupancy_y >= 0:
-                new_pos_base = new_pos_base.at[1].add(-move_tiles)
-        elif base_orientation.item() == 3:
-            # positive x
-            if new_pos_base[0] + agent_occupancy_x < map_width:
-                new_pos_base = new_pos_base.at[0].add(move_tiles)
-        elif base_orientation.item() == 1:
-            # negative x
-            if new_pos_base[0] - agent_occupancy_x >= 0:
-                new_pos_base = new_pos_base.at[0].add(-move_tiles)
-        
-        assert 0 <= new_pos_base[0] < map_width
-        assert 0 <= new_pos_base[1] < map_height
-        
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    pos_base=new_pos_base
-                )
-            )
-        )
     
     @staticmethod
     def _base_orientation_to_one_hot_forward(base_orientation: IntLowDim):
+        """
+        Converts the base orientation (int 0 to N) to a one-hot encoded vector.
+        Use for the forward action.
+        """
         return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
     
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
+        """
+        Converts the base orientation (int 0 to N) to a one-hot encoded vector.
+        Use for the backwards action.
+        """
         fwd_to_bkwd_transformation = jnp.array([
             [0, 0, 1, 0],
             [0, 0, 0, 1],
@@ -205,13 +151,6 @@ class State(NamedTuple):
         map_height = self.world.height
         new_pos_base = self.agent.agent_state.pos_base
 
-        # assert (
-        #     (base_orientation[0] == 0) |
-        #     (base_orientation[0] == 1) |
-        #     (base_orientation[0] == 2) |
-        #     (base_orientation[0] == 3)
-        # )
-
         # Propagate action
         possible_deltas_xy = jnp.array([
             [0, move_tiles],
@@ -232,18 +171,8 @@ class State(NamedTuple):
                                                    )
 
         # Compute mask (if to apply the action based on the agent occupancy vs map position)
-        # valid_move_mask = [1, 0] means that the move is not valid
-        # valid_move_mask = [0, 1] means that the move is valid
-
-        # conditions = jnp.array([
-        #     [new_pos_base[1] + agent_occupancy_xy[0, 1] < map_height],
-        #     [new_pos_base[0] - agent_occupancy_xy[0, 0] >= 0],
-        #     [new_pos_base[1] - agent_occupancy_xy[0, 1] >= 0],
-        #     [new_pos_base[0] + agent_occupancy_xy[0, 0] < map_width]
-        # ])
-        # valid_move = orientation_vector @ conditions
-
-        # valid_matrix =  < jnp.array([map_width, map_height])
+        #   valid_move_mask [1, 0] means that the move is not valid
+        #   valid_move_mask [0, 1] means that the move is valid
         valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
         valid_matrix_up = agent_corners_xy < jnp.array([map_width, map_height])
 
@@ -281,7 +210,7 @@ class State(NamedTuple):
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = decrease_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
 
-        # TODO in case the agent can reach the limit of the map (currently not possible)
+        # TODO in case the agent can reach the limit of the map
         # 1. Check occupancy
         # 2. Apply or mask action
 
@@ -297,7 +226,7 @@ class State(NamedTuple):
         old_angle_base = self.agent.agent_state.angle_base
         new_angle_base = increase_angle_circular(old_angle_base, self.env_cfg.agent.angles_base)
         
-        # TODO in case the agent can reach the limit of the map (currently not possible)
+        # TODO in case the agent can reach the limit of the map
         # 1. Check occupancy
         # 2. Apply or mask action
         
@@ -397,6 +326,10 @@ class State(NamedTuple):
     
     @staticmethod
     def _get_current_pos_from_flattened_map(flattened_map: Array, idx: IntMap) -> Array:
+        """
+        Given the flattened map and the index of the current position in the vector,
+        it returns the current position as [x, y].
+        """
         num_tiles = flattened_map.shape[1]
         idx_one_hot = jax.nn.one_hot(idx, num_tiles, dtype=Float)
         current_pos = flattened_map @ idx_one_hot[0]

@@ -9,8 +9,6 @@ class TestAgent(unittest.TestCase):
     def test_create_agent(self):
         agent = Agent.new(EnvConfig())
 
-        # print(agent)
-
 
 if __name__ == "__main__":
     unittest.main()

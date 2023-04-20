@@ -37,7 +37,3 @@ class EnvConfig(NamedTuple):
     action_map: MapConfig = ActionMapConfig()
 
     tile_size: float = 10.
-
-
-# class BufferConfig(NamedTuple):
-#     pass

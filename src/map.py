@@ -32,7 +32,7 @@ class GridMap(NamedTuple):
         assert len(map.shape) == 2
         
         return GridMap(
-            map=map  # GridMap.__annotations__["map"](map)
+            map=map
         )
 
     @staticmethod

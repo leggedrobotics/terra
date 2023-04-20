@@ -19,15 +19,9 @@ class TestMap(unittest.TestCase):
 
         self.assertFalse(jnp.equal(map1.map, map3.map).all())
 
-        # print(map1)
-        # print(map2)
-        # print(map3)
-
     def test_create_grid_world(self):
         seed = 5
         grid_world = GridWorld.new(seed, EnvConfig())
-
-        # print(grid_world)
 
 
 if __name__ == "__main__":

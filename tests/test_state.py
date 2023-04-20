@@ -11,20 +11,13 @@ class TestAgent(unittest.TestCase):
     def test_create_state(self):
         seed = 33
         state = State.new(seed, env_cfg=EnvConfig())
-
-        # print(state)
     
     def test_call_step_forward(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        # print(state.agent.agent_state)
-
         action = TrackedActionType.FORWARD
         state = state._step(action)
-
-        # print(state.agent.agent_state)
-
 
     def test_get_agent_corners(self):
         seed = 25
@@ -53,11 +46,6 @@ class TestAgent(unittest.TestCase):
     def test_get_current_pos_vector_idx(self):
         pos_base = IntMap(jnp.array([3, 5]))
         map_h = 7
-        # map_w = 4
-        # map_flattened = jnp.arange(map_w * map_h)
-        # map = map_flattened.reshape((map_w, map_h))
-        # print(f"{map=}")
-        # print(f"{map_flattened=}")
 
         idx = State._get_current_pos_vector_idx(pos_base, map_h)
         self.assertEqual(idx, 26)
@@ -67,9 +55,6 @@ class TestAgent(unittest.TestCase):
         map_w = 3
         tile_size = 10.
         flat_map = State._map_to_flattened_global_coords(map_w, map_h, tile_size)
-        # print(f"{flat_map=}")
-        # print(f"{flat_map[0].reshape(map_w, map_h)=}")
-        # print(f"{flat_map[1].reshape(map_w, map_h)=}")
         flat_map_gt = jnp.array([[5., 5., 15., 15., 25., 25.],
                                  [5., 15.,  5., 15.,  5., 15.]])
         self.assertTrue(jnp.allclose(flat_map, flat_map_gt))
@@ -85,20 +70,12 @@ class TestAgent(unittest.TestCase):
 
         self.assertTrue(jnp.allclose(current_pos, jnp.array([15.,  5.])))
 
-        # print(f"{flat_map=}")
-        # print(f"{flat_map[0].reshape(map_w, map_h)=}")
-        # print(f"{flat_map[1].reshape(map_w, map_h)=}")
-        # print(f"{current_pos=}")
-
     def test_handle_dig(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        # print(state.agent.agent_state)
-        # print(f"{state=}")
         action = TrackedActionType.DO
         state = state._step(action)
-        # print(f"{state=}")
 
 
 if __name__ == "__main__":

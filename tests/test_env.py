@@ -17,11 +17,7 @@ class TestEnv(unittest.TestCase):
         seed = 29
         env = TerraEnv(env_cfg=EnvConfig())
         state = env.reset(seed)
-
-        # print(state)
         _, (state1, reward, dones, infos) = env.step(state, action)
-
-        # print(state)
 
         # self.assertFalse(state == state1)  # TODO implement __eq__
 

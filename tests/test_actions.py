@@ -10,7 +10,5 @@ class TestActions(unittest.TestCase):
 
         self.assertTrue(action.action.item() == TrackedActionType.DO)
 
-        # print(action)
-
 if __name__ == "__main__":
     unittest.main()
