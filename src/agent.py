@@ -20,7 +20,7 @@ class AgentState(NamedTuple):
     angle_base: IntLowDim
     angle_cabin: IntLowDim
     arm_extension: IntLowDim
-    loaded: jnp.bool_
+    loaded: IntLowDim
 
 
 class Agent(NamedTuple):
@@ -39,7 +39,7 @@ class Agent(NamedTuple):
             angle_base=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             angle_cabin=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
             arm_extension=jnp.full((1, ), fill_value=0, dtype=IntLowDim),
-            loaded=jnp.full((1, ), fill_value=False, dtype=jnp.bool_)
+            loaded=jnp.full((1, ), fill_value=0, dtype=IntLowDim)
         )
         
         return Agent(

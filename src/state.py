@@ -527,7 +527,7 @@ class State(NamedTuple):
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
         return flattened_map - delta_dig
     
-    def _apply_dump_mask(self, flattened_map: Array, dump_mask: Array) -> Array:
+    def _apply_dump_mask(self, flattened_map: Array, dump_mask: Array, dump_volume_per_tile: IntLowDim) -> Array:
         """
         Args:
             - flattened_map: (N, ) Array flattened height map
@@ -535,7 +535,7 @@ class State(NamedTuple):
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        delta_dig = self.env_cfg.agent.dig_depth * dump_mask.astype(IntMap)
+        delta_dig = self.env_cfg.agent.dig_depth * dump_mask.astype(IntMap) * dump_volume_per_tile
         return flattened_map + delta_dig
     
     def _build_dig_dump_mask(self) -> Array:
@@ -566,7 +566,7 @@ class State(NamedTuple):
         a dumped tile.
         """
         dumped_mask_action_map = self.world.action_map.map > 0
-        jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
+        # jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
         return dig_mask * (~dumped_mask_action_map).reshape(-1)
     
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -575,12 +575,14 @@ class State(NamedTuple):
         a digged tile.
         """
         digged_mask_action_map = self.world.action_map.map < 0
-        jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
+        # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
         dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
+        dig_volume = dig_mask.sum()
+        
         flattened_action_map = self.world.action_map.map.reshape(-1)
         new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
@@ -593,7 +595,7 @@ class State(NamedTuple):
             ),
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(
-                    loaded=jnp.full((1, ), fill_value=True, dtype=jnp.bool_)
+                    loaded=jnp.full((1, ), fill_value=dig_volume, dtype=IntLowDim)
                 )
             )
         )
@@ -601,8 +603,11 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_mask()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+
+        dump_volume_per_tile = jnp.rint(self.agent.agent_state.loaded / dump_mask.sum()).astype(IntLowDim)
+
         flattened_action_map = self.world.action_map.map.reshape(-1)
-        new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask)
+        new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask, dump_volume_per_tile)
         new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
 
         return self._replace(
@@ -613,17 +618,19 @@ class State(NamedTuple):
             ),
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(
-                    loaded=jnp.full((1, ), fill_value=False, dtype=jnp.bool_)
+                    loaded=jnp.full((1, ), fill_value=0, dtype=IntLowDim)
                 )
             )
         )
     
     def _handle_do(self) -> "State":
         state = jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded),
+            jnp.all(self.agent.agent_state.loaded.astype(jnp.bool_)),
             self._handle_dump,
             self._handle_dig
         )
+
+        jax.debug.print("action map = {x}", x=state.world.action_map.map)
         return state
 
     def _get_reward(self) -> Float:
