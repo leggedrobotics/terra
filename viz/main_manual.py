@@ -7,12 +7,12 @@ from src.config import EnvConfig
 
 
 def redraw():
-    global state
+    global state, tile_size
     # if not args.agent_view:
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
     # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
-    img = env.render(state=state, mode="human", tile_size=32, key_handler=key_handler)
+    img = env.render(state=state, mode="human", tile_size=tile_size, key_handler=key_handler)
 
     env.window.show_img(img)
     # env.window_target.show_img(img_target)
@@ -142,13 +142,15 @@ env = TerraEnv(EnvConfig(), rendering=True)
 print(env)
 seed = 24
 state = env.reset(seed=seed)
+tile_size = 16
+
 # if args.agent_view:
 #     env = FullyObsWrapper(env)
 # env = ImgObsWrapper(env)
 
 # window = Window('heightgrid - ' + args.env)
 # env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
-env.render(state=state, key_handler=key_handler, block=True)
+env.render(state=state, key_handler=key_handler, block=True, tile_size=tile_size)
 
 # env.window.reg_key_handler(key_handler)
 # env.window_target.reg_key_handler(key_handler)
