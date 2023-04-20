@@ -582,45 +582,60 @@ class State(NamedTuple):
         dig_mask = self._build_dig_dump_mask()
         dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_volume = dig_mask.sum()
-        
-        flattened_action_map = self.world.action_map.map.reshape(-1)
-        new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
-        new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
 
-        return self._replace(
-            world=self.world._replace(
-                action_map=self.world.action_map._replace(
-                    map=new_map_global_coords
-                )
-            ),
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    loaded=jnp.full((1, ), fill_value=dig_volume, dtype=IntLowDim)
+        def _apply_dig():
+            flattened_action_map = self.world.action_map.map.reshape(-1)
+            new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
+            new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
+
+            return self._replace(
+                world=self.world._replace(
+                    action_map=self.world.action_map._replace(
+                        map=new_map_global_coords
+                    )
+                ),
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        loaded=jnp.full((1, ), fill_value=dig_volume, dtype=IntLowDim)
+                    )
                 )
             )
+
+        return jax.lax.cond(
+            dig_volume > 0,
+            _apply_dig,
+            self._do_nothing
         )
     
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_mask()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+        dump_volume = dump_mask.sum()
 
-        dump_volume_per_tile = jnp.rint(self.agent.agent_state.loaded / dump_mask.sum()).astype(IntLowDim)
+        dump_volume_per_tile = jnp.rint(self.agent.agent_state.loaded / (dump_volume + 1e-6)).astype(IntLowDim)
 
-        flattened_action_map = self.world.action_map.map.reshape(-1)
-        new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask, dump_volume_per_tile)
-        new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
+        def _apply_dump():
+            flattened_action_map = self.world.action_map.map.reshape(-1)
+            new_map_global_coords = self._apply_dump_mask(flattened_action_map, dump_mask, dump_volume_per_tile)
+            new_map_global_coords = new_map_global_coords.reshape(self.world.target_map.map.shape)
 
-        return self._replace(
-            world=self.world._replace(
-                action_map=self.world.action_map._replace(
-                    map=new_map_global_coords
-                )
-            ),
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    loaded=jnp.full((1, ), fill_value=0, dtype=IntLowDim)
+            return self._replace(
+                world=self.world._replace(
+                    action_map=self.world.action_map._replace(
+                        map=new_map_global_coords
+                    )
+                ),
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        loaded=jnp.full((1, ), fill_value=0, dtype=IntLowDim)
+                    )
                 )
             )
+
+        return jax.lax.cond(
+            dump_volume > 0,
+            _apply_dump,
+            self._do_nothing
         )
     
     def _handle_do(self) -> "State":
@@ -631,6 +646,7 @@ class State(NamedTuple):
         )
 
         # jax.debug.print("action map = {x}", x=state.world.action_map.map)
+        # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
 
     def _get_reward(self) -> Float:
