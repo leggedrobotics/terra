@@ -447,8 +447,14 @@ class State(NamedTuple):
         arm_extension = self.agent.agent_state.arm_extension
         dig_portion_radius = self.env_cfg.agent.move_tiles
         tile_size = self.env_cfg.tile_size
-        r_max = (arm_extension + 1) * dig_portion_radius * tile_size
-        r_min = arm_extension * dig_portion_radius * tile_size
+        
+        # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
+        max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
+        min_distance_from_agent = tile_size * max_agent_dim
+
+        r_max = (arm_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+        r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
+
         theta_max = np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
@@ -504,6 +510,8 @@ class State(NamedTuple):
         # jax.debug.print("dig_dump_mask_cart= {x}", x=dig_dump_mask_cart)
 
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
+        # jax.debug.print("x = {x}", x=dig_dump_mask_cart_x.sum())
+        # jax.debug.print("y = {x}", x=dig_dump_mask_cart_y.sum())
         jax.debug.print("cyl = {x}", x=dig_dump_mask_cyl.sum())
         jax.debug.print("both = {x}", x=dig_dump_mask.sum())
         return dig_dump_mask

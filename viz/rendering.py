@@ -337,6 +337,7 @@ class RenderingEngine:
                 img[xmin:xmax, ymin:ymax, :] = tile_img
 
         self.img_cache = img.copy()
+        self.height_grid_cache = height_grid.copy()
         self.first_render = False
         
         # Render agent
