@@ -512,8 +512,8 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         # jax.debug.print("x = {x}", x=dig_dump_mask_cart_x.sum())
         # jax.debug.print("y = {x}", x=dig_dump_mask_cart_y.sum())
-        jax.debug.print("cyl = {x}", x=dig_dump_mask_cyl.sum())
-        jax.debug.print("both = {x}", x=dig_dump_mask.sum())
+        # jax.debug.print("cyl = {x}", x=dig_dump_mask_cyl.sum())
+        # jax.debug.print("both = {x}", x=dig_dump_mask.sum())
         return dig_dump_mask
     
     def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
@@ -630,7 +630,7 @@ class State(NamedTuple):
             self._handle_dig
         )
 
-        jax.debug.print("action map = {x}", x=state.world.action_map.map)
+        # jax.debug.print("action map = {x}", x=state.world.action_map.map)
         return state
 
     def _get_reward(self) -> Float:
