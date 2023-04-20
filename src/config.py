@@ -28,8 +28,8 @@ class AgentConfig(NamedTuple):
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
 
     dig_depth: int = 1  # how much every dig action digs
-    max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
-    max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
+    # max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
+    # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
 
 
 class EnvConfig(NamedTuple):
