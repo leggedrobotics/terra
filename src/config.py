@@ -3,12 +3,12 @@ from typing import NamedTuple
 MapConfig = NamedTuple
 
 class TargetMapConfig(MapConfig):
-    width: int = 10
+    width: int = 12
     height: int = 12
 
 
 class ActionMapConfig(MapConfig):
-    width: int = 10
+    width: int = 12
     height: int = 12
 
 

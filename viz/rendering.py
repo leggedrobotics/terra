@@ -181,7 +181,9 @@ class RenderingEngine:
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.grid_object = [None] * (self.x_dim * self.y_dim)
-
+        self.height_grid_cache = np.zeros((self.x_dim, self.y_dim))
+        self.first_render = True
+        
     # @classmethod
     def render_tile(
             self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
@@ -314,36 +316,30 @@ class RenderingEngine:
         # Render the grid
         for i in range(0, self.x_dim):
             for j in range(0, self.y_dim):
-
-                # if render_objects:
-                #     cell = self.get(i, j)
-                # else:
-                #     cell = None
-
-                # print(f"{cell=}")
-
-                if target_height:
-                    agent_here = False
-                else:
-                    agent_here = np.array_equal(agent_pos, (i, j))
                 
-                tile_img = self.render_tile(
-                    AgentObject() if agent_here else None,
-                    height_grid[i, j],
-                    base_dir=base_dir if agent_here else None,
-                    cabin_dir=cabin_dir if agent_here else None,
-                    tile_size=tile_size,
-                )
-
                 ymin = j * tile_size
                 ymax = (j + 1) * tile_size
                 xmin = i * tile_size
                 xmax = (i + 1) * tile_size
 
+                if height_grid[i, j] != self.height_grid_cache[i, j] or self.first_render:
+                    tile_img = self.render_tile(
+                        None,
+                        height_grid[i, j],
+                        None,
+                        None,
+                        tile_size=tile_size,
+                    )
+                else:
+                    tile_img = self.img_cache[xmin:xmax, ymin:ymax, :]
+
                 # img[ymin:ymax, xmin:xmax, :] = tile_img
                 img[xmin:xmax, ymin:ymax, :] = tile_img
-        
 
+        self.img_cache = img.copy()
+        self.first_render = False
+        
+        # Render agent
         agent_corners = State._get_agent_corners(
             pos_base=agent_pos,
             base_orientation=base_dir,
