@@ -2,20 +2,21 @@ import math
 import numpy as np
 from abc import abstractmethod, ABCMeta
 from src.state import State
+import time
 
-def downsample(img, factor):
-    """
-    Downsample an image along both dimensions by some factor
-    """
+# def downsample(img, factor):
+#     """
+#     Downsample an image along both dimensions by some factor
+#     """
 
-    assert img.shape[0] % factor == 0
-    assert img.shape[1] % factor == 0
+#     assert img.shape[0] % factor == 0
+#     assert img.shape[1] % factor == 0
 
-    img = img.reshape([img.shape[0] // factor, factor, img.shape[1] // factor, factor, 3])
-    img = img.mean(axis=3)
-    img = img.mean(axis=1)
+#     img = img.reshape([img.shape[0] // factor, factor, img.shape[1] // factor, factor, 3])
+#     img = img.mean(axis=3)
+#     img = img.mean(axis=1)
 
-    return img
+#     return img
 
 
 def fill_coords(img, fn, color):
@@ -34,63 +35,22 @@ def fill_coords(img, fn, color):
 
 
 def rotate_fn(fin, cx, cy, theta):
-    theta = -theta
     def fout(x, y):
         x = x - cx
         y = y - cy
 
-        x2 = cx + x * math.cos(-theta) - y * math.sin(-theta)
-        y2 = cy + y * math.cos(-theta) + x * math.sin(-theta)
+        x2 = cx + x * math.cos(theta) - y * math.sin(theta)
+        y2 = cy + y * math.cos(theta) + x * math.sin(theta)
 
         return fin(x2, y2)
 
     return fout
-
-
-def point_in_line(x0, y0, x1, y1, r):
-    p0 = np.array([x0, y0])
-    p1 = np.array([x1, y1])
-    dir = p1 - p0
-    dist = np.linalg.norm(dir)
-    dir = dir / dist
-
-    xmin = min(x0, x1) - r
-    xmax = max(x0, x1) + r
-    ymin = min(y0, y1) - r
-    ymax = max(y0, y1) + r
-
-    def fn(x, y):
-        # Fast, early escape test
-        if x < xmin or x > xmax or y < ymin or y > ymax:
-            return False
-
-        q = np.array([x, y])
-        pq = q - p0
-
-        # Closest point on line
-        a = np.dot(pq, dir)
-        a = np.clip(a, 0, dist)
-        p = p0 + a * dir
-
-        dist_to_line = np.linalg.norm(q - p)
-        return dist_to_line <= r
-
-    return fn
-
-
-def point_in_circle(cx, cy, r):
-    def fn(x, y):
-        return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r
-
-    return fn
-
 
 def point_in_rect(xmin, xmax, ymin, ymax):
     def fn(x, y):
         return x >= xmin and x <= xmax and y >= ymin and y <= ymax
 
     return fn
-
 
 def point_in_triangle(a, b, c):
     a = np.array(a)
@@ -120,14 +80,52 @@ def point_in_triangle(a, b, c):
     return fn
 
 
-def highlight_img(img, color=(255, 255, 255), alpha=0.30):
-    """
-    Add highlighting to an image
-    """
+# def point_in_line(x0, y0, x1, y1, r):
+#     p0 = np.array([x0, y0])
+#     p1 = np.array([x1, y1])
+#     dir = p1 - p0
+#     dist = np.linalg.norm(dir)
+#     dir = dir / dist
 
-    blend_img = img + alpha * (np.array(color, dtype=np.uint8) - img)
-    blend_img = blend_img.clip(0, 255).astype(np.uint8)
-    img[:, :, :] = blend_img
+#     xmin = min(x0, x1) - r
+#     xmax = max(x0, x1) + r
+#     ymin = min(y0, y1) - r
+#     ymax = max(y0, y1) + r
+
+#     def fn(x, y):
+#         # Fast, early escape test
+#         if x < xmin or x > xmax or y < ymin or y > ymax:
+#             return False
+
+#         q = np.array([x, y])
+#         pq = q - p0
+
+#         # Closest point on line
+#         a = np.dot(pq, dir)
+#         a = np.clip(a, 0, dist)
+#         p = p0 + a * dir
+
+#         dist_to_line = np.linalg.norm(q - p)
+#         return dist_to_line <= r
+
+#     return fn
+
+
+# def point_in_circle(cx, cy, r):
+#     def fn(x, y):
+#         return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r
+
+#     return fn
+
+
+# def highlight_img(img, color=(255, 255, 255), alpha=0.30):
+#     """
+#     Add highlighting to an image
+#     """
+
+#     blend_img = img + alpha * (np.array(color, dtype=np.uint8) - img)
+#     blend_img = blend_img.clip(0, 255).astype(np.uint8)
+#     img[:, :, :] = blend_img
 
 
 OBJECT_TO_IDX = {
@@ -185,51 +183,51 @@ class RenderingEngine:
         self.first_render = True
         
     # @classmethod
-    def render_tile(
-            self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
-    ):
-        """
-        Render a tile and cache the result
-        """
+    # def render_tile(
+    #         self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
+    # ):
+    #     """
+    #     Render a tile and cache the result
+    #     """
 
-        # Hash map lookup key for the cache
+    #     # Hash map lookup key for the cache
 
-        key = str(tile_size) + "h" + str(height)
-        key = obj.type + key if obj else key
-        # key = obj.encode() if obj else key
+    #     key = str(tile_size) + "h" + str(height)
+    #     key = obj.type + key if obj else key
+    #     # key = obj.encode() if obj else key
 
-        if key in self.tile_cache and obj is None:
-            return self.tile_cache[key]
+    #     if key in self.tile_cache and obj is None:
+    #         return self.tile_cache[key]
 
-        img = np.zeros(
-            shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
-        )
+    #     img = np.zeros(
+    #         shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
+    #     )
 
-        # Draw the grid lines (top and left edges)
+    #     # Draw the grid lines (top and left edges)
 
-        # if obj != None:
-        #     obj.render(img)
-        # else:
-        fill_coords(
-            img,
-            point_in_rect(0, 1, 0, 1),
-            np.array([255, 255, 255]) * (height + 3) / 7,
-        )
-        fill_coords(
-            img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100)
-        )
-        fill_coords(
-            img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
-        )
+    #     # if obj != None:
+    #     #     obj.render(img)
+    #     # else:
+    #     fill_coords(
+    #         img,
+    #         point_in_rect(0, 1, 0, 1),
+    #         np.array([255, 255, 255]) * (height + 3) / 7,
+    #     )
+    #     fill_coords(
+    #         img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100)
+    #     )
+    #     fill_coords(
+    #         img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
+    #     )
 
-        # Downsample the image to perform supersampling/anti-aliasing
-        img = downsample(img, subdivs)
+    #     # Downsample the image to perform supersampling/anti-aliasing
+    #     img = downsample(img, subdivs)
 
-        # Cache the rendered tile
+    #     # Cache the rendered tile
 
-        self.tile_cache[key] = img
+    #     self.tile_cache[key] = img
 
-        return img
+    #     return img
     
     def render_agent(self, agent_width, agent_height, tile_size, base_dir, cabin_dir = None):
         # draw the base a yellow rectangle with one side longer than the other
@@ -251,7 +249,7 @@ class RenderingEngine:
             img, back_base_fn, (0, 0, 0))
 
         base_fn = point_in_rect(
-            0.25, 0.75, 0.25, 1
+            0.25, 0.75, 0.0, 0.25
         )
 
         base_fn = rotate_fn(
@@ -306,40 +304,25 @@ class RenderingEngine:
         :param r: target renderer object
         :param tile_size: tile size in pixels
         """
-        # Compute the total grid size
+        s1 = time.time()
+
         width_px = self.x_dim * tile_size
         height_px = self.y_dim * tile_size
 
-        # img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
-        img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint8)
+        height_grid = np.array(height_grid)
 
-        # Render the grid
-        for i in range(0, self.x_dim):
-            for j in range(0, self.y_dim):
-                
-                ymin = j * tile_size
-                ymax = (j + 1) * tile_size
-                xmin = i * tile_size
-                xmax = (i + 1) * tile_size
+        # img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint8)
+        x = ((height_grid.repeat(tile_size, axis=1).repeat(tile_size, axis=0) + 3) / 7)[:, :, None]
+        img = np.array([[[255, 255, 255]]]) * x
 
-                if height_grid[i, j] != self.height_grid_cache[i, j] or self.first_render:
-                    tile_img = self.render_tile(
-                        None,
-                        height_grid[i, j],
-                        None,
-                        None,
-                        tile_size=tile_size,
-                    )
-                else:
-                    tile_img = self.img_cache[xmin:xmax, ymin:ymax, :]
-
-                # img[ymin:ymax, xmin:xmax, :] = tile_img
-                img[xmin:xmax, ymin:ymax, :] = tile_img
-
-        self.img_cache = img.copy()
-        self.height_grid_cache = height_grid.copy()
-        self.first_render = False
+        # apply grid
+        grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
+        grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
+        img[grid_idx_x] = np.array([100, 100, 100])
+        img[:, grid_idx_y] = np.array([100, 100, 100])
+        img = img.astype(np.int16)
         
+        s2 = time.time()
         # Render agent
         agent_corners = State._get_agent_corners(
             pos_base=agent_pos,
@@ -353,28 +336,22 @@ class RenderingEngine:
         ay_max = np.max(agent_corners[:, 1] + 1).astype(np.int16)
         ax_max = np.max(agent_corners[:, 0] + 1).astype(np.int16)
 
-        # print(f"{agent_corners=}")
-        # print(f"{ay_min=}")
-        # print(f"{ax_min=}")
-        # print(f"{ay_max=}")
-        # print(f"{ax_max=}")
-
         agent_ymin = ay_min * tile_size
         agent_ymax = ay_max * tile_size
         agent_xmin = ax_min * tile_size
         agent_xmax = ax_max * tile_size
 
-        # print(f"{agent_ymin=}")
-        # print(f"{agent_ymax=}")
-        # print(f"{agent_xmin=}")
-        # print(f"{agent_xmax=}")
-
         agent_img = self.render_agent(ax_max-ax_min, ay_max-ay_min, tile_size, base_dir, cabin_dir)
         img[agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_img
 
+        e = time.time()
+
+        print(f"grid = {100 * (s2-s1)/(e-s1)}%")
+        print(f"agent = {100 * (e-s2)/(e-s1)}%")
+
         return img.transpose(0, 1, 2)
 
-# def render(
+# def render_multiple(
 #         self,
 #         mode="human",
 #         close=False,

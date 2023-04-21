@@ -769,8 +769,8 @@ class State(NamedTuple):
             self._handle_dig
         )
 
-        jax.debug.print("action map = {x}", x=state.world.action_map.map)
-        jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
+        # jax.debug.print("action map = {x}", x=state.world.action_map.map)
+        # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
 
     def _get_reward(self) -> Float:
