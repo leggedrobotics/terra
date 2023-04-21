@@ -16,6 +16,10 @@ if __name__ == "__main__":
     gpu_times = gpu_df["time"]
     cpu_times = cpu_df["time"]
 
+    gpu_step_env = gpu_df["avg_step_env"]
+    cpu_step_env = cpu_df["avg_step_env"]
+
+    # Times
     fig = plt.figure(0)
     plt.scatter(batch_sizes, gpu_times.values(), c="g", label="gpu")
     plt.plot(batch_sizes, gpu_times.values(), c="g", label="gpu")
@@ -26,4 +30,18 @@ if __name__ == "__main__":
     plt.title(f"Terra - {n_steps_per_env} steps per environment - {policy} policy")
     plt.legend()
     plt.xscale("log")
+    plt.yscale("log")
+    
+    fig = plt.figure(1)
+    plt.scatter(batch_sizes, gpu_step_env.values(), c="g", label="gpu")
+    plt.plot(batch_sizes, gpu_step_env.values(), c="g", label="gpu")
+    plt.scatter(batch_sizes, cpu_step_env.values(), c="r", label="cpu")
+    plt.plot(batch_sizes, cpu_step_env.values(), c="r", label="cpu")
+    plt.xlabel("number of environments")
+    plt.ylabel("avg step duration (s)")
+    plt.title(f"Terra - {n_steps_per_env} steps per environment - {policy} policy")
+    plt.legend()
+    plt.xscale("log")
+    plt.yscale("log")
+
     plt.show()
