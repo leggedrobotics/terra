@@ -1,8 +1,7 @@
-import math
 import numpy as np
 from abc import abstractmethod, ABCMeta
 from src.state import State
-import time
+# import time
 
 # def downsample(img, factor):
 #     """
@@ -23,36 +22,83 @@ def fill_coords(img, fn, color):
     """
     Fill pixels of an image with coordinates matching a filter function
     """
+    x = np.arange(img.shape[0], dtype=np.int16)
+    y = np.arange(img.shape[1], dtype=np.int16)
+    xf = (x.copy() + 0.5) / img.shape[0]
+    yf = (y.copy() + 0.5) / img.shape[1]
 
-    for y in range(img.shape[0]):
-        for x in range(img.shape[1]):
-            yf = (y + 0.5) / img.shape[0]
-            xf = (x + 0.5) / img.shape[1]
-            if fn(xf, yf):
-                img[y, x] = color
+    cond = fn(xf, yf).reshape(img.shape[0], img.shape[1])
 
+    img = np.where(
+        cond[:, :, None],
+        color,
+        img
+    )
     return img
 
+def generate_combinations_xy(x, y):
+    xa = x[:, None].repeat(y.shape[0], axis=1).reshape(-1)
+    ya = y[None].repeat(x.shape[0], axis=0).reshape(-1)
+    xya = np.vstack([xa, ya])
+    return xya
 
 def rotate_fn(fin, cx, cy, theta):
+    theta = -theta
     def fout(x, y):
-        x = x - cx
-        y = y - cy
+        xya = generate_combinations_xy(x, y)
+        xya[0] -= cx
+        xya[1] -= cy
+        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        xya = R[..., 0] @ xya
+        xya[0] += cx
+        xya[1] += cy
 
-        x2 = cx + x * math.cos(theta) - y * math.sin(theta)
-        y2 = cy + y * math.cos(theta) + x * math.sin(theta)
+        # x = x - cx
+        # y = y - cy
 
-        return fin(x2, y2)
+        # x2 = cx + x * np.cos(theta) - y * np.sin(theta)
+        # y2 = cy + y * np.cos(theta) + x * np.sin(theta)
+
+        return fin(xya[0], xya[1])
 
     return fout
 
 def point_in_rect(xmin, xmax, ymin, ymax):
     def fn(x, y):
-        return x >= xmin and x <= xmax and y >= ymin and y <= ymax
-
+        # return x >= xmin and x <= xmax and y >= ymin and y <= ymax
+        x_cond = np.logical_and(x >= xmin, x <= xmax)
+        y_cond = np.logical_and(y >= ymin, y <= ymax)
+        return np.logical_and(x_cond, y_cond)
     return fn
 
 def point_in_triangle(a, b, c):
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
+
+    def fn(x, y):
+        v0 = (c - a)[None]  # (1, 2)
+        v1 = (b - a)[None]  # (1, 2)
+        v2 = np.array((x, y)).T - a  # (N, 2)
+
+        # Compute dot products
+        dot00 = (v0**2).sum(axis=-1)
+        dot01 = np.multiply(v0, v1).sum(axis=-1)
+        dot02 = np.multiply(v0, v2).sum(axis=-1)
+        dot11 = (v1**2).sum(axis=-1)
+        dot12 = np.multiply(v1, v2).sum(axis=-1)
+
+        # Compute barycentric coordinates
+        inv_denom = 1 / (dot00 * dot11 - dot01 * dot01)
+        u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+        v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+
+        # Check if point is in triangle
+        return np.logical_and(np.logical_and(u>=0, v>=0), (u+v) < 1)
+
+    return fn
+
+def point_in_triangle_naive(a, b, c):
     a = np.array(a)
     b = np.array(b)
     c = np.array(c)
@@ -237,6 +283,7 @@ class RenderingEngine:
             shape=(tile_size * agent_width, tile_size * agent_height, 3), dtype=np.uint8
         )
 
+        # base
         back_base_fn = point_in_rect(
             0.25, 0.75, 0.0, 0.25
         )
@@ -244,20 +291,21 @@ class RenderingEngine:
         back_base_fn = rotate_fn(
             back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
         )
-        # render in black
-        fill_coords(
-            img, back_base_fn, (0, 0, 0))
+        img = fill_coords(
+            img, back_base_fn, np.array([0, 0, 0]))
 
+        # yellow of the base
         base_fn = point_in_rect(
             0.25, 0.75, 0.0, 0.25
         )
 
         base_fn = rotate_fn(
-            base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
+            base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir + np.pi 
         )
 
-        fill_coords(img, base_fn, (255, 255, 0))
+        img = fill_coords(img, base_fn, np.array([255, 255, 0]))
 
+        # red triangle
         tri_fn = point_in_triangle(
             (0.12, 0.81),
             (0.12, 0.19),
@@ -266,9 +314,9 @@ class RenderingEngine:
 
         # Rotate the agent based on its direction
         tri_fn = rotate_fn(
-            tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir
+            tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir + np.pi/2
         )
-        fill_coords(img, tri_fn, (255, 0, 0))
+        img = fill_coords(img, tri_fn, (255, 0, 0))
 
         return img
     
@@ -304,7 +352,7 @@ class RenderingEngine:
         :param r: target renderer object
         :param tile_size: tile size in pixels
         """
-        s1 = time.time()
+        # s1 = time.time()
 
         width_px = self.x_dim * tile_size
         height_px = self.y_dim * tile_size
@@ -322,7 +370,7 @@ class RenderingEngine:
         img[:, grid_idx_y] = np.array([100, 100, 100])
         img = img.astype(np.int16)
         
-        s2 = time.time()
+        # s2 = time.time()
         # Render agent
         agent_corners = State._get_agent_corners(
             pos_base=agent_pos,
@@ -344,10 +392,10 @@ class RenderingEngine:
         agent_img = self.render_agent(ax_max-ax_min, ay_max-ay_min, tile_size, base_dir, cabin_dir)
         img[agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_img
 
-        e = time.time()
+        # e = time.time()
 
-        print(f"grid = {100 * (s2-s1)/(e-s1)}%")
-        print(f"agent = {100 * (e-s2)/(e-s1)}%")
+        # print(f"grid = {100 * (s2-s1)/(e-s1)}%")
+        # print(f"agent = {100 * (e-s2)/(e-s1)}%")
 
         return img.transpose(0, 1, 2)
 
