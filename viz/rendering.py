@@ -169,8 +169,8 @@ def point_in_triangle_naive(a, b, c):
 #     Add highlighting to an image
 #     """
 
-#     blend_img = img + alpha * (np.array(color, dtype=np.uint8) - img)
-#     blend_img = blend_img.clip(0, 255).astype(np.uint8)
+#     blend_img = img + alpha * (np.array(color, dtype=np.uint16) - img)
+#     blend_img = blend_img.clip(0, 255).astype(np.uint16)
 #     img[:, :, :] = blend_img
 
 
@@ -246,7 +246,7 @@ class RenderingEngine:
     #         return self.tile_cache[key]
 
     #     img = np.zeros(
-    #         shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint8
+    #         shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint16
     #     )
 
     #     # Draw the grid lines (top and left edges)
@@ -280,7 +280,7 @@ class RenderingEngine:
         # to make it easier to see the direction
 
         img = np.zeros(
-            shape=(tile_size * agent_width, tile_size * agent_height, 3), dtype=np.uint8
+            shape=(tile_size * agent_width, tile_size * agent_height, 3), dtype=np.uint16
         )
 
         # base
@@ -359,9 +359,9 @@ class RenderingEngine:
 
         height_grid = np.array(height_grid)
 
-        # img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint8)
+        # img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint16)
         x = ((height_grid.repeat(tile_size, axis=1).repeat(tile_size, axis=0) + 3) / 7)[:, :, None]
-        img = np.array([[[255, 255, 255]]]) * x
+        img = (np.array([[[255, 255, 255]]]) * x).astype(np.int16)
 
         # apply grid
         grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
@@ -439,11 +439,11 @@ class RenderingEngine:
 #     )
 
 #     # white row of pixels
-#     img_white = np.ones(shape=(tile_size * self.x_dim, tile_size, 3), dtype=np.uint8) * 255
+#     img_white = np.ones(shape=(tile_size * self.x_dim, tile_size, 3), dtype=np.uint16) * 255
 
 #     img = np.concatenate((img_white, img, img_white, img_target), axis=1)
 #     # add a row of white pixels at the bottom
-#     white_row = np.ones(shape=(tile_size, tile_size * self.y_dim * 2 + 2 * tile_size, 3), dtype=np.uint8) * 255
+#     white_row = np.ones(shape=(tile_size, tile_size * self.y_dim * 2 + 2 * tile_size, 3), dtype=np.uint16) * 255
 #     img = np.concatenate((img, white_row), axis=0)
 
 #     if key_handler:
