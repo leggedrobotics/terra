@@ -82,11 +82,12 @@ class TerraEnv:
 
         reward = state._get_reward(new_state, action)
 
+        dones = State._is_done(new_state.world.action_map.map, new_state.world.target_map.map)
+
         infos = {}
 
-        dones = new_state._is_done()
-
         jax.debug.print("Reward = {x}", x=reward)
+        jax.debug.print("Dones = {x}", x=dones)
 
         return new_state, (new_state, reward, dones, infos)
 

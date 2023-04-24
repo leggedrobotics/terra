@@ -77,6 +77,22 @@ class TestAgent(unittest.TestCase):
         action = TrackedActionType.DO
         state = state._step(action)
 
+    def test_is_done(self):
+        x = jnp.arange(3)[None].repeat(3, 0)
+        target_map = x - jnp.max(x)
+
+        print(f"{target_map=}")
+
+        action_map1 = jnp.ones((3, 3))
+        self.assertFalse(State._is_done(action_map1, target_map))
+
+        action_map2 = target_map.copy()        
+        self.assertTrue(State._is_done(action_map2, target_map))
+
+        action_map3 = target_map.copy()
+        action_map3 = action_map3.at[:, -1].set(action_map3[:, -1] + 20)
+        self.assertTrue(State._is_done(action_map3, target_map))
+
 
 if __name__ == "__main__":
     unittest.main()

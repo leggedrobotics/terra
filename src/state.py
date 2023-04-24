@@ -778,7 +778,7 @@ class State(NamedTuple):
         # Collision
         reward += jax.lax.cond(
             jnp.allclose(self.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base),
-            lambda: self.env_cfg.rewards.collision,
+            lambda: self.env_cfg.rewards.collision_move,
             lambda: 0.
         )
 
@@ -793,9 +793,80 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.move
 
         return reward
+    
+    def _handle_rewards_base_turn(self, new_state: "State", action: TrackedActionType) -> Float:
+        reward = 0.
+
+        # Collision turn
+        reward += jax.lax.cond(
+            jnp.allclose(self.agent.agent_state.angle_base, new_state.agent.agent_state.angle_base),
+            lambda: self.env_cfg.rewards.collision_turn,
+            lambda: 0.
+        )
+        
+        # Base turn
+        reward += self.env_cfg.rewards.base_turn
+        return reward
+    
+    def _handle_rewards_cabin_turn(self, new_state: "State", action: TrackedActionType) -> Float:
+        # Cabin turn
+        return self.env_cfg.rewards.cabin_turn
+    
+    def _handle_rewards_dump(self, new_state: "State", action: TrackedActionType) -> Float:
+        # Dump wrong or correct
+        return jax.lax.cond(
+            jnp.allclose(self.agent.agent_state.loaded, new_state.agent.agent_state.loaded),
+            lambda: self.env_cfg.rewards.dump_wrong,
+            lambda: self.env_cfg.rewards.dump_correct
+        )
+    
+    @staticmethod
+    def _get_action_map_progress(action_map_old: Array, action_map_new: Array, target_map: Array) -> IntMap:
+        """
+        Computes the difference between the delta old and delta new.
+
+        The delta is defined as the absolute sum of the height differences between
+        the clipped action map (to only make the dig count) and the target map.
+        """
+        action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
+
+        delta_old = jnp.sum(jnp.abs((action_map_clip_old - target_map)))
+        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map))
+
+        return IntMap(delta_new - delta_old)
+
+    def _handle_rewards_dig(self, new_state: "State", action: TrackedActionType) -> Float:
+        # Dig wrong or correct
+        return jax.lax.cond(
+            jnp.allclose(self.agent.agent_state.loaded, new_state.agent.agent_state.loaded),
+            lambda: self.env_cfg.rewards.dig_wrong,
+            lambda: jax.lax.cond(
+                jnp.all(
+                    self._get_action_map_progress(
+                        self.world.action_map.map,
+                        new_state.world.action_map.map,
+                        self.world.target_map.map)
+                        > 0
+                ),
+                lambda: self.env_cfg.rewards.dig_wrong,
+                lambda: self.env_cfg.rewards.dig_correct
+            )
+        )
+    
+    def _handle_rewards_do(self, new_state: "State", action: TrackedActionType) -> Float:
+        return jax.lax.cond(
+            jnp.all(self.agent.agent_state.loaded > 0),
+            self._handle_rewards_dump,
+            self._handle_rewards_dig,
+            new_state,
+            action
+        )
 
     def _get_reward(self, new_state: "State", action: TrackedActionType) -> Float:
         reward = 0.
+
+        # Action-dependent
 
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD) | (action == TrackedActionType.BACKWARD),
@@ -805,14 +876,56 @@ class State(NamedTuple):
             action
         )
 
-        # reward += jax.lax.cond(
-        #     (action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK),
-        #     self._handle_rewards_move,
-        #     lambda new_state, action: 0.,
-        #     new_state,
-        #     action
-        # )
+        reward += jax.lax.cond(
+            (action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK),
+            self._handle_rewards_base_turn,
+            lambda new_state, action: 0.,
+            new_state,
+            action
+        )
+
+        reward += jax.lax.cond(
+            (action == TrackedActionType.CABIN_CLOCK) | (action == TrackedActionType.CABIN_ANTICLOCK),
+            self._handle_rewards_cabin_turn,
+            lambda new_state, action: 0.,
+            new_state,
+            action
+        )
+
+        reward += jax.lax.cond(
+            action == TrackedActionType.DO,
+            self._handle_rewards_do,
+            lambda new_state, action: 0.,
+            new_state,
+            action
+        )
+
+        # Terminal
+        reward += jax.lax.cond(
+            self._is_done(new_state.world.action_map.map, self.world.target_map.map),
+            lambda: self.env_cfg.rewards.terminal,
+            lambda: 0.
+        )
+
+        # Existence
+        reward += self.env_cfg.rewards.existence
+
         return reward
-        
-    def _is_done(self) -> jnp.bool_:
-        pass
+
+    @staticmethod
+    def _is_done(action_map: Array, target_map: Array) -> jnp.bool_:
+        """
+        Checks if the target map matches the action map,
+        but only on the relevant tiles.
+
+        The relevant tiles are defined as the tiles where the target map is not zero.
+        """
+        relevant_action_map = jnp.where(
+            target_map != 0,
+            action_map,
+            target_map
+        )
+
+        jax.debug.print("relevant_action_map={x}", x=relevant_action_map)
+
+        return jnp.allclose(relevant_action_map, target_map)

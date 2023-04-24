@@ -34,18 +34,24 @@ class AgentConfig(NamedTuple):
     
 
 class Rewards(NamedTuple):
-    collision: Float = -1.
-    move_while_loaded: Float = -0.2
-    move: Float = -0.1
-    base_turn: Float = -0.05
-    cabin_turn: Float = -0.05
-    dig_wrong: Float = -2.
-    dump_wrong: Float = -2.
     existence: Float = -0.05
 
-    dig_correct: Float = 2.
-    dump_correct: Float = 2.
-    terminal: Float = 100.
+    collision_move: Float = -1.
+    move_while_loaded: Float = -0.2
+    move: Float = -0.1
+
+    collision_turn: Float = -1.
+    base_turn: Float = -0.05
+
+    cabin_turn: Float = -0.05
+
+    dig_wrong: Float = -2.  # given both if loaded stayed the same, or if new map is not closer than old to target
+    dump_wrong: Float = -2.  # given if loaded stayed the same
+
+    dig_correct: Float = 2.  # given if the new map is closer to target map than before
+    dump_correct: Float = 0.2  # implemented as dump where not digged
+
+    terminal: Float = 10.  # given if the action map is the same as the target map where it matters (digged tiles)
 
 
 class EnvConfig(NamedTuple):
