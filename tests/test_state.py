@@ -81,8 +81,6 @@ class TestAgent(unittest.TestCase):
         x = jnp.arange(3)[None].repeat(3, 0)
         target_map = x - jnp.max(x)
 
-        print(f"{target_map=}")
-
         action_map1 = jnp.ones((3, 3))
         self.assertFalse(State._is_done(action_map1, target_map))
 

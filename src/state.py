@@ -925,7 +925,5 @@ class State(NamedTuple):
             action_map,
             target_map
         )
-
-        jax.debug.print("relevant_action_map={x}", x=relevant_action_map)
-
+        
         return jnp.allclose(relevant_action_map, target_map)
