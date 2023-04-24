@@ -772,9 +772,47 @@ class State(NamedTuple):
         # jax.debug.print("action map = {x}", x=state.world.action_map.map)
         # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
+    
+    def _handle_rewards_move(self, new_state: "State", action: TrackedActionType) -> Float:
+        reward = 0.
+        # Collision
+        reward += jax.lax.cond(
+            jnp.allclose(self.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base),
+            lambda: self.env_cfg.rewards.collision,
+            lambda: 0.
+        )
 
-    def _get_reward(self) -> Float:
-        pass
+        # Move while loaded
+        reward += jax.lax.cond(
+            jnp.all(self.agent.agent_state.loaded > 0),
+            lambda: self.env_cfg.rewards.move_while_loaded,
+            lambda: 0.
+        )
 
+        # Move
+        reward += self.env_cfg.rewards.move
+
+        return reward
+
+    def _get_reward(self, new_state: "State", action: TrackedActionType) -> Float:
+        reward = 0.
+
+        reward += jax.lax.cond(
+            (action == TrackedActionType.FORWARD) | (action == TrackedActionType.BACKWARD),
+            self._handle_rewards_move,
+            lambda new_state, action: 0.,
+            new_state,
+            action
+        )
+
+        # reward += jax.lax.cond(
+        #     (action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK),
+        #     self._handle_rewards_move,
+        #     lambda new_state, action: 0.,
+        #     new_state,
+        #     action
+        # )
+        return reward
+        
     def _is_done(self) -> jnp.bool_:
         pass

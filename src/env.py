@@ -78,15 +78,17 @@ class TerraEnv:
             done (jnp.bool_): done indicator. If episode ends, then done = True.
             infos (Dict): additional information (currently empty)
         """
-        state = state._step(action)
+        new_state = state._step(action)
 
-        reward = state._get_reward()
+        reward = state._get_reward(new_state, action)
 
         infos = {}
 
-        dones = state._is_done()
+        dones = new_state._is_done()
 
-        return state, (state, reward, dones, infos)
+        jax.debug.print("Reward = {x}", x=reward)
+
+        return new_state, (new_state, reward, dones, infos)
 
 
 class TerraEnvBatch:
