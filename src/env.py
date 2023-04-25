@@ -3,6 +3,7 @@ from jax import Array
 from functools import partial
 from src.config import EnvConfig
 from src.state import State
+from src.actions import Action
 from typing import Tuple, Dict, Optional, Callable
 
 
@@ -61,7 +62,7 @@ class TerraEnv:
 
 
     @partial(jax.jit, static_argnums=(0, ))
-    def step(self, state: State, action: int) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
+    def step(self, state: State, action: int, action_type: Action) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
         """
         Step the env given an action
 
@@ -78,7 +79,7 @@ class TerraEnv:
             done (jnp.bool_): done indicator. If episode ends, then done = True.
             infos (Dict): additional information (currently empty)
         """
-        new_state = state._step(action)
+        new_state = state._step(action, action_type)
 
         reward = state._get_reward(new_state, action)
 
@@ -105,6 +106,6 @@ class TerraEnvBatch:
         return jax.vmap(self.terra_env.reset)(seeds)
 
     @partial(jax.jit, static_argnums=(0, ))
-    def step(self, states: State, actions: Array) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
-        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(states, actions)
+    def step(self, states: State, actions: Array, action_type: Action) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
+        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(states, actions, action_type)
         return states, (states, rewards, dones, infos)

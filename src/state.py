@@ -6,7 +6,7 @@ from typing import NamedTuple, Tuple
 from src.config import EnvConfig
 from src.map import GridWorld
 from src.agent import Agent
-from src.actions import Action, TrackedActionType
+from src.actions import Action, TrackedActionType, WheeledActionType, TrackedAction, WheeledAction
 from src.utils import (
     apply_rot_transl,
     increase_angle_circular,
@@ -51,9 +51,9 @@ class State(NamedTuple):
             env_steps=0
         )
 
-    def _step(self, action: Action, action_type = TrackedActionType) -> "State":
-        jax.debug.print("action={x}", x=action)
-        if action_type == TrackedActionType:
+    def _step(self, action: Array, action_type: Action) -> "State":
+
+        if isinstance(action_type, TrackedAction):
             handlers = [
                 self._handle_move_forward,
                 self._handle_move_backward,
@@ -65,58 +65,23 @@ class State(NamedTuple):
                 self._handle_retract_arm,
                 self._handle_do,
             ]
-        # elif action_type == WheeledActionType:
-        #     handlers = [
-        #         self._handle_move_forward_right,
-        #         self._handle_move_forward_left,
-        #         self._handle_move_backward_right,
-        #         self._handle_move_backward_left,
-        #         self._handle_cabin_clock,
-        #         self._handle_cabin_anticlock,
-        #         self._handle_extend_arm,
-        #         self._handle_retract_arm,
-        #         self._handle_do,
-        #     ]
+        elif isinstance(action_type, WheeledAction):
+            # TODO implement missing handlers
+            handlers = [
+                self._handle_move_forward,
+                self._handle_move_backward,
+                self._do_nothing,  # self._handle_move_clock_forward,
+                self._do_nothing,  # self._handle_move_clock_backward,
+                self._do_nothing,  # self._handle_move_anticlock_forward,
+                self._do_nothing,  # self._handle_move_anticlock_backward,
+                self._handle_cabin_clock,
+                self._handle_cabin_anticlock,
+                self._handle_extend_arm,
+                self._handle_retract_arm,
+                self._handle_do,
+            ]
 
         state = jax.lax.switch(action, handlers)
-
-        # state = jax.lax.cond(
-        #     action == TrackedActionType.FORWARD,
-        #     self._handle_move_forward,
-        #     lambda: jax.lax.cond(
-        #         action == TrackedActionType.BACKWARD,
-        #         self._handle_move_backward,
-        #         lambda: jax.lax.cond(
-        #             action == TrackedActionType.CLOCK,
-        #             self._handle_clock,
-        #             lambda: jax.lax.cond(
-        #                 action == TrackedActionType.ANTICLOCK,
-        #                 self._handle_anticlock,
-        #                 lambda: jax.lax.cond(
-        #                     action == TrackedActionType.CABIN_CLOCK,
-        #                     self._handle_cabin_clock,
-        #                     lambda: jax.lax.cond(
-        #                         action == TrackedActionType.CABIN_ANTICLOCK,
-        #                         self._handle_cabin_anticlock,
-        #                         lambda: jax.lax.cond(
-        #                             action == TrackedActionType.EXTEND_ARM,
-        #                             self._handle_extend_arm,
-        #                             lambda: jax.lax.cond(
-        #                                 action == TrackedActionType.RETRACT_ARM,
-        #                                 self._handle_retract_arm,
-        #                                 lambda: jax.lax.cond(
-        #                                     action == TrackedActionType.DO,
-        #                                     self._handle_do,
-        #                                     self._do_nothing
-        #                                 )
-        #                             )
-        #                         )
-        #                     )
-        #                 )
-        #             )
-        #         )
-        #     )
-        # )
 
         return state
     

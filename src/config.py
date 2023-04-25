@@ -1,5 +1,6 @@
 from typing import NamedTuple
 from src.utils import Float
+from src.actions import Action, TrackedAction
 
 MapConfig = NamedTuple
 
@@ -67,3 +68,6 @@ class EnvConfig(NamedTuple):
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
 
     max_episode_duration: int = 100  # in number of steps
+
+class BatchConfig(NamedTuple):
+    action_type: Action = TrackedAction()
