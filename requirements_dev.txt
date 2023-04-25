@@ -2,3 +2,4 @@
 pytest-cov
 pylint
 mypy
+pre-commit
