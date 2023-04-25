@@ -1,6 +1,6 @@
 from typing import NamedTuple
 from src.utils import Float
-from src.actions import Action, TrackedAction
+from src.actions import Action, TrackedAction, WheeledAction
 
 MapConfig = NamedTuple
 
@@ -70,4 +70,4 @@ class EnvConfig(NamedTuple):
     max_episode_duration: int = 100  # in number of steps
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction()
+    action_type: Action = TrackedAction

@@ -51,9 +51,9 @@ class State(NamedTuple):
             env_steps=0
         )
 
-    def _step(self, action: Array, action_type: Action) -> "State":
+    def _step(self, action: Action) -> "State":
 
-        if isinstance(action_type, TrackedAction):
+        if isinstance(action, TrackedAction):
             handlers = [
                 self._handle_move_forward,
                 self._handle_move_backward,
@@ -65,7 +65,7 @@ class State(NamedTuple):
                 self._handle_retract_arm,
                 self._handle_do,
             ]
-        elif isinstance(action_type, WheeledAction):
+        elif isinstance(action, WheeledAction):
             # TODO implement missing handlers
             handlers = [
                 self._handle_move_forward,
@@ -81,7 +81,7 @@ class State(NamedTuple):
                 self._handle_do,
             ]
 
-        state = jax.lax.switch(action, handlers)
+        state = jax.lax.switch(action.action, handlers)
 
         return state
     

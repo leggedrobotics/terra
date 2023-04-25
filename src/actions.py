@@ -1,3 +1,4 @@
+import jax
 from jax import Array
 import jax.numpy as jnp
 from enum import IntEnum
@@ -72,6 +73,10 @@ class TrackedAction(Action):
     @classmethod
     def do(cls):
         return cls.new(TrackedActionType.DO)
+    
+    @classmethod
+    def random(cls, key: jnp.int32):
+        return cls.new(jax.random.choice(key, jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1)))
 
 
 class WheeledActionType(ActionType):
@@ -148,3 +153,7 @@ class WheeledAction(Action):
     @classmethod
     def do(cls):
         return cls.new(WheeledActionType.DO)
+    
+    @classmethod
+    def random(cls, key: jnp.int32):
+        return cls.new(jax.random.choice(key, jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1)))

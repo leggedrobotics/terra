@@ -1,12 +1,8 @@
 import unittest
-import time
 import jax
 import jax.numpy as jnp
-import numpy as np
 from src.env import TerraEnvBatch
 from src.config import EnvConfig, BatchConfig
-from src.utils import IntLowDim
-from src.actions import TrackedActionType
 
 
 class TestEnvBatch(unittest.TestCase):
@@ -29,13 +25,20 @@ class TestEnvBatch(unittest.TestCase):
         env_batch = TerraEnvBatch(env_cfg=env_cfg)
         states = env_batch.reset(seeds)
 
-        # TODO make this more elegant
-        dummy = jnp.ones((batch_size))
-        action_type_batch = jax.vmap(lambda actions: batch_cfg.action_type)(dummy)
+        keys = jax.vmap(jax.random.PRNGKey)(seeds)
+        ks = jax.vmap(jax.random.split)(keys)
+        keys = ks[..., 0]
+        subkeys = ks[..., 1]
 
         for i in range(episode_length):
-            actions = np.random.randint(TrackedActionType.FORWARD, TrackedActionType.DO + 1, (batch_size))
-            _, (states, reward, dones, infos) = env_batch.step(states, actions, action_type_batch)
+            actions = jax.vmap(batch_cfg.action_type.random)(subkeys)
+
+            # jax.debug.print("actions {i} = {x}", x=actions, i=i)
+
+            _, (states, reward, dones, infos) = env_batch.step(states, actions)
+            ks = jax.vmap(jax.random.split)(keys)
+            keys = ks[..., 0]
+            subkeys = ks[..., 1]
 
 
 if __name__ == "__main__":
