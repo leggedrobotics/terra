@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from src.env import TerraEnv
-from src.actions import TrackedActionType
+from src.actions import TrackedAction
 from src.config import EnvConfig
 # import argparse
 
@@ -44,39 +44,39 @@ def key_handler(event):
     #     reset()
 
     if event.key == "left":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.ANTICLOCK)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.anticlock())
         parse_step(state, reward, done, info)
 
     if event.key == "right":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CLOCK)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.clock())
         parse_step(state, reward, done, info)
 
     if event.key == "up":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.FORWARD)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.forward())
         parse_step(state, reward, done, info)
 
     if event.key == "down":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.BACKWARD)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.backward())
         parse_step(state, reward, done, info)
 
     if event.key == "a":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_ANTICLOCK)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.cabin_anticlock())
         parse_step(state, reward, done, info)
 
     if event.key == "d":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_CLOCK)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.cabin_clock())
         parse_step(state, reward, done, info)
 
     if event.key == "e":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.EXTEND_ARM)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.extend_arm())
         parse_step(state, reward, done, info)
 
     if event.key == "r":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.RETRACT_ARM)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.retract_arm())
         parse_step(state, reward, done, info)
 
     if event.key == " ":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.DO)
+        _, (state, reward, done, info) = env.step(state, TrackedAction.do())
         parse_step(state, reward, done, info)
         return
 
