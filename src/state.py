@@ -51,44 +51,72 @@ class State(NamedTuple):
             env_steps=0
         )
 
-    def _step(self, action: Action) -> "State":
-        state = jax.lax.cond(
-            action == TrackedActionType.FORWARD,
-            self._handle_move_forward,
-            lambda: jax.lax.cond(
-                action == TrackedActionType.BACKWARD,
+    def _step(self, action: Action, action_type = TrackedActionType) -> "State":
+        jax.debug.print("action={x}", x=action)
+        if action_type == TrackedActionType:
+            handlers = [
+                self._handle_move_forward,
                 self._handle_move_backward,
-                lambda: jax.lax.cond(
-                    action == TrackedActionType.CLOCK,
-                    self._handle_clock,
-                    lambda: jax.lax.cond(
-                        action == TrackedActionType.ANTICLOCK,
-                        self._handle_anticlock,
-                        lambda: jax.lax.cond(
-                            action == TrackedActionType.CABIN_CLOCK,
-                            self._handle_cabin_clock,
-                            lambda: jax.lax.cond(
-                                action == TrackedActionType.CABIN_ANTICLOCK,
-                                self._handle_cabin_anticlock,
-                                lambda: jax.lax.cond(
-                                    action == TrackedActionType.EXTEND_ARM,
-                                    self._handle_extend_arm,
-                                    lambda: jax.lax.cond(
-                                        action == TrackedActionType.RETRACT_ARM,
-                                        self._handle_retract_arm,
-                                        lambda: jax.lax.cond(
-                                            action == TrackedActionType.DO,
-                                            self._handle_do,
-                                            self._do_nothing
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
+                self._handle_clock,
+                self._handle_anticlock,
+                self._handle_cabin_clock,
+                self._handle_cabin_anticlock,
+                self._handle_extend_arm,
+                self._handle_retract_arm,
+                self._handle_do,
+            ]
+        # elif action_type == WheeledActionType:
+        #     handlers = [
+        #         self._handle_move_forward_right,
+        #         self._handle_move_forward_left,
+        #         self._handle_move_backward_right,
+        #         self._handle_move_backward_left,
+        #         self._handle_cabin_clock,
+        #         self._handle_cabin_anticlock,
+        #         self._handle_extend_arm,
+        #         self._handle_retract_arm,
+        #         self._handle_do,
+        #     ]
+
+        state = jax.lax.switch(action, handlers)
+
+        # state = jax.lax.cond(
+        #     action == TrackedActionType.FORWARD,
+        #     self._handle_move_forward,
+        #     lambda: jax.lax.cond(
+        #         action == TrackedActionType.BACKWARD,
+        #         self._handle_move_backward,
+        #         lambda: jax.lax.cond(
+        #             action == TrackedActionType.CLOCK,
+        #             self._handle_clock,
+        #             lambda: jax.lax.cond(
+        #                 action == TrackedActionType.ANTICLOCK,
+        #                 self._handle_anticlock,
+        #                 lambda: jax.lax.cond(
+        #                     action == TrackedActionType.CABIN_CLOCK,
+        #                     self._handle_cabin_clock,
+        #                     lambda: jax.lax.cond(
+        #                         action == TrackedActionType.CABIN_ANTICLOCK,
+        #                         self._handle_cabin_anticlock,
+        #                         lambda: jax.lax.cond(
+        #                             action == TrackedActionType.EXTEND_ARM,
+        #                             self._handle_extend_arm,
+        #                             lambda: jax.lax.cond(
+        #                                 action == TrackedActionType.RETRACT_ARM,
+        #                                 self._handle_retract_arm,
+        #                                 lambda: jax.lax.cond(
+        #                                     action == TrackedActionType.DO,
+        #                                     self._handle_do,
+        #                                     self._do_nothing
+        #                                 )
+        #                             )
+        #                         )
+        #                     )
+        #                 )
+        #             )
+        #         )
+        #     )
+        # )
 
         return state
     
