@@ -1,17 +1,19 @@
 import unittest
+
 import jax
 import jax.numpy as jnp
+
+from src.config import BatchConfig
+from src.config import EnvConfig
 from src.env import TerraEnvBatch
-from src.config import EnvConfig, BatchConfig
 
 
 class TestEnvBatch(unittest.TestCase):
-
     def test_create_env_batch(self):
         batch_size = 2
         seeds = jnp.arange(batch_size)
         env_batch = TerraEnvBatch(env_cfg=EnvConfig())
-        states = env_batch.reset(seeds)
+        env_batch.reset(seeds)
 
         # print(states)
 

@@ -1,8 +1,2 @@
 [flake8]
-ignore = E203, E266, E501, W503, F403, F401, E402
-max-line-length = 120
-max-complexity = 18
-select = B,C,E,F,W,T4,B9
-exclude =
-    .git,
-    tests
+ignore = E501, E203, W, PAI

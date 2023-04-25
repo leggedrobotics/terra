@@ -1,15 +1,15 @@
 import unittest
-from src.env import TerraEnv
+
+from src.actions import TrackedAction
 from src.config import EnvConfig
-from src.actions import TrackedActionType
+from src.env import TerraEnv
 
 
 class TestEnv(unittest.TestCase):
-
     def test_create_env(self):
         seed = 27
         env = TerraEnv(env_cfg=EnvConfig())
-        state = env.reset(seed)
+        env.reset(seed)
 
         # print(state)
 
@@ -24,31 +24,31 @@ class TestEnv(unittest.TestCase):
         return state1
 
     def test_step_fwd(self):
-        state = self._test_step_action(TrackedActionType.FORWARD)
-    
+        self._test_step_action(TrackedAction.forward())
+
     def test_step_bkwd(self):
-        state = self._test_step_action(TrackedActionType.BACKWARD)
-    
+        self._test_step_action(TrackedAction.backward())
+
     def test_step_clock(self):
-        state = self._test_step_action(TrackedActionType.CLOCK)
-    
+        self._test_step_action(TrackedAction.clock())
+
     def test_step_anticlock(self):
-        state = self._test_step_action(TrackedActionType.ANTICLOCK)
-    
+        self._test_step_action(TrackedAction.anticlock())
+
     def test_step_cabin_clock(self):
-        state = self._test_step_action(TrackedActionType.CABIN_CLOCK)
-    
+        self._test_step_action(TrackedAction.cabin_clock())
+
     def test_step_cabin_anticlock(self):
-        state = self._test_step_action(TrackedActionType.CABIN_ANTICLOCK)
+        self._test_step_action(TrackedAction.cabin_anticlock())
 
     def test_step_extend_arm(self):
-        state = self._test_step_action(TrackedActionType.EXTEND_ARM)
+        self._test_step_action(TrackedAction.extend_arm())
 
     def test_step_retract_arm(self):
-        state = self._test_step_action(TrackedActionType.RETRACT_ARM)
+        self._test_step_action(TrackedAction.retract_arm())
 
     def test_step_do(self):
-        action = TrackedActionType.DO
+        action = TrackedAction.do()
         seed = 29
         env = TerraEnv(env_cfg=EnvConfig())
         state = env.reset(seed)

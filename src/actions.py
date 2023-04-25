@@ -1,16 +1,20 @@
-import jax
-from jax import Array
-import jax.numpy as jnp
 from enum import IntEnum
 from typing import NamedTuple
+
+import jax
+import jax.numpy as jnp
+from jax import Array
+
 from src.utils import IntLowDim
 
 ActionType = IntEnum
+
 
 class TrackedActionType(ActionType):
     """
     Tracked robot specific actions.
     """
+
     DO_NOTHING = -1
     FORWARD = 0
     BACKWARD = 1
@@ -22,17 +26,19 @@ class TrackedActionType(ActionType):
     RETRACT_ARM = 7
     DO = 8
 
+
 Action = NamedTuple
+
 
 class TrackedAction(Action):
     # action: IntLowDim = IntLowDim(TrackedActionType.DO_NOTHING)
-    action: Array = jnp.full((1, ), fill_value=TrackedActionType.DO_NOTHING, dtype=IntLowDim)
+    action: Array = jnp.full(
+        (1,), fill_value=TrackedActionType.DO_NOTHING, dtype=IntLowDim
+    )
 
     @classmethod
     def new(cls, action: TrackedActionType) -> "TrackedAction":
-        return TrackedAction(
-            action=IntLowDim(action)
-        )
+        return TrackedAction(action=IntLowDim(action))
 
     @classmethod
     def do_nothing(cls):
@@ -41,48 +47,53 @@ class TrackedAction(Action):
     @classmethod
     def forward(cls):
         return cls.new(TrackedActionType.FORWARD)
-    
+
     @classmethod
     def backward(cls):
         return cls.new(TrackedActionType.BACKWARD)
-    
+
     @classmethod
     def clock(cls):
         return cls.new(TrackedActionType.CLOCK)
-    
+
     @classmethod
     def anticlock(cls):
         return cls.new(TrackedActionType.ANTICLOCK)
-        
+
     @classmethod
     def cabin_clock(cls):
         return cls.new(TrackedActionType.CABIN_CLOCK)
-    
+
     @classmethod
     def cabin_anticlock(cls):
         return cls.new(TrackedActionType.CABIN_ANTICLOCK)
-    
+
     @classmethod
     def extend_arm(cls):
         return cls.new(TrackedActionType.EXTEND_ARM)
-    
+
     @classmethod
     def retract_arm(cls):
         return cls.new(TrackedActionType.RETRACT_ARM)
-    
+
     @classmethod
     def do(cls):
         return cls.new(TrackedActionType.DO)
-    
+
     @classmethod
     def random(cls, key: jnp.int32):
-        return cls.new(jax.random.choice(key, jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1)))
+        return cls.new(
+            jax.random.choice(
+                key, jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1)
+            )
+        )
 
 
 class WheeledActionType(ActionType):
     """
     Wheeled robot specific actions.
     """
+
     DO_NOTHING = -1
     FORWARD = 0
     BACKWARD = 1
@@ -98,13 +109,13 @@ class WheeledActionType(ActionType):
 
 
 class WheeledAction(Action):
-    action: Array = jnp.full((1, ), fill_value=WheeledActionType.DO_NOTHING, dtype=IntLowDim)
+    action: Array = jnp.full(
+        (1,), fill_value=WheeledActionType.DO_NOTHING, dtype=IntLowDim
+    )
 
     @classmethod
     def new(cls, action: WheeledActionType) -> "TrackedAction":
-        return TrackedAction(
-            action=IntLowDim(action)
-        )
+        return TrackedAction(action=IntLowDim(action))
 
     @classmethod
     def do_nothing(cls):
@@ -113,47 +124,51 @@ class WheeledAction(Action):
     @classmethod
     def forward(cls):
         return cls.new(WheeledActionType.FORWARD)
-    
+
     @classmethod
     def backward(cls):
         return cls.new(WheeledActionType.BACKWARD)
-    
+
     @classmethod
     def clock_forward(cls):
         return cls.new(WheeledActionType.CLOCK_FORWARD)
-    
+
     @classmethod
     def clock_backward(cls):
         return cls.new(WheeledActionType.CLOCK_BACKWARD)
-    
+
     @classmethod
     def anticlock_forward(cls):
         return cls.new(WheeledActionType.ANTICLOCK_FORWARD)
-    
+
     @classmethod
     def anticlock_backward(cls):
         return cls.new(WheeledActionType.ANTICLOCK_BACKWARD)
-        
+
     @classmethod
     def cabin_clock(cls):
         return cls.new(WheeledActionType.CABIN_CLOCK)
-    
+
     @classmethod
     def cabin_anticlock(cls):
         return cls.new(WheeledActionType.CABIN_ANTICLOCK)
-    
+
     @classmethod
     def extend_arm(cls):
         return cls.new(WheeledActionType.EXTEND_ARM)
-    
+
     @classmethod
     def retract_arm(cls):
         return cls.new(WheeledActionType.RETRACT_ARM)
-    
+
     @classmethod
     def do(cls):
         return cls.new(WheeledActionType.DO)
-    
+
     @classmethod
     def random(cls, key: jnp.int32):
-        return cls.new(jax.random.choice(key, jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1)))
+        return cls.new(
+            jax.random.choice(
+                key, jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1)
+            )
+        )

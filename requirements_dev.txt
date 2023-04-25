@@ -3,3 +3,4 @@ pytest-cov
 pylint
 mypy
 pre-commit
+flake8

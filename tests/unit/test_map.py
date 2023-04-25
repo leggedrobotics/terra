@@ -1,11 +1,13 @@
 import unittest
+
 import jax.numpy as jnp
-from src.map import GridMap, GridWorld
+
 from src.config import EnvConfig
+from src.map import GridMap
+from src.map import GridWorld
 
 
 class TestMap(unittest.TestCase):
-
     def test_random_map_one_dig(self):
         seed = 3
         width = 3
@@ -21,7 +23,7 @@ class TestMap(unittest.TestCase):
 
     def test_create_grid_world(self):
         seed = 5
-        grid_world = GridWorld.new(seed, EnvConfig())
+        GridWorld.new(seed, EnvConfig())
 
 
 if __name__ == "__main__":

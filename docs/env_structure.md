@@ -152,4 +152,3 @@ A few points on the implementation:
 
 ## Notes on JUX
 1. Conversion from/to the Lux interface with the functions `from_lux` `to_lux`.
-

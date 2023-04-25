@@ -1,68 +1,78 @@
+from collections.abc import Callable
+from functools import partial
+
 import jax
 from jax import Array
-from functools import partial
+
+from src.actions import Action
 from src.config import EnvConfig
 from src.state import State
-from src.actions import Action
-from typing import Tuple, Dict, Optional, Callable
 
 
 class TerraEnv:
     def __init__(self, env_cfg: EnvConfig, rendering: bool = False) -> None:
-        self.env_cfg = env_cfg       
+        self.env_cfg = env_cfg
 
         if rendering:
             from viz.window import Window
             from viz.rendering import RenderingEngine
+
             self.window = Window("Terra")
             self.rendering_engine = RenderingEngine(
-                x_dim=env_cfg.target_map.width,
-                y_dim=env_cfg.target_map.height
+                x_dim=env_cfg.target_map.width, y_dim=env_cfg.target_map.height
             )
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
-    
+
     def __hash__(self) -> int:
         return hash((TerraEnv, self.env_cfg))
 
-    @partial(jax.jit, static_argnums=(0, ))
+    @partial(jax.jit, static_argnums=(0,))
     def reset(self, seed: int) -> State:
         """
         Resets the environment using values from config files, and a seed.
         """
         return State.new(seed, self.env_cfg)
 
-    def render(self, state: State,
-               key_handler: Optional[Callable],
-               mode: str = "human",
-               block: bool = False,
-               tile_size: int = 32) -> Array:
+    def render(
+        self,
+        state: State,
+        key_handler: Callable | None,
+        mode: str = "human",
+        block: bool = False,
+        tile_size: int = 32,
+    ) -> Array:
         """
         Renders the environment at a given state.
 
         # TODO write a cleaner rendering engine
         """
-        img = self.rendering_engine.render_grid(tile_size=tile_size,
-                                                height_grid=state.world.action_map.map,
-                                                agent_pos=state.agent.agent_state.pos_base,
-                                                base_dir=state.agent.agent_state.angle_base,
-                                                cabin_dir=state.agent.agent_state.angle_cabin,
-                                                agent_width=self.env_cfg.agent.width,
-                                                agent_height=self.env_cfg.agent.height)
+        img = self.rendering_engine.render_grid(
+            tile_size=tile_size,
+            height_grid=state.world.action_map.map,
+            agent_pos=state.agent.agent_state.pos_base,
+            base_dir=state.agent.agent_state.angle_base,
+            cabin_dir=state.agent.agent_state.angle_cabin,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
 
         if key_handler:
             if mode == "human":
-                self.window.set_title(title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}")
+                self.window.set_title(
+                    title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
+                )
                 self.window.show_img(img)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
-        
+
         return img
 
-
-    @partial(jax.jit, static_argnums=(0, ))
-    def step(self, state: State, action: Action) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
+    @partial(jax.jit, static_argnums=(0,))
+    def step(
+        self, state: State, action: Action
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
 
@@ -83,7 +93,9 @@ class TerraEnv:
 
         reward = state._get_reward(new_state, action)
 
-        dones = State._is_done(new_state.world.action_map.map, new_state.world.target_map.map)
+        dones = State._is_done(
+            new_state.world.action_map.map, new_state.world.target_map.map
+        )
 
         infos = {}
 
@@ -101,11 +113,15 @@ class TerraEnvBatch:
     def __init__(self, env_cfg: EnvConfig = EnvConfig()) -> None:
         self.terra_env = TerraEnv(env_cfg)
 
-    @partial(jax.jit, static_argnums=(0, ))
+    @partial(jax.jit, static_argnums=(0,))
     def reset(self, seeds: Array) -> State:
         return jax.vmap(self.terra_env.reset)(seeds)
 
-    @partial(jax.jit, static_argnums=(0, ))
-    def step(self, states: State, actions: Action) -> Tuple[State, Tuple[Dict, Array, Array, Dict]]:
-        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(states, actions)
+    @partial(jax.jit, static_argnums=(0,))
+    def step(
+        self, states: State, actions: Action
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
+            states, actions
+        )
         return states, (states, rewards, dones, infos)

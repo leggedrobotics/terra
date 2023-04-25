@@ -1,6 +1,10 @@
+from abc import ABCMeta
+from abc import abstractmethod
+
 import numpy as np
-from abc import abstractmethod, ABCMeta
+
 from src.state import State
+
 # import time
 
 # def downsample(img, factor):
@@ -29,12 +33,9 @@ def fill_coords(img, fn, color):
 
     cond = fn(xf, yf).reshape(img.shape[0], img.shape[1])
 
-    img = np.where(
-        cond[:, :, None],
-        color,
-        img
-    )
+    img = np.where(cond[:, :, None], color, img)
     return img
+
 
 def generate_combinations_xy(x, y):
     xa = x[:, None].repeat(y.shape[0], axis=1).reshape(-1)
@@ -42,8 +43,10 @@ def generate_combinations_xy(x, y):
     xya = np.vstack([xa, ya])
     return xya
 
+
 def rotate_fn(fin, cx, cy, theta):
     theta = -theta
+
     def fout(x, y):
         xya = generate_combinations_xy(x, y)
         xya[0] -= cx
@@ -63,13 +66,16 @@ def rotate_fn(fin, cx, cy, theta):
 
     return fout
 
+
 def point_in_rect(xmin, xmax, ymin, ymax):
     def fn(x, y):
         # return x >= xmin and x <= xmax and y >= ymin and y <= ymax
         x_cond = np.logical_and(x >= xmin, x <= xmax)
         y_cond = np.logical_and(y >= ymin, y <= ymax)
         return np.logical_and(x_cond, y_cond)
+
     return fn
+
 
 def point_in_triangle(a, b, c):
     a = np.array(a)
@@ -94,9 +100,10 @@ def point_in_triangle(a, b, c):
         v = (dot00 * dot12 - dot01 * dot02) * inv_denom
 
         # Check if point is in triangle
-        return np.logical_and(np.logical_and(u>=0, v>=0), (u+v) < 1)
+        return np.logical_and(np.logical_and(u >= 0, v >= 0), (u + v) < 1)
 
     return fn
+
 
 def point_in_triangle_naive(a, b, c):
     a = np.array(a)
@@ -211,6 +218,7 @@ class GridObject(metaclass=ABCMeta):
             32,
         )
 
+
 class AgentObject(GridObject):
     def __init__(self, type="agent", color="red"):
         super().__init__(type, color)
@@ -227,7 +235,7 @@ class RenderingEngine:
         self.grid_object = [None] * (self.x_dim * self.y_dim)
         self.height_grid_cache = np.zeros((self.x_dim, self.y_dim))
         self.first_render = True
-        
+
     # @classmethod
     # def render_tile(
     #         self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
@@ -274,34 +282,30 @@ class RenderingEngine:
     #     self.tile_cache[key] = img
 
     #     return img
-    
-    def render_agent(self, agent_width, agent_height, tile_size, base_dir, cabin_dir = None):
+
+    def render_agent(
+        self, agent_width, agent_height, tile_size, base_dir, cabin_dir=None
+    ):
         # draw the base a yellow rectangle with one side longer than the other
         # to make it easier to see the direction
 
         img = np.zeros(
-            shape=(tile_size * agent_width, tile_size * agent_height, 3), dtype=np.uint16
+            shape=(tile_size * agent_width, tile_size * agent_height, 3),
+            dtype=np.uint16,
         )
 
         # base
-        back_base_fn = point_in_rect(
-            0.25, 0.75, 0.0, 0.25
-        )
+        back_base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
         back_base_fn = rotate_fn(
             back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
         )
-        img = fill_coords(
-            img, back_base_fn, np.array([0, 0, 0]))
+        img = fill_coords(img, back_base_fn, np.array([0, 0, 0]))
 
         # yellow of the base
-        base_fn = point_in_rect(
-            0.25, 0.75, 0.0, 0.25
-        )
+        base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
-        base_fn = rotate_fn(
-            base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir + np.pi 
-        )
+        base_fn = rotate_fn(base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir + np.pi)
 
         img = fill_coords(img, base_fn, np.array([255, 255, 0]))
 
@@ -314,12 +318,15 @@ class RenderingEngine:
 
         # Rotate the agent based on its direction
         tri_fn = rotate_fn(
-            tri_fn, cx=0.5, cy=0.5, theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir + np.pi/2
+            tri_fn,
+            cx=0.5,
+            cy=0.5,
+            theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir + np.pi / 2,
         )
         img = fill_coords(img, tri_fn, (255, 0, 0))
 
         return img
-    
+
     def get(self, i: int, j: int) -> GridObject:
         """Retrieve object at location (i, j)
 
@@ -330,22 +337,21 @@ class RenderingEngine:
         assert i <= self.x_dim, "Grid index i out of bound"
         assert j <= self.y_dim, "Grid index j out of boudns"
         return self.grid_object[i + self.x_dim * j]
-    
+
     # def _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir):
     #     pass
 
-
     def render_grid(
-            self,
-            tile_size,
-            height_grid,
-            agent_pos=None,
-            base_dir=None,
-            cabin_dir=None,
-            agent_width=None,
-            agent_height=None,
-            render_objects=True,
-            target_height=False
+        self,
+        tile_size,
+        height_grid,
+        agent_pos=None,
+        base_dir=None,
+        cabin_dir=None,
+        agent_width=None,
+        agent_height=None,
+        render_objects=True,
+        target_height=False,
     ):
         """
         Render this grid at a given scale
@@ -360,7 +366,9 @@ class RenderingEngine:
         height_grid = np.array(height_grid)
 
         # img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint16)
-        x = ((height_grid.repeat(tile_size, axis=1).repeat(tile_size, axis=0) + 3) / 7)[:, :, None]
+        x = ((height_grid.repeat(tile_size, axis=1).repeat(tile_size, axis=0) + 3) / 7)[
+            :, :, None
+        ]
         img = (np.array([[[255, 255, 255]]]) * x).astype(np.int16)
 
         # apply grid
@@ -369,14 +377,14 @@ class RenderingEngine:
         img[grid_idx_x] = np.array([100, 100, 100])
         img[:, grid_idx_y] = np.array([100, 100, 100])
         img = img.astype(np.int16)
-        
+
         # s2 = time.time()
         # Render agent
         agent_corners = State._get_agent_corners(
             pos_base=agent_pos,
             base_orientation=base_dir,
             agent_width=agent_width,
-            agent_height=agent_height
+            agent_height=agent_height,
         )
 
         ay_min = np.min(agent_corners[:, 1]).astype(np.int16)
@@ -389,7 +397,9 @@ class RenderingEngine:
         agent_xmin = ax_min * tile_size
         agent_xmax = ax_max * tile_size
 
-        agent_img = self.render_agent(ax_max-ax_min, ay_max-ay_min, tile_size, base_dir, cabin_dir)
+        agent_img = self.render_agent(
+            ax_max - ax_min, ay_max - ay_min, tile_size, base_dir, cabin_dir
+        )
         img[agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_img
 
         # e = time.time()
@@ -398,6 +408,7 @@ class RenderingEngine:
         # print(f"agent = {100 * (e-s2)/(e-s1)}%")
 
         return img.transpose(0, 1, 2)
+
 
 # def render_multiple(
 #         self,

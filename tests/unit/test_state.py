@@ -1,33 +1,34 @@
 import unittest
+
 import jax.numpy as jnp
-from src.state import State
+
+from src.actions import TrackedAction
 from src.config import EnvConfig
-from src.actions import TrackedActionType
+from src.state import State
 from src.utils import IntMap
 
 
 class TestAgent(unittest.TestCase):
-
     def test_create_state(self):
         seed = 33
-        state = State.new(seed, env_cfg=EnvConfig())
-    
+        State.new(seed, env_cfg=EnvConfig())
+
     def test_call_step_forward(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        action = TrackedActionType.FORWARD
+        action = TrackedAction.forward()
         state = state._step(action)
 
     def test_get_agent_corners(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
-        
-        corners = state._get_agent_corners(
+
+        state._get_agent_corners(
             pos_base=state.agent.agent_state.pos_base,
             base_orientation=state.agent.agent_state.angle_base,
             agent_width=state.env_cfg.agent.width,
-            agent_height=state.env_cfg.agent.height
+            agent_height=state.env_cfg.agent.height,
         )
 
     def test_arm_extension(self):
@@ -53,28 +54,29 @@ class TestAgent(unittest.TestCase):
     def test_map_to_flattened_global_coords(self):
         map_h = 2
         map_w = 3
-        tile_size = 10.
+        tile_size = 10.0
         flat_map = State._map_to_flattened_global_coords(map_w, map_h, tile_size)
-        flat_map_gt = jnp.array([[5., 5., 15., 15., 25., 25.],
-                                 [5., 15.,  5., 15.,  5., 15.]])
+        flat_map_gt = jnp.array(
+            [[5.0, 5.0, 15.0, 15.0, 25.0, 25.0], [5.0, 15.0, 5.0, 15.0, 5.0, 15.0]]
+        )
         self.assertTrue(jnp.allclose(flat_map, flat_map_gt))
 
     def test_get_current_pos_from_flattened_map(self):
         map_h = 2
         map_w = 3
-        tile_size = 10.
+        tile_size = 10.0
 
         idx = jnp.full((1,), fill_value=2)
         flat_map = State._map_to_flattened_global_coords(map_w, map_h, tile_size)
         current_pos = State._get_current_pos_from_flattened_map(flat_map, idx)
 
-        self.assertTrue(jnp.allclose(current_pos, jnp.array([15.,  5.])))
+        self.assertTrue(jnp.allclose(current_pos, jnp.array([15.0, 5.0])))
 
     def test_handle_dig(self):
         seed = 25
         state = State.new(seed, env_cfg=EnvConfig())
 
-        action = TrackedActionType.DO
+        action = TrackedAction.do()
         state = state._step(action)
 
     def test_is_done(self):
@@ -84,7 +86,7 @@ class TestAgent(unittest.TestCase):
         action_map1 = jnp.ones((3, 3))
         self.assertFalse(State._is_done(action_map1, target_map))
 
-        action_map2 = target_map.copy()        
+        action_map2 = target_map.copy()
         self.assertTrue(State._is_done(action_map2, target_map))
 
         action_map3 = target_map.copy()

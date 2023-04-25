@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-
-from src.env import TerraEnv
 from src.actions import TrackedAction
 from src.config import EnvConfig
+from src.env import TerraEnv
+
 # import argparse
 
 
@@ -12,7 +12,9 @@ def redraw():
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
     # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
-    img = env.render(state=state, mode="human", tile_size=tile_size, key_handler=key_handler)
+    img = env.render(
+        state=state, mode="human", tile_size=tile_size, key_handler=key_handler
+    )
 
     env.window.show_img(img)
     # env.window_target.show_img(img_target)
@@ -30,8 +32,8 @@ def redraw():
 
 #     redraw()
 
-def key_handler(event):
 
+def key_handler(event):
     global state
 
     print("pressed", event.key)
@@ -60,7 +62,9 @@ def key_handler(event):
         parse_step(state, reward, done, info)
 
     if event.key == "a":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.cabin_anticlock())
+        _, (state, reward, done, info) = env.step(
+            state, TrackedAction.cabin_anticlock()
+        )
         parse_step(state, reward, done, info)
 
     if event.key == "d":
@@ -116,7 +120,7 @@ def parse_step(obs, reward, done, info):
 #     "--tile_size", type=int, help="size at which to render tiles", default=32
 # )
 # parser.add_argument(
-#     "--agent_view", 
+#     "--agent_view",
 #     default=False,
 #     help="draw the agent sees (partially observable view)",
 #     action="store_true",
