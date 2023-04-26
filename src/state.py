@@ -6,7 +6,9 @@ import numpy as np
 from jax import Array
 
 from src.actions import Action
+from src.actions import ActionType
 from src.actions import TrackedActionType
+from src.actions import WheeledActionType
 from src.agent import Agent
 from src.config import EnvConfig
 from src.map import GridWorld
@@ -507,15 +509,19 @@ class State(NamedTuple):
         )
 
     def _handle_move_clock_forward(self) -> "State":
+        # TODO: implement a better collision check - this is just putting together 3 independent checks
         return self._handle_move_forward()._handle_clock()._handle_move_forward()
 
     def _handle_move_clock_backward(self) -> "State":
+        # TODO: implement a better collision check - this is just putting together 3 independent checks
         return self._handle_move_backward()._handle_clock()._handle_move_backward()
 
     def _handle_move_anticlock_forward(self) -> "State":
+        # TODO: implement a better collision check - this is just putting together 3 independent checks
         return self._handle_move_forward()._handle_anticlock()._handle_move_forward()
 
     def _handle_move_anticlock_backward(self) -> "State":
+        # TODO: implement a better collision check - this is just putting together 3 independent checks
         return self._handle_move_backward()._handle_anticlock()._handle_move_backward()
 
     def _handle_extend_arm(self) -> "State":
@@ -960,10 +966,8 @@ class State(NamedTuple):
             action,
         )
 
-    def _get_reward(self, new_state: "State", action: TrackedActionType) -> Float:
+    def _get_rewards_tracked(self, new_state: "State", action: ActionType) -> Float:
         reward = 0.0
-
-        # Action-dependent
 
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
@@ -996,6 +1000,63 @@ class State(NamedTuple):
             action == TrackedActionType.DO,
             self._handle_rewards_do,
             lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+        return reward
+
+    def _get_rewards_wheeled(self, new_state: "State", action: ActionType) -> Float:
+        reward = 0.0
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.FORWARD)
+            | (action == WheeledActionType.BACKWARD),
+            self._handle_rewards_move,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.CLOCK_FORWARD)
+            | (action == WheeledActionType.ANTICLOCK_FORWARD)
+            | (action == WheeledActionType.CLOCK_BACKWARD)
+            | (action == WheeledActionType.ANTICLOCK_BACKWARD),
+            lambda new_state, action: self._handle_rewards_base_turn(new_state, action)
+            + self._handle_rewards_move(new_state, action),
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.CABIN_CLOCK)
+            | (action == WheeledActionType.CABIN_ANTICLOCK),
+            self._handle_rewards_cabin_turn,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            action == WheeledActionType.DO,
+            self._handle_rewards_do,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+        return reward
+
+    def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
+        action = action_handler.action
+
+        reward = 0.0
+
+        # Action-dependent
+        reward += jax.lax.cond(
+            action_handler.type[0] == 0,
+            self._get_rewards_tracked,
+            self._get_rewards_wheeled,
             new_state,
             action,
         )
