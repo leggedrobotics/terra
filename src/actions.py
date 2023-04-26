@@ -31,14 +31,16 @@ Action = NamedTuple
 
 
 class TrackedAction(Action):
-    # action: IntLowDim = IntLowDim(TrackedActionType.DO_NOTHING)
+    type: Array = jnp.full((1,), fill_value=0, dtype=IntLowDim)
     action: Array = jnp.full(
         (1,), fill_value=TrackedActionType.DO_NOTHING, dtype=IntLowDim
     )
 
     @classmethod
     def new(cls, action: TrackedActionType) -> "TrackedAction":
-        return TrackedAction(action=IntLowDim(action))
+        return TrackedAction(
+            action=IntLowDim(action), type=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+        )
 
     @classmethod
     def do_nothing(cls):
@@ -109,13 +111,16 @@ class WheeledActionType(ActionType):
 
 
 class WheeledAction(Action):
+    type: Array = jnp.full((1,), fill_value=1, dtype=IntLowDim)
     action: Array = jnp.full(
         (1,), fill_value=WheeledActionType.DO_NOTHING, dtype=IntLowDim
     )
 
     @classmethod
     def new(cls, action: WheeledActionType) -> "TrackedAction":
-        return TrackedAction(action=IntLowDim(action))
+        return TrackedAction(
+            action=IntLowDim(action), type=jnp.full((1,), fill_value=1, dtype=IntLowDim)
+        )
 
     @classmethod
     def do_nothing(cls):

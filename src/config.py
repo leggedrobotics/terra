@@ -77,4 +77,4 @@ class EnvConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction
+    action_type: Action = WheeledAction

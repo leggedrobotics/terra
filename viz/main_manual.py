@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from src.actions import TrackedAction
+from src.config import BatchConfig
 from src.config import EnvConfig
 from src.env import TerraEnv
 
@@ -34,7 +34,7 @@ def redraw():
 
 
 def key_handler(event):
-    global state
+    global state, action_type
 
     print("pressed", event.key)
 
@@ -46,41 +46,59 @@ def key_handler(event):
     #     reset()
 
     if event.key == "left":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.anticlock())
+        _, (state, reward, done, info) = env.step(state, action_type.anticlock())
         parse_step(state, reward, done, info)
 
     if event.key == "right":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.clock())
+        _, (state, reward, done, info) = env.step(state, action_type.clock())
         parse_step(state, reward, done, info)
 
     if event.key == "up":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.forward())
+        _, (state, reward, done, info) = env.step(state, action_type.forward())
         parse_step(state, reward, done, info)
 
     if event.key == "down":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.backward())
+        _, (state, reward, done, info) = env.step(state, action_type.backward())
         parse_step(state, reward, done, info)
 
     if event.key == "a":
-        _, (state, reward, done, info) = env.step(
-            state, TrackedAction.cabin_anticlock()
-        )
+        _, (state, reward, done, info) = env.step(state, action_type.cabin_anticlock())
         parse_step(state, reward, done, info)
 
     if event.key == "d":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.cabin_clock())
+        _, (state, reward, done, info) = env.step(state, action_type.cabin_clock())
         parse_step(state, reward, done, info)
 
     if event.key == "e":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.extend_arm())
+        _, (state, reward, done, info) = env.step(state, action_type.extend_arm())
         parse_step(state, reward, done, info)
 
     if event.key == "r":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.retract_arm())
+        _, (state, reward, done, info) = env.step(state, action_type.retract_arm())
+        parse_step(state, reward, done, info)
+
+    if event.key == "o":
+        _, (state, reward, done, info) = env.step(state, action_type.clock_forward())
+        parse_step(state, reward, done, info)
+
+    if event.key == "k":
+        _, (state, reward, done, info) = env.step(state, action_type.clock_backward())
+        parse_step(state, reward, done, info)
+
+    if event.key == "i":
+        _, (state, reward, done, info) = env.step(
+            state, action_type.anticlock_forward()
+        )
+        parse_step(state, reward, done, info)
+
+    if event.key == "l":
+        _, (state, reward, done, info) = env.step(
+            state, action_type.anticlock_backward()
+        )
         parse_step(state, reward, done, info)
 
     if event.key == " ":
-        _, (state, reward, done, info) = env.step(state, TrackedAction.do())
+        _, (state, reward, done, info) = env.step(state, action_type.do())
         parse_step(state, reward, done, info)
         return
 
@@ -142,7 +160,10 @@ def parse_step(obs, reward, done, info):
 #            "cabin_turn_reward": -0.05, # ok
 #            "terminal_reward": 10}
 
-env = TerraEnv(EnvConfig(), rendering=True)
+env_cfg = EnvConfig()
+batch_cfg = BatchConfig()
+action_type = batch_cfg.action_type
+env = TerraEnv(env_cfg, rendering=True)
 print(env)
 seed = 24
 state = env.reset(seed=seed)

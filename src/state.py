@@ -6,9 +6,7 @@ import numpy as np
 from jax import Array
 
 from src.actions import Action
-from src.actions import TrackedAction
 from src.actions import TrackedActionType
-from src.actions import WheeledAction
 from src.agent import Agent
 from src.config import EnvConfig
 from src.map import GridWorld
@@ -59,35 +57,40 @@ class State(NamedTuple):
         )
 
     def _step(self, action: Action) -> "State":
-        if isinstance(action, TrackedAction):
-            handlers = [
-                self._handle_move_forward,
-                self._handle_move_backward,
-                self._handle_clock,
-                self._handle_anticlock,
-                self._handle_cabin_clock,
-                self._handle_cabin_anticlock,
-                self._handle_extend_arm,
-                self._handle_retract_arm,
-                self._handle_do,
-            ]
-        elif isinstance(action, WheeledAction):
-            # TODO implement missing handlers
-            handlers = [
-                self._handle_move_forward,
-                self._handle_move_backward,
-                self._do_nothing,  # self._handle_move_clock_forward,
-                self._do_nothing,  # self._handle_move_clock_backward,
-                self._do_nothing,  # self._handle_move_anticlock_forward,
-                self._do_nothing,  # self._handle_move_anticlock_backward,
-                self._handle_cabin_clock,
-                self._handle_cabin_anticlock,
-                self._handle_extend_arm,
-                self._handle_retract_arm,
-                self._handle_do,
-            ]
+        """
+        TrackedAction type --> 0
+        WheeledAction type --> 1
+        """
+        handlers_list = [
+            # Tracked
+            self._handle_move_forward,
+            self._handle_move_backward,
+            self._handle_clock,
+            self._handle_anticlock,
+            self._handle_cabin_clock,
+            self._handle_cabin_anticlock,
+            self._handle_extend_arm,
+            self._handle_retract_arm,
+            self._handle_do,
+            # Wheeled
+            self._handle_move_forward,
+            self._handle_move_backward,
+            self._handle_move_clock_forward,
+            self._handle_move_clock_backward,
+            self._handle_move_anticlock_forward,
+            self._handle_move_anticlock_backward,
+            self._handle_cabin_clock,
+            self._handle_cabin_anticlock,
+            self._handle_extend_arm,
+            self._handle_retract_arm,
+            self._handle_do,
+        ]
+        cumulative_len = jnp.array([0, 9], dtype=IntLowDim)
+        offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
+            IntLowDim
+        )
 
-        state = jax.lax.switch(action.action, handlers)
+        state = jax.lax.switch(offset_idx + action.action, handlers_list)
 
         return state
 
@@ -502,6 +505,18 @@ class State(NamedTuple):
                 agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
             )
         )
+
+    def _handle_move_clock_forward(self) -> "State":
+        return self._handle_move_forward()._handle_clock()._handle_move_forward()
+
+    def _handle_move_clock_backward(self) -> "State":
+        return self._handle_move_backward()._handle_clock()._handle_move_backward()
+
+    def _handle_move_anticlock_forward(self) -> "State":
+        return self._handle_move_forward()._handle_anticlock()._handle_move_forward()
+
+    def _handle_move_anticlock_backward(self) -> "State":
+        return self._handle_move_backward()._handle_anticlock()._handle_move_backward()
 
     def _handle_extend_arm(self) -> "State":
         new_arm_extension = jnp.min(
