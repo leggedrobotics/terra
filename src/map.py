@@ -48,12 +48,20 @@ class GridMap(NamedTuple):
         map = map.at[x, y].set(-1)
         return GridMap.new(map)
 
+    @staticmethod
+    def dummy_map() -> "GridMap":
+        return GridMap.new(jnp.full((1, 1), fill_value=0, dtype=jnp.bool_))
+
 
 class GridWorld(NamedTuple):
     seed: jnp.uint32
 
     target_map: GridMap
     action_map: GridMap
+
+    # Dummies for wrappers
+    traversability_mask: GridMap = GridMap.dummy_map()
+    local_map: GridMap = GridMap.dummy_map()
 
     @property
     def width(self) -> int:

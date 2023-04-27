@@ -7,6 +7,7 @@ from jax import Array
 from src.actions import Action
 from src.config import EnvConfig
 from src.state import State
+from src.wrappers import TraversabilityMaskWrapper
 
 
 class TerraEnv:
@@ -102,10 +103,13 @@ class TerraEnv:
 
         infos = {}
 
-        jax.debug.print("Reward = {x}", x=reward)
-        jax.debug.print("Dones = {x}", x=dones)
+        observations = TraversabilityMaskWrapper.wrap(new_state)
+        # observations = LocalMapWrapper.wrap(observations)
 
-        return new_state, (new_state, reward, dones, infos)
+        # jax.debug.print("Reward = {x}", x=reward)
+        # jax.debug.print("Dones = {x}", x=dones)
+
+        return new_state, (observations, reward, dones, infos)
 
 
 class TerraEnvBatch:
