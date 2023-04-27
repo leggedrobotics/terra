@@ -3,7 +3,6 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
-from src.actions import TrackedAction
 from src.config import EnvConfig
 from src.utils import IntLowDim
 from src.utils import IntMap
@@ -32,8 +31,6 @@ class Agent(NamedTuple):
     Defines the state and type of the agent.
     """
 
-    # agent_type  # TODO implement later on
-    action: TrackedAction  # TODO replace with something more generic
     agent_state: AgentState
 
     @staticmethod
@@ -49,4 +46,4 @@ class Agent(NamedTuple):
             loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim),
         )
 
-        return Agent(action=TrackedAction.do_nothing(), agent_state=agent_state)
+        return Agent(agent_state=agent_state)

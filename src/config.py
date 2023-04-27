@@ -5,25 +5,30 @@ from src.actions import TrackedAction  # noqa: F401
 from src.actions import WheeledAction  # noqa: F401
 from src.utils import Float
 
-MapConfig = NamedTuple
+
+class TileSize(NamedTuple):
+    tile_size: Float = 1.5  # in meters
+
+
+class MapDims(NamedTuple):
+    width_m: Float = 40.0  # in meters
+    height_m: Float = 40.0  # in meters
+
+
+class MapConfig(NamedTuple):
+    width: int = round(MapDims().width_m / TileSize().tile_size)
+    height: int = round(MapDims().height_m / TileSize().tile_size)
 
 
 class TargetMapConfig(MapConfig):
-    width: int = 20
-    height: int = 20
+    pass
 
 
 class ActionMapConfig(MapConfig):
-    width: int = 20
-    height: int = 20
+    pass
 
 
 class AgentConfig(NamedTuple):
-    # Have the following numbers odd for the COG to be the center cell of the robot
-    # NOT SURE IT WILL WORK NICELY IF EVEN
-    width: int = 1
-    height: int = 3
-
     angles_base: int = 4
     angles_cabin: int = 8
 
@@ -36,6 +41,17 @@ class AgentConfig(NamedTuple):
     dig_depth: int = 1  # how much every dig action digs
     # max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
     # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
+
+    height: int = (
+        round(6.08 / TileSize().tile_size)
+        if (round(6.08 / TileSize().tile_size)) % 2 != 0
+        else round(6.08 / TileSize().tile_size) + 1
+    )
+    width: int = (
+        round(3.5 / TileSize().tile_size)
+        if (round(3.5 / TileSize().tile_size)) % 2 != 0
+        else round(3.5 / TileSize().tile_size) + 1
+    )
 
 
 class Rewards(NamedTuple):
@@ -62,14 +78,14 @@ class Rewards(NamedTuple):
 
 
 class EnvConfig(NamedTuple):
+    tile_size: Float = TileSize().tile_size
+
     agent: AgentConfig = AgentConfig()
 
     target_map: MapConfig = TargetMapConfig()
     action_map: MapConfig = ActionMapConfig()
 
     rewards = Rewards()
-
-    tile_size: float = 10.0
 
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
 

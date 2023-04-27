@@ -1105,7 +1105,11 @@ class State(NamedTuple):
 
         # Terminal
         reward += jax.lax.cond(
-            self._is_done(new_state.world.action_map.map, self.world.target_map.map),
+            self._is_done(
+                new_state.world.action_map.map,
+                self.world.target_map.map,
+                new_state.agent.agent_state.loaded,
+            ),
             lambda: self.env_cfg.rewards.terminal,
             lambda: 0.0,
         )
@@ -1116,13 +1120,16 @@ class State(NamedTuple):
         return reward
 
     @staticmethod
-    def _is_done(action_map: Array, target_map: Array) -> jnp.bool_:
+    def _is_done(
+        action_map: Array, target_map: Array, agent_loaded: Array
+    ) -> jnp.bool_:
         """
         Checks if the target map matches the action map,
         but only on the relevant tiles.
 
+        On top of that, the agent should not be loaded.
+
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
         relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
-
-        return jnp.allclose(relevant_action_map, target_map)
+        return jnp.allclose(relevant_action_map, target_map) & (agent_loaded[0] == 0)
