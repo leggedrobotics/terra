@@ -285,16 +285,36 @@ class State(NamedTuple):
         )
 
     def _handle_move_forward(self) -> "State":
-        base_orientation = self.agent.agent_state.angle_base
-        orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
-        return self._move_on_orientation(orientation_vector)
+        """
+        Moves the base forward - if not loaded
+        """
+
+        def _move_forward():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_forward(
+                base_orientation
+            )
+            return self._move_on_orientation(orientation_vector)
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
+        )
 
     def _handle_move_backward(self) -> "State":
-        base_orientation = self.agent.agent_state.angle_base
-        orientation_vector = self._base_orientation_to_one_hot_backwards(
-            base_orientation
+        """
+        Moves the base backward - if not loaded
+        """
+
+        def _move_backward():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_backwards(
+                base_orientation
+            )
+            return self._move_on_orientation(orientation_vector)
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
         )
-        return self._move_on_orientation(orientation_vector)
 
     def _apply_base_rotation_mask(
         self, old_angle_base: Array, new_angle_base: Array, clockwise: jnp.bool_
@@ -454,34 +474,47 @@ class State(NamedTuple):
         return valid_move_mask @ old_new_angle_base
 
     def _handle_clock(self) -> "State":
-        # Rotate
-        old_angle_base = self.agent.agent_state.angle_base
-        new_angle_base = decrease_angle_circular(
-            old_angle_base, self.env_cfg.agent.angles_base
-        )
-        new_angle_base = self._apply_base_rotation_mask(
-            old_angle_base, new_angle_base, clockwise=True
-        )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_base=new_angle_base)
+        def _rotate_clock():
+            old_angle_base = self.agent.agent_state.angle_base
+            new_angle_base = decrease_angle_circular(
+                old_angle_base, self.env_cfg.agent.angles_base
             )
+            new_angle_base = self._apply_base_rotation_mask(
+                old_angle_base, new_angle_base, clockwise=True
+            )
+
+            return self._replace(
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        angle_base=new_angle_base
+                    )
+                )
+            )
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_clock
         )
 
     def _handle_anticlock(self) -> "State":
-        old_angle_base = self.agent.agent_state.angle_base
-        new_angle_base = increase_angle_circular(
-            old_angle_base, self.env_cfg.agent.angles_base
-        )
-        new_angle_base = self._apply_base_rotation_mask(
-            old_angle_base, new_angle_base, clockwise=False
-        )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_base=new_angle_base)
+        def _rotate_anticlock():
+            old_angle_base = self.agent.agent_state.angle_base
+            new_angle_base = increase_angle_circular(
+                old_angle_base, self.env_cfg.agent.angles_base
             )
+            new_angle_base = self._apply_base_rotation_mask(
+                old_angle_base, new_angle_base, clockwise=False
+            )
+
+            return self._replace(
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        angle_base=new_angle_base
+                    )
+                )
+            )
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_anticlock
         )
 
     def _handle_cabin_clock(self) -> "State":

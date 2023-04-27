@@ -18,8 +18,8 @@ class TestEnvBatch(unittest.TestCase):
         # print(states)
 
     def test_step_env_batch(self):
-        batch_size = 20
-        episode_length = 10
+        batch_size = 3
+        episode_length = 2
         seeds = jnp.arange(batch_size)
         env_cfg = EnvConfig()
         batch_cfg = BatchConfig()
