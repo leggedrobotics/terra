@@ -5,6 +5,7 @@ import numpy as np
 from src.utils import apply_local_cartesian_to_cyl
 from src.utils import apply_rot_transl
 from src.utils import decrease_angle_circular
+from src.utils import get_arm_angle_int
 from src.utils import increase_angle_circular
 from src.utils import wrap_angle_rad
 
@@ -41,6 +42,20 @@ class TestUtils(unittest.TestCase):
         cyl = apply_local_cartesian_to_cyl(local)
         cyl_gt = np.array([[1, np.sqrt(5)], [np.arctan2(-1, 0), np.arctan2(-1, 2)]])
         self.assertTrue(np.allclose(cyl, cyl_gt))
+
+    def test_get_arm_angle_int(self):
+        mab = 4
+        mac = 8
+
+        ab = 2
+        ac = 4
+        self.assertEqual(get_arm_angle_int(ab, ac, mab, mac), 0)
+        ac = 2
+        self.assertEqual(get_arm_angle_int(ab, ac, mab, mac), 6)
+        ab = 3
+        self.assertEqual(get_arm_angle_int(ab, ac, mab, mac), 0)
+        ac = 3
+        self.assertEqual(get_arm_angle_int(ab, ac, mab, mac), 1)
 
 
 if __name__ == "__main__":

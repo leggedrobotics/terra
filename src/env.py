@@ -7,6 +7,7 @@ from jax import Array
 from src.actions import Action
 from src.config import EnvConfig
 from src.state import State
+from src.wrappers import LocalMapWrapper
 from src.wrappers import TraversabilityMaskWrapper
 
 
@@ -103,8 +104,9 @@ class TerraEnv:
 
         infos = {}
 
-        observations = TraversabilityMaskWrapper.wrap(new_state)
-        # observations = LocalMapWrapper.wrap(observations)
+        observations = new_state
+        observations = TraversabilityMaskWrapper.wrap(observations)
+        observations = LocalMapWrapper.wrap(observations)
 
         # jax.debug.print("Reward = {x}", x=reward)
         # jax.debug.print("Dones = {x}", x=dones)

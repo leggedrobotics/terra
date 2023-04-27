@@ -102,8 +102,12 @@ def angle_idx_to_rad(angle: IntLowDim, idx_tot: IntLowDim) -> Float:
     return wrap_angle_rad(angle)
 
 
-# def dynamic_slice_2D(a: Array, x_minmax: Array, y_minmax: Array) -> Array:
-#     """
-#     Applies dynamic slicing through one-hot encoding and matrix multiplication.
-#     This makes it JIT-compatible.
-#     """
+def get_arm_angle_int(
+    angle_base, angle_cabin, n_angles_base, n_angles_cabin
+) -> IntLowDim:
+    """
+    Returns the equivalent int angle of the arm, expressed in
+    the range of numbers allowed by the cabin angles.
+    """
+    angles_cabin_base_ratio = round(n_angles_cabin / n_angles_base)
+    return (angles_cabin_base_ratio * angle_base + angle_cabin) % n_angles_cabin

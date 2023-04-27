@@ -655,7 +655,9 @@ class State(NamedTuple):
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
 
-    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
+    def _get_dig_dump_mask_cyl(
+        self, map_cyl_coords: Array, arm_extension: Array
+    ) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
 
@@ -664,7 +666,6 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        arm_extension = self.agent.agent_state.arm_extension
         dig_portion_radius = self.env_cfg.agent.move_tiles
         tile_size = self.env_cfg.tile_size
 
@@ -705,7 +706,9 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(map_cyl_coords)
+        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(
+            map_cyl_coords, self.agent.agent_state.arm_extension
+        )
 
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
@@ -733,19 +736,7 @@ class State(NamedTuple):
             jnp.bool_
         )
 
-        # jax.debug.print("agent_width= {x}", x=agent_width)
-        # jax.debug.print("agent_height= {x}", x=agent_height)
-        # jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[0])
-        # jax.debug.print("map_local_coords[0]= {x}", x=map_local_coords[1])
-        # jax.debug.print("dig_dump_mask_cart_x= {x}", x=dig_dump_mask_cart_x.reshape(self.world.action_map.map.shape))
-        # jax.debug.print("dig_dump_mask_cart_y= {x}", x=dig_dump_mask_cart_y.reshape(self.world.action_map.map.shape))
-        # jax.debug.print("dig_dump_mask_cart= {x}", x=dig_dump_mask_cart)
-
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
-        # jax.debug.print("x = {x}", x=dig_dump_mask_cart_x.sum())
-        # jax.debug.print("y = {x}", x=dig_dump_mask_cart_y.sum())
-        # jax.debug.print("cyl = {x}", x=dig_dump_mask_cyl.sum())
-        # jax.debug.print("both = {x}", x=dig_dump_mask.sum())
         return dig_dump_mask
 
     def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
@@ -776,7 +767,12 @@ class State(NamedTuple):
         )
         return flattened_map + delta_dig
 
-    def _build_dig_dump_mask(self) -> Array:
+    def _get_map_local_and_cyl_coords(self):
+        """
+        Returns:
+            - map_cyl_coords: (2, width*height) map with [r, theta] rows
+            - map_local_coords_base: (2, width*height) map with [x, y] rows
+        """
         current_pos_idx = self._get_current_pos_vector_idx(
             pos_base=self.agent.agent_state.pos_base,
             map_height=self.env_cfg.action_map.height,
@@ -797,7 +793,10 @@ class State(NamedTuple):
         # Local coordinates excluding the cabin rotation
         current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad()))
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
+        return map_cyl_coords, map_local_coords_base
 
+    def _build_dig_dump_mask(self) -> Array:
+        map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
     # def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
