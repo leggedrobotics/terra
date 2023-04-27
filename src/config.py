@@ -46,7 +46,7 @@ class Rewards(NamedTuple):
     move: Float = -0.1
 
     collision_turn: Float = -1.0
-    base_turn: Float = -0.05
+    base_turn: Float = -0.2
 
     cabin_turn: Float = -0.05
 
@@ -77,4 +77,4 @@ class EnvConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = WheeledAction
+    action_type: Action = TrackedAction
