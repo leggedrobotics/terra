@@ -818,9 +818,18 @@ class State(NamedTuple):
         # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
+    def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
+        """
+        Takes the dig mask and turns into False the elements that do not correspond to
+        a tile that has to be digged in the target map.
+        """
+        dig_mask_target_map = self.world.target_map.map < 0
+        return dig_mask * dig_mask_target_map.reshape(-1)
+
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
+        dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
         dig_volume = dig_mask.sum()
 
         def _apply_dig():
