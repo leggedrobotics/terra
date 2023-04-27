@@ -48,9 +48,10 @@ class TerraEnv:
 
         # TODO write a cleaner rendering engine
         """
-        img = self.rendering_engine.render_grid(
+        img = self.rendering_engine.render(
             tile_size=tile_size,
-            height_grid=state.world.action_map.map,
+            active_grid=state.world.action_map.map,
+            target_grid=state.world.target_map.map,
             agent_pos=state.agent.agent_state.pos_base,
             base_dir=state.agent.agent_state.angle_base,
             cabin_dir=state.agent.agent_state.angle_cabin,

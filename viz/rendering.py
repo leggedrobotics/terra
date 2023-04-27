@@ -341,25 +341,7 @@ class RenderingEngine:
     # def _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir):
     #     pass
 
-    def render_grid(
-        self,
-        tile_size,
-        height_grid,
-        agent_pos=None,
-        base_dir=None,
-        cabin_dir=None,
-        agent_width=None,
-        agent_height=None,
-        render_objects=True,
-        target_height=False,
-    ):
-        """
-        Render this grid at a given scale
-        :param r: target renderer object
-        :param tile_size: tile size in pixels
-        """
-        # s1 = time.time()
-
+    def _render_grid(self, tile_size, height_grid):
         width_px = self.x_dim * tile_size
         height_px = self.y_dim * tile_size
 
@@ -377,6 +359,26 @@ class RenderingEngine:
         img[grid_idx_x] = np.array([100, 100, 100])
         img[:, grid_idx_y] = np.array([100, 100, 100])
         img = img.astype(np.int16)
+        return img
+
+    def render_active_grid(
+        self,
+        tile_size,
+        height_grid,
+        agent_pos=None,
+        base_dir=None,
+        cabin_dir=None,
+        agent_width=None,
+        agent_height=None,
+    ):
+        """
+        Render this grid at a given scale
+        :param r: target renderer object
+        :param tile_size: tile size in pixels
+        """
+        # s1 = time.time()
+
+        img = self._render_grid(tile_size, height_grid)
 
         # s2 = time.time()
         # Render agent
@@ -409,63 +411,46 @@ class RenderingEngine:
 
         return img.transpose(0, 1, 2)
 
+    def render_target_grid(self, tile_size, target_grid):
+        return self._render_grid(tile_size, target_grid)
 
-# def render_multiple(
-#         self,
-#         mode="human",
-#         close=False,
-#         block=False,
-#         key_handler=None,
-#         highlight=False,
-#         tile_size=SIZE_TILE_PIXELS,
-# ):
-#     """
-#     Render the whole-grid human view
-#     """
-#     self.place_obj_at_pos(AgentObj(), self.agent_pos)
+    def render(
+        self,
+        tile_size,
+        active_grid,
+        target_grid,
+        agent_pos=None,
+        base_dir=None,
+        cabin_dir=None,
+        agent_width=None,
+        agent_height=None,
+    ):
+        white_margin = 0.05  # percentage
 
-#     if close:
-#         if self.window:
-#             self.window.close()
-#         if self.window_target:
-#             self.window_target.close()
-#         return
+        img_active_grid = self.render_active_grid(
+            tile_size,
+            active_grid,
+            agent_pos,
+            base_dir,
+            cabin_dir,
+            agent_width,
+            agent_height,
+        )
 
-#     if mode == "human" and not self.window:
-#         self.window = heightgrid.window.Window("heightgrid")
-
-#     # Render the whole grid
-#     img = self.render_grid(
-#         tile_size, self.image_obs[:, :, 0], self.agent_pos, self.base_dir, self.cabin_dir
-#     )
-
-#     img_target = self.render_grid(
-#         tile_size,
-#         self.image_obs[:, :, 1],
-#         self.agent_pos,
-#         self.base_dir,
-#         self.cabin_dir,
-#         render_objects=True,
-#         target_height=True
-#     )
-
-#     # white row of pixels
-#     img_white = np.ones(shape=(tile_size * self.x_dim, tile_size, 3), dtype=np.uint16) * 255
-
-#     img = np.concatenate((img_white, img, img_white, img_target), axis=1)
-#     # add a row of white pixels at the bottom
-#     white_row = np.ones(shape=(tile_size, tile_size * self.y_dim * 2 + 2 * tile_size, 3), dtype=np.uint16) * 255
-#     img = np.concatenate((img, white_row), axis=0)
-
-#     if key_handler:
-#         if mode == "human":
-#             # self.window.set_caption(self.mission)
-#             self.window.show_img(img)
-#             # self.window_target.show_img(img_target)
-#             # manually controlled
-#             self.window.reg_key_handler(key_handler)
-#             # self.window_target.reg_key_handler(key_handler)
-#             self.window.show(block=block)
-#             # self.window_target.show(block=block)
-
-#     return img
+        img_target_grid = self.render_target_grid(tile_size, target_grid)
+        print(f"{int(white_margin * img_active_grid.shape[1])=}")
+        img = np.hstack(
+            [
+                img_active_grid,
+                255
+                * np.ones(
+                    (
+                        img_active_grid.shape[0],
+                        int(white_margin * img_active_grid.shape[1]),
+                        3,
+                    )
+                ).astype(np.int16),
+                img_target_grid,
+            ]
+        )
+        return img
