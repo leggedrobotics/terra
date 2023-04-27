@@ -438,7 +438,6 @@ class RenderingEngine:
         )
 
         img_target_grid = self.render_target_grid(tile_size, target_grid)
-        print(f"{int(white_margin * img_active_grid.shape[1])=}")
         img = np.hstack(
             [
                 img_active_grid,

@@ -6,18 +6,15 @@ from src.actions import WheeledAction  # noqa: F401
 from src.utils import Float
 
 
-class TileSize(NamedTuple):
-    tile_size: Float = 1.5  # in meters
-
-
 class MapDims(NamedTuple):
+    tile_size: Float = 1.5  # in meters
     width_m: Float = 40.0  # in meters
     height_m: Float = 40.0  # in meters
 
 
 class MapConfig(NamedTuple):
-    width: int = round(MapDims().width_m / TileSize().tile_size)
-    height: int = round(MapDims().height_m / TileSize().tile_size)
+    width: int = round(MapDims().width_m / MapDims().tile_size)
+    height: int = round(MapDims().height_m / MapDims().tile_size)
 
 
 class TargetMapConfig(MapConfig):
@@ -43,14 +40,14 @@ class AgentConfig(NamedTuple):
     # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
 
     height: int = (
-        round(6.08 / TileSize().tile_size)
-        if (round(6.08 / TileSize().tile_size)) % 2 != 0
-        else round(6.08 / TileSize().tile_size) + 1
+        round(6.08 / MapDims().tile_size)
+        if (round(6.08 / MapDims().tile_size)) % 2 != 0
+        else round(6.08 / MapDims().tile_size) + 1
     )
     width: int = (
-        round(3.5 / TileSize().tile_size)
-        if (round(3.5 / TileSize().tile_size)) % 2 != 0
-        else round(3.5 / TileSize().tile_size) + 1
+        round(3.5 / MapDims().tile_size)
+        if (round(3.5 / MapDims().tile_size)) % 2 != 0
+        else round(3.5 / MapDims().tile_size) + 1
     )
 
 
@@ -78,7 +75,7 @@ class Rewards(NamedTuple):
 
 
 class EnvConfig(NamedTuple):
-    tile_size: Float = TileSize().tile_size
+    tile_size: Float = MapDims().tile_size
 
     agent: AgentConfig = AgentConfig()
 
