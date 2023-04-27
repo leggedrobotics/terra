@@ -49,6 +49,46 @@ class GridMap(NamedTuple):
         return GridMap.new(map)
 
     @staticmethod
+    def random_map_n_digs(seed: int, width: int, height: int, n: int = 20) -> "GridMap":
+        map = jnp.zeros((width, height), dtype=IntMap)
+        key = jax.random.PRNGKey(seed)
+        x = jax.random.randint(key, (n,), minval=0, maxval=width - 1)
+
+        key, _ = jax.random.split(key)
+        y = jax.random.randint(key, (n,), minval=0, maxval=height - 1)
+
+        map = map.at[x, y].set(-1)
+        return GridMap.new(map)
+
+    @staticmethod
+    def random_map_square_trench(
+        seed: int, width: int, height: int, trench_size: int = 5
+    ) -> "GridMap":
+        map = jnp.zeros((width, height), dtype=IntMap)
+        key = jax.random.PRNGKey(seed)
+        x_top_left = jax.random.randint(
+            key, (1,), minval=0, maxval=width - trench_size - 1
+        )
+        x = (
+            (jnp.arange(trench_size) + x_top_left)[None]
+            .repeat(trench_size, 0)
+            .reshape(-1)
+        )
+
+        key, _ = jax.random.split(key)
+        y_top_left = jax.random.randint(
+            key, (1,), minval=0, maxval=height - trench_size - 1
+        )
+        y = (
+            (jnp.arange(trench_size) + y_top_left)[:, None]
+            .repeat(trench_size, 1)
+            .reshape(-1)
+        )
+
+        map = map.at[x, y].set(-1)
+        return GridMap.new(map)
+
+    @staticmethod
     def dummy_map() -> "GridMap":
         return GridMap.new(jnp.full((1, 1), fill_value=0, dtype=jnp.bool_))
 
@@ -76,7 +116,7 @@ class GridWorld(NamedTuple):
         assert env_cfg.target_map.width == env_cfg.action_map.width
         assert env_cfg.target_map.height == env_cfg.action_map.height
 
-        target_map = GridMap.random_map_one_dig(
+        target_map = GridMap.random_map_square_trench(
             seed=seed, width=env_cfg.target_map.width, height=env_cfg.target_map.height
         )
 

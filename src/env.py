@@ -110,6 +110,7 @@ class TerraEnv:
 
         # jax.debug.print("Reward = {x}", x=reward)
         # jax.debug.print("Dones = {x}", x=dones)
+        jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
 
         return new_state, (observations, reward, dones, infos)
 

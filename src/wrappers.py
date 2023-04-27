@@ -126,8 +126,6 @@ class LocalMapWrapper:
         # Roll it to bring it back in agent view
         local_cyl_height_map = jnp.roll(local_cyl_height_map, current_arm_angle, axis=0)
 
-        jax.debug.print("local_cyl_height_map={x}", x=local_cyl_height_map)
-
         return state._replace(
             world=state.world._replace(
                 local_map=state.world.local_map._replace(
