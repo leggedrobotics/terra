@@ -800,14 +800,14 @@ class State(NamedTuple):
 
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
-    def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
-        """
-        Takes the dig mask and turns into False the elements that correspond to
-        a dumped tile.
-        """
-        dumped_mask_action_map = self.world.action_map.map > 0
-        # jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
-        return dig_mask * (~dumped_mask_action_map).reshape(-1)
+    # def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
+    #     """
+    #     Takes the dig mask and turns into False the elements that correspond to
+    #     a dumped tile.
+    #     """
+    #     dumped_mask_action_map = self.world.action_map.map > 0
+    #     # jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
+    #     return dig_mask * (~dumped_mask_action_map).reshape(-1)
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
@@ -820,7 +820,7 @@ class State(NamedTuple):
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
-        dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
+        # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_volume = dig_mask.sum()
 
         def _apply_dig():
