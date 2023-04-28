@@ -3,6 +3,7 @@ from typing import NamedTuple
 from src.actions import Action
 from src.actions import TrackedAction  # noqa: F401
 from src.actions import WheeledAction  # noqa: F401
+from src.map_generator import MapType
 from src.utils import Float
 
 
@@ -18,7 +19,7 @@ class MapConfig(NamedTuple):
 
 
 class TargetMapConfig(MapConfig):
-    pass
+    type: MapType = MapType.SQUARE_SINGLE_TRENCH
 
 
 class ActionMapConfig(MapConfig):
