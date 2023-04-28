@@ -124,7 +124,9 @@ class LocalMapWrapper:
         )(local_cartesian_masks)
 
         # Roll it to bring it back in agent view
-        local_cyl_height_map = jnp.roll(local_cyl_height_map, current_arm_angle, axis=0)
+        local_cyl_height_map = jnp.roll(
+            local_cyl_height_map, -current_arm_angle, axis=0
+        )
 
         return state._replace(
             world=state.world._replace(

@@ -50,7 +50,7 @@ class TerraEnv:
 
         # TODO write a cleaner rendering engine
         """
-        img = self.rendering_engine.render(
+        img_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=state.world.action_map.map,
             target_grid=state.world.target_map.map,
@@ -61,16 +61,18 @@ class TerraEnv:
             agent_height=self.env_cfg.agent.height,
         )
 
+        img_local = state.world.local_map.map
+
         if key_handler:
             if mode == "human":
                 self.window.set_title(
                     title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
                 )
-                self.window.show_img(img)
+                self.window.show_img(img_global, img_local)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
 
-        return img
+        return img_global, img_local
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
@@ -110,7 +112,7 @@ class TerraEnv:
 
         # jax.debug.print("Reward = {x}", x=reward)
         # jax.debug.print("Dones = {x}", x=dones)
-        jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
+        # jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
 
         return new_state, (observations, reward, dones, infos)
 

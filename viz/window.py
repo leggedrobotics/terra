@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Window:
@@ -9,19 +10,19 @@ class Window:
     def __init__(self, title):
         self.fig = None
 
-        self.imshow_obj = None
+        self.imshow_obj1 = None
 
         # Create the figure and axes
-        self.fig, self.ax = plt.subplots()
+        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, width_ratios=[2, 1])
 
         # Show the env name in the window title
         # self.fig.canvas.setWindowTitle(title)
 
         # Turn off x/y axis numbering/ticks
-        self.ax.xaxis.set_ticks_position("none")
-        self.ax.yaxis.set_ticks_position("none")
-        _ = self.ax.set_xticklabels([])
-        _ = self.ax.set_yticklabels([])
+        self.ax1.xaxis.set_ticks_position("none")
+        self.ax1.yaxis.set_ticks_position("none")
+        _ = self.ax1.set_xticklabels([])
+        _ = self.ax1.set_yticklabels([])
 
         # Flag indicating the window was closed
         self.closed = False
@@ -31,16 +32,49 @@ class Window:
 
         self.fig.canvas.mpl_connect("close_event", close_handler)
 
-    def show_img(self, img):
+    def _build_nested_pie(self, local_map, n_arm_extensions=2, n_angles=8):
+        size = 0.3
+        v1 = np.ones((n_angles,))
+        vmax = 5
+        vmin = -5
+
+        local_map = (local_map.T).astype(np.float32)
+
+        def array_to_colors(a):
+            vvmax = max(vmax, a.max())
+            vvmin = min(vmin, a.min())
+            return ((a - vvmin) / (vvmax - vvmin))[:, None].repeat(3, axis=-1)
+
+        for i in range(n_arm_extensions):
+            labels = [str(x) for x in local_map[i].astype(np.int16)]
+            radius = (i + 1) / n_arm_extensions
+            colors = array_to_colors(local_map[i])
+            white_width = size * radius
+
+            self.ax2.pie(
+                v1,
+                radius=radius,
+                colors=colors.tolist(),
+                labeldistance=1.1 * radius,
+                labels=labels,
+                wedgeprops=dict(width=white_width, edgecolor="w"),
+                startangle=90 - (180 / n_angles),
+            )
+
+        self.ax2.set(aspect="equal")
+
+    def show_img(self, img_global, img_local):
         """
         Show an image or update the image being shown
         """
 
         # Show the first image of the environment
-        if self.imshow_obj is None:
-            self.imshow_obj = self.ax.imshow(img, interpolation="bilinear")
+        if self.imshow_obj1 is None:
+            self.imshow_obj1 = self.ax1.imshow(img_global, interpolation="bilinear")
 
-        self.imshow_obj.set_data(img)
+        self.imshow_obj1.set_data(img_global)
+        self.ax2.clear()
+        self._build_nested_pie(img_local)
         self.fig.canvas.draw()
 
         # Let matplotlib process UI events
@@ -48,7 +82,7 @@ class Window:
         plt.pause(0.001)
 
     def set_title(self, title):
-        self.ax.set_title(title)
+        self.ax1.set_title(title)
 
     def set_caption(self, text):
         """

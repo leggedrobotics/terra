@@ -414,7 +414,7 @@ class RenderingEngine:
     def render_target_grid(self, tile_size, target_grid):
         return self._render_grid(tile_size, target_grid)
 
-    def render(
+    def render_global(
         self,
         tile_size,
         active_grid,
@@ -453,3 +453,6 @@ class RenderingEngine:
             ]
         )
         return img
+
+    def render_local(self):
+        pass
