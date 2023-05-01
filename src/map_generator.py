@@ -10,11 +10,10 @@ from src.utils import IntMap
 
 
 class MapType(IntEnum):
-    SQUARE_SINGLE_TRENCH = 0
-    RECTANGULAR_SINGLE_TRENCH = 1
-    SQUARE_SINGLE_RAMP = 2
-    # SQUARE_TRENCHES = 3
-    # RECTANGULAR_TRENCHES = 4
+    SINGLE_TILE = 0
+    SQUARE_SINGLE_TRENCH = 1
+    RECTANGULAR_SINGLE_TRENCH = 2
+    SQUARE_SINGLE_RAMP = 3
 
 
 class MapParams(NamedTuple):
@@ -61,6 +60,7 @@ class GridMap(NamedTuple):
         map = jax.lax.switch(
             map_params.type,
             [
+                partial(single_tile, width, height),
                 partial(single_square_trench, width, height),
                 partial(single_rectangular_trench, width, height),
                 partial(single_square_ramp, width, height),
@@ -147,6 +147,17 @@ def _get_generic_rectangular_ramp(
     )
 
     return map.astype(IntMap)
+
+
+def single_tile(width: IntMap, height: IntMap, seed: jnp.int32, map_params: MapParams):
+    map = jnp.zeros((width, height), dtype=IntMap)
+    key = jax.random.PRNGKey(seed)
+    key, subkey = jax.random.split(key)
+    x = jax.random.randint(subkey, (1,), minval=0, maxval=width)
+    key, subkey = jax.random.split(key)
+    y = jax.random.randint(subkey, (1,), minval=0, maxval=height)
+    map = map.at[x, y].set(map_params.depth)
+    return map
 
 
 def single_square_trench(

@@ -1133,4 +1133,4 @@ class State(NamedTuple):
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
         relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
-        return jnp.allclose(relevant_action_map, target_map) & (agent_loaded[0] == 0)
+        return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)

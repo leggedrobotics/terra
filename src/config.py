@@ -20,6 +20,14 @@ class MapConfig(NamedTuple):
 
 
 # Map params #####
+class MapParamsSquareSingleTile(MapParams):
+    type: MapType = MapType.SINGLE_TILE
+    depth: int = -3
+
+    edge_min: int = 4  # ignore
+    edge_max: int = 10  # ignore
+
+
 class MapParamsSquareSingleTrench(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH
     edge_min: int = 4
@@ -45,7 +53,7 @@ class MapParamsSquareSingleRamp(MapParams):
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleRamp()
+    params: MapParams = MapParamsSquareSingleTile()
 
 
 class ActionMapConfig(MapConfig):
