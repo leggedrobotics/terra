@@ -820,10 +820,12 @@ class State(NamedTuple):
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
         Takes the dig mask and turns into False the elements that do not correspond to
-        a tile that has to be digged in the target map.
+        a tile that has to be digged in the target map or that are dumped tiles in the action map.
         """
         dig_mask_target_map = self.world.target_map.map < 0
-        return dig_mask * dig_mask_target_map.reshape(-1)
+        dig_mask_action_map = self.world.action_map.map > 0
+        dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
+        return dig_mask * dig_mask_maps.reshape(-1)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
