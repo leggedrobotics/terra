@@ -12,7 +12,7 @@ from src.utils import IntMap
 class MapType(IntEnum):
     SQUARE_SINGLE_TRENCH = 0
     RECTANGULAR_SINGLE_TRENCH = 1
-    SINGLE_RAMP = 2
+    SQUARE_SINGLE_RAMP = 2
     # SQUARE_TRENCHES = 3
     # RECTANGULAR_TRENCHES = 4
 
@@ -57,12 +57,13 @@ class GridMap(NamedTuple):
     def random_map(
         seed: jnp.int32, width: IntMap, height: IntMap, map_params: MapParams
     ) -> "GridMap":
+        jax.debug.print("map_params.type={x}", x=map_params.type)
         map = jax.lax.switch(
             map_params.type,
             [
                 partial(single_square_trench, width, height),
                 partial(single_rectangular_trench, width, height),
-                partial(single_ramp, width, height),
+                partial(single_square_ramp, width, height),
             ],
             seed,
             map_params,
@@ -70,7 +71,7 @@ class GridMap(NamedTuple):
         return GridMap(map)
 
 
-def _get_generic_rectangular_target_map(
+def _get_generic_rectangular_trench(
     width: IntMap,
     height: IntMap,
     x_top_left: IntMap,
@@ -98,15 +99,62 @@ def _get_generic_rectangular_target_map(
         map,
         depth,
     )
-    return map
+    return map.astype(IntMap)
+
+
+def _get_generic_rectangular_ramp(
+    width: IntMap,
+    height: IntMap,
+    x_top_left: IntMap,
+    y_top_left: IntMap,
+    size_x: IntMap,
+    size_y: IntMap,
+    orientation: IntMap,
+):
+    ramp_element = jax.lax.cond(
+        (orientation[0] == 0) | (orientation[0] == 2),
+        lambda: (jnp.arange(width, dtype=IntMap) - x_top_left - size_x)[:, None].repeat(
+            height, -1
+        ),
+        lambda: (jnp.arange(height, dtype=IntMap) - y_top_left - size_y)[None].repeat(
+            width, 0
+        ),
+    )
+
+    map = jnp.zeros((width, height), dtype=IntMap)
+    map = jnp.where(
+        jnp.logical_or(
+            (
+                jnp.logical_or(
+                    jnp.arange(width) < x_top_left,
+                    jnp.arange(width) > x_top_left + size_x,
+                )
+            )[:, None].repeat(height, -1),
+            (
+                jnp.logical_or(
+                    jnp.arange(height) < y_top_left,
+                    jnp.arange(height) > y_top_left + size_y,
+                )
+            )[None].repeat(width, 0),
+        ),
+        map,
+        ramp_element,
+    )
+
+    map = jax.lax.switch(
+        orientation[0],
+        [lambda: map, lambda: map, lambda: jnp.flipud(map), lambda: jnp.fliplr(map)],
+    )
+
+    return map.astype(IntMap)
 
 
 def single_square_trench(
     width: IntMap, height: IntMap, seed: jnp.int32, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params.trench_size_edge_min
-    trench_size_edge_max = map_params.trench_size_edge_max
-    trench_depth = map_params.trench_depth
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key = jax.random.PRNGKey(seed)
 
@@ -123,7 +171,7 @@ def single_square_trench(
     y_top_left = jax.random.randint(
         subkey, (1,), minval=0, maxval=height - trench_size_edge - 1
     )
-    return _get_generic_rectangular_target_map(
+    return _get_generic_rectangular_trench(
         width,
         height,
         x_top_left,
@@ -137,9 +185,9 @@ def single_square_trench(
 def single_rectangular_trench(
     width: IntMap, height: IntMap, seed: jnp.int32, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params.trench_size_edge_min
-    trench_size_edge_max = map_params.trench_size_edge_max
-    trench_depth = map_params.trench_depth
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key = jax.random.PRNGKey(seed)
 
@@ -156,7 +204,7 @@ def single_rectangular_trench(
     y_top_left = jax.random.randint(
         subkey, (1,), minval=0, maxval=height - trench_size_edge[1] - 1
     )
-    return _get_generic_rectangular_target_map(
+    return _get_generic_rectangular_trench(
         width,
         height,
         x_top_left,
@@ -167,8 +215,36 @@ def single_rectangular_trench(
     )
 
 
-def single_ramp(
+def single_square_ramp(
     width: IntMap, height: IntMap, seed: jnp.int32, map_params: MapParams
 ) -> Array:
-    # TODO implement
-    return jnp.zeros((width, height), dtype=IntMap)
+    edge_min = map_params.edge_min
+    edge_max = map_params.edge_max
+
+    key = jax.random.PRNGKey(seed)
+
+    key, subkey = jax.random.split(key)
+    trench_size_edge = jax.random.randint(
+        subkey, (1,), minval=edge_min, maxval=edge_max + 1
+    )
+
+    key, subkey = jax.random.split(key)
+    x_top_left = jax.random.randint(
+        subkey, (1,), minval=0, maxval=width - trench_size_edge - 1
+    )
+    key, subkey = jax.random.split(key)
+    y_top_left = jax.random.randint(
+        subkey, (1,), minval=0, maxval=height - trench_size_edge - 1
+    )
+
+    key, subkey = jax.random.split(key)
+    orientation = jax.random.randint(subkey, (1,), minval=0, maxval=5)
+    return _get_generic_rectangular_ramp(
+        width,
+        height,
+        x_top_left,
+        y_top_left,
+        trench_size_edge,
+        trench_size_edge,
+        orientation,
+    )

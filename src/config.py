@@ -22,23 +22,30 @@ class MapConfig(NamedTuple):
 # Map params #####
 class MapParamsSquareSingleTrench(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH
-    trench_size_edge_min: int = 4
-    trench_size_edge_max: int = 10
-    trench_depth: int = -3
+    edge_min: int = 4
+    edge_max: int = 10
+    depth: int = -3
 
 
 class MapParamsRectangularSingleTrench(MapParams):
     type: MapType = MapType.RECTANGULAR_SINGLE_TRENCH
-    trench_size_edge_min: int = 4
-    trench_size_edge_max: int = 10
-    trench_depth: int = -3
+    edge_min: int = 4
+    edge_max: int = 10
+    depth: int = -3
+
+
+class MapParamsSquareSingleRamp(MapParams):
+    type: MapType = MapType.SQUARE_SINGLE_RAMP
+    edge_min: int = 4
+    edge_max: int = 10
+    depth: int = -97  # ignore
 
 
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsRectangularSingleTrench()
+    params: MapParams = MapParamsSquareSingleRamp()
 
 
 class ActionMapConfig(MapConfig):
