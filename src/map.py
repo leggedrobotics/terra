@@ -32,7 +32,7 @@ class GridWorld(NamedTuple):
 
         target_map = GridMap.random_map(
             seed=seed,
-            map_type=env_cfg.target_map.type,
+            map_params=env_cfg.target_map.params,
             width=env_cfg.target_map.width,
             height=env_cfg.target_map.height,
         )

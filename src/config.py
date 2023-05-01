@@ -3,6 +3,7 @@ from typing import NamedTuple
 from src.actions import Action
 from src.actions import TrackedAction  # noqa: F401
 from src.actions import WheeledAction  # noqa: F401
+from src.map_generator import MapParams
 from src.map_generator import MapType
 from src.utils import Float
 
@@ -18,8 +19,26 @@ class MapConfig(NamedTuple):
     height: int = round(MapDims().height_m / MapDims().tile_size)
 
 
-class TargetMapConfig(MapConfig):
+# Map params #####
+class MapParamsSquareSingleTrench(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH
+    trench_size_edge_min: int = 4
+    trench_size_edge_max: int = 10
+    trench_depth: int = -3
+
+
+class MapParamsRectangularSingleTrench(MapParams):
+    type: MapType = MapType.RECTANGULAR_SINGLE_TRENCH
+    trench_size_edge_min: int = 4
+    trench_size_edge_max: int = 10
+    trench_depth: int = -3
+
+
+# end Map params #####
+
+
+class TargetMapConfig(MapConfig):
+    params: MapParams = MapParamsRectangularSingleTrench()
 
 
 class ActionMapConfig(MapConfig):
