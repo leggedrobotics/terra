@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from src.utils import IntMap
+from terra.utils import IntMap
 
 
 class MapType(IntEnum):

@@ -6,9 +6,9 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
-from src.actions import TrackedActionType
-from src.config import EnvConfig
-from src.env import TerraEnvBatch
+from terra.actions import TrackedActionType
+from terra.config import EnvConfig
+from terra.env import TerraEnvBatch
 
 if __name__ == "__main__":
     policy = "random"

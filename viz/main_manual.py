@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-from src.config import BatchConfig
-from src.config import EnvConfig
-from src.env import TerraEnv
+from terra.config import BatchConfig
+from terra.config import EnvConfig
+from terra.env import TerraEnv
 
 # import argparse
 

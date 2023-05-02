@@ -1,7 +1,7 @@
 import unittest
 
-from src.agent import Agent
-from src.config import EnvConfig
+from terra.agent import Agent
+from terra.config import EnvConfig
 
 
 class TestAgent(unittest.TestCase):

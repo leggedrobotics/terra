@@ -2,9 +2,9 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from src.config import EnvConfig
-from src.map_generator import GridMap
-from src.utils import IntMap
+from terra.config import EnvConfig
+from terra.map_generator import GridMap
+from terra.utils import IntMap
 
 
 class GridWorld(NamedTuple):

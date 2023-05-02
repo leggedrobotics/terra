@@ -3,9 +3,9 @@ import unittest
 import jax
 import jax.numpy as jnp
 
-from src.config import BatchConfig
-from src.config import EnvConfig
-from src.env import TerraEnvBatch
+from terra.config import BatchConfig
+from terra.config import EnvConfig
+from terra.env import TerraEnvBatch
 
 
 class TestEnvBatch(unittest.TestCase):

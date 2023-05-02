@@ -1,11 +1,11 @@
 from typing import NamedTuple
 
-from src.actions import Action
-from src.actions import TrackedAction  # noqa: F401
-from src.actions import WheeledAction  # noqa: F401
-from src.map_generator import MapParams
-from src.map_generator import MapType
-from src.utils import Float
+from terra.actions import Action
+from terra.actions import TrackedAction  # noqa: F401
+from terra.actions import WheeledAction  # noqa: F401
+from terra.map_generator import MapParams
+from terra.map_generator import MapType
+from terra.utils import Float
 
 
 class MapDims(NamedTuple):

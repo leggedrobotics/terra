@@ -4,11 +4,11 @@ from functools import partial
 import jax
 from jax import Array
 
-from src.actions import Action
-from src.config import EnvConfig
-from src.state import State
-from src.wrappers import LocalMapWrapper
-from src.wrappers import TraversabilityMaskWrapper
+from terra.actions import Action
+from terra.config import EnvConfig
+from terra.state import State
+from terra.wrappers import LocalMapWrapper
+from terra.wrappers import TraversabilityMaskWrapper
 
 
 class TerraEnv:

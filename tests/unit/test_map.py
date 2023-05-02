@@ -1,7 +1,7 @@
 import unittest
 
-from src.config import EnvConfig
-from src.map import GridWorld
+from terra.config import EnvConfig
+from terra.map import GridWorld
 
 
 class TestMap(unittest.TestCase):

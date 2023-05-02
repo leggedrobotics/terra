@@ -2,12 +2,12 @@ import unittest
 
 import numpy as np
 
-from src.utils import apply_local_cartesian_to_cyl
-from src.utils import apply_rot_transl
-from src.utils import decrease_angle_circular
-from src.utils import get_arm_angle_int
-from src.utils import increase_angle_circular
-from src.utils import wrap_angle_rad
+from terra.utils import apply_local_cartesian_to_cyl
+from terra.utils import apply_rot_transl
+from terra.utils import decrease_angle_circular
+from terra.utils import get_arm_angle_int
+from terra.utils import increase_angle_circular
+from terra.utils import wrap_angle_rad
 
 
 class TestUtils(unittest.TestCase):

@@ -3,7 +3,7 @@ from abc import abstractmethod
 
 import numpy as np
 
-from src.state import State
+from terra.state import State
 
 # import time
 

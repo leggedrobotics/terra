@@ -1,13 +1,13 @@
 import jax
 import jax.numpy as jnp
 
-from src.config import EnvConfig
-from src.state import State
-from src.utils import angle_idx_to_rad
-from src.utils import apply_local_cartesian_to_cyl
-from src.utils import apply_rot_transl
-from src.utils import get_arm_angle_int
-from src.utils import IntLowDim
+from terra.config import EnvConfig
+from terra.state import State
+from terra.utils import angle_idx_to_rad
+from terra.utils import apply_local_cartesian_to_cyl
+from terra.utils import apply_rot_transl
+from terra.utils import get_arm_angle_int
+from terra.utils import IntLowDim
 
 
 class TraversabilityMaskWrapper:

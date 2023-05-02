@@ -5,3 +5,4 @@ tests/unit/__pycache__/*
 .others/*
 .coverage
 __pycache__/*
+*.egg*

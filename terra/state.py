@@ -5,22 +5,22 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
-from src.actions import Action
-from src.actions import ActionType
-from src.actions import TrackedActionType
-from src.actions import WheeledActionType
-from src.agent import Agent
-from src.config import EnvConfig
-from src.map import GridWorld
-from src.utils import angle_idx_to_rad
-from src.utils import apply_local_cartesian_to_cyl
-from src.utils import apply_rot_transl
-from src.utils import decrease_angle_circular
-from src.utils import Float
-from src.utils import increase_angle_circular
-from src.utils import IntLowDim
-from src.utils import IntMap
-from src.utils import wrap_angle_rad
+from terra.actions import Action
+from terra.actions import ActionType
+from terra.actions import TrackedActionType
+from terra.actions import WheeledActionType
+from terra.agent import Agent
+from terra.config import EnvConfig
+from terra.map import GridWorld
+from terra.utils import angle_idx_to_rad
+from terra.utils import apply_local_cartesian_to_cyl
+from terra.utils import apply_rot_transl
+from terra.utils import decrease_angle_circular
+from terra.utils import Float
+from terra.utils import increase_angle_circular
+from terra.utils import IntLowDim
+from terra.utils import IntMap
+from terra.utils import wrap_angle_rad
 
 
 class State(NamedTuple):

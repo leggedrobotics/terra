@@ -1,4 +1,4 @@
 [flake8]
 ignore = E501, E203, W, PAI
 per-file-ignores =
-    src/noise/simplex_noise.py: F401, E741, E731
+    terra/noise/simplex_noise.py: F401, E741, E731

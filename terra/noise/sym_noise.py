@@ -8,7 +8,7 @@ from jax import Array
 from jax import lax
 from jax import numpy as jnp
 
-from src.noise.simplexnoise import SimplexNoise
+from terra.noise.simplexnoise import SimplexNoise
 
 
 class SymmetryType(IntEnum):

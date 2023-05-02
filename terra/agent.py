@@ -3,9 +3,9 @@ from typing import NamedTuple
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import EnvConfig
-from src.utils import IntLowDim
-from src.utils import IntMap
+from terra.config import EnvConfig
+from terra.utils import IntLowDim
+from terra.utils import IntMap
 
 
 class AgentState(NamedTuple):

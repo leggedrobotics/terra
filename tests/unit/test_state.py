@@ -2,10 +2,10 @@ import unittest
 
 import jax.numpy as jnp
 
-from src.actions import TrackedAction
-from src.config import EnvConfig
-from src.state import State
-from src.utils import IntMap
+from terra.actions import TrackedAction
+from terra.config import EnvConfig
+from terra.state import State
+from terra.utils import IntMap
 
 
 class TestAgent(unittest.TestCase):

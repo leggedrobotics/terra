@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-from src.utils import IntLowDim
+from terra.utils import IntLowDim
 
 ActionType = IntEnum
 

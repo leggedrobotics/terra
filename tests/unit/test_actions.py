@@ -1,7 +1,7 @@
 import unittest
 
-from src.actions import TrackedAction
-from src.actions import TrackedActionType
+from terra.actions import TrackedAction
+from terra.actions import TrackedActionType
 
 
 class TestActions(unittest.TestCase):

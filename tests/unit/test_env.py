@@ -1,8 +1,8 @@
 import unittest
 
-from src.actions import TrackedAction
-from src.config import EnvConfig
-from src.env import TerraEnv
+from terra.actions import TrackedAction
+from terra.config import EnvConfig
+from terra.env import TerraEnv
 
 
 class TestEnv(unittest.TestCase):
