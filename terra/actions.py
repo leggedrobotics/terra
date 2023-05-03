@@ -90,6 +90,10 @@ class TrackedAction(Action):
             )
         )
 
+    @staticmethod
+    def get_num_actions():
+        return 9
+
 
 class WheeledActionType(ActionType):
     """
@@ -177,3 +181,7 @@ class WheeledAction(Action):
                 key, jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1)
             )
         )
+
+    @staticmethod
+    def get_num_actions():
+        return 11

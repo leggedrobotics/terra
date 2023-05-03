@@ -18,6 +18,10 @@ class MapConfig(NamedTuple):
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)
 
+    # Bounds on the volume per tile  # TODO implement in code
+    min_height: int = -10
+    max_height: int = 10
+
 
 # Map params #####
 class MapParamsSquareSingleTile(MapParams):
@@ -73,6 +77,8 @@ class AgentConfig(NamedTuple):
     dig_depth: int = 1  # how much every dig action digs
     # max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
     # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
+
+    max_loaded: int = 100  # TODO implement
 
     height: int = (
         round(6.08 / MapDims().tile_size)
