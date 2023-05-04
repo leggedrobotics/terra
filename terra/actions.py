@@ -44,49 +44,53 @@ class TrackedAction(Action):
 
     @classmethod
     def do_nothing(cls):
-        return cls.new(TrackedActionType.DO_NOTHING)
+        return cls.new(jnp.full((1,), TrackedActionType.DO_NOTHING, dtype=IntLowDim))
 
     @classmethod
     def forward(cls):
-        return cls.new(TrackedActionType.FORWARD)
+        return cls.new(jnp.full((1,), TrackedActionType.FORWARD, dtype=IntLowDim))
 
     @classmethod
     def backward(cls):
-        return cls.new(TrackedActionType.BACKWARD)
+        return cls.new(jnp.full((1,), TrackedActionType.BACKWARD, dtype=IntLowDim))
 
     @classmethod
     def clock(cls):
-        return cls.new(TrackedActionType.CLOCK)
+        return cls.new(jnp.full((1,), TrackedActionType.CLOCK, dtype=IntLowDim))
 
     @classmethod
     def anticlock(cls):
-        return cls.new(TrackedActionType.ANTICLOCK)
+        return cls.new(jnp.full((1,), TrackedActionType.ANTICLOCK, dtype=IntLowDim))
 
     @classmethod
     def cabin_clock(cls):
-        return cls.new(TrackedActionType.CABIN_CLOCK)
+        return cls.new(jnp.full((1,), TrackedActionType.CABIN_CLOCK, dtype=IntLowDim))
 
     @classmethod
     def cabin_anticlock(cls):
-        return cls.new(TrackedActionType.CABIN_ANTICLOCK)
+        return cls.new(
+            jnp.full((1,), TrackedActionType.CABIN_ANTICLOCK, dtype=IntLowDim)
+        )
 
     @classmethod
     def extend_arm(cls):
-        return cls.new(TrackedActionType.EXTEND_ARM)
+        return cls.new(jnp.full((1,), TrackedActionType.EXTEND_ARM, dtype=IntLowDim))
 
     @classmethod
     def retract_arm(cls):
-        return cls.new(TrackedActionType.RETRACT_ARM)
+        return cls.new(jnp.full((1,), TrackedActionType.RETRACT_ARM, dtype=IntLowDim))
 
     @classmethod
     def do(cls):
-        return cls.new(TrackedActionType.DO)
+        return cls.new(jnp.full((1,), TrackedActionType.DO, dtype=IntLowDim))
 
     @classmethod
     def random(cls, key: jnp.int32):
         return cls.new(
             jax.random.choice(
-                key, jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1)
+                key,
+                jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1),
+                (1,),
             )
         )
 
@@ -128,57 +132,67 @@ class WheeledAction(Action):
 
     @classmethod
     def do_nothing(cls):
-        return cls.new(WheeledActionType.DO_NOTHING)
+        return cls.new(jnp.full((1,), WheeledActionType.DO_NOTHING, dtype=IntLowDim))
 
     @classmethod
     def forward(cls):
-        return cls.new(WheeledActionType.FORWARD)
+        return cls.new(jnp.full((1,), WheeledActionType.FORWARD, dtype=IntLowDim))
 
     @classmethod
     def backward(cls):
-        return cls.new(WheeledActionType.BACKWARD)
+        return cls.new(jnp.full((1,), WheeledActionType.BACKWARD, dtype=IntLowDim))
 
     @classmethod
     def clock_forward(cls):
-        return cls.new(WheeledActionType.CLOCK_FORWARD)
+        return cls.new(jnp.full((1,), WheeledActionType.CLOCK_FORWARD, dtype=IntLowDim))
 
     @classmethod
     def clock_backward(cls):
-        return cls.new(WheeledActionType.CLOCK_BACKWARD)
+        return cls.new(
+            jnp.full((1,), WheeledActionType.CLOCK_BACKWARD, dtype=IntLowDim)
+        )
 
     @classmethod
     def anticlock_forward(cls):
-        return cls.new(WheeledActionType.ANTICLOCK_FORWARD)
+        return cls.new(
+            jnp.full((1,), WheeledActionType.ANTICLOCK_FORWARD, dtype=IntLowDim)
+        )
 
     @classmethod
     def anticlock_backward(cls):
-        return cls.new(WheeledActionType.ANTICLOCK_BACKWARD)
+        return cls.new(
+            jnp.full((1,), WheeledActionType.ANTICLOCK_BACKWARD, dtype=IntLowDim)
+        )
 
     @classmethod
     def cabin_clock(cls):
-        return cls.new(WheeledActionType.CABIN_CLOCK)
+        return cls.new(jnp.full((1,), WheeledActionType.CABIN_CLOCK, dtype=IntLowDim))
 
     @classmethod
     def cabin_anticlock(cls):
-        return cls.new(WheeledActionType.CABIN_ANTICLOCK)
+        return cls.new(
+            jnp.full((1,), WheeledActionType.CABIN_ANTICLOCK, dtype=IntLowDim)
+        )
 
     @classmethod
     def extend_arm(cls):
-        return cls.new(WheeledActionType.EXTEND_ARM)
+        return cls.new(jnp.full((1,), WheeledActionType.EXTEND_ARM, dtype=IntLowDim))
 
     @classmethod
     def retract_arm(cls):
-        return cls.new(WheeledActionType.RETRACT_ARM)
+        return cls.new(jnp.full((1,), WheeledActionType.RETRACT_ARM, dtype=IntLowDim))
 
     @classmethod
     def do(cls):
-        return cls.new(WheeledActionType.DO)
+        return cls.new(jnp.full((1,), WheeledActionType.DO, dtype=IntLowDim))
 
     @classmethod
     def random(cls, key: jnp.int32):
         return cls.new(
             jax.random.choice(
-                key, jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1)
+                key,
+                jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1),
+                (1,),
             )
         )
 
