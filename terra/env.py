@@ -36,7 +36,10 @@ class TerraEnv:
         """
         Resets the environment using values from config files, and a seed.
         """
-        return State.new(seed, self.env_cfg)
+        observations = State.new(seed, self.env_cfg)
+        observations = TraversabilityMaskWrapper.wrap(observations)
+        observations = LocalMapWrapper.wrap(observations)
+        return observations
 
     def render(
         self,
@@ -111,6 +114,9 @@ class TerraEnv:
         observations = TraversabilityMaskWrapper.wrap(observations)
         observations = LocalMapWrapper.wrap(observations)
 
+        # jax.debug.print("tm = {x}", x=observations.world.traversability_mask.map.shape)
+        # jax.debug.print("lm = {x}", x=observations.world.local_map.map.shape)
+
         # jax.debug.print("Reward = {x}", x=reward)
         # jax.debug.print("Dones = {x}", x=dones)
         # jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
@@ -148,7 +154,7 @@ class TerraEnvBatch:
         """
         Number of actions played at every env step.
         """
-        return (1,)
+        return ()
 
     @property
     def num_actions(self) -> int:
@@ -246,8 +252,8 @@ class TerraEnvBatch:
         return {
             "agent_states": (4,),
             "local_map": (
-                self.env_cfg.agent.max_arm_extension + 1,
                 self.env_cfg.agent.angles_cabin,
+                self.env_cfg.agent.max_arm_extension + 1,
             ),
             "action_map": (
                 self.env_cfg.action_map.width,

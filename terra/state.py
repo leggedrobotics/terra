@@ -92,7 +92,7 @@ class State(NamedTuple):
             IntLowDim
         )
 
-        state = jax.lax.switch(offset_idx + action.action, handlers_list)
+        state = jax.lax.switch(offset_idx + action.action[0], handlers_list)
 
         return state
 
@@ -1011,6 +1011,7 @@ class State(NamedTuple):
 
     def _get_rewards_tracked(self, new_state: "State", action: ActionType) -> Float:
         reward = 0.0
+        action = action[0]
 
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
@@ -1050,6 +1051,7 @@ class State(NamedTuple):
 
     def _get_rewards_wheeled(self, new_state: "State", action: ActionType) -> Float:
         reward = 0.0
+        action = action[0]
 
         reward += jax.lax.cond(
             (action == WheeledActionType.FORWARD)

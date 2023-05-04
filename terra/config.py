@@ -132,3 +132,4 @@ class EnvConfig(NamedTuple):
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
+    max_steps_in_episode: int = 100  # used in eval PPO call (not for training)

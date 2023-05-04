@@ -39,7 +39,7 @@ class TrackedAction(Action):
     @classmethod
     def new(cls, action: TrackedActionType) -> "TrackedAction":
         return TrackedAction(
-            action=IntLowDim(action), type=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+            action=IntLowDim(action), type=jnp.zeros_like(action, dtype=IntLowDim)
         )
 
     @classmethod
@@ -123,7 +123,7 @@ class WheeledAction(Action):
     @classmethod
     def new(cls, action: WheeledActionType) -> "TrackedAction":
         return TrackedAction(
-            action=IntLowDim(action), type=jnp.full((1,), fill_value=1, dtype=IntLowDim)
+            action=IntLowDim(action), type=jnp.ones_like(action, dtype=IntLowDim)
         )
 
     @classmethod
