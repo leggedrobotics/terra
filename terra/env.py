@@ -13,7 +13,9 @@ from terra.wrappers import TraversabilityMaskWrapper
 
 
 class TerraEnv:
-    def __init__(self, env_cfg: EnvConfig, rendering: bool = False) -> None:
+    def __init__(
+        self, env_cfg: EnvConfig = EnvConfig(), rendering: bool = False
+    ) -> None:
         self.env_cfg = env_cfg
 
         if rendering:
@@ -37,6 +39,7 @@ class TerraEnv:
         Resets the environment using values from config files, and a seed.
         """
         observations = State.new(seed, self.env_cfg)
+        # TODO remove wrap from here -- the wrapped objects will stay in the state this way
         observations = TraversabilityMaskWrapper.wrap(observations)
         observations = LocalMapWrapper.wrap(observations)
         return observations
@@ -44,7 +47,7 @@ class TerraEnv:
     def render(
         self,
         state: State,
-        key_handler: Callable | None,
+        key_handler: Callable | None = None,
         mode: str = "human",
         block: bool = False,
         tile_size: int = 32,
@@ -72,9 +75,15 @@ class TerraEnv:
                 self.window.set_title(
                     title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
                 )
-                self.window.show_img(img_global, img_local)
+                self.window.show_img(img_global, img_local, mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
+        if mode == "gif":
+            self.window.set_title(
+                title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
+            )
+            self.window.show_img(img_global, img_local, mode)
+            # self.window.show(block)
 
         return img_global, img_local
 
@@ -130,9 +139,12 @@ class TerraEnvBatch:
     """
 
     def __init__(
-        self, env_cfg: EnvConfig = EnvConfig(), batch_cfg: BatchConfig = BatchConfig()
+        self,
+        env_cfg: EnvConfig = EnvConfig(),
+        batch_cfg: BatchConfig = BatchConfig(),
+        rendering: bool = False,
     ) -> None:
-        self.terra_env = TerraEnv(env_cfg)
+        self.terra_env = TerraEnv(env_cfg, rendering=rendering)
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
 

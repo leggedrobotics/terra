@@ -1,3 +1,4 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -25,12 +26,15 @@ class Window:
         _ = self.ax1.set_yticklabels([])
 
         # Flag indicating the window was closed
-        self.closed = False
+        # self.closed = False
 
-        def close_handler(evt):
-            self.closed = True
+        # def close_handler(evt):
+        #     self.closed = True
 
-        self.fig.canvas.mpl_connect("close_event", close_handler)
+        # self.fig.canvas.mpl_connect("close_event", close_handler)
+
+    def get_fig(self):
+        return self.fig
 
     def _build_nested_pie(self, local_map, n_arm_extensions=2, n_angles=8):
         size = 0.3
@@ -63,19 +67,20 @@ class Window:
 
         self.ax2.set(aspect="equal")
 
-    def show_img(self, img_global, img_local):
+    def show_img(self, img_global, img_local, mode):
         """
         Show an image or update the image being shown
         """
+        if mode == "gif":
+            matplotlib.use("Agg")
 
         # Show the first image of the environment
-        if self.imshow_obj1 is None:
-            self.imshow_obj1 = self.ax1.imshow(img_global, interpolation="bilinear")
-
-        self.imshow_obj1.set_data(img_global)
+        self.ax1.clear()
         self.ax2.clear()
+        self.ax1.imshow(img_global, interpolation="bilinear")
         self._build_nested_pie(img_local)
-        self.fig.canvas.draw()
+        if not mode == "gif":
+            self.fig.canvas.draw()
 
         # Let matplotlib process UI events
         # This is needed for interactive mode to work properly
