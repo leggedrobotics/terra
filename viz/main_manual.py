@@ -7,13 +7,13 @@ from terra.env import TerraEnv
 
 
 def redraw():
-    global obs, tile_size
+    global obs, state, tile_size
     # if not args.agent_view:
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
     # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
     img_global, img_local = env.render(
-        state=obs, mode="human", tile_size=tile_size, key_handler=key_handler
+        state=state, mode="human", tile_size=tile_size, key_handler=key_handler
     )
 
     env.window.show_img(img_global, img_local)
@@ -168,7 +168,7 @@ action_type = batch_cfg.action_type
 env = TerraEnv(env_cfg, rendering=True)
 print(env)
 seed = 24
-state = env.reset(seed=seed)
+state, obs = env.reset(seed=seed)
 
 tile_size = 16
 
@@ -179,7 +179,7 @@ tile_size = 16
 # window = Window('heightgrid - ' + args.env)
 # env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
 state, (obs, reward, done, info) = env.step(state, action_type.do_nothing())
-env.render(state=obs, key_handler=key_handler, block=True, tile_size=tile_size)
+env.render(state=state, key_handler=key_handler, block=True, tile_size=tile_size)
 
 # env.window.reg_key_handler(key_handler)
 # env.window_target.reg_key_handler(key_handler)

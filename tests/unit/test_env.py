@@ -16,7 +16,7 @@ class TestEnv(unittest.TestCase):
     def _test_step_action(self, action):
         seed = 29
         env = TerraEnv(env_cfg=EnvConfig())
-        state = env.reset(seed)
+        state, obs = env.reset(seed)
         _, (state1, reward, dones, infos) = env.step(state, action)
 
         # self.assertFalse(state == state1)  # TODO implement __eq__
@@ -51,12 +51,12 @@ class TestEnv(unittest.TestCase):
         action = TrackedAction.do()
         seed = 29
         env = TerraEnv(env_cfg=EnvConfig())
-        state = env.reset(seed)
+        state, obs = env.reset(seed)
 
         # Dig
-        _, (state1, reward, dones, infos) = env.step(state, action)
+        state1, (obs, reward, dones, infos) = env.step(state, action)
         # Dump
-        _, (state2, reward, dones, infos) = env.step(state1, action)
+        state2, (obs, reward, dones, infos) = env.step(state1, action)
 
 
 if __name__ == "__main__":

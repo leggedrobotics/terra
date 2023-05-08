@@ -2,6 +2,7 @@ from collections.abc import Callable
 from functools import partial
 
 import jax
+import jax.numpy as jnp
 from jax import Array
 
 from terra.actions import Action
@@ -38,11 +39,12 @@ class TerraEnv:
         """
         Resets the environment using values from config files, and a seed.
         """
-        observations = State.new(seed, self.env_cfg)
-        # TODO remove wrap from here -- the wrapped objects will stay in the state this way
-        observations = TraversabilityMaskWrapper.wrap(observations)
-        observations = LocalMapWrapper.wrap(observations)
-        return observations
+        state = State.new(seed, self.env_cfg)
+        # TODO remove wrappers from state
+        state = TraversabilityMaskWrapper.wrap(state)
+        state = LocalMapWrapper.wrap(state)
+        observations = self._state_to_obs_dict(state)
+        return state, observations
 
     def render(
         self,
@@ -123,6 +125,8 @@ class TerraEnv:
         observations = TraversabilityMaskWrapper.wrap(observations)
         observations = LocalMapWrapper.wrap(observations)
 
+        observations = self._state_to_obs_dict(observations)
+
         # jax.debug.print("tm = {x}", x=observations.world.traversability_mask.map.shape)
         # jax.debug.print("lm = {x}", x=observations.world.local_map.map.shape)
 
@@ -131,6 +135,28 @@ class TerraEnv:
         # jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
 
         return new_state, (observations, reward, dones, infos)
+
+    @staticmethod
+    def _state_to_obs_dict(state: State) -> dict[str, Array]:
+        """
+        Transforms a State object to an observation dictionary.
+        """
+        agent_state = jnp.hstack(
+            [
+                # state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
+                state.agent.agent_state.angle_base,
+                state.agent.agent_state.angle_cabin,
+                state.agent.agent_state.arm_extension,
+                state.agent.agent_state.loaded,
+            ]
+        )
+        return {
+            "agent_state": agent_state,
+            "local_map": state.world.local_map.map,
+            "traversability_mask": state.world.traversability_mask.map,
+            "action_map": state.world.action_map.map,
+            "target_map": state.world.target_map.map,
+        }
 
 
 class TerraEnvBatch:
@@ -156,10 +182,10 @@ class TerraEnvBatch:
     def step(
         self, states: State, actions: Action
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        _, (states, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
+        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
             states, actions
         )
-        return states, (states, rewards, dones, infos)
+        return states, (obs, rewards, dones, infos)
 
     @property
     def actions_size(self) -> int:

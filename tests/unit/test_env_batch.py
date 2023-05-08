@@ -25,7 +25,7 @@ class TestEnvBatch(unittest.TestCase):
         batch_cfg = BatchConfig()
 
         env_batch = TerraEnvBatch(env_cfg=env_cfg)
-        states = env_batch.reset(seeds)
+        states, obs = env_batch.reset(seeds)
 
         keys = jax.vmap(jax.random.PRNGKey)(seeds)
         ks = jax.vmap(jax.random.split)(keys)
@@ -37,7 +37,7 @@ class TestEnvBatch(unittest.TestCase):
 
             # jax.debug.print("actions {i} = {x}", x=actions, i=i)
 
-            _, (states, reward, dones, infos) = env_batch.step(states, actions)
+            states, (obs, reward, dones, infos) = env_batch.step(states, actions)
             ks = jax.vmap(jax.random.split)(keys)
             keys = ks[..., 0]
             subkeys = ks[..., 1]
