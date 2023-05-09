@@ -121,13 +121,12 @@ class TerraEnv:
 
         infos = {}
 
-        observations = new_state
-        observations = TraversabilityMaskWrapper.wrap(observations)
-        observations = LocalMapWrapper.wrap(observations)
+        new_state = TraversabilityMaskWrapper.wrap(new_state)
+        new_state = LocalMapWrapper.wrap(new_state)
 
-        observations = self._state_to_obs_dict(observations)
+        observations = self._state_to_obs_dict(new_state)
 
-        # jax.debug.print("tm = {x}", x=observations.world.traversability_mask.map.shape)
+        # jax.debug.print("am = {x}", x=state.world.action_map.map)
         # jax.debug.print("lm = {x}", x=observations.world.local_map.map.shape)
 
         # jax.debug.print("Reward = {x}", x=reward)

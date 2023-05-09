@@ -751,21 +751,33 @@ class State(NamedTuple):
         return flattened_map - delta_dig
 
     def _apply_dump_mask(
-        self, flattened_map: Array, dump_mask: Array, dump_volume_per_tile: IntLowDim
+        self,
+        flattened_map: Array,
+        dump_mask: Array,
+        even_volume_per_tile: IntLowDim,
+        remaining_volume: IntLowDim,
     ) -> Array:
         """
+        TODO: delta_dig_remaining now is added with a naive approach - should be added
+            either to the closest tiles or randomly
+
         Args:
             - flattened_map: (N, ) Array flattened height map
             - dump_mask: (N, ) Array of where to dump bools
+            - even_volume_per_tile: IntLowDim, volume to add to each of the tiles in the mask (per tile)
+            - remaining_volume: IntLowDim, remaining volume to add to some of the tiles in the mask (total)
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        delta_dig = (
-            self.env_cfg.agent.dig_depth
-            * dump_mask.astype(IntMap)
-            * dump_volume_per_tile
+        dump_mask = dump_mask.astype(IntMap)
+        delta_dig = self.env_cfg.agent.dig_depth * dump_mask * even_volume_per_tile
+        delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
+        delta_dig_remaining = jnp.where(
+            jnp.logical_and(jnp.cumsum(dump_mask) <= remaining_volume, dump_mask),
+            1,
+            delta_dig_remaining,
         )
-        return flattened_map + delta_dig
+        return (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
 
     def _get_map_local_and_cyl_coords(self):
         """
@@ -858,14 +870,19 @@ class State(NamedTuple):
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
-        dump_volume_per_tile = jnp.rint(
-            self.agent.agent_state.loaded / (dump_volume + 1e-6)
-        ).astype(IntLowDim)
+        # dump_volume_per_tile = jnp.rint(
+        #     self.agent.agent_state.loaded / (dump_volume + 1e-6)
+        # ).astype(IntLowDim)
+
+        remaining_volume = self.agent.agent_state.loaded % dump_volume
+        even_volume_per_tile = (
+            self.agent.agent_state.loaded - remaining_volume
+        ) / dump_volume
 
         def _apply_dump():
             flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map, dump_mask, dump_volume_per_tile
+                flattened_action_map, dump_mask, even_volume_per_tile, remaining_volume
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape

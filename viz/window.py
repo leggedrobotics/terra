@@ -67,7 +67,7 @@ class Window:
 
         self.ax2.set(aspect="equal")
 
-    def show_img(self, img_global, img_local, mode):
+    def show_img(self, img_global, img_local, mode="human"):
         """
         Show an image or update the image being shown
         """

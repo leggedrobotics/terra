@@ -57,7 +57,7 @@ class MapParamsSquareSingleRamp(MapParams):
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsRectangularSingleTrench()
+    params: MapParams = MapParamsSquareSingleTile()
 
 
 class ActionMapConfig(MapConfig):
