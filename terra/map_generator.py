@@ -56,7 +56,7 @@ class GridMap(NamedTuple):
     def random_map(
         seed: jnp.int32, width: IntMap, height: IntMap, map_params: MapParams
     ) -> "GridMap":
-        jax.debug.print("map_params.type={x}", x=map_params.type)
+        # jax.debug.print("map_params.type={x}", x=map_params.type)
         map = jax.lax.switch(
             map_params.type,
             [
