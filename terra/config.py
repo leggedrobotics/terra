@@ -10,8 +10,8 @@ from terra.utils import Float
 
 class MapDims(NamedTuple):
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 40.0  # in meters
-    height_m: Float = 40.0  # in meters
+    width_m: Float = 20.0  # in meters
+    height_m: Float = 20.0  # in meters
 
 
 class MapConfig(NamedTuple):
@@ -28,28 +28,28 @@ class MapParamsSquareSingleTile(MapParams):
     type: MapType = MapType.SINGLE_TILE
     depth: int = -1
 
-    edge_min: int = 4  # ignore
-    edge_max: int = 10  # ignore
+    edge_min: int = 2  # ignore
+    edge_max: int = 2  # ignore
 
 
 class MapParamsSquareSingleTrench(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH
-    edge_min: int = 4
-    edge_max: int = 10
+    edge_min: int = 2
+    edge_max: int = 2
     depth: int = -1
 
 
 class MapParamsRectangularSingleTrench(MapParams):
     type: MapType = MapType.RECTANGULAR_SINGLE_TRENCH
-    edge_min: int = 4
-    edge_max: int = 10
+    edge_min: int = 2
+    edge_max: int = 2
     depth: int = -1
 
 
 class MapParamsSquareSingleRamp(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_RAMP
     edge_min: int = 4
-    edge_max: int = 10
+    edge_max: int = 4
     depth: int = -97  # ignore
 
 
@@ -57,7 +57,7 @@ class MapParamsSquareSingleRamp(MapParams):
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTile()
+    params: MapParams = MapParamsSquareSingleTrench()
 
 
 class ActionMapConfig(MapConfig):
@@ -93,7 +93,7 @@ class AgentConfig(NamedTuple):
 
 
 class Rewards(NamedTuple):
-    existence: Float = -0.05
+    existence: Float = -0.1
 
     collision_move: Float = -1.0
     move_while_loaded: Float = -0.2
