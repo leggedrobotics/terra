@@ -52,12 +52,18 @@ class MapParamsSquareSingleRamp(MapParams):
     edge_max: int = 4
     depth: int = -97  # ignore
 
+class MapParamsSquareSingleTrenchRightSide(MapParams):
+    type: MapType = MapType.SQUARE_SINGLE_TRENCH_RIGHT_SIDE
+    edge_min: int = 2
+    edge_max: int = 2
+    depth: int = -1
+
 
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTrench()
+    params: MapParams = MapParamsSquareSingleTrenchRightSide()
 
 
 class ActionMapConfig(MapConfig):
@@ -93,24 +99,24 @@ class AgentConfig(NamedTuple):
 
 
 class Rewards(NamedTuple):
-    existence: Float = -0.1
+    existence: Float = -0.05
 
-    collision_move: Float = -1.0
-    move_while_loaded: Float = -0.2
-    move: Float = -0.1
+    collision_move: Float = -0.2
+    move_while_loaded: Float = -0.1
+    move: Float = 0.0
 
-    collision_turn: Float = -1.0
-    base_turn: Float = -0.2
+    collision_turn: Float = -0.2
+    base_turn: Float = 0.0
 
-    cabin_turn: Float = -0.05
+    cabin_turn: Float = 0.0
 
     dig_wrong: Float = (
-        -2.0
+        -0.05
     )  # given both if loaded stayed the same, or if new map is not closer than old to target
-    dump_wrong: Float = -2.0  # given if loaded stayed the same
+    dump_wrong: Float = -0.05  # given if loaded stayed the same
 
     dig_correct: Float = 2.0  # given if the new map is closer to target map than before
-    dump_correct: Float = 0.2  # implemented as dump where not digged
+    dump_correct: Float = 0.05  # implemented as dump where not digged
 
     terminal: Float = 10.0  # given if the action map is the same as the target map where it matters (digged tiles)
 

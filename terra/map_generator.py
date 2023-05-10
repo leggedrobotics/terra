@@ -14,6 +14,7 @@ class MapType(IntEnum):
     SQUARE_SINGLE_TRENCH = 1
     RECTANGULAR_SINGLE_TRENCH = 2
     SQUARE_SINGLE_RAMP = 3
+    SQUARE_SINGLE_TRENCH_RIGHT_SIDE = 4
 
 
 class MapParams(NamedTuple):
@@ -64,6 +65,7 @@ class GridMap(NamedTuple):
                 partial(single_square_trench, width, height),
                 partial(single_rectangular_trench, width, height),
                 partial(single_square_ramp, width, height),
+                partial(single_square_trench_right_side, width, height),
             ],
             seed,
             map_params,
@@ -177,6 +179,38 @@ def single_square_trench(
     key, subkey = jax.random.split(key)
     x_top_left = jax.random.randint(
         subkey, (1,), minval=0, maxval=width - trench_size_edge - 1
+    )
+    key, subkey = jax.random.split(key)
+    y_top_left = jax.random.randint(
+        subkey, (1,), minval=0, maxval=height - trench_size_edge - 1
+    )
+    return _get_generic_rectangular_trench(
+        width,
+        height,
+        x_top_left,
+        y_top_left,
+        trench_size_edge,
+        trench_size_edge,
+        trench_depth,
+    )
+
+def single_square_trench_right_side(
+    width: IntMap, height: IntMap, seed: jnp.int32, map_params: MapParams
+) -> Array:
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
+
+    key = jax.random.PRNGKey(seed)
+
+    key, subkey = jax.random.split(key)
+    trench_size_edge = jax.random.randint(
+        subkey, (1,), minval=trench_size_edge_min, maxval=trench_size_edge_max + 1
+    )
+
+    key, subkey = jax.random.split(key)
+    x_top_left = jax.random.randint(
+        subkey, (1,), minval=width // 2, maxval=width - trench_size_edge - 1
     )
     key, subkey = jax.random.split(key)
     y_top_left = jax.random.randint(
