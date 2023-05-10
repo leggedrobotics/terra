@@ -89,6 +89,49 @@ class TerraEnv:
 
         return img_global, img_local
 
+    def render_obs(
+        self,
+        obs: dict[str, Array],
+        key_handler: Callable | None = None,
+        mode: str = "human",
+        block: bool = False,
+        tile_size: int = 32,
+    ) -> Array:
+        """
+        Renders the environment at a given observation.
+
+        # TODO write a cleaner rendering engine
+        """
+        img_global = self.rendering_engine.render_global(
+            tile_size=tile_size,
+            active_grid=obs["action_map"],
+            target_grid=obs["target_map"],
+            agent_pos=obs["agent_state"][..., [0, 1]],
+            base_dir=obs["agent_state"][..., [2]],
+            cabin_dir=obs["agent_state"][..., [3]],
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+
+        img_local = obs["local_map"]
+
+        if key_handler:
+            if mode == "human":
+                self.window.set_title(
+                    title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
+                )
+                self.window.show_img(img_global, img_local, mode)
+                self.window.reg_key_handler(key_handler)
+                self.window.show(block)
+        if mode == "gif":
+            self.window.set_title(
+                title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
+            )
+            self.window.show_img(img_global, img_local, mode)
+            # self.window.show(block)
+
+        return img_global, img_local
+
     @partial(jax.jit, static_argnums=(0,))
     def step(
         self, state: State, action: Action
@@ -142,7 +185,7 @@ class TerraEnv:
         """
         agent_state = jnp.hstack(
             [
-                # state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
+                state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
                 state.agent.agent_state.arm_extension,
@@ -287,7 +330,7 @@ class TerraEnvBatch:
             - value: the tuple representing the shape of the input feature
         """
         return {
-            "agent_states": (4,),
+            "agent_states": (6,),
             "local_map": (
                 self.env_cfg.agent.angles_cabin,
                 self.env_cfg.agent.max_arm_extension + 1,
