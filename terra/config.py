@@ -10,8 +10,8 @@ from terra.utils import Float
 
 class MapDims(NamedTuple):
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 10.0  # in meters
-    height_m: Float = 10.0  # in meters
+    width_m: Float = 15.0  # in meters
+    height_m: Float = 15.0  # in meters
 
 
 class MapConfig(NamedTuple):
