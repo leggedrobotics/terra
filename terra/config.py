@@ -10,8 +10,8 @@ from terra.utils import Float
 
 class MapDims(NamedTuple):
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 20.0  # in meters
-    height_m: Float = 20.0  # in meters
+    width_m: Float = 10.0  # in meters
+    height_m: Float = 10.0  # in meters
 
 
 class MapConfig(NamedTuple):
@@ -54,8 +54,8 @@ class MapParamsSquareSingleRamp(MapParams):
 
 class MapParamsSquareSingleTrenchRightSide(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH_RIGHT_SIDE
-    edge_min: int = 2
-    edge_max: int = 2
+    edge_min: int = 1
+    edge_max: int = 1
     depth: int = -1
 
 
@@ -99,26 +99,26 @@ class AgentConfig(NamedTuple):
 
 
 class Rewards(NamedTuple):
-    existence: Float = -0.05
+    existence: Float = -0.01
 
-    collision_move: Float = -0.01
-    move_while_loaded: Float = -0.05
+    collision_move: Float = 0.0
+    move_while_loaded: Float = 0.0
     move: Float = 0.0
 
-    collision_turn: Float = -0.01
+    collision_turn: Float = 0.0
     base_turn: Float = 0.0
 
     cabin_turn: Float = 0.0
 
     dig_wrong: Float = (
-        -0.02
+        0.0
     )  # given both if loaded stayed the same, or if new map is not closer than old to target
     dump_wrong: Float = 0.0  # given if loaded stayed the same
 
-    dig_correct: Float = 0.15  # given if the new map is closer to target map than before
+    dig_correct: Float = 0.0  # given if the new map is closer to target map than before
     dump_correct: Float = 0.0  # implemented as dump where not digged
 
-    terminal: Float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: Float = 1.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
 
 class EnvConfig(NamedTuple):
