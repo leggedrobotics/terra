@@ -98,6 +98,12 @@ class TrackedAction(Action):
     def get_num_actions():
         return 9
 
+    # def __hash__(self) -> int:
+    #     return hash((self.type[0],))
+
+    # def __eq__(self, __o: "TrackedAction") -> bool:
+    #     return (jnp.all(self.type == __o.type)) & (jnp.all(self.action == __o.action))
+
 
 class WheeledActionType(ActionType):
     """
@@ -199,3 +205,9 @@ class WheeledAction(Action):
     @staticmethod
     def get_num_actions():
         return 11
+
+    # def __hash__(self) -> int:
+    #     return hash((self.type[0],))
+
+    # def __eq__(self, __o: "WheeledAction") -> bool:
+    #     return (jnp.all(self.type == __o.type)) & (jnp.all(self.action == __o.action))

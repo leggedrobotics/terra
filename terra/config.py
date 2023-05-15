@@ -52,6 +52,7 @@ class MapParamsSquareSingleRamp(MapParams):
     edge_max: int = 4
     depth: int = -97  # ignore
 
+
 class MapParamsSquareSingleTrenchRightSide(MapParams):
     type: MapType = MapType.SQUARE_SINGLE_TRENCH_RIGHT_SIDE
     edge_min: int = 1
@@ -137,5 +138,5 @@ class EnvConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction
+    action_type: Action = WheeledAction
     max_steps_in_episode: int = 100  # used in eval PPO call (not for training)

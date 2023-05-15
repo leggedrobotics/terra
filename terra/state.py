@@ -1156,6 +1156,7 @@ class State(NamedTuple):
         return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)
 
     def _get_action_mask_tracked(self):
+        jax.debug.print("TRACKED")
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
@@ -1220,25 +1221,116 @@ class State(NamedTuple):
                 bool_extend_arm,
                 bool_retract_arm,
                 bool_do,
+                0,  # dummy
+                0,  # dummy
             ],
             dtype=jnp.bool_,
         )
         return action_mask
 
     def _get_action_mask_wheeled(self):
-        # TODO implement
-        return jnp.ones((9,), dtype=jnp.bool_)
+        jax.debug.print("WHEELED")
+        # forward
+        new_state = self._handle_move_forward()
+        bool_forward = ~jnp.all(
+            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+        )
+
+        # backward
+        new_state = self._handle_move_backward()
+        bool_backward = ~jnp.all(
+            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+        )
+
+        # move clock forward
+        new_state = self._handle_move_clock_forward()
+        bool_move_clock_forward = ~jnp.all(
+            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        )
+
+        # move clock backward
+        new_state = self._handle_move_clock_backward()
+        bool_move_clock_backward = ~jnp.all(
+            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        )
+
+        # move anticlock forward
+        new_state = self._handle_move_anticlock_forward()
+        bool_move_anticlock_forward = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # move anticlock backward
+        new_state = self._handle_move_anticlock_backward()
+        bool_move_anticlock_backward = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # cabin clock
+        new_state = self._handle_cabin_clock()
+        bool_cabin_clock = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # cabin anticlock
+        new_state = self._handle_cabin_anticlock()
+        bool_cabin_anticlock = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # extend arm
+        bool_extend_arm = ~(
+            self.agent.agent_state.arm_extension[0]
+            == self.env_cfg.agent.max_arm_extension
+        )
+
+        # retract arm
+        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
+
+        # do
+        new_state = self._handle_do()
+        bool_do = ~jnp.all(
+            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+        )
+
+        action_mask = jnp.array(
+            [
+                bool_forward,
+                bool_backward,
+                bool_move_clock_forward,
+                bool_move_clock_backward,
+                bool_move_anticlock_forward,
+                bool_move_anticlock_backward,
+                bool_cabin_clock,
+                bool_cabin_anticlock,
+                bool_extend_arm,
+                bool_retract_arm,
+                bool_do,
+            ],
+            dtype=jnp.bool_,
+        )
+        return action_mask
 
     def _get_action_mask(self, dummy_action: Action):
         """
         Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
         """
-        return jax.lax.cond(
+        jax.debug.print("dummy_action.type[0]={x}", x=dummy_action.type[0])
+        num_actions = dummy_action.get_num_actions()
+        jax.debug.print("num_actions={x}", x=num_actions)
+        action_mask = jax.lax.cond(
             dummy_action.type[0] == 0,
             self._get_action_mask_tracked,
             self._get_action_mask_wheeled,
         )
+        action_mask = action_mask[:num_actions]
 
-    # @partial(jax.jit, static_argnums=(1,))
+        jax.debug.print("action_mask={x}", x=action_mask)
+        return action_mask
+
     def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
         return {"action_mask": self._get_action_mask(dummy_action)}
