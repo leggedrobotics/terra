@@ -1156,7 +1156,6 @@ class State(NamedTuple):
         return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)
 
     def _get_action_mask_tracked(self):
-        jax.debug.print("TRACKED")
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
@@ -1229,7 +1228,6 @@ class State(NamedTuple):
         return action_mask
 
     def _get_action_mask_wheeled(self):
-        jax.debug.print("WHEELED")
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
@@ -1319,9 +1317,7 @@ class State(NamedTuple):
         """
         Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
         """
-        jax.debug.print("dummy_action.type[0]={x}", x=dummy_action.type[0])
         num_actions = dummy_action.get_num_actions()
-        jax.debug.print("num_actions={x}", x=num_actions)
         action_mask = jax.lax.cond(
             dummy_action.type[0] == 0,
             self._get_action_mask_tracked,
@@ -1329,7 +1325,6 @@ class State(NamedTuple):
         )
         action_mask = action_mask[:num_actions]
 
-        jax.debug.print("action_mask={x}", x=action_mask)
         return action_mask
 
     def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
