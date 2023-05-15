@@ -162,19 +162,12 @@ class TerraEnv:
             new_state.agent.agent_state.loaded,
         )
 
-        infos = {}
+        infos = new_state._get_infos(action)
 
         new_state = TraversabilityMaskWrapper.wrap(new_state)
         new_state = LocalMapWrapper.wrap(new_state)
 
         observations = self._state_to_obs_dict(new_state)
-
-        # jax.debug.print("am = {x}", x=state.world.action_map.map)
-        # jax.debug.print("lm = {x}", x=observations.world.local_map.map.shape)
-
-        # jax.debug.print("Reward = {x}", x=reward)
-        # jax.debug.print("Dones = {x}", x=dones)
-        # jax.debug.print("local map = \n{x}", x=observations.world.local_map.map.T)
 
         return new_state, (observations, reward, dones, infos)
 

@@ -21,6 +21,7 @@ from terra.utils import increase_angle_circular
 from terra.utils import IntLowDim
 from terra.utils import IntMap
 from terra.utils import wrap_angle_rad
+from typing import Any
 
 
 class State(NamedTuple):
@@ -1153,3 +1154,52 @@ class State(NamedTuple):
         """
         relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
         return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)
+    
+
+    def _get_action_mask_tracked(self, dummy_action: Action):
+        # action_mask = jnp.zeros((dummy_action.get_num_actions(),))
+        
+        # forward
+        action = dummy_action.action.at[0].set(TrackedActionType.FORWARD)
+        new_state = self._step(action)
+        bool_forward = new_state.agent.agent_state.pos_base != self.agent.agent_state.pos_base
+
+        # backward
+        action = dummy_action.action.at[0].set(TrackedActionType.BACKWARD)
+        new_state = self._step(action)
+        bool_backward = new_state.agent.agent_state.pos_base != self.agent.agent_state.pos_base
+
+        return jnp.array([
+            bool_forward,
+            bool_backward,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ],
+        dtype=jnp.bool_)
+
+    
+    def _get_action_mask_wheeled(self, dummy_action: Action):
+        # TODO implement
+        return jnp.ones((dummy_action.get_num_actions(),), dtype=jnp.bool_)
+
+
+    def _get_action_mask(self, dummy_action: Action):
+        """
+        Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
+        """
+        return jax.lax.cond(
+            dummy_action.type[0] == 0,
+            self._get_action_mask_tracked,
+            self._get_action_mask_wheeled,
+        )
+
+
+    def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
+        return {
+            "action_mask": self._get_action_mask(dummy_action)
+        }
