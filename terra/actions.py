@@ -131,8 +131,8 @@ class WheeledAction(Action):
     )
 
     @classmethod
-    def new(cls, action: WheeledActionType) -> "TrackedAction":
-        return TrackedAction(
+    def new(cls, action: WheeledActionType) -> "WheeledAction":
+        return WheeledAction(
             action=IntLowDim(action), type=jnp.ones_like(action, dtype=IntLowDim)
         )
 
