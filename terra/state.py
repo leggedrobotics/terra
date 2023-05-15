@@ -1,3 +1,4 @@
+from typing import Any
 from typing import NamedTuple
 
 import jax
@@ -21,7 +22,6 @@ from terra.utils import increase_angle_circular
 from terra.utils import IntLowDim
 from terra.utils import IntMap
 from terra.utils import wrap_angle_rad
-from typing import Any
 
 
 class State(NamedTuple):
@@ -1154,39 +1154,80 @@ class State(NamedTuple):
         """
         relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
         return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)
-    
 
-    def _get_action_mask_tracked(self, dummy_action: Action):
-        # action_mask = jnp.zeros((dummy_action.get_num_actions(),))
-        
+    def _get_action_mask_tracked(self):
         # forward
-        action = dummy_action.action.at[0].set(TrackedActionType.FORWARD)
-        new_state = self._step(action)
-        bool_forward = new_state.agent.agent_state.pos_base != self.agent.agent_state.pos_base
+        new_state = self._handle_move_forward()
+        bool_forward = ~jnp.all(
+            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+        )
 
         # backward
-        action = dummy_action.action.at[0].set(TrackedActionType.BACKWARD)
-        new_state = self._step(action)
-        bool_backward = new_state.agent.agent_state.pos_base != self.agent.agent_state.pos_base
+        new_state = self._handle_move_backward()
+        bool_backward = ~jnp.all(
+            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+        )
 
-        return jnp.array([
-            bool_forward,
-            bool_backward,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-            0,
-        ],
-        dtype=jnp.bool_)
+        # clock
+        new_state = self._handle_clock()
+        bool_clock = ~jnp.all(
+            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        )
 
-    
-    def _get_action_mask_wheeled(self, dummy_action: Action):
+        # anticlock
+        new_state = self._handle_anticlock()
+        bool_anticlock = ~jnp.all(
+            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        )
+
+        # cabin clock
+        new_state = self._handle_cabin_clock()
+        bool_cabin_clock = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # cabin clock
+        new_state = self._handle_cabin_anticlock()
+        bool_cabin_anticlock = ~jnp.all(
+            new_state.agent.agent_state.angle_cabin
+            == self.agent.agent_state.angle_cabin
+        )
+
+        # extend arm
+        bool_extend_arm = ~(
+            self.agent.agent_state.arm_extension[0]
+            == self.env_cfg.agent.max_arm_extension
+        )
+
+        # retract arm
+        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
+
+        # do
+        new_state = self._handle_do()
+        bool_do = ~jnp.all(
+            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+        )
+
+        action_mask = jnp.array(
+            [
+                bool_forward,
+                bool_backward,
+                bool_clock,
+                bool_anticlock,
+                bool_cabin_clock,
+                bool_cabin_anticlock,
+                bool_extend_arm,
+                bool_retract_arm,
+                bool_do,
+            ],
+            dtype=jnp.bool_,
+        )
+        return action_mask
+
+    def _get_action_mask_wheeled(self):
         # TODO implement
-        return jnp.ones((dummy_action.get_num_actions(),), dtype=jnp.bool_)
-
+        return jnp.ones((9,), dtype=jnp.bool_)
 
     def _get_action_mask(self, dummy_action: Action):
         """
@@ -1198,8 +1239,6 @@ class State(NamedTuple):
             self._get_action_mask_wheeled,
         )
 
-
+    # @partial(jax.jit, static_argnums=(1,))
     def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
-        return {
-            "action_mask": self._get_action_mask(dummy_action)
-        }
+        return {"action_mask": self._get_action_mask(dummy_action)}
