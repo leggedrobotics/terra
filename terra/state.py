@@ -834,11 +834,15 @@ class State(NamedTuple):
         """
         Takes the dig mask and turns into False the elements that do not correspond to
         a tile that has to be digged in the target map or that are dumped tiles in the action map.
+        Also masks out the tiles that are digged as much as the target map requires.
         """
         dig_mask_target_map = self.world.target_map.map < 0
         dig_mask_action_map = self.world.action_map.map > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
-        return dig_mask * dig_mask_maps.reshape(-1)
+
+        dig_mask_already_done = self.world.target_map.map < self.world.action_map.map
+
+        return dig_mask * dig_mask_maps.reshape(-1) * dig_mask_already_done.reshape(-1)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_mask()
