@@ -15,7 +15,10 @@ from terra.wrappers import TraversabilityMaskWrapper
 
 class TerraEnv:
     def __init__(
-        self, env_cfg: EnvConfig = EnvConfig(), rendering: bool = False
+        self,
+        env_cfg: EnvConfig = EnvConfig(),
+        rendering: bool = False,
+        n_imgs_row: int = 1,
     ) -> None:
         self.env_cfg = env_cfg
 
@@ -23,7 +26,7 @@ class TerraEnv:
             from viz.window import Window
             from viz.rendering import RenderingEngine
 
-            self.window = Window("Terra")
+            self.window = Window("Terra", n_imgs_row)
             self.rendering_engine = RenderingEngine(
                 x_dim=env_cfg.target_map.width, y_dim=env_cfg.target_map.height
             )
@@ -59,7 +62,7 @@ class TerraEnv:
 
         # TODO write a cleaner rendering engine
         """
-        img_global = self.rendering_engine.render_global(
+        imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=state.world.action_map.map,
             target_grid=state.world.target_map.map,
@@ -69,22 +72,25 @@ class TerraEnv:
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
+        img_global = imgs_global[0]
 
         img_local = state.world.local_map.map
 
         if key_handler:
             if mode == "human":
                 self.window.set_title(
-                    title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
+                    title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
+                    idx=0,
                 )
-                self.window.show_img(img_global, img_local, mode)
+                self.window.show_img([img_global], [img_local], mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
         if mode == "gif":
             self.window.set_title(
-                title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}"
+                title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
+                idx=0,
             )
-            self.window.show_img(img_global, img_local, mode)
+            self.window.show_img([img_global], [img_local], mode)
             # self.window.show(block)
 
         return img_global, img_local
@@ -102,7 +108,7 @@ class TerraEnv:
 
         # TODO write a cleaner rendering engine
         """
-        img_global = self.rendering_engine.render_global(
+        imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
@@ -113,24 +119,24 @@ class TerraEnv:
             agent_height=self.env_cfg.agent.height,
         )
 
-        img_local = obs["local_map"]
+        imgs_local = obs["local_map"]
 
         if key_handler:
             if mode == "human":
                 self.window.set_title(
                     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
                 )
-                self.window.show_img(img_global, img_local, mode)
+                self.window.show_img(imgs_global, imgs_local, mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
         if mode == "gif":
-            self.window.set_title(
-                title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
-            )
-            self.window.show_img(img_global, img_local, mode)
+            # self.window.set_title(
+            #     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
+            # )
+            self.window.show_img(imgs_global, imgs_local, mode)
             # self.window.show(block)
 
-        return img_global, img_local
+        return imgs_global, imgs_local
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
@@ -204,8 +210,9 @@ class TerraEnvBatch:
         env_cfg: EnvConfig = EnvConfig(),
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
+        n_imgs_row: int = 1,
     ) -> None:
-        self.terra_env = TerraEnv(env_cfg, rendering=rendering)
+        self.terra_env = TerraEnv(env_cfg, rendering=rendering, n_imgs_row=n_imgs_row)
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
 

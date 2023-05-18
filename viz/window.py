@@ -8,22 +8,26 @@ class Window:
     Window to draw a gridworld instance using Matplotlib
     """
 
-    def __init__(self, title):
+    def __init__(self, title, n_imgs_row):
         self.fig = None
 
         self.imshow_obj1 = None
 
         # Create the figure and axes
-        self.fig, (self.ax1, self.ax2) = plt.subplots(1, 2, width_ratios=[2, 1])
+        self.fig, self.axs = plt.subplots(
+            n_imgs_row, 2 * n_imgs_row, width_ratios=[2, 1] * n_imgs_row
+        )
+        self.axs = self.axs.reshape(-1)
 
         # Show the env name in the window title
         # self.fig.canvas.setWindowTitle(title)
 
         # Turn off x/y axis numbering/ticks
-        self.ax1.xaxis.set_ticks_position("none")
-        self.ax1.yaxis.set_ticks_position("none")
-        _ = self.ax1.set_xticklabels([])
-        _ = self.ax1.set_yticklabels([])
+        for i in range(len(self.axs)):
+            self.axs[i].xaxis.set_ticks_position("none")
+            self.axs[i].yaxis.set_ticks_position("none")
+            _ = self.axs[i].set_xticklabels([])
+            _ = self.axs[i].set_yticklabels([])
 
         # Flag indicating the window was closed
         # self.closed = False
@@ -36,7 +40,7 @@ class Window:
     def get_fig(self):
         return self.fig
 
-    def _build_nested_pie(self, local_map, n_arm_extensions=2, n_angles=8):
+    def _build_nested_pie(self, ax, local_map, n_arm_extensions=2, n_angles=8):
         size = 0.3
         v1 = np.ones((n_angles,))
         vmax = 5
@@ -55,7 +59,7 @@ class Window:
             colors = array_to_colors(local_map[i])
             white_width = size * radius
 
-            self.ax2.pie(
+            ax.pie(
                 v1,
                 radius=radius,
                 colors=colors.tolist(),
@@ -65,29 +69,31 @@ class Window:
                 startangle=90 - (180 / n_angles),
             )
 
-        self.ax2.set(aspect="equal")
+        ax.set(aspect="equal")
 
-    def show_img(self, img_global, img_local, mode="human"):
+    def show_img(self, imgs_global, imgs_local, mode="human"):
         """
         Show an image or update the image being shown
         """
         if mode == "gif":
             matplotlib.use("Agg")
 
-        # Show the first image of the environment
-        self.ax1.clear()
-        self.ax2.clear()
-        self.ax1.imshow(img_global, interpolation="bilinear")
-        self._build_nested_pie(img_local)
-        if not mode == "gif":
-            self.fig.canvas.draw()
+        for i, (img_global, img_local) in enumerate(zip(imgs_global, imgs_local)):
+            # Show the first image of the environment
+            j = i * 2
+            self.axs[j].clear()
+            self.axs[j + 1].clear()
+            self.axs[j].imshow(img_global, interpolation="bilinear")
+            self._build_nested_pie(self.axs[j + 1], img_local)
+            if not mode == "gif":
+                self.fig.canvas.draw()
 
         # Let matplotlib process UI events
         # This is needed for interactive mode to work properly
         plt.pause(0.001)
 
-    def set_title(self, title):
-        self.ax1.set_title(title)
+    def set_title(self, title, idx):
+        self.axs[idx].set_title(title)
 
     def set_caption(self, text):
         """

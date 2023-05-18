@@ -12,11 +12,9 @@ def redraw():
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
     # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
-    img_global, img_local = env.render(
-        state=state, mode="human", tile_size=tile_size, key_handler=key_handler
-    )
+    env.render(state=state, mode="human", tile_size=tile_size, key_handler=key_handler)
 
-    env.window.show_img(img_global, img_local)
+    # env.window.show_img(img_global, img_local)
     # env.window_target.show_img(img_target)
 
 

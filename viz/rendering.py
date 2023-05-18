@@ -425,34 +425,50 @@ class RenderingEngine:
         agent_width=None,
         agent_height=None,
     ):
+        # Add batch dim in case it's not there
+        if len(active_grid.shape) < 3:
+            active_grid = active_grid[None]
+        if len(target_grid.shape) < 3:
+            target_grid = target_grid[None]
+        if agent_pos is not None and len(agent_pos.shape) < 2:
+            agent_pos = agent_pos[None]
+        if base_dir is not None and len(base_dir.shape) < 2:
+            base_dir = base_dir[None]
+        if cabin_dir is not None and len(cabin_dir.shape) < 2:
+            cabin_dir = cabin_dir[None]
+
         white_margin = 0.05  # percentage
+        batch_size = active_grid.shape[0]
 
-        img_active_grid = self.render_active_grid(
-            tile_size,
-            active_grid,
-            agent_pos,
-            base_dir,
-            cabin_dir,
-            agent_width,
-            agent_height,
-        )
+        imgs = []
+        for i in range(batch_size):
+            img_active_grid = self.render_active_grid(
+                tile_size,
+                active_grid[i],
+                agent_pos[i],
+                base_dir[i],
+                cabin_dir[i],
+                agent_width,
+                agent_height,
+            )
 
-        img_target_grid = self.render_target_grid(tile_size, target_grid)
-        img = np.hstack(
-            [
-                img_active_grid,
-                255
-                * np.ones(
-                    (
-                        img_active_grid.shape[0],
-                        int(white_margin * img_active_grid.shape[1]),
-                        3,
-                    )
-                ).astype(np.int16),
-                img_target_grid,
-            ]
-        )
-        return img
+            img_target_grid = self.render_target_grid(tile_size, target_grid[i])
+            img = np.hstack(
+                [
+                    img_active_grid,
+                    255
+                    * np.ones(
+                        (
+                            img_active_grid.shape[0],
+                            int(white_margin * img_active_grid.shape[1]),
+                            3,
+                        )
+                    ).astype(np.int16),
+                    img_target_grid,
+                ]
+            )
+            imgs.append(img)
+        return imgs
 
     def render_local(self):
         pass
