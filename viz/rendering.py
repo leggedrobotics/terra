@@ -1,6 +1,7 @@
 from abc import ABCMeta
 from abc import abstractmethod
 
+import jax
 import numpy as np
 
 from terra.state import State
@@ -22,25 +23,29 @@ from terra.state import State
 #     return img
 
 
-def fill_coords(img, fn, color):
+def fill_coords(img, fn, color, batch_size):
     """
     Fill pixels of an image with coordinates matching a filter function
     """
-    x = np.arange(img.shape[0], dtype=np.int16)
-    y = np.arange(img.shape[1], dtype=np.int16)
-    xf = (x.copy() + 0.5) / img.shape[0]
-    yf = (y.copy() + 0.5) / img.shape[1]
+    x = np.arange(img.shape[1], dtype=np.int16)
+    y = np.arange(img.shape[2], dtype=np.int16)
+    xf = (x.copy() + 0.5) / img.shape[1]
+    yf = (y.copy() + 0.5) / img.shape[2]
 
-    cond = fn(xf, yf).reshape(img.shape[0], img.shape[1])
+    xf = xf[None].repeat(batch_size, 0)
+    yf = yf[None].repeat(batch_size, 0)
 
-    img = np.where(cond[:, :, None], color, img)
+    cond = fn(xf, yf).reshape(-1, img.shape[1], img.shape[2])
+
+    img = np.where(cond[..., None], color, img)
     return img
 
 
 def generate_combinations_xy(x, y):
-    xa = x[:, None].repeat(y.shape[0], axis=1).reshape(-1)
-    ya = y[None].repeat(x.shape[0], axis=0).reshape(-1)
-    xya = np.vstack([xa, ya])
+    batch_size = x.shape[0]
+    xa = x[:, :, None].repeat(y.shape[1], axis=2).reshape(batch_size, -1)
+    ya = y[:, None].repeat(x.shape[1], axis=1).reshape(batch_size, -1)
+    xya = np.concatenate([xa[:, None], ya[:, None]], axis=1)
     return xya
 
 
@@ -49,12 +54,14 @@ def rotate_fn(fin, cx, cy, theta):
 
     def fout(x, y):
         xya = generate_combinations_xy(x, y)
-        xya[0] -= cx
-        xya[1] -= cy
-        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        xya[:, 0] -= cx
+        xya[:, 1] -= cy
+        R = np.array(
+            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
+        ).transpose(2, 0, 1, 3)
         xya = R[..., 0] @ xya
-        xya[0] += cx
-        xya[1] += cy
+        xya[:, 0] += cx
+        xya[:, 1] += cy
 
         # x = x - cx
         # y = y - cy
@@ -62,7 +69,7 @@ def rotate_fn(fin, cx, cy, theta):
         # x2 = cx + x * np.cos(theta) - y * np.sin(theta)
         # y2 = cy + y * np.cos(theta) + x * np.sin(theta)
 
-        return fin(xya[0], xya[1])
+        return fin(xya[:, 0], xya[:, 1])
 
     return fout
 
@@ -85,7 +92,7 @@ def point_in_triangle(a, b, c):
     def fn(x, y):
         v0 = (c - a)[None]  # (1, 2)
         v1 = (b - a)[None]  # (1, 2)
-        v2 = np.array((x, y)).T - a  # (N, 2)
+        v2 = np.concatenate((x[..., None], y[..., None]), -1) - a  # (N, 2)
 
         # Compute dot products
         dot00 = (v0**2).sum(axis=-1)
@@ -284,13 +291,19 @@ class RenderingEngine:
     #     return img
 
     def render_agent(
-        self, agent_width, agent_height, tile_size, base_dir, cabin_dir=None
+        self,
+        agent_width,
+        agent_height,
+        tile_size,
+        base_dir,
+        cabin_dir=None,
+        batch_size=1,
     ):
         # draw the base a yellow rectangle with one side longer than the other
         # to make it easier to see the direction
 
-        img = np.zeros(
-            shape=(tile_size * agent_width, tile_size * agent_height, 3),
+        imgs = np.zeros(
+            shape=(batch_size, tile_size * agent_width, tile_size * agent_height, 3),
             dtype=np.uint16,
         )
 
@@ -300,14 +313,14 @@ class RenderingEngine:
         back_base_fn = rotate_fn(
             back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
         )
-        img = fill_coords(img, back_base_fn, np.array([0, 0, 0]))
+        imgs = fill_coords(imgs, back_base_fn, np.array([0, 0, 0]), batch_size)
 
         # yellow of the base
         base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
         base_fn = rotate_fn(base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir + np.pi)
 
-        img = fill_coords(img, base_fn, np.array([255, 255, 0]))
+        imgs = fill_coords(imgs, base_fn, np.array([255, 255, 0]), batch_size)
 
         # red triangle
         tri_fn = point_in_triangle(
@@ -323,9 +336,9 @@ class RenderingEngine:
             cy=0.5,
             theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir + np.pi / 2,
         )
-        img = fill_coords(img, tri_fn, (255, 0, 0))
+        imgs = fill_coords(imgs, tri_fn, (255, 0, 0), batch_size)
 
-        return img
+        return imgs
 
     def get(self, i: int, j: int) -> GridObject:
         """Retrieve object at location (i, j)
@@ -341,23 +354,23 @@ class RenderingEngine:
     # def _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir):
     #     pass
 
-    def _render_grid(self, tile_size, height_grid):
+    def _render_grids(self, tile_size, height_grid):
         width_px = self.x_dim * tile_size
         height_px = self.y_dim * tile_size
 
         height_grid = np.array(height_grid)
 
         # img = np.zeros(shape=(width_px, height_px, 3), dtype=np.uint16)
-        x = ((height_grid.repeat(tile_size, axis=1).repeat(tile_size, axis=0) + 3) / 7)[
-            :, :, None
-        ]
+        x = (
+            (height_grid.repeat(tile_size, axis=-2).repeat(tile_size, axis=-1) + 3) / 7
+        )[..., None]
         img = (np.array([[[255, 255, 255]]]) * x).astype(np.int16)
 
         # apply grid
         grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
         grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
-        img[grid_idx_x] = np.array([100, 100, 100])
-        img[:, grid_idx_y] = np.array([100, 100, 100])
+        img[:, grid_idx_x] = np.array([100, 100, 100])
+        img[:, :, grid_idx_y] = np.array([100, 100, 100])
         img = img.astype(np.int16)
         return img
 
@@ -370,6 +383,7 @@ class RenderingEngine:
         cabin_dir=None,
         agent_width=None,
         agent_height=None,
+        batch_size=1,
     ):
         """
         Render this grid at a given scale
@@ -378,41 +392,62 @@ class RenderingEngine:
         """
         # s1 = time.time()
 
-        img = self._render_grid(tile_size, height_grid)
+        imgs = self._render_grids(tile_size, height_grid)
 
         # s2 = time.time()
-        # Render agent
-        agent_corners = State._get_agent_corners(
-            pos_base=agent_pos,
-            base_orientation=base_dir,
-            agent_width=agent_width,
-            agent_height=agent_height,
-        )
 
-        ay_min = np.min(agent_corners[:, 1]).astype(np.int16)
-        ax_min = np.min(agent_corners[:, 0]).astype(np.int16)
-        ay_max = np.max(agent_corners[:, 1] + 1).astype(np.int16)
-        ax_max = np.max(agent_corners[:, 0] + 1).astype(np.int16)
+        # Render agent
+
+        # agent_corners = []
+        # for i in range(batch_size):
+        #     agent_corners.append(State._get_agent_corners(
+        #         pos_base=agent_pos[i],
+        #         base_orientation=base_dir[i],
+        #         agent_width=agent_width,
+        #         agent_height=agent_height,
+        #     )[None])
+        #     agent_corners = np.concatenate(agent_corners, axis=0)
+
+        # agent_corners = jax.vmap(
+        #     partial(State._get_agent_corners(
+        #         agent_width=agent_width,
+        #         agent_height=agent_height,
+        #         ))
+        #     )(agent_pos, base_dir)
+
+        agent_corners = jax.vmap(
+            lambda agent_pos, base_dir: State._get_agent_corners(
+                pos_base=agent_pos,
+                base_orientation=base_dir,
+                agent_width=agent_width,
+                agent_height=agent_height,
+            )
+        )(agent_pos, base_dir)
+
+        ay_min = np.min(agent_corners[:, :, 1]).astype(np.int16)
+        ax_min = np.min(agent_corners[:, :, 0]).astype(np.int16)
+        ay_max = np.max(agent_corners[:, :, 1] + 1).astype(np.int16)
+        ax_max = np.max(agent_corners[:, :, 0] + 1).astype(np.int16)
 
         agent_ymin = ay_min * tile_size
         agent_ymax = ay_max * tile_size
         agent_xmin = ax_min * tile_size
         agent_xmax = ax_max * tile_size
 
-        agent_img = self.render_agent(
-            ax_max - ax_min, ay_max - ay_min, tile_size, base_dir, cabin_dir
+        agent_imgs = self.render_agent(
+            ax_max - ax_min, ay_max - ay_min, tile_size, base_dir, cabin_dir, batch_size
         )
-        img[agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_img
+        imgs[:, agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_imgs
 
         # e = time.time()
 
         # print(f"grid = {100 * (s2-s1)/(e-s1)}%")
         # print(f"agent = {100 * (e-s2)/(e-s1)}%")
 
-        return img.transpose(0, 1, 2)
+        return imgs
 
-    def render_target_grid(self, tile_size, target_grid):
-        return self._render_grid(tile_size, target_grid)
+    def render_target_grids(self, tile_size, target_grid):
+        return self._render_grids(tile_size, target_grid)
 
     def render_global(
         self,
@@ -440,34 +475,37 @@ class RenderingEngine:
         white_margin = 0.05  # percentage
         batch_size = active_grid.shape[0]
 
-        imgs = []
-        for i in range(batch_size):
-            img_active_grid = self.render_active_grid(
-                tile_size,
-                active_grid[i],
-                agent_pos[i],
-                base_dir[i],
-                cabin_dir[i],
-                agent_width,
-                agent_height,
-            )
+        imgs_active_grid = self.render_active_grid(
+            tile_size,
+            active_grid,
+            agent_pos,
+            base_dir,
+            cabin_dir,
+            agent_width,
+            agent_height,
+            batch_size,
+        )
 
-            img_target_grid = self.render_target_grid(tile_size, target_grid[i])
-            img = np.hstack(
+        imgs_target_grid = self.render_target_grids(tile_size, target_grid)
+
+        imgs = [
+            np.hstack(
                 [
-                    img_active_grid,
+                    imgs_active_grid[i],
                     255
                     * np.ones(
                         (
-                            img_active_grid.shape[0],
-                            int(white_margin * img_active_grid.shape[1]),
+                            imgs_active_grid[i].shape[0],
+                            int(white_margin * imgs_active_grid[i].shape[1]),
                             3,
                         )
                     ).astype(np.int16),
-                    img_target_grid,
+                    imgs_target_grid[i],
                 ]
             )
-            imgs.append(img)
+            for i in range(batch_size)
+        ]
+
         return imgs
 
     def render_local(self):
