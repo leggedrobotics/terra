@@ -80,20 +80,26 @@ class TestAgent(unittest.TestCase):
         state = state._step(action)
 
     def test_is_done(self):
+        seed = 25
+        state = State.new(seed, env_cfg=EnvConfig())
+
         loaded = jnp.full((1,), 0, dtype=jnp.int16)
         x = jnp.arange(3)[None].repeat(3, 0)
         target_map = x - jnp.max(x)
 
         action_map1 = jnp.ones((3, 3))
-        self.assertFalse(State._is_done(action_map1, target_map, loaded))
+        self.assertFalse(state._is_done(action_map1, target_map, loaded))
 
         action_map2 = target_map.copy()
-        self.assertTrue(State._is_done(action_map2, target_map, loaded))
-        self.assertFalse(State._is_done(action_map2, target_map, loaded + 3))
+        self.assertTrue(state._is_done(action_map2, target_map, loaded))
+        self.assertFalse(state._is_done(action_map2, target_map, loaded + 3))
 
         action_map3 = target_map.copy()
         action_map3 = action_map3.at[:, -1].set(action_map3[:, -1] + 20)
-        self.assertTrue(State._is_done(action_map3, target_map, loaded))
+        self.assertTrue(state._is_done(action_map3, target_map, loaded))
+
+        state = state._replace(env_steps=state.env_cfg.max_steps_in_episode + 1)
+        self.assertTrue(state._is_done(action_map1, target_map, loaded))
 
 
 if __name__ == "__main__":

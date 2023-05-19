@@ -95,7 +95,7 @@ class State(NamedTuple):
 
         state = jax.lax.switch(offset_idx + action.action[0], handlers_list)
 
-        return state
+        return state._replace(env_steps=state.env_steps + 1)
 
     def _do_nothing(self):
         return self
@@ -1130,7 +1130,7 @@ class State(NamedTuple):
 
         # Terminal
         reward += jax.lax.cond(
-            self._is_done(
+            self._is_done_task(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
                 new_state.agent.agent_state.loaded,
@@ -1143,11 +1143,9 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.existence
 
         return reward
-
+    
     @staticmethod
-    def _is_done(
-        action_map: Array, target_map: Array, agent_loaded: Array
-    ) -> jnp.bool_:
+    def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array):
         """
         Checks if the target map matches the action map,
         but only on the relevant tiles.
@@ -1157,7 +1155,21 @@ class State(NamedTuple):
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
         relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
-        return jnp.all(target_map - relevant_action_map >= 0) & (agent_loaded[0] == 0)
+        done_task = jnp.all(target_map - relevant_action_map >= 0) & (
+            agent_loaded[0] == 0
+        )
+        return done_task
+
+    def _is_done(
+        self, action_map: Array, target_map: Array, agent_loaded: Array
+    ) -> jnp.bool_:
+        """
+        Checks if the task is done or if the env reached its max number of steps.
+        """
+        done_task = self._is_done_task(action_map, target_map, agent_loaded)
+
+        done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
+        return jnp.logical_or(done_task, done_steps)
 
     def _get_action_mask_tracked(self):
         # forward

@@ -133,8 +133,8 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
+    max_steps_in_episode: int = 10
 
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
-    max_steps_in_episode: int = 100  # used in eval PPO call (not for training)
