@@ -2,6 +2,7 @@ from abc import ABCMeta
 from abc import abstractmethod
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from terra.state import State
@@ -32,8 +33,8 @@ def fill_coords(img, fn, color, batch_size):
     xf = (x.copy() + 0.5) / img.shape[1]
     yf = (y.copy() + 0.5) / img.shape[2]
 
-    xf = xf[None].repeat(batch_size, 0)
-    yf = yf[None].repeat(batch_size, 0)
+    xf = xf[None]
+    yf = yf[None]
 
     cond = fn(xf, yf).reshape(-1, img.shape[1], img.shape[2])
 
@@ -42,9 +43,8 @@ def fill_coords(img, fn, color, batch_size):
 
 
 def generate_combinations_xy(x, y):
-    batch_size = x.shape[0]
-    xa = x[:, :, None].repeat(y.shape[1], axis=2).reshape(batch_size, -1)
-    ya = y[:, None].repeat(x.shape[1], axis=1).reshape(batch_size, -1)
+    xa = x[:, :, None].repeat(y.shape[1], axis=2).reshape(1, -1)
+    ya = y[:, None].repeat(x.shape[1], axis=1).reshape(1, -1)
     xya = np.concatenate([xa[:, None], ya[:, None]], axis=1)
     return xya
 
@@ -302,41 +302,62 @@ class RenderingEngine:
         # draw the base a yellow rectangle with one side longer than the other
         # to make it easier to see the direction
 
-        imgs = np.zeros(
-            shape=(batch_size, tile_size * agent_width, tile_size * agent_height, 3),
-            dtype=np.uint16,
-        )
+        # imgs = np.zeros(
+        #     shape=(batch_size, tile_size * agent_width, tile_size * agent_height, 3),
+        #     dtype=np.uint16,
+        # )
 
-        # base
-        back_base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
+        imgs = [
+            jnp.zeros(
+                shape=(1, tile_size * agent_width[i], tile_size * agent_height[i], 3),
+                dtype=jnp.uint16,
+            )
+            for i in range(batch_size)
+        ]
 
-        back_base_fn = rotate_fn(
-            back_base_fn, cx=0.5, cy=0.5, theta=-np.pi / 2 + np.pi / 2 * base_dir
-        )
-        imgs = fill_coords(imgs, back_base_fn, np.array([0, 0, 0]), batch_size)
+        for i in range(batch_size):
+            # base
+            back_base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
-        # yellow of the base
-        base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
+            jax.debug.print("base_dir={x}", x=base_dir)
+            jax.debug.print("base_dir type={x}", x=type(base_dir))
 
-        base_fn = rotate_fn(base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir + np.pi)
+            back_base_fn = rotate_fn(
+                back_base_fn,
+                cx=0.5,
+                cy=0.5,
+                theta=-np.pi / 2 + np.pi / 2 * base_dir[[i]],
+            )
+            imgs[i] = fill_coords(
+                imgs[i], back_base_fn, np.array([0, 0, 0]), batch_size
+            )
 
-        imgs = fill_coords(imgs, base_fn, np.array([255, 255, 0]), batch_size)
+            # yellow of the base
+            base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
-        # red triangle
-        tri_fn = point_in_triangle(
-            (0.12, 0.81),
-            (0.12, 0.19),
-            (0.87, 0.50),
-        )
+            base_fn = rotate_fn(
+                base_fn, cx=0.5, cy=0.5, theta=np.pi / 2 * base_dir[[i]] + np.pi
+            )
 
-        # Rotate the agent based on its direction
-        tri_fn = rotate_fn(
-            tri_fn,
-            cx=0.5,
-            cy=0.5,
-            theta=np.pi / 4 * cabin_dir + np.pi / 2 * base_dir + np.pi / 2,
-        )
-        imgs = fill_coords(imgs, tri_fn, (255, 0, 0), batch_size)
+            imgs[i] = fill_coords(imgs[i], base_fn, np.array([255, 255, 0]), batch_size)
+
+            # red triangle
+            tri_fn = point_in_triangle(
+                (0.12, 0.81),
+                (0.12, 0.19),
+                (0.87, 0.50),
+            )
+
+            # Rotate the agent based on its direction
+            tri_fn = rotate_fn(
+                tri_fn,
+                cx=0.5,
+                cy=0.5,
+                theta=np.pi / 4 * cabin_dir[[i]]
+                + np.pi / 2 * base_dir[[i]]
+                + np.pi / 2,
+            )
+            imgs[i] = fill_coords(imgs[i], tri_fn, (255, 0, 0), batch_size)
 
         return imgs
 
@@ -397,24 +418,6 @@ class RenderingEngine:
         # s2 = time.time()
 
         # Render agent
-
-        # agent_corners = []
-        # for i in range(batch_size):
-        #     agent_corners.append(State._get_agent_corners(
-        #         pos_base=agent_pos[i],
-        #         base_orientation=base_dir[i],
-        #         agent_width=agent_width,
-        #         agent_height=agent_height,
-        #     )[None])
-        #     agent_corners = np.concatenate(agent_corners, axis=0)
-
-        # agent_corners = jax.vmap(
-        #     partial(State._get_agent_corners(
-        #         agent_width=agent_width,
-        #         agent_height=agent_height,
-        #         ))
-        #     )(agent_pos, base_dir)
-
         agent_corners = jax.vmap(
             lambda agent_pos, base_dir: State._get_agent_corners(
                 pos_base=agent_pos,
@@ -424,10 +427,10 @@ class RenderingEngine:
             )
         )(agent_pos, base_dir)
 
-        ay_min = np.min(agent_corners[:, :, 1]).astype(np.int16)
-        ax_min = np.min(agent_corners[:, :, 0]).astype(np.int16)
-        ay_max = np.max(agent_corners[:, :, 1] + 1).astype(np.int16)
-        ax_max = np.max(agent_corners[:, :, 0] + 1).astype(np.int16)
+        ay_min = jax.vmap(lambda x: np.min(x[:, 1]))(agent_corners).astype(np.int16)
+        ax_min = jax.vmap(lambda x: np.min(x[:, 0]))(agent_corners).astype(np.int16)
+        ay_max = jax.vmap(lambda x: np.max(x[:, 1]))(agent_corners).astype(np.int16)
+        ax_max = jax.vmap(lambda x: np.max(x[:, 0]))(agent_corners).astype(np.int16)
 
         agent_ymin = ay_min * tile_size
         agent_ymax = ay_max * tile_size
@@ -435,9 +438,17 @@ class RenderingEngine:
         agent_xmax = ax_max * tile_size
 
         agent_imgs = self.render_agent(
-            ax_max - ax_min, ay_max - ay_min, tile_size, base_dir, cabin_dir, batch_size
+            ax_max - ax_min,
+            ay_max - ay_min,
+            tile_size,
+            np.array(base_dir),
+            np.array(cabin_dir),
+            batch_size,
         )
-        imgs[:, agent_xmin:agent_xmax, agent_ymin:agent_ymax, :] = agent_imgs
+        for i in range(batch_size):
+            imgs[
+                i, agent_xmin[i] : agent_xmax[i], agent_ymin[i] : agent_ymax[i], :
+            ] = agent_imgs[i]
 
         # e = time.time()
 
