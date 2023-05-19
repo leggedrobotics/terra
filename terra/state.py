@@ -30,7 +30,7 @@ class State(NamedTuple):
     Given perfect information, the observation corresponds to the state.
     """
 
-    seed: jnp.uint32
+    key: jax.random.KeyArray
 
     env_cfg: EnvConfig
 
@@ -40,11 +40,8 @@ class State(NamedTuple):
     env_steps: int
 
     @classmethod
-    def new(cls, seed: int, env_cfg: EnvConfig) -> "State":
-        key = jax.random.PRNGKey(seed)
-        world = GridWorld.new(jnp.uint32(seed), env_cfg)
-
-        key, subkey = jax.random.split(key)
+    def new(cls, key: jax.random.KeyArray, env_cfg: EnvConfig) -> "State":
+        world, key = GridWorld.new(key, env_cfg)
 
         agent = Agent.new(env_cfg)
         agent = jax.tree_map(
@@ -52,11 +49,21 @@ class State(NamedTuple):
         )
 
         return State(
-            seed=jnp.uint32(seed),
+            key=key,
             env_cfg=env_cfg,
             world=world,
             agent=agent,
             env_steps=0,
+        )
+
+    def _reset(self, env_cfg) -> "State":
+        """
+        Resets the already-existing State
+        """
+        key, _ = jax.random.split(self.key)
+        return self.new(
+            key=key,
+            env_cfg=env_cfg,
         )
 
     def _step(self, action: Action) -> "State":
@@ -1143,7 +1150,7 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.existence
 
         return reward
-    
+
     @staticmethod
     def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array):
         """

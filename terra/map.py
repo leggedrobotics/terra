@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from terra.config import EnvConfig
@@ -8,7 +9,7 @@ from terra.utils import IntMap
 
 
 class GridWorld(NamedTuple):
-    seed: jnp.uint32
+    key: jax.random.KeyArray
 
     target_map: GridMap
     action_map: GridMap
@@ -19,28 +20,29 @@ class GridWorld(NamedTuple):
 
     @property
     def width(self) -> int:
+        assert self.target_map.width == self.action_map.width
         return self.target_map.width
 
     @property
     def height(self) -> int:
+        assert self.target_map.height == self.action_map.height
         return self.target_map.height
 
     @classmethod
-    def new(cls, seed: int, env_cfg: EnvConfig) -> "GridWorld":
-        assert env_cfg.target_map.width == env_cfg.action_map.width
-        assert env_cfg.target_map.height == env_cfg.action_map.height
-
-        target_map = GridMap.random_map(
-            seed=seed,
-            map_params=env_cfg.target_map.params,
-            width=env_cfg.target_map.width,
-            height=env_cfg.target_map.height,
-        )
-
+    def new(cls, key: jax.random.KeyArray, env_cfg: EnvConfig) -> "GridWorld":
         action_map = GridMap.new(
             map=jnp.zeros(
                 (env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap
             )
         )
 
-        return GridWorld(seed=seed, target_map=target_map, action_map=action_map)
+        target_map, key = GridMap.random_map(
+            key=key,
+            map_params=env_cfg.target_map.params,
+            width=env_cfg.target_map.width,
+            height=env_cfg.target_map.height,
+        )
+
+        world = GridWorld(key=key, target_map=target_map, action_map=action_map)
+
+        return world, key

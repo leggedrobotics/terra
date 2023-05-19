@@ -1,5 +1,6 @@
 import unittest
 
+import jax
 import jax.numpy as jnp
 
 from terra.actions import TrackedAction
@@ -11,18 +12,21 @@ from terra.utils import IntMap
 class TestAgent(unittest.TestCase):
     def test_create_state(self):
         seed = 33
-        State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        State.new(key, env_cfg=EnvConfig())
 
     def test_call_step_forward(self):
         seed = 25
-        state = State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, env_cfg=EnvConfig())
 
         action = TrackedAction.forward()
         state = state._step(action)
 
     def test_get_agent_corners(self):
         seed = 25
-        state = State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, env_cfg=EnvConfig())
 
         state._get_agent_corners(
             pos_base=state.agent.agent_state.pos_base,
@@ -33,7 +37,8 @@ class TestAgent(unittest.TestCase):
 
     def test_arm_extension(self):
         seed = 25
-        state = State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, env_cfg=EnvConfig())
 
         state = state._handle_extend_arm()
         self.assertEqual(state.agent.agent_state.arm_extension, 1)
@@ -74,14 +79,16 @@ class TestAgent(unittest.TestCase):
 
     def test_handle_dig(self):
         seed = 25
-        state = State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, env_cfg=EnvConfig())
 
         action = TrackedAction.do()
         state = state._step(action)
 
     def test_is_done(self):
         seed = 25
-        state = State.new(seed, env_cfg=EnvConfig())
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, env_cfg=EnvConfig())
 
         loaded = jnp.full((1,), 0, dtype=jnp.int16)
         x = jnp.arange(3)[None].repeat(3, 0)

@@ -38,11 +38,24 @@ class TerraEnv:
         return hash((TerraEnv, self.env_cfg))
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seed: int) -> State:
+    def reset(self, seed: int) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
-        state = State.new(seed, self.env_cfg)
+        key = jax.random.PRNGKey(seed)
+        state = State.new(key, self.env_cfg)
+        # TODO remove wrappers from state
+        state = TraversabilityMaskWrapper.wrap(state)
+        state = LocalMapWrapper.wrap(state)
+        observations = self._state_to_obs_dict(state)
+        return state, observations
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _reset_existent(self, state: State) -> tuple[State, dict[str, Array]]:
+        """
+        Resets the env, assuming that it already exists.
+        """
+        state = state._reset(self.env_cfg)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap(state)
@@ -162,21 +175,27 @@ class TerraEnv:
 
         reward = state._get_reward(new_state, action)
 
-        dones = state._is_done(
-            new_state.world.action_map.map,
-            new_state.world.target_map.map,
-            new_state.agent.agent_state.loaded,
-        )
-        jax.debug.print("is done = {x}", x=dones)
-
-        infos = new_state._get_infos(action)
-
         new_state = TraversabilityMaskWrapper.wrap(new_state)
         new_state = LocalMapWrapper.wrap(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
-        return new_state, (observations, reward, dones, infos)
+        done = state._is_done(
+            new_state.world.action_map.map,
+            new_state.world.target_map.map,
+            new_state.agent.agent_state.loaded,
+        )
+
+        new_state, observations = jax.lax.cond(
+            done,
+            self._reset_existent,
+            lambda x: (new_state, observations),
+            new_state,
+        )
+
+        infos = new_state._get_infos(action)
+
+        return new_state, (observations, reward, done, infos)
 
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
