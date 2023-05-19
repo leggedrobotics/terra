@@ -319,9 +319,6 @@ class RenderingEngine:
             # base
             back_base_fn = point_in_rect(0.25, 0.75, 0.0, 0.25)
 
-            jax.debug.print("base_dir={x}", x=base_dir)
-            jax.debug.print("base_dir type={x}", x=type(base_dir))
-
             back_base_fn = rotate_fn(
                 back_base_fn,
                 cx=0.5,
