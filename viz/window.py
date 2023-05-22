@@ -1,12 +1,6 @@
-import sys
-
-# Only ask users to install matplotlib if they actually need it
-try:
-    import matplotlib.pyplot as plt
-except:
-    print('To display the environment in a window, please install matplotlib, eg:')
-    print('pip3 install --user matplotlib')
-    sys.exit(-1)
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Window:
@@ -14,49 +8,92 @@ class Window:
     Window to draw a gridworld instance using Matplotlib
     """
 
-    def __init__(self, title):
+    def __init__(self, title, n_imgs_row):
         self.fig = None
 
-        self.imshow_obj = None
+        self.imshow_obj1 = None
 
         # Create the figure and axes
-        self.fig, self.ax = plt.subplots()
+        self.fig, self.axs = plt.subplots(
+            n_imgs_row, 2 * n_imgs_row, width_ratios=[2, 1] * n_imgs_row
+        )
+        self.axs = self.axs.reshape(-1)
 
         # Show the env name in the window title
         # self.fig.canvas.setWindowTitle(title)
 
         # Turn off x/y axis numbering/ticks
-        self.ax.xaxis.set_ticks_position('none')
-        self.ax.yaxis.set_ticks_position('none')
-        _ = self.ax.set_xticklabels([])
-        _ = self.ax.set_yticklabels([])
+        for i in range(len(self.axs)):
+            self.axs[i].xaxis.set_ticks_position("none")
+            self.axs[i].yaxis.set_ticks_position("none")
+            _ = self.axs[i].set_xticklabels([])
+            _ = self.axs[i].set_yticklabels([])
 
         # Flag indicating the window was closed
-        self.closed = False
+        # self.closed = False
 
-        def close_handler(evt):
-            self.closed = True
+        # def close_handler(evt):
+        #     self.closed = True
 
-        self.fig.canvas.mpl_connect('close_event', close_handler)
+        # self.fig.canvas.mpl_connect("close_event", close_handler)
 
-    def show_img(self, img):
+    def get_fig(self):
+        return self.fig
+
+    def _build_nested_pie(self, ax, local_map, n_arm_extensions=2, n_angles=8):
+        size = 0.3
+        v1 = np.ones((n_angles,))
+        vmax = 5
+        vmin = -5
+
+        local_map = (local_map.T).astype(np.float32)
+
+        def array_to_colors(a):
+            vvmax = max(vmax, a.max())
+            vvmin = min(vmin, a.min())
+            return ((a - vvmin) / (vvmax - vvmin))[:, None].repeat(3, axis=-1)
+
+        for i in range(n_arm_extensions):
+            labels = [str(x) for x in local_map[i].astype(np.int16)]
+            radius = (i + 1) / n_arm_extensions
+            colors = array_to_colors(local_map[i])
+            white_width = size * radius
+
+            ax.pie(
+                v1,
+                radius=radius,
+                colors=colors.tolist(),
+                labeldistance=1.1 * radius,
+                labels=labels,
+                wedgeprops=dict(width=white_width, edgecolor="w"),
+                startangle=90 - (180 / n_angles),
+            )
+
+        ax.set(aspect="equal")
+
+    def show_img(self, imgs_global, imgs_local, mode="human"):
         """
         Show an image or update the image being shown
         """
+        if mode == "gif":
+            matplotlib.use("Agg")
 
-        # Show the first image of the environment
-        if self.imshow_obj is None:
-            self.imshow_obj = self.ax.imshow(img, interpolation='bilinear')
-
-        self.imshow_obj.set_data(img)
-        self.fig.canvas.draw()
+        for i, (img_global, img_local) in enumerate(zip(imgs_global, imgs_local)):
+            # Show the first image of the environment
+            j = i * 2
+            self.axs[j].clear()
+            self.axs[j + 1].clear()
+            self.axs[j].imshow(img_global, interpolation="bilinear")
+            self._build_nested_pie(self.axs[j + 1], img_local)
+            if not mode == "gif":
+                self.fig.canvas.draw()
 
         # Let matplotlib process UI events
         # This is needed for interactive mode to work properly
         plt.pause(0.001)
-    
-    def set_title(self, title):
-        self.ax.set_title(title)
+
+    def set_title(self, title, idx):
+        self.axs[idx].set_title(title)
 
     def set_caption(self, text):
         """
@@ -71,7 +108,7 @@ class Window:
         """
 
         # Keyboard handler
-        self.fig.canvas.mpl_connect('key_press_event', key_handler)
+        self.fig.canvas.mpl_connect("key_press_event", key_handler)
 
     def show(self, block=True):
         """

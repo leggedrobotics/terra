@@ -28,3 +28,22 @@ If you want to render the environment, you are going to need the following Pytho
 matplotlib
 PyQt5
 ~~~
+
+## Pre-commit
+To setup the development tools, run:
+~~~
+pip install -r requirements_dev.txt
+~~~
+
+Then run:
+~~~
+pre-commit install
+~~~
+
+At this point you should be able to run:
+~~~
+pre-commit run --all-files
+~~~
+to check if all files pass the linters and if the unit tests don't fail.
+
+From now on, the `pre-commit` tool will run automatically at every commit.

@@ -1,15 +1,10 @@
 import unittest
-from typing import Tuple
+
 
 class TestBitwiseLogic(unittest.TestCase):
-
     @staticmethod
-    def _bitwise_in(a: Tuple[int, int, int], b: int):  
-        return (
-            (b == a[0]) |
-            (b == a[1]) |
-            (b == a[2])
-        )
+    def _bitwise_in(a: tuple[int, int, int], b: int):
+        return (b == a[0]) | (b == a[1]) | (b == a[2])
 
     def test_bitwise_logic_1(self):
         a = (0, 2, 3)

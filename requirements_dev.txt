@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest-cov
+pylint
+mypy
+pre-commit
+flake8

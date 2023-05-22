@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
+from terra.config import BatchConfig
+from terra.config import EnvConfig
+from terra.env import TerraEnv
 
-from src.env import TerraEnv
-from src.actions import TrackedActionType
-from src.config import EnvConfig
 # import argparse
 
 
 def redraw():
-    global state
+    global obs, state, tile_size
     # if not args.agent_view:
     #     img = env.render("rgb_array", tile_size=args.tile_size)
 
     # img = env.render(state=state, mode="human", tile_size=32, key_handler=lambda event: key_handler(event, state))
-    img = env.render(state=state, mode="human", tile_size=32, key_handler=key_handler)
+    env.render(state=state, mode="human", tile_size=tile_size, key_handler=key_handler)
 
-    env.window.show_img(img)
+    # env.window.show_img(img_global, img_local)
     # env.window_target.show_img(img_target)
 
 
@@ -30,9 +30,9 @@ def redraw():
 
 #     redraw()
 
-def key_handler(event):
 
-    global state
+def key_handler(event):
+    global state, action_type, obs
 
     print("pressed", event.key)
 
@@ -44,39 +44,61 @@ def key_handler(event):
     #     reset()
 
     if event.key == "left":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.ANTICLOCK)
+        state, (obs, reward, done, info) = env.step(state, action_type.anticlock())
         parse_step(state, reward, done, info)
 
     if event.key == "right":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CLOCK)
+        state, (obs, reward, done, info) = env.step(state, action_type.clock())
         parse_step(state, reward, done, info)
 
     if event.key == "up":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.FORWARD)
+        state, (obs, reward, done, info) = env.step(state, action_type.forward())
         parse_step(state, reward, done, info)
 
     if event.key == "down":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.BACKWARD)
+        state, (obs, reward, done, info) = env.step(state, action_type.backward())
         parse_step(state, reward, done, info)
 
     if event.key == "a":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_ANTICLOCK)
+        state, (obs, reward, done, info) = env.step(
+            state, action_type.cabin_anticlock()
+        )
         parse_step(state, reward, done, info)
 
     if event.key == "d":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.CABIN_CLOCK)
+        state, (obs, reward, done, info) = env.step(state, action_type.cabin_clock())
         parse_step(state, reward, done, info)
 
     if event.key == "e":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.EXTEND_ARM)
+        state, (obs, reward, done, info) = env.step(state, action_type.extend_arm())
         parse_step(state, reward, done, info)
 
     if event.key == "r":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.RETRACT_ARM)
+        state, (obs, reward, done, info) = env.step(state, action_type.retract_arm())
+        parse_step(state, reward, done, info)
+
+    if event.key == "o":
+        state, (obs, reward, done, info) = env.step(state, action_type.clock_forward())
+        parse_step(state, reward, done, info)
+
+    if event.key == "k":
+        state, (obs, reward, done, info) = env.step(state, action_type.clock_backward())
+        parse_step(state, reward, done, info)
+
+    if event.key == "i":
+        state, (obs, reward, done, info) = env.step(
+            state, action_type.anticlock_forward()
+        )
+        parse_step(state, reward, done, info)
+
+    if event.key == "l":
+        state, (obs, reward, done, info) = env.step(
+            state, action_type.anticlock_backward()
+        )
         parse_step(state, reward, done, info)
 
     if event.key == " ":
-        _, (state, reward, done, info) = env.step(state, TrackedActionType.DO)
+        state, (obs, reward, done, info) = env.step(state, action_type.do())
         parse_step(state, reward, done, info)
         return
 
@@ -116,7 +138,7 @@ def parse_step(obs, reward, done, info):
 #     "--tile_size", type=int, help="size at which to render tiles", default=32
 # )
 # parser.add_argument(
-#     "--agent_view", 
+#     "--agent_view",
 #     default=False,
 #     help="draw the agent sees (partially observable view)",
 #     action="store_true",
@@ -138,17 +160,24 @@ def parse_step(obs, reward, done, info):
 #            "cabin_turn_reward": -0.05, # ok
 #            "terminal_reward": 10}
 
-env = TerraEnv(EnvConfig(), rendering=True)
+env_cfg = EnvConfig()
+batch_cfg = BatchConfig()
+action_type = batch_cfg.action_type
+env = TerraEnv(env_cfg, rendering=True)
 print(env)
 seed = 24
-state = env.reset(seed=seed)
+state, obs = env.reset(seed=seed)
+
+tile_size = 16
+
 # if args.agent_view:
 #     env = FullyObsWrapper(env)
 # env = ImgObsWrapper(env)
 
 # window = Window('heightgrid - ' + args.env)
 # env.render(state=state, key_handler=lambda event: key_handler(event, state), block=True)
-env.render(state=state, key_handler=key_handler, block=True)
+state, (obs, reward, done, info) = env.step(state, action_type.do_nothing())
+env.render(state=state, key_handler=key_handler, block=True, tile_size=tile_size)
 
 # env.window.reg_key_handler(key_handler)
 # env.window_target.reg_key_handler(key_handler)
