@@ -15,7 +15,7 @@ class MapType(IntEnum):
     RECTANGULAR_SINGLE_TRENCH = 2
     SQUARE_SINGLE_RAMP = 3
     SQUARE_SINGLE_TRENCH_RIGHT_SIDE = 4
-    SINGLE_TILE_SAME_POSITION=5
+    SINGLE_TILE_SAME_POSITION = 5
 
 
 class MapParams(NamedTuple):
@@ -164,14 +164,16 @@ def single_tile(
     map = map.at[x, y].set(map_params.depth)
     return map, key
 
+
 def single_tile_same_position(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ):
     map = jnp.zeros((width, height), dtype=IntMap)
     x = jnp.full((1,), 1)
-    y = jnp.full((1,), height-1)
+    y = jnp.full((1,), 5)
     map = map.at[x, y].set(map_params.depth)
     return map, key
+
 
 def single_square_trench(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams

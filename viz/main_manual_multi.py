@@ -205,7 +205,7 @@ tile_size = 16
 # window = Window('heightgrid - ' + args.env)
 # env.render(states=states, key_handler=lambda event: key_handler(event, states), block=True)
 states, (obs, rewards, dones, infos) = env.step(
-    states, batch_cfg.action_type.new(jnp.array([[-1], [-1], [-1]]))
+    states, action_type.new(action_type.do_nothing().action[None].repeat(3, 0))
 )
 env.terra_env.render_obs(obs, key_handler=key_handler, block=True, tile_size=tile_size)
 
