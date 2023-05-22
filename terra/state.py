@@ -100,7 +100,11 @@ class State(NamedTuple):
             IntLowDim
         )
 
-        state = jax.lax.switch(offset_idx + action.action[0], handlers_list)
+        state = jax.lax.cond(
+            action.action[0] == -1,
+            self._do_nothing,
+            lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
+        )
 
         return state._replace(env_steps=state.env_steps + 1)
 
