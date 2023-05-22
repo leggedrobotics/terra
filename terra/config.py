@@ -67,11 +67,18 @@ class MapParamsSquareSingleTileSamePosition(MapParams):
     depth: int = -1
 
 
+class MapParamsSquareSingleTileEasyPosition(MapParams):
+    type: MapType = MapType.SINGLE_TILE_EASY_POSITION
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTileSamePosition()
+    params: MapParams = MapParamsSquareSingleTileEasyPosition()
 
 
 class ActionMapConfig(MapConfig):
@@ -126,7 +133,7 @@ class Rewards(NamedTuple):
     dig_correct: Float = 1.0  # given if the new map is closer to target map than before
     dump_correct: Float = 0.2  # implemented as dump where not digged
 
-    terminal: Float = 10.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: Float = 3.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
 
 class EnvConfig(NamedTuple):
