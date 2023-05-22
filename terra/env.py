@@ -85,9 +85,8 @@ class TerraEnv:
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
-        img_global = imgs_global[0]
 
-        img_local = state.world.local_map.map
+        imgs_local = state.world.local_map.map
 
         if key_handler:
             if mode == "human":
@@ -95,7 +94,7 @@ class TerraEnv:
                     title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
                     idx=0,
                 )
-                self.window.show_img([img_global], [img_local], mode)
+                self.window.show_img(imgs_global, [imgs_local], mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
         if mode == "gif":
@@ -103,10 +102,10 @@ class TerraEnv:
                 title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
                 idx=0,
             )
-            self.window.show_img([img_global], [img_local], mode)
+            self.window.show_img(imgs_global, [imgs_local], mode)
             # self.window.show(block)
 
-        return img_global, img_local
+        return imgs_global, imgs_local
 
     def render_obs(
         self,
@@ -136,9 +135,9 @@ class TerraEnv:
 
         if key_handler:
             if mode == "human":
-                self.window.set_title(
-                    title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
-                )
+                # self.window.set_title(
+                #     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
+                # )
                 self.window.show_img(imgs_global, imgs_local, mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
