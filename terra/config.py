@@ -60,11 +60,18 @@ class MapParamsSquareSingleTrenchRightSide(MapParams):
     depth: int = -1
 
 
+class MapParamsSquareSingleTileSamePosition(MapParams):
+    type: MapType = MapType.SINGLE_TILE_SAME_POSITION
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTile()
+    params: MapParams = MapParamsSquareSingleTileSamePosition()
 
 
 class ActionMapConfig(MapConfig):
@@ -102,22 +109,22 @@ class AgentConfig(NamedTuple):
 class Rewards(NamedTuple):
     existence: Float = -0.01
 
-    collision_move: Float = -0.02
+    collision_move: Float = -0.2
     move_while_loaded: Float = 0.0
-    move: Float = -0.01
+    move: Float = -0.1
 
-    collision_turn: Float = -0.02
-    base_turn: Float = -0.01
+    collision_turn: Float = -0.2
+    base_turn: Float = -0.05
 
     cabin_turn: Float = -0.01
 
     dig_wrong: Float = (
-        -0.05
+        -0.2
     )  # given both if loaded stayed the same, or if new map is not closer than old to target
-    dump_wrong: Float = -0.01  # given if loaded stayed the same
+    dump_wrong: Float = -0.1  # given if loaded stayed the same
 
-    dig_correct: Float = 0.2  # given if the new map is closer to target map than before
-    dump_correct: Float = 0.1  # implemented as dump where not digged
+    dig_correct: Float = 1.0  # given if the new map is closer to target map than before
+    dump_correct: Float = 0.2  # implemented as dump where not digged
 
     terminal: Float = 10.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
