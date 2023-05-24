@@ -117,7 +117,10 @@ class LocalMapWrapper:
         local_cyl_height_map = jax.vmap(
             jax.vmap(
                 lambda x: (
-                    state.world.action_map.map
+                    (
+                        state.world.target_map.map
+                        - jnp.clip(state.world.action_map.map, a_max=0)
+                    )
                     * x.reshape(state.world.width, state.world.height)
                 ).sum()
             )
