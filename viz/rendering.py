@@ -430,13 +430,13 @@ class RenderingEngine:
         ax_max = jax.vmap(lambda x: np.max(x[:, 0]))(agent_corners).astype(np.int16)
 
         agent_ymin = ay_min * tile_size
-        agent_ymax = ay_max * tile_size
+        agent_ymax = (ay_max + 1) * tile_size
         agent_xmin = ax_min * tile_size
-        agent_xmax = ax_max * tile_size
+        agent_xmax = (ax_max + 1) * tile_size
 
         agent_imgs = self.render_agent(
-            ax_max - ax_min,
-            ay_max - ay_min,
+            ax_max - ax_min + 1,
+            ay_max - ay_min + 1,
             tile_size,
             np.array(base_dir),
             np.array(cabin_dir),
