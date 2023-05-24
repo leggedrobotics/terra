@@ -118,20 +118,20 @@ class Rewards(NamedTuple):
 
     collision_move: Float = -0.2
     move_while_loaded: Float = 0.0
-    move: Float = -0.1
+    move: Float = -0.05
 
     collision_turn: Float = -0.2
-    base_turn: Float = -0.05
+    base_turn: Float = -0.1
 
-    cabin_turn: Float = -0.01
+    cabin_turn: Float = -0.02
 
     dig_wrong: Float = (
         -0.2
     )  # given both if loaded stayed the same, or if new map is not closer than old to target
-    dump_wrong: Float = -0.1  # given if loaded stayed the same
+    dump_wrong: Float = -0.2  # given if loaded stayed the same
 
     dig_correct: Float = 1.0  # given if the new map is closer to target map than before
-    dump_correct: Float = 0.2  # implemented as dump where not digged
+    dump_correct: Float = 1.0  # implemented as dump where not digged
 
     terminal: Float = 3.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
