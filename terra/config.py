@@ -149,12 +149,6 @@ class EnvConfig(NamedTuple):
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
     max_steps_in_episode: int = 10
 
-    def __hash__(self) -> int:
-        return hash(0)
-
-    def __eq__(self, _o: "EnvConfig") -> bool:
-        return self.tile_size == _o.tile_size
-
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
