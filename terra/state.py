@@ -728,18 +728,20 @@ class State(NamedTuple):
         dig_dump_mask_cart_x = map_local_coords[0].copy()  # TODO is copy necessary?
         dig_dump_mask_cart_y = map_local_coords[1].copy()  # TODO is copy necessary?
 
+        eps = self.env_cfg.tile_size / 2  # add margin to avoid rounding errors
+
         dig_dump_mask_cart_x = jnp.where(
             jnp.logical_or(
-                dig_dump_mask_cart_x >= jnp.floor(agent_width / 2),
-                dig_dump_mask_cart_x <= -jnp.floor(agent_width / 2),
+                dig_dump_mask_cart_x >= jnp.floor((agent_width + eps) / 2),
+                dig_dump_mask_cart_x <= -jnp.floor((agent_width + eps) / 2),
             ),
             1,
             0,
         )
         dig_dump_mask_cart_y = jnp.where(
             jnp.logical_or(
-                dig_dump_mask_cart_y >= jnp.floor(agent_height / 2),
-                dig_dump_mask_cart_y <= -jnp.floor(agent_height / 2),
+                dig_dump_mask_cart_y >= jnp.floor((agent_height + eps) / 2),
+                dig_dump_mask_cart_y <= -jnp.floor((agent_height + eps) / 2),
             ),
             1,
             0,
@@ -747,7 +749,6 @@ class State(NamedTuple):
         dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(
             jnp.bool_
         )
-
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
