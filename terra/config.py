@@ -137,11 +137,13 @@ class Rewards(NamedTuple):
 
     dig_wrong: Float = (
         -0.2
-    )  # given both if loaded stayed the same, or if new map is not closer than old to target
+    )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: Float = -0.2  # given if loaded stayed the same
 
-    dig_correct: Float = 1.0  # given if the new map is closer to target map than before
-    dump_correct: Float = 1.0  # implemented as dump where not digged
+    dig_correct: Float = (
+        1.0  # dig where the target map is negative, and not more than required
+    )
+    dump_correct: Float = 1.0  # dump where the target map is positive (TODO implement positive part of target map)
 
     terminal: Float = 3.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
