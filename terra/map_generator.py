@@ -17,6 +17,7 @@ class MapType(IntEnum):
     SQUARE_SINGLE_TRENCH_RIGHT_SIDE = 4
     SINGLE_TILE_SAME_POSITION = 5
     SINGLE_TILE_EASY_POSITION = 6
+    MULTIPLE_SINGLE_TILES = 7
 
 
 class MapParams(NamedTuple):
@@ -70,6 +71,7 @@ class GridMap(NamedTuple):
                 partial(single_square_trench_right_side, width, height),
                 partial(single_tile_same_position, width, height),
                 partial(single_tile_easy_position, width, height),
+                partial(multiple_single_tiles, width, height),
             ],
             key,
             map_params,
@@ -186,6 +188,19 @@ def single_tile_easy_position(
     x = jax.random.randint(subkey, (1,), minval=0, maxval=width // 2)
     key, subkey = jax.random.split(key)
     y = jax.random.randint(subkey, (1,), minval=height // 2, maxval=height)
+    map = map.at[x, y].set(map_params.depth)
+    return map, key
+
+
+def multiple_single_tiles(
+    width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
+):
+    n_tiles = 4
+    map = jnp.zeros((width, height), dtype=IntMap)
+    key, subkey = jax.random.split(key)
+    x = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
+    key, subkey = jax.random.split(key)
+    y = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
     map = map.at[x, y].set(map_params.depth)
     return map, key
 

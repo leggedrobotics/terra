@@ -74,11 +74,18 @@ class MapParamsSquareSingleTileEasyPosition(MapParams):
     depth: int = -1
 
 
+class MapParamsMultipleSingleTiles(MapParams):
+    type: MapType = MapType.MULTIPLE_SINGLE_TILES
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTile()
+    params: MapParams = MapParamsMultipleSingleTiles()
 
 
 class ActionMapConfig(MapConfig):
