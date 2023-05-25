@@ -43,7 +43,7 @@ class State(NamedTuple):
     def new(cls, key: jax.random.KeyArray, env_cfg: EnvConfig) -> "State":
         world, key = GridWorld.new(key, env_cfg)
 
-        agent = Agent.new(env_cfg)
+        agent, key = Agent.new(key, env_cfg)
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )

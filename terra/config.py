@@ -10,8 +10,8 @@ from terra.utils import Float
 
 class MapDims(NamedTuple):
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 15.0  # in meters
-    height_m: Float = 15.0  # in meters
+    width_m: Float = 60.0  # in meters
+    height_m: Float = 60.0  # in meters
 
 
 class MapConfig(NamedTuple):
@@ -78,7 +78,7 @@ class MapParamsSquareSingleTileEasyPosition(MapParams):
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsSquareSingleTileEasyPosition()
+    params: MapParams = MapParamsSquareSingleTile()
 
 
 class ActionMapConfig(MapConfig):
@@ -86,6 +86,9 @@ class ActionMapConfig(MapConfig):
 
 
 class AgentConfig(NamedTuple):
+    random_init_pos: bool = True
+    random_init_base_angle: bool = True
+
     angles_base: int = 4
     angles_cabin: int = 8
 
@@ -147,7 +150,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 10
+    max_steps_in_episode: int = 100
 
 
 class BatchConfig(NamedTuple):
