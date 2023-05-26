@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from terra.config import EnvConfig
 from terra.state import State
@@ -61,7 +62,7 @@ class TraversabilityMaskWrapper:
 
 class LocalMapWrapper:
     @staticmethod
-    def wrap(state: State) -> State:
+    def _wrap(state: State, map_to_wrap: Array) -> Array:
         """
         Encodes the local map in the GridWorld.
 
@@ -117,10 +118,7 @@ class LocalMapWrapper:
         local_cyl_height_map = jax.vmap(
             jax.vmap(
                 lambda x: (
-                    (
-                        state.world.target_map.map
-                        - jnp.clip(state.world.action_map.map, a_max=0)
-                    )
+                    (map_to_wrap)
                     * x.reshape(state.world.width, state.world.height)
                 ).sum()
             )
@@ -131,10 +129,28 @@ class LocalMapWrapper:
             local_cyl_height_map, -current_arm_angle, axis=0
         )
 
+        return local_cyl_height_map.astype(IntLowDim)
+
+
+    @staticmethod
+    def wrap_target_map(state: State) -> State:
+        local_map_target = LocalMapWrapper._wrap(state, state.world.target_map.map)
         return state._replace(
             world=state.world._replace(
-                local_map=state.world.local_map._replace(
-                    map=local_cyl_height_map.astype(IntLowDim)
+                local_map_target=state.world.local_map_target._replace(
+                    map=local_map_target
+                )
+            )
+        )
+
+    
+    @staticmethod
+    def wrap_action_map(state: State) -> State:
+        local_map_action = LocalMapWrapper._wrap(state, state.world.action_map.map)
+        return state._replace(
+            world=state.world._replace(
+                local_map_action=state.world.local_map_action._replace(
+                    map=local_map_action
                 )
             )
         )

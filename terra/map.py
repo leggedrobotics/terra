@@ -16,7 +16,8 @@ class GridWorld(NamedTuple):
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
-    local_map: GridMap = GridMap.dummy_map()
+    local_map_target: GridMap = GridMap.dummy_map()
+    local_map_action: GridMap = GridMap.dummy_map()
 
     @property
     def width(self) -> int:

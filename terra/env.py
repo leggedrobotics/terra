@@ -46,7 +46,8 @@ class TerraEnv:
         state = State.new(key, self.env_cfg)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap(state)
+        state = LocalMapWrapper.wrap_target_map(state)
+        state = LocalMapWrapper.wrap_action_map(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -58,7 +59,8 @@ class TerraEnv:
         state = state._reset(self.env_cfg)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap(state)
+        state = LocalMapWrapper.wrap_target_map(state)
+        state = LocalMapWrapper.wrap_action_map(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -86,7 +88,7 @@ class TerraEnv:
             agent_height=self.env_cfg.agent.height,
         )
 
-        imgs_local = state.world.local_map.map
+        imgs_local = state.world.local_map_action.map
 
         if key_handler:
             if mode == "human":
@@ -131,7 +133,7 @@ class TerraEnv:
             agent_height=self.env_cfg.agent.height,
         )
 
-        imgs_local = obs["local_map"]
+        imgs_local = obs["local_map_action"]
 
         if key_handler:
             if mode == "human":
@@ -175,7 +177,8 @@ class TerraEnv:
         reward = state._get_reward(new_state, action)
 
         new_state = TraversabilityMaskWrapper.wrap(new_state)
-        new_state = LocalMapWrapper.wrap(new_state)
+        new_state = LocalMapWrapper.wrap_target_map(new_state)
+        new_state = LocalMapWrapper.wrap_action_map(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
@@ -212,7 +215,8 @@ class TerraEnv:
         )
         return {
             "agent_state": agent_state,
-            "local_map": state.world.local_map.map,
+            "local_map_action": state.world.local_map_action.map,
+            "local_map_target": state.world.local_map_target.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
@@ -350,7 +354,11 @@ class TerraEnvBatch:
         """
         return {
             "agent_states": (6,),
-            "local_map": (
+            "local_map_action": (
+                self.env_cfg.agent.angles_cabin,
+                self.env_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target": (
                 self.env_cfg.agent.angles_cabin,
                 self.env_cfg.agent.max_arm_extension + 1,
             ),
