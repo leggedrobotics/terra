@@ -1229,10 +1229,16 @@ class State(NamedTuple):
 
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
-        relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
-        done_task = jnp.all(target_map - relevant_action_map >= 0) & (
-            agent_loaded[0] == 0
-        )
+        relevant_action_map_positive_inverse = jnp.where(target_map > 0, 0, action_map)
+        done_dump = jnp.all(relevant_action_map_positive_inverse <= 0)
+
+        relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
+        target_map_negative = jnp.clip(target_map, a_max=0)
+        done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
+
+        done_unload = agent_loaded[0] == 0
+
+        done_task = done_dump & done_dig & done_unload
         return done_task
 
     def _is_done(
