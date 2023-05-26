@@ -19,6 +19,7 @@ class MapType(IntEnum):
     SINGLE_TILE_EASY_POSITION = 6
     MULTIPLE_SINGLE_TILES = 7
     MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
+    TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
 
 
 class MapParams(NamedTuple):
@@ -74,6 +75,7 @@ class GridMap(NamedTuple):
                 partial(single_tile_easy_position, width, height),
                 partial(multiple_single_tiles, width, height),
                 partial(multiple_single_tiles_with_dump_tiles, width, height),
+                partial(two_square_trenches_two_dump_areas, width, height),
             ],
             key,
             map_params,
@@ -258,6 +260,71 @@ def single_square_trench(
         trench_size_edge,
         trench_depth,
     )
+    return map, key
+
+
+def two_square_trenches_two_dump_areas(
+    width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
+) -> Array:
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
+
+    key, subkey = jax.random.split(key)
+    trench_size_edge = jax.random.randint(
+        subkey, (1,), minval=trench_size_edge_min, maxval=trench_size_edge_max + 1
+    )
+
+    maps = []
+    # First trench
+    for i in range(2):
+        key, subkey = jax.random.split(key)
+        x_top_left = jax.random.randint(
+            subkey, (1,), minval=0, maxval=width - trench_size_edge - 1
+        )
+        key, subkey = jax.random.split(key)
+        y_top_left = jax.random.randint(
+            subkey, (1,), minval=0, maxval=height - trench_size_edge - 1
+        )
+        map = _get_generic_rectangular_trench(
+            width,
+            height,
+            x_top_left,
+            y_top_left,
+            trench_size_edge,
+            trench_size_edge,
+            trench_depth,
+        )
+        maps.append(map)
+
+    # Dump zone 1
+    for i in range(2):
+        key, subkey = jax.random.split(key)
+        x_top_left = jax.random.randint(
+            subkey, (1,), minval=0, maxval=width - trench_size_edge - 1
+        )
+        key, subkey = jax.random.split(key)
+        y_top_left = jax.random.randint(
+            subkey, (1,), minval=0, maxval=height - trench_size_edge - 1
+        )
+        map = _get_generic_rectangular_trench(
+            width,
+            height,
+            x_top_left,
+            y_top_left,
+            trench_size_edge,
+            trench_size_edge,
+            1,
+        )
+        maps.append(map)
+
+    map = jnp.zeros_like(maps[0])
+    for m in maps:
+        map += m
+    # Avoid some tiles with more depth or with higher than 1 dump
+    map = jnp.where(map < 0, trench_depth, map)
+    map = jnp.where(map > 0, 1, map)
+
     return map, key
 
 

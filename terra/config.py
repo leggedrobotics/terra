@@ -10,8 +10,8 @@ from terra.utils import Float
 
 class MapDims(NamedTuple):
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 60.0  # in meters
-    height_m: Float = 60.0  # in meters
+    width_m: Float = 30.0  # in meters
+    height_m: Float = 30.0  # in meters
 
 
 class MapConfig(NamedTuple):
@@ -88,11 +88,18 @@ class MapParamsMultipleSingleTilesWithDumpTiles(MapParams):
     depth: int = -1
 
 
+class MapParamsTwoSquareTrenchesTwoDumpAreas(MapParams):
+    type: MapType = MapType.TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsMultipleSingleTilesWithDumpTiles()
+    params: MapParams = MapParamsTwoSquareTrenchesTwoDumpAreas()
 
 
 class ActionMapConfig(MapConfig):
@@ -166,7 +173,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 100
+    max_steps_in_episode: int = 150
 
 
 class BatchConfig(NamedTuple):
