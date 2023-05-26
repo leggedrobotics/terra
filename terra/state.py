@@ -769,6 +769,7 @@ class State(NamedTuple):
         dump_mask: Array,
         even_volume_per_tile: IntLowDim,
         remaining_volume: IntLowDim,
+        target_map: Array,
     ) -> Array:
         """
         TODO: delta_dig_remaining now is added with a naive approach - should be added
@@ -782,14 +783,28 @@ class State(NamedTuple):
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        dump_mask = dump_mask.astype(IntMap)
+        # Check if there is any target dump tile within the mask
+        target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
+        target_dump_volume = target_map_dump_mask.sum()
+        dump_mask, dump_volume = jax.lax.cond(
+            target_dump_volume > 0,
+            lambda: (IntMap(target_map_dump_mask), target_dump_volume),
+            lambda: (IntMap(dump_mask), dump_mask.sum()),
+        )
+
+        loaded_volume = self.agent.agent_state.loaded
+        remaining_volume = loaded_volume % dump_volume
+        even_volume_per_tile = (loaded_volume - remaining_volume) / dump_volume
+
         delta_dig = self.env_cfg.agent.dig_depth * dump_mask * even_volume_per_tile
         delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
+
         delta_dig_remaining = jnp.where(
             jnp.logical_and(jnp.cumsum(dump_mask) <= remaining_volume, dump_mask),
             1,
             delta_dig_remaining,
         )
+
         return (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
 
     def _get_map_local_and_cyl_coords(self):
@@ -899,7 +914,11 @@ class State(NamedTuple):
         def _apply_dump():
             flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map, dump_mask, even_volume_per_tile, remaining_volume
+                flattened_action_map,
+                dump_mask,
+                even_volume_per_tile,
+                remaining_volume,
+                self.world.target_map.map,
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape

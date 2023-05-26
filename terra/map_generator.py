@@ -18,6 +18,7 @@ class MapType(IntEnum):
     SINGLE_TILE_SAME_POSITION = 5
     SINGLE_TILE_EASY_POSITION = 6
     MULTIPLE_SINGLE_TILES = 7
+    MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
 
 
 class MapParams(NamedTuple):
@@ -72,6 +73,7 @@ class GridMap(NamedTuple):
                 partial(single_tile_same_position, width, height),
                 partial(single_tile_easy_position, width, height),
                 partial(multiple_single_tiles, width, height),
+                partial(multiple_single_tiles_with_dump_tiles, width, height),
             ],
             key,
             map_params,
@@ -195,13 +197,35 @@ def single_tile_easy_position(
 def multiple_single_tiles(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ):
-    n_tiles = 4
+    n_tiles = 4  # TODO config
     map = jnp.zeros((width, height), dtype=IntMap)
     key, subkey = jax.random.split(key)
     x = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
     y = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
     map = map.at[x, y].set(map_params.depth)
+    return map, key
+
+
+def multiple_single_tiles_with_dump_tiles(
+    width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
+):
+    n_tiles = 4  # TODO config
+    map = jnp.zeros((width, height), dtype=IntMap)
+
+    # Dig
+    key, subkey = jax.random.split(key)
+    x_dig = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
+    key, subkey = jax.random.split(key)
+    y_dig = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
+    map = map.at[x_dig, y_dig].set(map_params.depth)
+
+    # Dump
+    key, subkey = jax.random.split(key)
+    x_dump = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
+    key, subkey = jax.random.split(key)
+    y_dump = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
+    map = map.at[x_dump, y_dump].set(-map_params.depth)
     return map, key
 
 

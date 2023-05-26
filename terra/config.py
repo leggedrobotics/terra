@@ -81,11 +81,18 @@ class MapParamsMultipleSingleTiles(MapParams):
     depth: int = -1
 
 
+class MapParamsMultipleSingleTilesWithDumpTiles(MapParams):
+    type: MapType = MapType.MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(MapConfig):
-    params: MapParams = MapParamsMultipleSingleTiles()
+    params: MapParams = MapParamsMultipleSingleTilesWithDumpTiles()
 
 
 class ActionMapConfig(MapConfig):
