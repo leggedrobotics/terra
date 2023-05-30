@@ -8,17 +8,20 @@ class Window:
     Window to draw a gridworld instance using Matplotlib
     """
 
-    def __init__(self, title, n_imgs_row):
+    def __init__(self, title, n_imgs_row, show_local=False):
         self.fig = None
 
         self.imshow_obj1 = None
+        self.show_local = show_local
 
         # Create the figure and axes
-        self.fig, self.axs = plt.subplots(
-            n_imgs_row, 2 * n_imgs_row, width_ratios=[2, 1] * n_imgs_row
-        )
+        if show_local:
+            self.fig, self.axs = plt.subplots(
+                n_imgs_row, 2 * n_imgs_row, width_ratios=[2, 1] * n_imgs_row
+            )
+        else:
+            self.fig, self.axs = plt.subplots(n_imgs_row, n_imgs_row)
         self.axs = self.axs.reshape(-1)
-
         # Show the env name in the window title
         # self.fig.canvas.setWindowTitle(title)
 
@@ -71,22 +74,34 @@ class Window:
 
         ax.set(aspect="equal")
 
-    def show_img(self, imgs_global, imgs_local, mode="human"):
+    def show_img(self, imgs_global, imgs_local=None, mode="human"):
         """
         Show an image or update the image being shown
         """
         if mode == "gif":
             matplotlib.use("Agg")
 
-        for i, (img_global, img_local) in enumerate(zip(imgs_global, imgs_local)):
-            # Show the first image of the environment
-            j = i * 2
-            self.axs[j].clear()
-            self.axs[j + 1].clear()
-            self.axs[j].imshow(img_global, interpolation="bilinear")
-            self._build_nested_pie(self.axs[j + 1], img_local)
-            if not mode == "gif":
-                self.fig.canvas.draw()
+        if imgs_local is not None and self.show_local:
+            for i, (img_global, img_local) in enumerate(zip(imgs_global, imgs_local)):
+                # Show the first image of the environment
+                j = i * 2
+                self.axs[j].clear()
+                self.axs[j + 1].clear()
+                self.axs[j].imshow(img_global, interpolation="bilinear")
+                self._build_nested_pie(self.axs[j + 1], img_local)
+                self.axs[j].set_yticklabels([])
+                self.axs[j].set_xticklabels([])
+                if not mode == "gif":
+                    self.fig.canvas.draw()
+        else:
+            for i, img_global in enumerate(imgs_global):
+                # Show the first image of the environment
+                self.axs[i].clear()
+                self.axs[i].imshow(img_global, interpolation="bilinear")
+                self.axs[i].set_yticklabels([])
+                self.axs[i].set_xticklabels([])
+                if not mode == "gif":
+                    self.fig.canvas.draw()
 
         # Let matplotlib process UI events
         # This is needed for interactive mode to work properly
