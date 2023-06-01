@@ -9,8 +9,8 @@ from terra.utils import Float
 
 
 class MapDims(NamedTuple):
-    width_m: Float = 10.0  # in meters
-    height_m: Float = 10.0  # in meters
+    width_m: Float = 20.0  # in meters
+    height_m: Float = 20.0  # in meters
     tile_size: Float = 1.5  # in meters
 
 
@@ -187,11 +187,11 @@ class Rewards(NamedTuple):
     dump_wrong: Float = -0.2  # given if loaded stayed the same
 
     dig_correct: Float = (
-        1.0  # dig where the target map is negative, and not more than required
+        2.0  # dig where the target map is negative, and not more than required
     )
-    dump_correct: Float = 1.0  # dump where the target map is positive (TODO implement positive part of target map)
+    dump_correct: Float = 2.0  # dump where the target map is positive
 
-    terminal: Float = 3.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: Float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
 
 class EnvConfig(NamedTuple):
@@ -208,9 +208,13 @@ class EnvConfig(NamedTuple):
     max_steps_in_episode: int = 10
 
     @staticmethod
-    def from_map_dims(map_dims: MapDims) -> "EnvConfig":
+    def parametrized(
+        map_dims: MapDims,
+        max_steps_in_episode: int,
+    ) -> "EnvConfig":
         return EnvConfig(
             tile_size=map_dims.tile_size,
+            max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
             target_map=TargetMapConfig.from_map_dims(map_dims),
             action_map=ActionMapConfig.from_map_dims(map_dims),
