@@ -27,9 +27,7 @@ class TerraEnv:
             from viz.rendering import RenderingEngine
 
             self.window = Window("Terra", n_imgs_row)
-            self.rendering_engine = RenderingEngine(
-                x_dim=env_cfg.target_map.width, y_dim=env_cfg.target_map.height
-            )
+            self.rendering_engine = RenderingEngine()
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
@@ -239,6 +237,12 @@ class TerraEnvBatch:
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
 
+    def __eq__(self, __o: object) -> bool:
+        return isinstance(__o, TerraEnvBatch) and self.env_cfg == __o.env_cfg
+
+    def __hash__(self) -> int:
+        return hash((TerraEnvBatch, self.env_cfg))
+
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, seeds: Array) -> State:
         return jax.vmap(self.terra_env.reset)(seeds)
@@ -265,85 +269,6 @@ class TerraEnvBatch:
         Total number of actions
         """
         return self.batch_cfg.action_type.get_num_actions()
-
-    # @property
-    # def observation_space(self) -> Dict[str, Dict[str, Array]]:
-    #     """
-    #     box around:
-    #         angle_base: 0, 3 -- discrete
-    #         angle_cabin: 0, 7 -- discrete
-    #         arm_extension: 0, 1 -- discrete
-    #         loaded: 0, N -- discrete
-
-    #         local_map: 8 x 2 x [-M, M] -- discrete
-    #         action_map: L1 x L2 x [-M, M] -- discrete
-    #         target_map: L1 x L2 x [-M, 0] -- discrete
-    #         traversability mask: L1 x L2 x [-1, 1] -- discrete
-
-    #     Note: both low and high values are inclusive.
-    #     """
-    #     observation_space = {"low": {},
-    #                          "high": {}}
-
-    #     low_agent_state = jnp.array(
-    #         [
-    #             0,  # angle_base
-    #             0,  # angle_cabin
-    #             0,  # arm_extension
-    #             0,  # loaded
-    #         ],
-    #         dtype=IntMap
-    #     )
-    #     high_agent_state = jnp.array(
-    #         [
-    #             self.env_cfg.agent.angles_base - 1,  # angle_base
-    #             self.env_cfg.agent.angles_cabin - 1,  # angle_cabin
-    #             self.env_cfg.agent.max_arm_extension,  # arm_extension
-    #             self.env_cfg.agent.max_loaded,  # loaded
-    #         ],
-    #         dtype=IntMap
-    #     )
-    #     observation_space["low"]["agent_states"] = low_agent_state
-    #     observation_space["high"]["agent_states"] = high_agent_state
-
-    #     arm_extensions = self.env_cfg.agent.max_arm_extension + 1
-    #     angles_cabin = self.env_cfg.agent.angles_cabin
-    #     low_local_map = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.min_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(arm_extensions, 0)[None].repeat(angles_cabin, 0)
-    #     high_local_map = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.max_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(arm_extensions, 0)[None].repeat(angles_cabin, 0)
-    #     observation_space["low"]["local_map"] = low_local_map
-    #     observation_space["high"]["local_map"] = high_local_map
-
-    #     n_grid_maps = 2
-    #     grid_map_width = self.env_cfg.action_map.width
-    #     grid_map_height = self.env_cfg.action_map.height
-    #     low_grid_maps = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.min_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(grid_map_height, 0)[None].repeat(grid_map_width, 0)
-    #     high_grid_maps = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.max_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(grid_map_height, 0)[None].repeat(grid_map_width, 0)
-    #     observation_space["low"]["active_map"] = low_local_map
-    #     observation_space["high"]["active_map"] = high_local_map
-
-    #     # TODO target map and traversability mask
-
-    #     return observation_space
 
     @property
     def observation_shapes(self) -> dict[str, tuple]:

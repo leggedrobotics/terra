@@ -21,7 +21,12 @@ class Window:
             )
         else:
             self.fig, self.axs = plt.subplots(n_imgs_row, n_imgs_row)
-        self.axs = self.axs.reshape(-1)
+
+        try:
+            self.axs = self.axs.reshape(-1)
+        except AttributeError:
+            self.axs = np.array([self.axs])
+
         # Show the env name in the window title
         # self.fig.canvas.setWindowTitle(title)
 

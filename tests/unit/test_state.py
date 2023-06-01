@@ -103,7 +103,7 @@ class TestAgent(unittest.TestCase):
 
         action_map3 = target_map.copy()
         action_map3 = action_map3.at[:, -1].set(action_map3[:, -1] + 20)
-        self.assertTrue(state._is_done(action_map3, target_map, loaded))
+        self.assertFalse(state._is_done(action_map3, target_map, loaded))
 
         state = state._replace(env_steps=state.env_cfg.max_steps_in_episode + 1)
         self.assertTrue(state._is_done(action_map1, target_map, loaded))

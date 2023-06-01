@@ -9,18 +9,9 @@ from terra.utils import Float
 
 
 class MapDims(NamedTuple):
+    width_m: Float = 10.0  # in meters
+    height_m: Float = 10.0  # in meters
     tile_size: Float = 1.5  # in meters
-    width_m: Float = 30.0  # in meters
-    height_m: Float = 30.0  # in meters
-
-
-class MapConfig(NamedTuple):
-    width: int = round(MapDims().width_m / MapDims().tile_size)
-    height: int = round(MapDims().height_m / MapDims().tile_size)
-
-    # Bounds on the volume per tile  # TODO implement in code
-    min_height: int = -10
-    max_height: int = 10
 
 
 # Map params #####
@@ -98,12 +89,38 @@ class MapParamsTwoSquareTrenchesTwoDumpAreas(MapParams):
 # end Map params #####
 
 
-class TargetMapConfig(MapConfig):
+class TargetMapConfig(NamedTuple):
     params: MapParams = MapParamsTwoSquareTrenchesTwoDumpAreas()
 
+    width: int = round(MapDims().width_m / MapDims().tile_size)
+    height: int = round(MapDims().height_m / MapDims().tile_size)
 
-class ActionMapConfig(MapConfig):
-    pass
+    # Bounds on the volume per tile  # TODO implement in code
+    min_height: int = -10
+    max_height: int = 10
+
+    @staticmethod
+    def from_map_dims(map_dims: MapDims) -> "TargetMapConfig":
+        return TargetMapConfig(
+            width=round(map_dims.width_m / map_dims.tile_size),
+            height=round(map_dims.height_m / map_dims.tile_size),
+        )
+
+
+class ActionMapConfig(NamedTuple):
+    width: int = round(MapDims().width_m / MapDims().tile_size)
+    height: int = round(MapDims().height_m / MapDims().tile_size)
+
+    # Bounds on the volume per tile  # TODO implement in code
+    min_height: int = -10
+    max_height: int = 10
+
+    @staticmethod
+    def from_map_dims(map_dims: MapDims) -> "ActionMapConfig":
+        return ActionMapConfig(
+            width=round(map_dims.width_m / map_dims.tile_size),
+            height=round(map_dims.height_m / map_dims.tile_size),
+        )
 
 
 class AgentConfig(NamedTuple):
@@ -136,6 +153,21 @@ class AgentConfig(NamedTuple):
         else round(3.5 / MapDims().tile_size) + 1
     )
 
+    @staticmethod
+    def from_map_dims(map_dims: MapDims) -> "AgentConfig":
+        return AgentConfig(
+            height=(
+                round(6.08 / map_dims.tile_size)
+                if (round(6.08 / map_dims.tile_size)) % 2 != 0
+                else round(6.08 / map_dims.tile_size) + 1
+            ),
+            width=(
+                round(3.5 / map_dims.tile_size)
+                if (round(3.5 / map_dims.tile_size)) % 2 != 0
+                else round(3.5 / map_dims.tile_size) + 1
+            ),
+        )
+
 
 class Rewards(NamedTuple):
     existence: Float = -0.01
@@ -167,13 +199,22 @@ class EnvConfig(NamedTuple):
 
     agent: AgentConfig = AgentConfig()
 
-    target_map: MapConfig = TargetMapConfig()
-    action_map: MapConfig = ActionMapConfig()
+    target_map: TargetMapConfig = TargetMapConfig()
+    action_map: ActionMapConfig = ActionMapConfig()
 
     rewards = Rewards()
 
     rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 150
+    max_steps_in_episode: int = 10
+
+    @staticmethod
+    def from_map_dims(map_dims: MapDims) -> "EnvConfig":
+        return EnvConfig(
+            tile_size=map_dims.tile_size,
+            agent=AgentConfig.from_map_dims(map_dims),
+            target_map=TargetMapConfig.from_map_dims(map_dims),
+            action_map=ActionMapConfig.from_map_dims(map_dims),
+        )
 
 
 class BatchConfig(NamedTuple):

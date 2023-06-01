@@ -7,22 +7,6 @@ import numpy as np
 
 from terra.state import State
 
-# import time
-
-# def downsample(img, factor):
-#     """
-#     Downsample an image along both dimensions by some factor
-#     """
-
-#     assert img.shape[0] % factor == 0
-#     assert img.shape[1] % factor == 0
-
-#     img = img.reshape([img.shape[0] // factor, factor, img.shape[1] // factor, factor, 3])
-#     img = img.mean(axis=3)
-#     img = img.mean(axis=1)
-
-#     return img
-
 
 def fill_coords(img, fn, color, batch_size):
     """
@@ -235,60 +219,9 @@ class AgentObject(GridObject):
 
 
 class RenderingEngine:
-    def __init__(self, x_dim, y_dim) -> None:
+    def __init__(self) -> None:
         self.tile_cache = {}
-        self.x_dim = x_dim
-        self.y_dim = y_dim
-        self.grid_object = [None] * (self.x_dim * self.y_dim)
-        self.height_grid_cache = np.zeros((self.x_dim, self.y_dim))
         self.first_render = True
-
-    # @classmethod
-    # def render_tile(
-    #         self, obj, height, base_dir=None, cabin_dir=None, tile_size=32, subdivs=3
-    # ):
-    #     """
-    #     Render a tile and cache the result
-    #     """
-
-    #     # Hash map lookup key for the cache
-
-    #     key = str(tile_size) + "h" + str(height)
-    #     key = obj.type + key if obj else key
-    #     # key = obj.encode() if obj else key
-
-    #     if key in self.tile_cache and obj is None:
-    #         return self.tile_cache[key]
-
-    #     img = np.zeros(
-    #         shape=(tile_size * subdivs, tile_size * subdivs, 3), dtype=np.uint16
-    #     )
-
-    #     # Draw the grid lines (top and left edges)
-
-    #     # if obj != None:
-    #     #     obj.render(img)
-    #     # else:
-    #     fill_coords(
-    #         img,
-    #         point_in_rect(0, 1, 0, 1),
-    #         np.array([255, 255, 255]) * (height + 3) / 7,
-    #     )
-    #     fill_coords(
-    #         img, point_in_rect(0, 0.031, 0, 1), (100, 100, 100)
-    #     )
-    #     fill_coords(
-    #         img, point_in_rect(0, 1, 0, 0.031), (100, 100, 100)
-    #     )
-
-    #     # Downsample the image to perform supersampling/anti-aliasing
-    #     img = downsample(img, subdivs)
-
-    #     # Cache the rendered tile
-
-    #     self.tile_cache[key] = img
-
-    #     return img
 
     def render_agent(
         self,
@@ -299,14 +232,6 @@ class RenderingEngine:
         cabin_dir=None,
         batch_size=1,
     ):
-        # draw the base a yellow rectangle with one side longer than the other
-        # to make it easier to see the direction
-
-        # imgs = np.zeros(
-        #     shape=(batch_size, tile_size * agent_width, tile_size * agent_height, 3),
-        #     dtype=np.uint16,
-        # )
-
         imgs = [
             jnp.zeros(
                 shape=(1, tile_size * agent_width[i], tile_size * agent_height[i], 3),
@@ -358,23 +283,11 @@ class RenderingEngine:
 
         return imgs
 
-    def get(self, i: int, j: int) -> GridObject:
-        """Retrieve object at location (i, j)
-
-        Args:
-            i (int): index of the x location
-            j (int): index of the y location
-        """
-        assert i <= self.x_dim, "Grid index i out of bound"
-        assert j <= self.y_dim, "Grid index j out of boudns"
-        return self.grid_object[i + self.x_dim * j]
-
-    # def _agent_occupancy_from_pos(agent_pos, agent_width, agent_height, base_dir):
-    #     pass
-
     def _render_grids(self, tile_size, height_grid):
-        width_px = self.x_dim * tile_size
-        height_px = self.y_dim * tile_size
+        x_dim = height_grid.shape[-2]
+        y_dim = height_grid.shape[-1]
+        width_px = x_dim * tile_size
+        height_px = y_dim * tile_size
 
         height_grid = np.array(height_grid)
 
