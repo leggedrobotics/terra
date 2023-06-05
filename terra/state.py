@@ -1038,7 +1038,7 @@ class State(NamedTuple):
                     )
                     <= 0
                 ),
-                lambda: 0.0,
+                lambda: self.env_cfg.rewards.dump_no_dump_area,
                 lambda: self.env_cfg.rewards.dump_correct,
             ),
         )
