@@ -4,8 +4,10 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
+from terra.map_utils.terrain_generation import generate_polygonal_bitmap
 from terra.utils import IntMap
 
 
@@ -20,6 +22,7 @@ class MapType(IntEnum):
     MULTIPLE_SINGLE_TILES = 7
     MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
     TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
+    RANDOM_MULTISHAPE = 10
 
 
 class MapParams(NamedTuple):
@@ -76,6 +79,7 @@ class GridMap(NamedTuple):
                 partial(multiple_single_tiles, width, height),
                 partial(multiple_single_tiles_with_dump_tiles, width, height),
                 partial(two_square_trenches_two_dump_areas, width, height),
+                partial(random_multishape, width, height),
             ],
             key,
             map_params,
@@ -424,3 +428,38 @@ def single_square_ramp(
         orientation,
     )
     return map, key
+
+
+def random_multishape(
+    width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
+) -> Array:
+    # TODO move to config
+    map_dict = {
+        "shapes": {
+            "triangle": 0,
+            "trapezoid": 0,
+            "rectangle": 1,
+            "pentagon": 1,
+            "hexagon": 1,
+            "L": 1,
+            "Z": 1,
+            # 'regular_polygon': 6,
+        },
+        "dimensions": (1000, 1000),
+        "max_edge": 400,
+        "min_edge": 50,
+        "radius": 300,
+        "regular_num_sides": [3, 4, 5],
+        "scale_factor": 0.7,
+        "area_threshold": 1000,
+    }
+
+    final_edge_size = width
+    # TODO convert following to JIT-compilable code
+    image = jax.pure_callback(
+        generate_polygonal_bitmap,
+        np.zeros((width, width), dtype=np.int8),
+        map_dict,
+        final_edge_size,
+    )
+    return jnp.array(image, dtype=IntMap), key

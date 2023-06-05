@@ -24,8 +24,10 @@ The function will return the map as a numpy array.
 """
 import random
 
-import cv2
 import numpy as np
+from cv2 import convexHull
+from cv2 import fillPoly
+from cv2 import polylines
 from shapely.geometry import Polygon
 from skimage.measure import block_reduce
 
@@ -47,17 +49,14 @@ def get_triangle(image, min_edge, max_edge, min_area, min_angle=1):
                 if all(d >= min_edge and d <= max_edge for d in distances):
                     # Check the angle between all pairs of edges
                     for i in range(len(vertices)):
-                        try:
-                            v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
-                            v2 = np.array([x, y]) - np.array(vertices[i])
-                            cosine_angle = np.dot(v1, v2) / (
-                                np.linalg.norm(v1) * np.linalg.norm(v2)
-                            )
-                            cosine_angle = np.clip(cosine_angle, -1, 1)
-                            angle = np.arccos(cosine_angle) * 180 / np.pi
-                        except RuntimeWarning:
-                            print("Runtime Warning encountered in get_triangle.")
-                            break
+                        v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
+                        v2 = np.array([x, y]) - np.array(vertices[i])
+                        cosine_angle = np.dot(v1, v2) / (
+                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        )
+                        cosine_angle = np.clip(cosine_angle, -1, 1)
+                        angle = np.arccos(cosine_angle) * 180 / np.pi
+
                         if angle < min_angle:
                             break
                     else:
@@ -90,17 +89,13 @@ def get_trapezoid(image, min_edge, max_edge, min_area, min_angle=30):
                 if all(d >= min_edge and d <= max_edge for d in distances):
                     # Check the angle between all pairs of edges
                     for i in range(len(vertices)):
-                        try:
-                            v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
-                            v2 = np.array([x, y]) - np.array(vertices[i])
-                            cosine_angle = np.dot(v1, v2) / (
-                                np.linalg.norm(v1) * np.linalg.norm(v2)
-                            )
-                            # cosine_angle = np.clip(cosine_angle, -1, 1)
-                            angle = np.arccos(cosine_angle) * 180 / np.pi
-                        except RuntimeWarning:
-                            print("Runtime Warning encountered in get_trapezoid.")
-                            break
+                        v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
+                        v2 = np.array([x, y]) - np.array(vertices[i])
+                        cosine_angle = np.dot(v1, v2) / (
+                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        )
+                        # cosine_angle = np.clip(cosine_angle, -1, 1)
+                        angle = np.arccos(cosine_angle) * 180 / np.pi
 
                         if angle < min_angle or angle > 0.9 * 180 or angle is np.nan:
                             break
@@ -308,14 +303,14 @@ def draw_shape(
     countour_color=(255, 255, 255),
     countour_thickness=10,
 ):
-    cv2.fillPoly(image, [vertices], color=color)
+    fillPoly(image, [vertices], color=color)
     # drow countour in grey
-    cv2.polylines(image, [vertices], True, countour_color, countour_thickness)
+    polylines(image, [vertices], True, countour_color, countour_thickness)
     return image
 
 
 def scale_shape(vertices, scale_factor=1.0):
-    hull = cv2.convexHull(vertices)
+    hull = convexHull(vertices)
     centroid = np.mean(hull, axis=0)
     scaled_vertices = (vertices - centroid) * scale_factor + centroid
     # make sure they are uint8
@@ -585,11 +580,35 @@ def downsample(image, final_edge_size: int):
     return image
 
 
+def image_to_bitmap(image):
+    """
+    Converts an RGB image to a single-channel (WxH) bitmap.
+
+    The following conversions are performed:
+    255 --> 0 (nothing there)
+    1 to 254 --> 1 (dump area)
+    0 --> -1 (dig area)
+    """
+    image = image.mean(axis=-1, keepdims=False)
+
+    image = np.where(image == 0, -1, image)
+    image = np.where((image > 0) & (image < 255), 1, image)
+    image = np.where(image == 255, 0, image)
+    return image.astype(np.int8)
+
+
+def generate_polygonal_bitmap(map_dict, final_edge_size):
+    image = generate_map(map_dict)
+    image = downsample(image, final_edge_size)
+    image = image_to_bitmap(image)
+    return image
+
+
 if __name__ == "__main__":
     map_dict = {
         "shapes": {
-            "triangle": 1,
-            "trapezoid": 1,
+            "triangle": 0,
+            "trapezoid": 0,
             "rectangle": 1,
             "pentagon": 1,
             "hexagon": 1,
@@ -605,24 +624,28 @@ if __name__ == "__main__":
         "scale_factor": 0.7,
         "area_threshold": 1000,
     }
-    n_images = 100
+    n_images = 1
+
+    # import sys
+
+    # if not sys.warnoptions:
+    #     import warnings
+
+    #     warnings.simplefilter("error")
 
     from tqdm import tqdm
-    import sys
-
-    if not sys.warnoptions:
-        import warnings
-
-        warnings.simplefilter("error")
 
     for _ in tqdm(range(n_images)):
         image = generate_map(map_dict)
         # inverted_image = invert_map(image)
         final_edge_size = 40
         image = downsample(image, final_edge_size)
+        bitmap = image_to_bitmap(image)
 
     print("image.shape", image.shape)
     div = 1000 // final_edge_size
+    import cv2
+
     cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
     cv2.waitKey(0)
     cv2.destroyAllWindows()

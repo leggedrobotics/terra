@@ -9,8 +9,8 @@ from terra.utils import Float
 
 
 class MapDims(NamedTuple):
-    width_m: Float = 20.0  # in meters
-    height_m: Float = 20.0  # in meters
+    width_m: Float = 30.0  # in meters
+    height_m: Float = 30.0  # in meters
     tile_size: Float = 1.5  # in meters
 
 
@@ -86,11 +86,18 @@ class MapParamsTwoSquareTrenchesTwoDumpAreas(MapParams):
     depth: int = -1
 
 
+class MapParamsRandomMultishape(MapParams):
+    type: MapType = MapType.RANDOM_MULTISHAPE
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(NamedTuple):
-    params: MapParams = MapParamsTwoSquareTrenchesTwoDumpAreas()
+    params: MapParams = MapParamsRandomMultishape()
 
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)

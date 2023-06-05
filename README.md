@@ -23,10 +23,17 @@ python3 -m tests.test_agent
 ~~~
 
 ## Visualization
-If you want to render the environment, you are going to need the following Python modules:
+If you want to render the environment, you are going to need the following:
+
+on Ubuntu:
+~~~
+sudo apt install libcairo2-dev
+sudo apt install libgirepository1.0-dev
+~~~
+
 ~~~
 matplotlib
-PyQt5
+PyGObject (you could use another backend like PyQt5 but it will clash with cv2 as it's QT-based)
 ~~~
 
 ## Pre-commit
