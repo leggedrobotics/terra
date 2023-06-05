@@ -1229,8 +1229,19 @@ class State(NamedTuple):
 
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
-        relevant_action_map_positive_inverse = jnp.where(target_map > 0, 0, action_map)
-        done_dump = jnp.all(relevant_action_map_positive_inverse <= 0)
+
+        def _check_done_dump():
+            relevant_action_map_positive_inverse = jnp.where(
+                target_map > 0, 0, action_map
+            )
+            done_dump = jnp.all(relevant_action_map_positive_inverse <= 0)
+            return done_dump
+
+        done_dump = jax.lax.cond(
+            jnp.all(target_map <= 0),
+            lambda: True,
+            _check_done_dump,
+        )
 
         relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
         target_map_negative = jnp.clip(target_map, a_max=0)
