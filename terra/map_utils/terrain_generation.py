@@ -22,8 +22,8 @@ The dictionary will be of the form:
 The map_dict will be passed to the function that will generate the map.
 The function will return the map as a numpy array.
 """
-import random
-
+import jax
+import jax.numpy as jnp
 import numpy as np
 from cv2 import convexHull
 from cv2 import fillPoly
@@ -35,39 +35,67 @@ from skimage.measure import block_reduce
 BORDER_COLOR = (255, 255, 255)
 
 
-def get_triangle(image, min_edge, max_edge, min_area, min_angle=1):
+def _get_search_bounds(vertices, max_edge, w, h):
+    if len(vertices) == 0:
+        minw = 0
+        maxw = w
+        minh = 0
+        maxh = h
+    elif len(vertices) >= 1:
+        minw_a = []
+        maxw_a = []
+        minh_a = []
+        maxh_a = []
+        for v in vertices:
+            minw_a.append(max(0, v[0] - max_edge))
+            maxw_a.append(min(w, v[0] + max_edge))
+            minh_a.append(max(0, v[1] - max_edge))
+            maxh_a.append(min(w, v[1] + max_edge))
+        minw = min(minw_a)
+        maxw = max(maxw_a)
+        minh = min(minh_a)
+        maxh = max(maxh_a)
+    return minw, maxw, minh, maxh
+
+
+def get_triangle(key, image, min_edge, max_edge, min_area, min_angle=1):
     h, w = image.shape[:2]
     while True:
         vertices = []
         for _ in range(3):
             while True:
-                x = random.randint(0, w)
-                y = random.randint(0, h)
+                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
+                key, subkey = jax.random.split(key)
+                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
+                key, subkey = jax.random.split(key)
+                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
                 # Calculate the distances to the other vertices
-                distances = [np.linalg.norm(np.array([x, y]) - v) for v in vertices]
+                xy = jnp.concatenate((x, y), axis=-1)
+                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
                 # Check if the distances are within the desired range
-                if all(d >= min_edge and d <= max_edge for d in distances):
+                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
                     # Check the angle between all pairs of edges
                     for i in range(len(vertices)):
-                        v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
-                        v2 = np.array([x, y]) - np.array(vertices[i])
-                        cosine_angle = np.dot(v1, v2) / (
-                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        v1 = jnp.array(vertices[i - 1]) - jnp.array(vertices[i])
+                        v2 = jnp.concatenate((x, y), axis=-1) - jnp.array(vertices[i])
+                        cosine_angle = jnp.dot(v1, v2) / (
+                            jnp.linalg.norm(v1) * jnp.linalg.norm(v2)
                         )
-                        cosine_angle = np.clip(cosine_angle, -1, 1)
-                        angle = np.arccos(cosine_angle) * 180 / np.pi
+                        cosine_angle = jnp.clip(cosine_angle, -1, 1)
+                        angle = jnp.arccos(cosine_angle) * 180 / jnp.pi
 
                         if angle < min_angle:
                             break
                     else:
-                        vertices.append([x, y])
+                        vertices.append(jnp.concatenate((x, y), axis=-1))
                         break
-        vertices = np.array(vertices)
+        vertices = jnp.array(vertices)
         # close the shape
-        vertices = np.append(vertices, [vertices[0]], axis=0)
+        vertices = jnp.concatenate((vertices, vertices[0][None]), axis=0)
+        vertices = np.array(vertices)
         area = get_shape_area(vertices)
         if area >= min_area:
-            return vertices
+            return vertices, key
 
 
 def get_shape_area(vertices):
@@ -75,131 +103,161 @@ def get_shape_area(vertices):
     return polygon.area
 
 
-def get_trapezoid(image, min_edge, max_edge, min_area, min_angle=30):
+def get_trapezoid(key, image, min_edge, max_edge, min_area, min_angle=30):
     h, w = image.shape[:2]
     while True:
         vertices = []
         for _ in range(4):
             while True:
-                x = random.randint(0, w)
-                y = random.randint(0, h)
+                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
+                key, subkey = jax.random.split(key)
+                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
+                key, subkey = jax.random.split(key)
+                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
                 # Calculate the distances to the other vertices
-                distances = [np.linalg.norm(np.array([x, y]) - v) for v in vertices]
+                xy = jnp.concatenate((x, y), axis=-1)
+                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
                 # Check if the distances are within the desired range
-                if all(d >= min_edge and d <= max_edge for d in distances):
+                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
                     # Check the angle between all pairs of edges
                     for i in range(len(vertices)):
-                        v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
-                        v2 = np.array([x, y]) - np.array(vertices[i])
-                        cosine_angle = np.dot(v1, v2) / (
-                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        v1 = jnp.array(vertices[i - 1]) - jnp.array(vertices[i])
+                        v2 = jnp.concatenate((x, y), axis=-1) - jnp.array(vertices[i])
+                        cosine_angle = jnp.dot(v1, v2) / (
+                            jnp.linalg.norm(v1) * jnp.linalg.norm(v2)
                         )
                         # cosine_angle = np.clip(cosine_angle, -1, 1)
-                        angle = np.arccos(cosine_angle) * 180 / np.pi
+                        angle = jnp.arccos(cosine_angle) * 180 / jnp.pi
 
-                        if angle < min_angle or angle > 0.9 * 180 or angle is np.nan:
+                        if angle < min_angle or angle > 0.9 * 180 or angle is jnp.nan:
                             break
                     else:
-                        vertices.append([x, y])
+                        vertices.append(jnp.concatenate((x, y), axis=-1))
                         break
 
-        vertices = np.array(vertices)
+        vertices = jnp.array(vertices)
 
         # Calculate the centroid of the vertices
-        centroid = np.mean(vertices, axis=0)
+        centroid = jnp.mean(vertices, axis=0)
 
         # Sort the vertices based on their angle from the centroid
-        angles = np.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
-        vertices = vertices[np.argsort(angles)]
+        angles = jnp.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
+        vertices = vertices[jnp.argsort(angles)]
 
         # Calculate the area of the trapezoid
+        vertices = np.array(vertices)
         area = get_shape_area(vertices)
         if area >= min_area:
-            return vertices
+            return vertices, key
 
 
-def get_rectangle(image, min_edge, max_edge, min_area):
+def get_rectangle(key, image, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
     while True:
-        pt1 = (random.randint(0, w), random.randint(0, h))
-        pt2 = (random.randint(0, w), random.randint(0, h))
+        key, *subkeys = jax.random.split(key, 3)
+        pt1 = jnp.concatenate(
+            (
+                jax.random.randint(subkeys[0], (1,), minval=0, maxval=w),
+                jax.random.randint(subkeys[1], (1,), minval=0, maxval=h),
+            ),
+            axis=-1,
+        )
+        key, *subkeys = jax.random.split(key, 3)
+        pt2 = jnp.concatenate(
+            (
+                jax.random.randint(subkeys[0], (1,), minval=0, maxval=w),
+                jax.random.randint(subkeys[1], (1,), minval=0, maxval=h),
+            ),
+            axis=-1,
+        )
         # Calculate the edge lengths
-        edge_lengths = [abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1])]
+        edge_lengths = jnp.array([jnp.abs(pt1[0] - pt2[0]), jnp.abs(pt1[1] - pt2[1])])
         # Check if the edge lengths are within the desired range
-        if all(edge >= min_edge and edge <= max_edge for edge in edge_lengths):
+        if jnp.all((edge_lengths >= min_edge) * (edge_lengths <= max_edge)):
             # cv2.rectangle(image, pt1, pt2, (255, 0, 0), 2)
 
             # Fill the rectangle with blue color
-            vertices = np.array([pt1, (pt1[0], pt2[1]), pt2, (pt2[0], pt1[1])])
+            vertices = jnp.array([pt1, (pt1[0], pt2[1]), pt2, (pt2[0], pt1[1])])
 
             # Calculate the area of the rectangle
             area = get_shape_area(vertices)
             if area >= min_area:
-                return vertices
+                return np.array(vertices), key
 
 
-def get_pentagon(image, min_edge, max_edge, min_area):
+def get_pentagon(key, image, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
     while True:
         vertices = []
         for _ in range(5):
             while True:
-                x = random.randint(0, w)
-                y = random.randint(0, h)
+                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
+                key, subkey = jax.random.split(key)
+                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
+                key, subkey = jax.random.split(key)
+                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
                 # Calculate the distances to the other vertices
-                distances = [np.linalg.norm(np.array([x, y]) - v) for v in vertices]
+                xy = jnp.concatenate((x, y), axis=-1)
+                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
                 # Check if the distances are within the desired range
-                if all(d >= min_edge and d <= max_edge for d in distances):
-                    vertices.append([x, y])
+                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
+                    vertices.append(jnp.concatenate((x, y), axis=-1))
                     break
-        vertices = np.array(vertices)
+        vertices = jnp.array(vertices)
 
         # Calculate the centroid of the vertices
-        centroid = np.mean(vertices, axis=0)
+        centroid = jnp.mean(vertices, axis=0)
 
         # Sort the vertices based on their angle with the centroid
-        angles = np.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
-        sorted_indices = np.argsort(angles)
+        angles = jnp.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
+        sorted_indices = jnp.argsort(angles)
         ordered_vertices = vertices[sorted_indices]
 
         # Calculate the area of the pentagon
+        vertices = np.array(vertices)
         area = get_shape_area(vertices)
         if area >= min_area:
-            return ordered_vertices
+            return ordered_vertices, key
 
 
-def get_hexagon(image, min_edge, max_edge, min_area):
+def get_hexagon(key, image, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
     while True:
         vertices = []
         for _ in range(6):
             while True:
-                x = random.randint(0, w)
-                y = random.randint(0, h)
+                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
+
+                key, subkey = jax.random.split(key)
+                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
+                key, subkey = jax.random.split(key)
+                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
                 # Calculate the distances to the other vertices
-                distances = [np.linalg.norm(np.array([x, y]) - v) for v in vertices]
+                xy = jnp.concatenate((x, y), axis=-1)
+                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
                 # Check if the distances are within the desired range
-                if all(d >= min_edge and d <= max_edge for d in distances):
-                    vertices.append([x, y])
+                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
+                    vertices.append(jnp.concatenate((x, y), axis=-1))
                     break
-        vertices = np.array(vertices)
+        vertices = jnp.array(vertices)
 
         # Calculate the centroid of the vertices
-        centroid = np.mean(vertices, axis=0)
+        centroid = jnp.mean(vertices, axis=0)
 
         # Sort the vertices based on their angle with the centroid
-        angles = np.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
-        sorted_indices = np.argsort(angles)
+        angles = jnp.arctan2(vertices[:, 1] - centroid[1], vertices[:, 0] - centroid[0])
+        sorted_indices = jnp.argsort(angles)
         ordered_vertices = vertices[sorted_indices]
 
         # Calculate the area of the hexagon
+        vertices = np.array(vertices)
         area = get_shape_area(ordered_vertices)
         # print(area)
         if area >= min_area:
-            return ordered_vertices
+            return ordered_vertices, key
 
 
-def draw_regular_polygon(image, num_sides: list[int], radius: int):
+def draw_regular_polygon(key, image, num_sides: list[int], radius: int):
     """
     Creates a regular polygon with the specified number of sides.
     :param image: The image to draw the polygon on.
@@ -211,36 +269,45 @@ def draw_regular_polygon(image, num_sides: list[int], radius: int):
     :return: The vertices of the polygon.
     """
     # sample the number of sides
-    num_sides = random.choice(num_sides)
+    key, subkey = jax.random.split(key)
+    num_sides = jax.random.choice(subkey, num_sides)
     # center is randomly chosen but not too close to the edges (radius)
     h, w = image.shape[:2]
-    center = (random.randint(radius, w - radius), random.randint(radius, h - radius))
+    key, *subkeys = jax.random.split(key, 3)
+    center = jnp.concatenate(
+        (
+            jax.random.randint(subkeys[0], (1,), minval=radius, maxval=w - radius),
+            jax.random.randint(subkeys[1], (1,), minval=radius, maxval=h - radius),
+        ),
+        axis=-1,
+    )
 
-    vertices = np.array(
+    vertices = jnp.array(
         [
             [
-                center[0] + radius * np.cos(2 * np.pi * i / num_sides),
-                center[1] + radius * np.sin(2 * np.pi * i / num_sides),
+                center[0] + radius * jnp.cos(2 * jnp.pi * i / num_sides),
+                center[1] + radius * jnp.sin(2 * jnp.pi * i / num_sides),
             ]
             for i in range(num_sides)
         ],
-        dtype=np.int32,
+        dtype=jnp.int32,
     )
-    return vertices
+    vertices = np.array(vertices)
+    return vertices, key
 
 
-def draw_L(image, min_edge, max_edge, min_area):
+def draw_L(key, image, min_edge, max_edge, min_area):
     """
     Creates a L shape by creating two intersecting rectangles. we use the function
     get_rectangle to create the rectangles but we ensure that the rectangles
     intersect.
     """
     # generate the first rectangle
-    vertices = get_rectangle(image, min_edge, max_edge, min_area)
+    vertices, key = get_rectangle(key, image, min_edge, max_edge, min_area)
     vertices2 = []
     while True:
         # generate the second rectangle
-        vertices2 = get_rectangle(image, min_edge, max_edge, min_area)
+        vertices2, key = get_rectangle(key, image, min_edge, max_edge, min_area)
         # check if the rectangles intersect
         if find_intersection_vertices(vertices, vertices2):
             break
@@ -248,16 +315,16 @@ def draw_L(image, min_edge, max_edge, min_area):
     vertices = get_excluded_shape(vertices, vertices2)
     # list to np array
     vertices = np.array(vertices).astype(np.int64)
-    return vertices
+    return vertices, key
 
 
-def draw_Z(image, min_edge, max_edge, min_area):
+def draw_Z(key, image, min_edge, max_edge, min_area):
     # generate the first rectangle
-    vertices = get_rectangle(image, min_edge, max_edge, min_area)
+    vertices, key = get_rectangle(key, image, min_edge, max_edge, min_area)
     vertices2 = []
     while True:
         # generate the second rectangle
-        vertices2 = get_rectangle(image, min_edge, max_edge, min_area)
+        vertices2, key = get_rectangle(key, image, min_edge, max_edge, min_area)
         # check if the rectangles intersect
         if find_intersection_vertices(vertices, vertices2):
             break
@@ -265,25 +332,57 @@ def draw_Z(image, min_edge, max_edge, min_area):
     vertices = get_union(vertices, vertices2)
     # list to np array
     vertices = np.array(vertices).astype(np.int64)
-    return vertices
+    return vertices, key
 
 
-def draw_O(image, min_edge, max_edge):
+def draw_O(key, image, min_edge, max_edge):
     h, w = image.shape[:2]
     # Ensure the size of the C shape
     while True:
-        pt1 = (random.randint(0, w - max_edge), random.randint(0, h - max_edge))
-        pt2 = (
-            pt1[0] + random.randint(min_edge, max_edge),
-            pt1[1] + random.randint(min_edge, max_edge),
+        key, *subkeys = jax.random.split(key, 9)
+        pt1 = jnp.concatenate(
+            (
+                jax.random.randint(subkeys[0], (1,), minval=0, maxval=w - max_edge),
+                jax.random.randint(subkeys[1], (1,), minval=0, maxval=h - max_edge),
+            ),
+            axis=-1,
         )
-        inner_width = random.randint(min_edge, pt2[0] - pt1[0] - 1)
-        inner_height = random.randint(min_edge, pt2[1] - pt1[1] - 1)
-        inner_pt1 = (
-            random.randint(pt1[0] + 1, pt2[0] - inner_width),
-            random.randint(pt1[1] + 1, pt2[1] - inner_height),
+        pt2 = jnp.concatenate(
+            (
+                pt1[0]
+                + jax.random.randint(
+                    subkeys[2], (1,), minval=min_edge, maxval=max_edge
+                ),
+                pt1[1]
+                + jax.random.randint(
+                    subkeys[3], (1,), minval=min_edge, maxval=max_edge
+                ),
+            ),
+            axis=-1,
         )
-        inner_pt2 = (inner_pt1[0] + inner_width, inner_pt1[1] + inner_height)
+
+        inner_width = jax.random.randint(
+            subkeys[4], (1,), minval=min_edge, maxval=pt2[0] - pt1[0] - 1
+        )
+        inner_height = jax.random.randint(
+            subkeys[5], (1,), minval=min_edge, maxval=pt2[1] - pt1[1] - 1
+        )
+        inner_pt1 = jnp.concatenate(
+            (
+                jax.random.randint(
+                    subkeys[6], (1,), minval=pt1[0] + 1, maxval=pt2[0] - inner_width
+                ),
+                jax.random.randint(
+                    subkeys[7], (1,), minval=pt1[1] + 1, maxval=pt2[1] - inner_height
+                ),
+            ),
+            axis=-1,
+        )
+
+        inner_pt2 = jnp.concatenate(
+            (inner_pt1[0] + inner_width, inner_pt1[1] + inner_height), axis=-1
+        )
+
         if (
             pt1[0] < inner_pt1[0] < pt2[0]
             and pt1[1] < inner_pt1[1] < pt2[1]
@@ -293,7 +392,7 @@ def draw_O(image, min_edge, max_edge):
             break
     # cv2.rectangle(image, pt1, pt2, (0, 0, 0), -1)
     # cv2.rectangle(image, inner_pt1, inner_pt2, (255, 255, 255), -1)
-    return image
+    return image, key
 
 
 def draw_shape(
@@ -429,7 +528,7 @@ def increase_image_size(image, factor=1.0, color=(255, 255, 255)):
 
 
 # Main function to generate the map
-def generate_map(map_dict):
+def generate_map(key, map_dict):
     # Create a blank image
     dimensions = map_dict.get("dimensions", (600, 400))
     image = np.ones((dimensions[1], dimensions[0], 3), dtype=np.uint8) * 255
@@ -439,56 +538,65 @@ def generate_map(map_dict):
     for shape, count in map_dict.get("shapes", {}).items():
         for _ in range(count):
             while True:
+                print(shape)
                 if shape == "triangle":
-                    vertices = get_triangle(
+                    vertices, key = get_triangle(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "trapezoid":
-                    vertices = get_trapezoid(
+                    vertices, key = get_trapezoid(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "rectangle":
-                    vertices = get_rectangle(
+                    vertices, key = get_rectangle(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "pentagon":
-                    vertices = get_pentagon(
+                    vertices, key = get_pentagon(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "hexagon":
-                    vertices = get_hexagon(
+                    vertices, key = get_hexagon(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "regular_polygon":
-                    vertices = draw_regular_polygon(
+                    vertices, key = draw_regular_polygon(
+                        key,
                         image,
                         map_dict.get("regular_num_sides", 5),
                         map_dict.get("radius", 100),
                     )
                 elif shape == "L":
-                    vertices = draw_L(
+                    vertices, key = draw_L(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
                     )
                 elif shape == "Z":
-                    vertices = draw_Z(
+                    vertices, key = draw_Z(
+                        key,
                         image,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
@@ -513,6 +621,7 @@ def generate_map(map_dict):
                 # If we reached this point, the shape doesn't overlap, so we can draw it
                 # print('Drawing shape {}'.format(shape))
                 shapes_list.append(new_shape)
+                vertices = np.array(vertices)
                 vertices_shrinked = scale_shape(
                     vertices, map_dict.get("scale_factor", 1.0)
                 )
@@ -597,8 +706,8 @@ def image_to_bitmap(image):
     return image.astype(np.int8)
 
 
-def generate_polygonal_bitmap(map_dict, final_edge_size):
-    image = generate_map(map_dict)
+def generate_polygonal_bitmap(key, map_dict, final_edge_size):
+    image = generate_map(key, map_dict)
     image = downsample(image, final_edge_size)
     image = image_to_bitmap(image)
     return image
@@ -607,13 +716,13 @@ def generate_polygonal_bitmap(map_dict, final_edge_size):
 if __name__ == "__main__":
     map_dict = {
         "shapes": {
-            "triangle": 0,
-            "trapezoid": 0,
+            "triangle": 1,
+            "trapezoid": 1,
             "rectangle": 1,
             "pentagon": 1,
             "hexagon": 1,
-            "L": 1,
-            "Z": 1,
+            "L": 0,
+            "Z": 0,
             # 'regular_polygon': 6,
         },
         "dimensions": (1000, 1000),
@@ -633,19 +742,22 @@ if __name__ == "__main__":
 
     #     warnings.simplefilter("error")
 
+    key = jax.random.PRNGKey(131)
+
     from tqdm import tqdm
 
     for _ in tqdm(range(n_images)):
-        image = generate_map(map_dict)
+        image = generate_map(key, map_dict)
         # inverted_image = invert_map(image)
         final_edge_size = 40
-        image = downsample(image, final_edge_size)
+        # image = downsample(image, final_edge_size)
         bitmap = image_to_bitmap(image)
 
     print("image.shape", image.shape)
     div = 1000 // final_edge_size
     import cv2
 
-    cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
+    # cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
+    cv2.imshow("Map", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
