@@ -22,6 +22,8 @@ The dictionary will be of the form:
 The map_dict will be passed to the function that will generate the map.
 The function will return the map as a numpy array.
 """
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -36,66 +38,79 @@ BORDER_COLOR = (255, 255, 255)
 
 
 def _get_search_bounds(vertices, max_edge, w, h):
-    if len(vertices) == 0:
-        minw = 0
-        maxw = w
-        minh = 0
-        maxh = h
-    elif len(vertices) >= 1:
-        minw_a = []
-        maxw_a = []
-        minh_a = []
-        maxh_a = []
-        for v in vertices:
-            minw_a.append(max(0, v[0] - max_edge))
-            maxw_a.append(min(w, v[0] + max_edge))
-            minh_a.append(max(0, v[1] - max_edge))
-            maxh_a.append(min(w, v[1] + max_edge))
-        minw = min(minw_a)
-        maxw = max(maxw_a)
-        minh = min(minh_a)
-        maxh = max(maxh_a)
+    if isinstance(vertices, list):
+        if len(vertices) == 0:
+            minw = 0
+            maxw = w
+            minh = 0
+            maxh = h
+        elif len(vertices) >= 1:
+            minw_a = []
+            maxw_a = []
+            minh_a = []
+            maxh_a = []
+            for v in vertices:
+                minw_a.append(max(0, v[0] - max_edge))
+                maxw_a.append(min(w, v[0] + max_edge))
+                minh_a.append(max(0, v[1] - max_edge))
+                maxh_a.append(min(w, v[1] + max_edge))
+            minw = min(minw_a)
+            maxw = max(maxw_a)
+            minh = min(minh_a)
+            maxh = max(maxh_a)
+    else:
+        minw = jnp.min(jnp.clip(vertices[..., 0] - max_edge, a_min=0))
+        minh = jnp.min(jnp.clip(vertices[..., 1] - max_edge, a_min=0))
+        maxw = jnp.max(jnp.clip(vertices[..., 0] + max_edge, a_max=w))
+        maxh = jnp.max(jnp.clip(vertices[..., 1] + max_edge, a_max=h))
     return minw, maxw, minh, maxh
 
 
+@partial(jax.jit, static_argnums=(1, 2, 3))
+def _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge):
+    x_set = jnp.arange(0, w)[None].repeat(h, axis=-2).reshape(-1)
+    y_set = jnp.arange(0, h)[:, None].repeat(w, axis=-1).reshape(-1)
+    vertices = []
+    xy_set = jnp.concatenate((x_set[..., None], y_set[..., None]), axis=-1)
+    xy_set_mask = jnp.ones_like(xy_set[..., 0]).astype(jnp.bool_)
+
+    for _ in range(n_sides):
+        key, subkey = jax.random.split(key)
+        valid_numbers = xy_set_mask.sum()
+        p = xy_set_mask * (1.0 / valid_numbers)
+        xy_idx = jax.random.choice(subkey, jnp.arange(0, h * w), p=p)
+        xy = xy_set[xy_idx]
+        vertices.append(xy)
+
+        # Mask out unavailable choices in sets
+        xy_norm = jnp.linalg.norm(xy_set - jnp.array(vertices)[:, None], axis=-1)
+        xy_set_mask = (xy_norm >= min_edge) * (xy_norm <= max_edge)
+        xy_set_mask = xy_set_mask.prod(axis=0)
+
+    # close the shape
+    vertices = jnp.array(vertices)
+    vertices = jnp.concatenate((vertices, vertices[0][None]), axis=0)
+    return vertices, key
+
+
+def _get_vertices_polygon_numpy(key, n_sides, w, h, min_edge, max_edge):
+    min_edge = min_edge.item() if not isinstance(min_edge, int) else min_edge
+    max_edge = max_edge.item() if not isinstance(max_edge, int) else max_edge
+    vertices, key = _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge)
+    return np.array(vertices), key
+
+
 def get_triangle(key, image, min_edge, max_edge, min_area, min_angle=1):
+    n_sides = 3
     h, w = image.shape[:2]
     while True:
-        vertices = []
-        for _ in range(3):
-            while True:
-                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
-                key, subkey = jax.random.split(key)
-                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
-                key, subkey = jax.random.split(key)
-                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
-                # Calculate the distances to the other vertices
-                xy = jnp.concatenate((x, y), axis=-1)
-                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
-                # Check if the distances are within the desired range
-                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
-                    # Check the angle between all pairs of edges
-                    for i in range(len(vertices)):
-                        v1 = jnp.array(vertices[i - 1]) - jnp.array(vertices[i])
-                        v2 = jnp.concatenate((x, y), axis=-1) - jnp.array(vertices[i])
-                        cosine_angle = jnp.dot(v1, v2) / (
-                            jnp.linalg.norm(v1) * jnp.linalg.norm(v2)
-                        )
-                        cosine_angle = jnp.clip(cosine_angle, -1, 1)
-                        angle = jnp.arccos(cosine_angle) * 180 / jnp.pi
-
-                        if angle < min_angle:
-                            break
-                    else:
-                        vertices.append(jnp.concatenate((x, y), axis=-1))
-                        break
-        vertices = jnp.array(vertices)
-        # close the shape
-        vertices = jnp.concatenate((vertices, vertices[0][None]), axis=0)
-        vertices = np.array(vertices)
+        vertices, key = _get_vertices_polygon_numpy(
+            key, n_sides, w, h, min_edge, max_edge
+        )
         area = get_shape_area(vertices)
         if area >= min_area:
-            return vertices, key
+            break
+    return vertices, key
 
 
 def get_shape_area(vertices):
@@ -187,23 +202,11 @@ def get_rectangle(key, image, min_edge, max_edge, min_area):
 
 def get_pentagon(key, image, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
+    n_sides = 5
     while True:
-        vertices = []
-        for _ in range(5):
-            while True:
-                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
-                key, subkey = jax.random.split(key)
-                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
-                key, subkey = jax.random.split(key)
-                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
-                # Calculate the distances to the other vertices
-                xy = jnp.concatenate((x, y), axis=-1)
-                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
-                # Check if the distances are within the desired range
-                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
-                    vertices.append(jnp.concatenate((x, y), axis=-1))
-                    break
-        vertices = jnp.array(vertices)
+        vertices, key = _get_vertices_polygon_numpy(
+            key, n_sides, w, h, min_edge, max_edge
+        )
 
         # Calculate the centroid of the vertices
         centroid = jnp.mean(vertices, axis=0)
@@ -222,24 +225,11 @@ def get_pentagon(key, image, min_edge, max_edge, min_area):
 
 def get_hexagon(key, image, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
+    n_sides = 6
     while True:
-        vertices = []
-        for _ in range(6):
-            while True:
-                minw, maxw, minh, maxh = _get_search_bounds(vertices, max_edge, w, h)
-
-                key, subkey = jax.random.split(key)
-                x = jax.random.randint(subkey, (1,), minval=minw, maxval=maxw)
-                key, subkey = jax.random.split(key)
-                y = jax.random.randint(subkey, (1,), minval=minh, maxval=maxh)
-                # Calculate the distances to the other vertices
-                xy = jnp.concatenate((x, y), axis=-1)
-                distances = jnp.array([jnp.linalg.norm(xy - v) for v in vertices])
-                # Check if the distances are within the desired range
-                if jnp.all((distances >= min_edge) * (distances <= max_edge)):
-                    vertices.append(jnp.concatenate((x, y), axis=-1))
-                    break
-        vertices = jnp.array(vertices)
+        vertices, key = _get_vertices_polygon_numpy(
+            key, n_sides, w, h, min_edge, max_edge
+        )
 
         # Calculate the centroid of the vertices
         centroid = jnp.mean(vertices, axis=0)
@@ -538,7 +528,7 @@ def generate_map(key, map_dict):
     for shape, count in map_dict.get("shapes", {}).items():
         for _ in range(count):
             while True:
-                print(shape)
+                # print(shape)
                 if shape == "triangle":
                     vertices, key = get_triangle(
                         key,
@@ -636,7 +626,7 @@ def generate_map(key, map_dict):
                 break  # Break the while loop and move to the next shape
     # increase image size
     image = increase_image_size(image, factor=1.1, color=(255, 255, 255))
-    return image
+    return image, key
 
 
 def invert_map(image: np.ndarray):
@@ -707,18 +697,18 @@ def image_to_bitmap(image):
 
 
 def generate_polygonal_bitmap(key, map_dict, final_edge_size):
-    image = generate_map(key, map_dict)
+    image, key = generate_map(key, map_dict)
     image = downsample(image, final_edge_size)
     image = image_to_bitmap(image)
-    return image
+    return image, key
 
 
 if __name__ == "__main__":
     map_dict = {
         "shapes": {
             "triangle": 1,
-            "trapezoid": 1,
-            "rectangle": 1,
+            "trapezoid": 0,
+            "rectangle": 0,
             "pentagon": 1,
             "hexagon": 1,
             "L": 0,
@@ -726,14 +716,14 @@ if __name__ == "__main__":
             # 'regular_polygon': 6,
         },
         "dimensions": (1000, 1000),
-        "max_edge": 400,
-        "min_edge": 50,
+        "max_edge": 500,
+        "min_edge": 200,
         "radius": 300,
         "regular_num_sides": [3, 4, 5],
         "scale_factor": 0.7,
-        "area_threshold": 1000,
+        "min_area": 0,
     }
-    n_images = 1
+    n_images = 20
 
     # import sys
 
@@ -742,22 +732,27 @@ if __name__ == "__main__":
 
     #     warnings.simplefilter("error")
 
-    key = jax.random.PRNGKey(131)
+    key = jax.random.PRNGKey(11)
 
     from tqdm import tqdm
-
-    for _ in tqdm(range(n_images)):
-        image = generate_map(key, map_dict)
-        # inverted_image = invert_map(image)
-        final_edge_size = 40
-        # image = downsample(image, final_edge_size)
-        bitmap = image_to_bitmap(image)
-
-    print("image.shape", image.shape)
-    div = 1000 // final_edge_size
     import cv2
 
-    # cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
-    cv2.imshow("Map", image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    do_downsample = True
+
+    for _ in tqdm(range(n_images)):
+        image, key = generate_map(key, map_dict)
+        # inverted_image = invert_map(image)
+        final_edge_size = 40
+        if do_downsample:
+            image = downsample(image, final_edge_size)
+        # bitmap = image_to_bitmap(image)
+
+        print("image.shape", image.shape)
+        div = 1000 // final_edge_size
+
+        if do_downsample:
+            cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
+        else:
+            cv2.imshow("Map", image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()

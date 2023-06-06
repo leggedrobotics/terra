@@ -436,18 +436,18 @@ def random_multishape(
     # TODO move to config
     map_dict = {
         "shapes": {
-            "triangle": 0,
+            "triangle": 1,
             "trapezoid": 0,
-            "rectangle": 1,
+            "rectangle": 0,
             "pentagon": 1,
             "hexagon": 1,
-            "L": 1,
-            "Z": 1,
+            "L": 0,
+            "Z": 0,
             # 'regular_polygon': 6,
         },
         "dimensions": (1000, 1000),
-        "max_edge": 400,
-        "min_edge": 50,
+        "max_edge": 500,
+        "min_edge": 200,
         "radius": 300,
         "regular_num_sides": [3, 4, 5],
         "scale_factor": 0.7,
@@ -456,9 +456,10 @@ def random_multishape(
 
     final_edge_size = width
     # TODO convert following to JIT-compilable code
-    image = jax.pure_callback(
+    image, key = jax.pure_callback(
         generate_polygonal_bitmap,
-        np.zeros((width, width), dtype=np.int8),
+        (np.zeros((width, width), dtype=np.int8), key),
+        key,
         map_dict,
         final_edge_size,
     )
