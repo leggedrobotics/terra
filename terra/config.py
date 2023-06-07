@@ -9,8 +9,8 @@ from terra.utils import Float
 
 
 class MapDims(NamedTuple):
-    width_m: Float = 30.0  # in meters
-    height_m: Float = 30.0  # in meters
+    width_m: Float = 60.0  # in meters
+    height_m: Float = 60.0  # in meters
     tile_size: Float = 1.5  # in meters
 
 
@@ -192,7 +192,9 @@ class Rewards(NamedTuple):
         -0.2
     )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: Float = -0.2  # given if loaded stayed the same
-    dump_no_dump_area: Float = -0.02  # given if dumps in an area that is not the dump area
+    dump_no_dump_area: Float = (
+        -0.02
+    )  # given if dumps in an area that is not the dump area
 
     dig_correct: Float = (
         2.0  # dig where the target map is negative, and not more than required

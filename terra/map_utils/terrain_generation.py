@@ -31,7 +31,8 @@ from cv2 import convexHull
 from cv2 import fillPoly
 from cv2 import polylines
 from shapely.geometry import Polygon
-from skimage.measure import block_reduce
+
+# from skimage.measure import block_reduce
 
 
 BORDER_COLOR = (255, 255, 255)
@@ -90,11 +91,11 @@ def _loop(i, value):
 
 
 @partial(jax.jit, static_argnums=(1, 2, 3))
-def _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge):
+def _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge, image_mask):
     x_set = jnp.arange(0, w)[None].repeat(h, axis=-2).reshape(-1)
     y_set = jnp.arange(0, h)[:, None].repeat(w, axis=-1).reshape(-1)
     xy_set = jnp.concatenate((x_set[..., None], y_set[..., None]), axis=-1)
-    xy_set_mask = jnp.ones_like(xy_set[..., 0]).astype(jnp.bool_)
+    xy_set_mask = image_mask
     vertices = jnp.empty((n_sides, 2))
 
     value = key, vertices, xy_set, xy_set_mask, min_edge, max_edge
@@ -107,19 +108,21 @@ def _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge):
     return vertices, key
 
 
-def _get_vertices_polygon_numpy(key, n_sides, w, h, min_edge, max_edge):
+def _get_vertices_polygon_numpy(key, n_sides, w, h, min_edge, max_edge, image_mask):
     min_edge = min_edge.item() if not isinstance(min_edge, int) else min_edge
     max_edge = max_edge.item() if not isinstance(max_edge, int) else max_edge
-    vertices, key = _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge)
+    vertices, key = _get_vertices_polygon(
+        key, n_sides, w, h, min_edge, max_edge, image_mask
+    )
     return np.array(vertices), key
 
 
-def get_triangle(key, image, min_edge, max_edge, min_area, min_angle=1):
+def get_triangle(key, image, image_mask, min_edge, max_edge, min_area, min_angle=1):
     n_sides = 3
     h, w = image.shape[:2]
     while True:
         vertices, key = _get_vertices_polygon_numpy(
-            key, n_sides, w, h, min_edge, max_edge
+            key, n_sides, w, h, min_edge, max_edge, image_mask
         )
         area = get_shape_area(vertices)
         if area >= min_area:
@@ -214,12 +217,12 @@ def get_rectangle(key, image, min_edge, max_edge, min_area):
                 return np.array(vertices), key
 
 
-def get_pentagon(key, image, min_edge, max_edge, min_area):
+def get_pentagon(key, image, image_mask, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
     n_sides = 5
     while True:
         vertices, key = _get_vertices_polygon_numpy(
-            key, n_sides, w, h, min_edge, max_edge
+            key, n_sides, w, h, min_edge, max_edge, image_mask
         )
 
         # Calculate the centroid of the vertices
@@ -237,12 +240,12 @@ def get_pentagon(key, image, min_edge, max_edge, min_area):
             return ordered_vertices, key
 
 
-def get_hexagon(key, image, min_edge, max_edge, min_area):
+def get_hexagon(key, image, image_mask, min_edge, max_edge, min_area):
     h, w = image.shape[:2]
     n_sides = 6
     while True:
         vertices, key = _get_vertices_polygon_numpy(
-            key, n_sides, w, h, min_edge, max_edge
+            key, n_sides, w, h, min_edge, max_edge, image_mask
         )
 
         # Calculate the centroid of the vertices
@@ -404,7 +407,7 @@ def draw_shape(
     vertices,
     color=(0, 0, 0),
     countour_color=(255, 255, 255),
-    countour_thickness=10,
+    countour_thickness=0,
 ):
     fillPoly(image, [vertices], color=color)
     # drow countour in grey
@@ -536,6 +539,7 @@ def generate_map(key, map_dict):
     # Create a blank image
     dimensions = map_dict.get("dimensions", (600, 400))
     image = np.ones((dimensions[1], dimensions[0], 3), dtype=np.uint8) * 255
+    image_mask = np.ones((dimensions[1], dimensions[0]), dtype=np.bool_).reshape(-1)
     shapes_list = []  # List of all shapes drawn so far
     # Draw the shapes
     odd = False
@@ -547,6 +551,7 @@ def generate_map(key, map_dict):
                     vertices, key = get_triangle(
                         key,
                         image,
+                        image_mask,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
@@ -571,6 +576,7 @@ def generate_map(key, map_dict):
                     vertices, key = get_pentagon(
                         key,
                         image,
+                        image_mask,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
@@ -579,6 +585,7 @@ def generate_map(key, map_dict):
                     vertices, key = get_hexagon(
                         key,
                         image,
+                        image_mask,
                         map_dict.get("min_edge", 50),
                         map_dict.get("max_edge", 100),
                         map_dict.get("min_area", 1000),
@@ -619,6 +626,10 @@ def generate_map(key, map_dict):
                 x_max, y_max = np.max(vertices, axis=0)
                 new_shape = (x_min, y_min, x_max, y_max)
 
+                image_mask = image_mask.reshape(dimensions[1], dimensions[0])
+                image_mask[int(y_min) : int(y_max), int(x_min) : int(x_max)] = False
+                image_mask = image_mask.reshape(-1)
+
                 # Check if it overlaps with any existing shape
                 if any(is_overlap(new_shape, shape) for shape in shapes_list):
                     continue  # This shape overlaps, try again
@@ -639,30 +650,30 @@ def generate_map(key, map_dict):
                 image = draw_shape(image, vertices_shrinked, color=color)
                 break  # Break the while loop and move to the next shape
     # increase image size
-    image = increase_image_size(image, factor=1.1, color=(255, 255, 255))
+    image = increase_image_size(image, factor=1.0, color=(255, 255, 255))
     return image, key
 
 
-def invert_map(image: np.ndarray):
-    """
-    Flips the image in this way:
-    - turns white (255, 255, 255) to BORDER_COLOR, which means traversable but should not dig there
-    - turns black (0, 0, 0) to white (255, 255, 255), which means that previous obstacles become dig zones
-    """
-    # Define the color for the traversable but non-diggable areas
+# def invert_map(image: np.ndarray):
+#     """
+#     Flips the image in this way:
+#     - turns white (255, 255, 255) to BORDER_COLOR, which means traversable but should not dig there
+#     - turns black (0, 0, 0) to white (255, 255, 255), which means that previous obstacles become dig zones
+#     """
+#     # Define the color for the traversable but non-diggable areas
 
-    # Create a copy of the image to avoid modifying the original array
-    flipped_image = np.copy(image)
+#     # Create a copy of the image to avoid modifying the original array
+#     flipped_image = np.copy(image)
 
-    # Replace white pixels with BORDER_COLOR
-    white_pixels = np.all(image == [255, 255, 255], axis=2)
-    flipped_image[white_pixels] = BORDER_COLOR
+#     # Replace white pixels with BORDER_COLOR
+#     white_pixels = np.all(image == [255, 255, 255], axis=2)
+#     flipped_image[white_pixels] = BORDER_COLOR
 
-    # Replace black pixels with white pixels
-    black_pixels = np.all(image == [0, 0, 0], axis=2)
-    flipped_image[black_pixels] = [255, 255, 255]
+#     # Replace black pixels with white pixels
+#     black_pixels = np.all(image == [0, 0, 0], axis=2)
+#     flipped_image[black_pixels] = [255, 255, 255]
 
-    return flipped_image
+#     return flipped_image
 
 
 def generate_occupancy(image: np.ndarray):
@@ -683,14 +694,14 @@ def generate_occupancy(image: np.ndarray):
     return occupancy_grid
 
 
-def downsample(image, final_edge_size: int):
-    div = int(np.ceil(image.shape[0] / final_edge_size).item())
-    image = block_reduce(
-        image,
-        block_size=div,
-        func=np.max,
-    )
-    return image
+# def downsample(image, final_edge_size: int):
+#     div = int(np.ceil(image.shape[0] / final_edge_size).item())
+#     image = block_reduce(
+#         image,
+#         block_size=div,
+#         func=np.max,
+#     )
+#     return image
 
 
 def image_to_bitmap(image):
@@ -710,9 +721,8 @@ def image_to_bitmap(image):
     return image.astype(np.int8)
 
 
-def generate_polygonal_bitmap(key, map_dict, final_edge_size):
+def generate_polygonal_bitmap(key, map_dict):
     image, key = generate_map(key, map_dict)
-    image = downsample(image, final_edge_size)
     image = image_to_bitmap(image)
     return image, key
 
@@ -729,44 +739,28 @@ if __name__ == "__main__":
             "Z": 0,
             # 'regular_polygon': 6,
         },
-        "dimensions": (1000, 1000),
-        "max_edge": 500,
-        "min_edge": 200,
+        "dimensions": (40, 40),
+        "max_edge": 10,
+        "min_edge": 2,
         "radius": 300,
         "regular_num_sides": [3, 4, 5],
-        "scale_factor": 0.7,
-        "min_area": 0,
+        "scale_factor": 1,
+        "min_area": 20,
     }
     n_images = 20
-
-    # import sys
-
-    # if not sys.warnoptions:
-    #     import warnings
-
-    #     warnings.simplefilter("error")
-
     key = jax.random.PRNGKey(11)
 
     from tqdm import tqdm
     import cv2
 
-    do_downsample = True
-
     for _ in tqdm(range(n_images)):
         image, key = generate_map(key, map_dict)
         # inverted_image = invert_map(image)
-        final_edge_size = 40
-        if do_downsample:
-            image = downsample(image, final_edge_size)
         # bitmap = image_to_bitmap(image)
 
-        print("image.shape", image.shape)
-        div = 1000 // final_edge_size
+        div = 600 // 40
 
-        if do_downsample:
-            cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
-        else:
-            cv2.imshow("Map", image)
+        cv2.imshow("Map", image.repeat(div, axis=0).repeat(div, axis=1))
+        # cv2.imshow("Map", image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
