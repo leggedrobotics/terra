@@ -436,7 +436,7 @@ def random_multishape(
     # TODO move to config
     key, *subkeys = jax.random.split(key, 4)
     n_triangles = jax.random.randint(subkeys[0], (), minval=1, maxval=3)
-    n_pentagons = jax.random.randint(subkeys[1], (), minval=1, maxval=2)
+    n_pentagons = jax.random.randint(subkeys[1], (), minval=1, maxval=3)
     n_hexagons = jax.random.randint(subkeys[2], (), minval=0, maxval=2)
     map_dict = {
         "shapes": {
@@ -450,23 +450,22 @@ def random_multishape(
             # 'regular_polygon': 6,
         },
         "dimensions": (width, height),
-        "max_edge": 10,
-        "min_edge": 2,
+        "max_edge": max(2, min(width, height) // 4),
+        "min_edge": max(1, min(width, height) // 20),
         "radius": 300,
         "regular_num_sides": [3, 4, 5],
         "scale_factor": 0.7,
-        "min_area": 20,
+        "min_area": max(1, width * height // 55),
+        "max_trial_per_shape": 5,
     }
 
     # TODO convert following to JIT-compilable code
-    jax.debug.print("here1")
     image, key = jax.pure_callback(
         generate_polygonal_bitmap,
         (np.zeros((width, height), dtype=np.int8), key),
         key,
         map_dict,
     )
-    jax.debug.print("here2")
 
     # image, key = single_tile(width, height, key, map_params)
     return jnp.array(image, dtype=IntMap), key

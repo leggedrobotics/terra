@@ -542,10 +542,11 @@ def generate_map(key, map_dict):
     image_mask = np.ones((dimensions[1], dimensions[0]), dtype=np.bool_).reshape(-1)
     shapes_list = []  # List of all shapes drawn so far
     # Draw the shapes
-    odd = False
+    color = (0, 0, 0)
+    color_idx = 0
     for shape, count in map_dict.get("shapes", {}).items():
         for _ in range(count):
-            while True:
+            for _ in range(map_dict["max_trial_per_shape"]):
                 # print(shape)
                 if shape == "triangle":
                     vertices, key = get_triangle(
@@ -626,10 +627,6 @@ def generate_map(key, map_dict):
                 x_max, y_max = np.max(vertices, axis=0)
                 new_shape = (x_min, y_min, x_max, y_max)
 
-                image_mask = image_mask.reshape(dimensions[1], dimensions[0])
-                image_mask[int(y_min) : int(y_max), int(x_min) : int(x_max)] = False
-                image_mask = image_mask.reshape(-1)
-
                 # Check if it overlaps with any existing shape
                 if any(is_overlap(new_shape, shape) for shape in shapes_list):
                     continue  # This shape overlaps, try again
@@ -641,14 +638,20 @@ def generate_map(key, map_dict):
                     vertices, map_dict.get("scale_factor", 1.0)
                 )
                 # image = draw_shape(image, vertices, color=(128, 128, 128))
-                if odd:
-                    odd = False
-                    color = (100, 100, 100)
-                elif not odd:
-                    odd = True
-                    color = (0, 0, 0)
+                image_old = image.copy()
                 image = draw_shape(image, vertices_shrinked, color=color)
-                break  # Break the while loop and move to the next shape
+                if (image_old - image).sum().item() != 0:
+                    # something has been added to the image
+                    image_mask = image_mask.reshape(dimensions[1], dimensions[0])
+                    image_mask[int(y_min) : int(y_max), int(x_min) : int(x_max)] = False
+                    image_mask = image_mask.reshape(-1)
+                    color_idx += 1
+                    break  # Break the while loop and move to the next shape
+            if color_idx % 2 != 0:
+                color = (100, 100, 100)
+            else:
+                color = (0, 0, 0)
+
     # increase image size
     image = increase_image_size(image, factor=1.0, color=(255, 255, 255))
     return image, key
@@ -728,24 +731,26 @@ def generate_polygonal_bitmap(key, map_dict):
 
 
 if __name__ == "__main__":
+    width, height = 40, 40
     map_dict = {
         "shapes": {
-            "triangle": 1,
+            "triangle": 2,
             "trapezoid": 0,
             "rectangle": 0,
-            "pentagon": 1,
+            "pentagon": 2,
             "hexagon": 1,
             "L": 0,
             "Z": 0,
             # 'regular_polygon': 6,
         },
-        "dimensions": (40, 40),
-        "max_edge": 10,
-        "min_edge": 2,
+        "dimensions": (width, height),
+        "max_edge": max(3, min(width, height) // 4),
+        "min_edge": max(1, min(width, height) // 20),
         "radius": 300,
         "regular_num_sides": [3, 4, 5],
         "scale_factor": 1,
-        "min_area": 20,
+        "min_area": max(1, width * height // 55),
+        "max_trial_per_shape": 5,
     }
     n_images = 20
     key = jax.random.PRNGKey(11)
