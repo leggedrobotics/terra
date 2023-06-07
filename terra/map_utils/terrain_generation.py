@@ -66,26 +66,40 @@ def _get_search_bounds(vertices, max_edge, w, h):
     return minw, maxw, minh, maxh
 
 
+def _loop(i, value):
+    key, vertices, xy_set, xy_set_mask, min_edge, max_edge = value
+    key, subkey = jax.random.split(key)
+    valid_numbers = xy_set_mask.sum()
+    p = xy_set_mask * (1.0 / valid_numbers)
+    xy_idx = jax.random.choice(subkey, jnp.arange(0, xy_set_mask.shape[0]), p=p)
+    xy = xy_set[xy_idx]
+    vertices = vertices.at[i].set(xy)
+
+    # Mask out unavailable choices in sets
+    xy_norm = jnp.linalg.norm(xy_set - vertices[:, None], axis=-1)
+    xy_set_mask = (xy_norm >= min_edge) * (xy_norm <= max_edge)
+    # Exclude placeholder rows
+    xy_set_mask = jnp.where(
+        jnp.arange(vertices.shape[0])[:, None].repeat(xy_set.shape[0], 1) > i,
+        1,
+        xy_set_mask,
+    )
+    xy_set_mask = xy_set_mask.prod(axis=0)
+    value = key, vertices, xy_set, xy_set_mask.astype(jnp.bool_), min_edge, max_edge
+    return value
+
+
 @partial(jax.jit, static_argnums=(1, 2, 3))
 def _get_vertices_polygon(key, n_sides, w, h, min_edge, max_edge):
     x_set = jnp.arange(0, w)[None].repeat(h, axis=-2).reshape(-1)
     y_set = jnp.arange(0, h)[:, None].repeat(w, axis=-1).reshape(-1)
-    vertices = []
     xy_set = jnp.concatenate((x_set[..., None], y_set[..., None]), axis=-1)
     xy_set_mask = jnp.ones_like(xy_set[..., 0]).astype(jnp.bool_)
+    vertices = jnp.empty((n_sides, 2))
 
-    for _ in range(n_sides):
-        key, subkey = jax.random.split(key)
-        valid_numbers = xy_set_mask.sum()
-        p = xy_set_mask * (1.0 / valid_numbers)
-        xy_idx = jax.random.choice(subkey, jnp.arange(0, h * w), p=p)
-        xy = xy_set[xy_idx]
-        vertices.append(xy)
-
-        # Mask out unavailable choices in sets
-        xy_norm = jnp.linalg.norm(xy_set - jnp.array(vertices)[:, None], axis=-1)
-        xy_set_mask = (xy_norm >= min_edge) * (xy_norm <= max_edge)
-        xy_set_mask = xy_set_mask.prod(axis=0)
+    value = key, vertices, xy_set, xy_set_mask, min_edge, max_edge
+    value = jax.lax.fori_loop(lower=0, upper=n_sides, body_fun=_loop, init_val=value)
+    key, vertices, xy_set, xy_set_mask, min_edge, max_edge = value
 
     # close the shape
     vertices = jnp.array(vertices)
