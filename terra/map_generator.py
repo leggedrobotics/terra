@@ -4,11 +4,12 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from jax import Array
 
-from terra.map_utils.terrain_generation import generate_polygonal_bitmap
+from terra.map_utils.jax_terrain_generation import generate_clustered_bitmap
 from terra.utils import IntMap
+
+# from terra.map_utils.terrain_generation import generate_polygonal_bitmap
 
 
 class MapType(IntEnum):
@@ -432,40 +433,51 @@ def single_square_ramp(
 
 def random_multishape(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
-) -> Array:
-    # TODO move to config
-    key, *subkeys = jax.random.split(key, 4)
-    n_triangles = jax.random.randint(subkeys[0], (), minval=1, maxval=3)
-    n_pentagons = jax.random.randint(subkeys[1], (), minval=1, maxval=3)
-    n_hexagons = jax.random.randint(subkeys[2], (), minval=0, maxval=2)
-    map_dict = {
-        "shapes": {
-            "triangle": n_triangles,
-            "trapezoid": 0,
-            "rectangle": 0,
-            "pentagon": n_pentagons,
-            "hexagon": n_hexagons,
-            "L": 0,
-            "Z": 0,
-            # 'regular_polygon': 6,
-        },
-        "dimensions": (width, height),
-        "max_edge": max(2, min(width, height) // 4),
-        "min_edge": max(1, min(width, height) // 20),
-        "radius": 300,
-        "regular_num_sides": [3, 4, 5],
-        "scale_factor": 0.7,
-        "min_area": max(1, width * height // 55),
-        "max_trial_per_shape": 5,
-    }
-
-    # TODO convert following to JIT-compilable code
-    image, key = jax.pure_callback(
-        generate_polygonal_bitmap,
-        (np.zeros((width, height), dtype=np.int8), key),
-        key,
-        map_dict,
+):
+    generate_clustered_bitmap_partial = partial(
+        generate_clustered_bitmap, width=width, height=height
+    )
+    return generate_clustered_bitmap_partial(
+        key=key, n_clusters=4, n_tiles_per_cluster=5, kernel_size=(3, 3)
     )
 
-    # image, key = single_tile(width, height, key, map_params)
-    return jnp.array(image, dtype=IntMap), key
+
+# def random_multishape(
+#     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
+# ) -> Array:
+#     # TODO move to config
+#     key, *subkeys = jax.random.split(key, 4)
+#     n_triangles = jax.random.randint(subkeys[0], (), minval=1, maxval=3)
+#     n_pentagons = jax.random.randint(subkeys[1], (), minval=1, maxval=3)
+#     n_hexagons = jax.random.randint(subkeys[2], (), minval=0, maxval=2)
+#     map_dict = {
+#         "shapes": {
+#             "triangle": n_triangles,
+#             "trapezoid": 0,
+#             "rectangle": 0,
+#             "pentagon": n_pentagons,
+#             "hexagon": n_hexagons,
+#             "L": 0,
+#             "Z": 0,
+#             # 'regular_polygon': 6,
+#         },
+#         "dimensions": (width, height),
+#         "max_edge": max(2, min(width, height) // 4),
+#         "min_edge": max(1, min(width, height) // 20),
+#         "radius": 300,
+#         "regular_num_sides": [3, 4, 5],
+#         "scale_factor": 0.7,
+#         "min_area": max(1, width * height // 55),
+#         "max_trial_per_shape": 5,
+#     }
+
+#     # TODO convert following to JIT-compilable code
+#     image, key = jax.pure_callback(
+#         generate_polygonal_bitmap,
+#         (np.zeros((width, height), dtype=np.int8), key),
+#         key,
+#         map_dict,
+#     )
+
+#     # image, key = single_tile(width, height, key, map_params)
+#     return jnp.array(image, dtype=IntMap), key
