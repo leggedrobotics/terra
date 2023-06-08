@@ -117,17 +117,19 @@ def _get_vertices_polygon_numpy(key, n_sides, w, h, min_edge, max_edge, image_ma
     return np.array(vertices), key
 
 
-def get_triangle(key, image, image_mask, min_edge, max_edge, min_area, min_angle=1):
+def get_triangle(
+    key, image, image_mask, min_edge, max_edge, min_area, min_angle=1, n_tries=10
+):
     n_sides = 3
     h, w = image.shape[:2]
-    while True:
+    for _ in range(n_tries):
         vertices, key = _get_vertices_polygon_numpy(
             key, n_sides, w, h, min_edge, max_edge, image_mask
         )
         area = get_shape_area(vertices)
         if area >= min_area:
-            break
-    return vertices, key
+            return vertices, key
+    return None, key
 
 
 def get_shape_area(vertices):
@@ -217,10 +219,10 @@ def get_rectangle(key, image, min_edge, max_edge, min_area):
                 return np.array(vertices), key
 
 
-def get_pentagon(key, image, image_mask, min_edge, max_edge, min_area):
+def get_pentagon(key, image, image_mask, min_edge, max_edge, min_area, n_tries=10):
     h, w = image.shape[:2]
     n_sides = 5
-    while True:
+    for _ in range(n_tries):
         vertices, key = _get_vertices_polygon_numpy(
             key, n_sides, w, h, min_edge, max_edge, image_mask
         )
@@ -238,12 +240,13 @@ def get_pentagon(key, image, image_mask, min_edge, max_edge, min_area):
         area = get_shape_area(vertices)
         if area >= min_area:
             return ordered_vertices, key
+    return None, key
 
 
-def get_hexagon(key, image, image_mask, min_edge, max_edge, min_area):
+def get_hexagon(key, image, image_mask, min_edge, max_edge, min_area, n_tries=10):
     h, w = image.shape[:2]
     n_sides = 6
-    while True:
+    for _ in range(n_tries):
         vertices, key = _get_vertices_polygon_numpy(
             key, n_sides, w, h, min_edge, max_edge, image_mask
         )
@@ -262,6 +265,7 @@ def get_hexagon(key, image, image_mask, min_edge, max_edge, min_area):
         # print(area)
         if area >= min_area:
             return ordered_vertices, key
+    return None, key
 
 
 def draw_regular_polygon(key, image, num_sides: list[int], radius: int):
@@ -731,7 +735,7 @@ def generate_polygonal_bitmap(key, map_dict):
 
 
 if __name__ == "__main__":
-    width, height = 40, 40
+    width, height = 13, 13
     map_dict = {
         "shapes": {
             "triangle": 2,
