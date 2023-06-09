@@ -438,7 +438,11 @@ def random_multishape(
         generate_clustered_bitmap, width=width, height=height
     )
     return generate_clustered_bitmap_partial(
-        key=key, n_clusters=4, n_tiles_per_cluster=5, kernel_size=(3, 3)
+        key=key,
+        n_clusters=4,
+        n_tiles_per_cluster=5,
+        kernel_size_aggregation=(3, 3),
+        kernel_size_initial_sampling=(5, 5),
     )
 
 

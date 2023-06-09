@@ -11,21 +11,41 @@ def generate_clustered_bitmap(
     height: int,
     n_clusters: int,
     n_tiles_per_cluster: int,
-    kernel_size: tuple = (3, 3),
+    kernel_size_aggregation: tuple = (3, 3),
+    kernel_size_initial_sampling: tuple = (5, 5),
 ):
-    n_dump_areas = n_clusters // 2
-    n_dig_areas = n_clusters - n_dump_areas
+    kernel_init = jnp.ones(kernel_size_initial_sampling)
 
-    key, *subkeys = jax.random.split(key, 5)
-    map = jnp.zeros((width, height), dtype=IntMap)
-    x_dump = jax.random.randint(subkeys[0], (n_dump_areas,), minval=0, maxval=width)
-    y_dump = jax.random.randint(subkeys[1], (n_dump_areas,), minval=0, maxval=height)
-    x_dig = jax.random.randint(subkeys[2], (n_dig_areas,), minval=0, maxval=width)
-    y_dig = jax.random.randint(subkeys[3], (n_dig_areas,), minval=0, maxval=height)
+    def _loop_init(i, carry):
+        """
+        Init the map by sampling spaced tiles based on the position
+        of the previously sampled ones
+        (low chance to sample neighbouring tiles).
+        """
+        key, map, set_value = carry
 
-    # TODO guarantee they do not cancel each other
-    map = map.at[(x_dump, y_dump)].set(1.0)
-    map = map.at[(x_dig, y_dig)].set(-1.0)
+        mask = (map != 0).astype(IntMap)
+        mask_convolved = convolve2d(mask, kernel_init, mode="same", boundary="fill")
+        mask_convolved_opposite = (mask_convolved <= mask_convolved.min()).astype(
+            IntMap
+        )
+        p_sampling = mask_convolved_opposite / mask_convolved_opposite.sum()
+
+        key, subkey = jax.random.split(key)
+        idx = jax.random.choice(
+            subkey, jnp.arange(start=0, stop=width * height), p=p_sampling.reshape(-1)
+        )
+        map = map.reshape(-1).at[idx].set(set_value).reshape(width, height)
+
+        set_value *= -1
+        carry = key, map, set_value
+        return carry
+
+    carry = key, jnp.zeros((width, height), dtype=IntMap), -1
+    carry = jax.lax.fori_loop(
+        lower=0, upper=n_clusters, body_fun=_loop_init, init_val=carry
+    )
+    key, map, _ = carry
 
     def _loop(i, carry):
         key, map = carry
@@ -52,7 +72,7 @@ def generate_clustered_bitmap(
         carry = key, map
         return carry
 
-    kernel = jnp.ones(kernel_size)
+    kernel = jnp.ones(kernel_size_aggregation)
 
     carry = key, map
     carry = jax.lax.fori_loop(0, n_tiles_per_cluster, _loop, carry)
