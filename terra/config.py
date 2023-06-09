@@ -103,9 +103,9 @@ class TargetMapConfig(NamedTuple):
     height: int = round(MapDims().height_m / MapDims().tile_size)
 
     # For clusters type of map
-    n_clusters: int = (5,)
-    n_tiles_per_cluster: int = (10,)
-    kernel_size_initial_sampling: tuple[int] = ((10, 10),)
+    n_clusters: int = 5
+    n_tiles_per_cluster: int = 10
+    kernel_size_initial_sampling: tuple[int] = 10
 
     # Bounds on the volume per tile  # TODO implement in code
     min_height: int = -10

@@ -30,6 +30,16 @@ class MapParams(NamedTuple):
     pass
 
 
+class ExtendedMapParams(NamedTuple):
+    depth: int
+    edge_min: int
+    edge_max: int
+
+    n_clusters: int
+    n_tiles_per_cluster: int
+    kernel_size_initial_sampling: int
+
+
 class GridMap(NamedTuple):
     """
     Clarifications on the map representation.
@@ -70,17 +80,18 @@ class GridMap(NamedTuple):
         map_params: MapParams,
         n_clusters: int,
         n_tiles_per_cluster: int,
-        kernel_size_initial_sampling: tuple[int],
+        kernel_size_initial_sampling: int,
     ) -> "GridMap":
         # jax.debug.print("map_params.type={x}", x=map_params.type)
-        params = {
-            "depth": map_params.depth,
-            "edge_min": map_params.edge_min,
-            "edge_max": map_params.edge_max,
-            "n_clusters": n_clusters,
-            "n_tiles_per_cluster": n_tiles_per_cluster,
-            "kernel_size_initial_sampling": kernel_size_initial_sampling,
-        }
+        params = ExtendedMapParams(
+            map_params.depth,
+            map_params.edge_min,
+            map_params.edge_max,
+            n_clusters,
+            n_tiles_per_cluster,
+            kernel_size_initial_sampling,
+        )
+
         map, key = jax.lax.switch(
             map_params.type,
             [
@@ -94,7 +105,15 @@ class GridMap(NamedTuple):
                 partial(multiple_single_tiles, width, height),
                 partial(multiple_single_tiles_with_dump_tiles, width, height),
                 partial(two_square_trenches_two_dump_areas, width, height),
-                partial(random_multishape, width, height),
+                partial(
+                    generate_clustered_bitmap,
+                    width,
+                    height,
+                    params.n_clusters,
+                    params.n_tiles_per_cluster,
+                    3,
+                    params.kernel_size_initial_sampling,
+                ),
             ],
             key,
             params,
@@ -188,7 +207,7 @@ def single_tile(
     x = jax.random.randint(subkey, (1,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
     y = jax.random.randint(subkey, (1,), minval=0, maxval=height)
-    map = map.at[x, y].set(map_params["depth"])
+    map = map.at[x, y].set(map_params.depth)
     return map, key
 
 
@@ -199,7 +218,7 @@ def single_tile_same_position(
     x = jnp.full((1,), 1)
     # y = jnp.full((1,), 5)
     y = jnp.full((1,), 7)
-    map = map.at[x, y].set(map_params["depth"])
+    map = map.at[x, y].set(map_params.depth)
     return map, key
 
 
@@ -211,7 +230,7 @@ def single_tile_easy_position(
     x = jax.random.randint(subkey, (1,), minval=0, maxval=width // 2)
     key, subkey = jax.random.split(key)
     y = jax.random.randint(subkey, (1,), minval=height // 2, maxval=height)
-    map = map.at[x, y].set(map_params["depth"])
+    map = map.at[x, y].set(map_params.depth)
     return map, key
 
 
@@ -224,7 +243,7 @@ def multiple_single_tiles(
     x = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
     y = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
-    map = map.at[x, y].set(map_params["depth"])
+    map = map.at[x, y].set(map_params.depth)
     return map, key
 
 
@@ -239,23 +258,23 @@ def multiple_single_tiles_with_dump_tiles(
     x_dig = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
     y_dig = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
-    map = map.at[x_dig, y_dig].set(map_params["depth"])
+    map = map.at[x_dig, y_dig].set(map_params.depth)
 
     # Dump
     key, subkey = jax.random.split(key)
     x_dump = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
     y_dump = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=height)
-    map = map.at[x_dump, y_dump].set(-map_params["depth"])
+    map = map.at[x_dump, y_dump].set(-map_params.depth)
     return map, key
 
 
 def single_square_trench(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params["edge_min"]
-    trench_size_edge_max = map_params["edge_max"]
-    trench_depth = map_params["depth"]
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key, subkey = jax.random.split(key)
     trench_size_edge = jax.random.randint(
@@ -285,9 +304,9 @@ def single_square_trench(
 def two_square_trenches_two_dump_areas(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params["edge_min"]
-    trench_size_edge_max = map_params["edge_max"]
-    trench_depth = map_params["depth"]
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key, subkey = jax.random.split(key)
     trench_size_edge = jax.random.randint(
@@ -350,9 +369,9 @@ def two_square_trenches_two_dump_areas(
 def single_square_trench_right_side(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params["edge_min"]
-    trench_size_edge_max = map_params["edge_max"]
-    trench_depth = map_params["depth"]
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key, subkey = jax.random.split(key)
     trench_size_edge = jax.random.randint(
@@ -382,9 +401,9 @@ def single_square_trench_right_side(
 def single_rectangular_trench(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ) -> Array:
-    trench_size_edge_min = map_params["edge_min"]
-    trench_size_edge_max = map_params["edge_max"]
-    trench_depth = map_params["depth"]
+    trench_size_edge_min = map_params.edge_min
+    trench_size_edge_max = map_params.edge_max
+    trench_depth = map_params.depth
 
     key, subkey = jax.random.split(key)
     trench_size_edge = jax.random.randint(
@@ -414,8 +433,8 @@ def single_rectangular_trench(
 def single_square_ramp(
     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
 ) -> Array:
-    edge_min = map_params["edge_min"]
-    edge_max = map_params["edge_max"]
+    edge_min = map_params.edge_min
+    edge_max = map_params.edge_max
 
     key, subkey = jax.random.split(key)
     trench_size_edge = jax.random.randint(
@@ -443,21 +462,6 @@ def single_square_ramp(
         orientation,
     )
     return map, key
-
-
-def random_multishape(
-    width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
-):
-    generate_clustered_bitmap_partial = partial(
-        generate_clustered_bitmap, width=width, height=height
-    )
-    return generate_clustered_bitmap_partial(
-        key=key,
-        n_clusters=5,
-        n_tiles_per_cluster=10,
-        kernel_size_aggregation=(3, 3),
-        kernel_size_initial_sampling=(10, 10),
-    )
 
 
 # def random_multishape(

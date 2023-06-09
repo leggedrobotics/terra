@@ -6,15 +6,16 @@ IntMap = jnp.int16  # TODO import
 
 
 def generate_clustered_bitmap(
-    key: int,
     width: int,
     height: int,
     n_clusters: int,
     n_tiles_per_cluster: int,
-    kernel_size_aggregation: tuple = (3, 3),
-    kernel_size_initial_sampling: tuple = (5, 5),
+    kernel_size_aggregation: int,
+    kernel_size_initial_sampling: int,
+    key: int,
+    placeholder=None,
 ):
-    kernel_init = jnp.ones(kernel_size_initial_sampling)
+    kernel_init = jnp.ones((kernel_size_initial_sampling, kernel_size_initial_sampling))
 
     def _loop_init(i, carry):
         """
@@ -87,7 +88,7 @@ def generate_clustered_bitmap(
         carry = key, map, set_value
         return carry
 
-    kernel = jnp.ones(kernel_size_aggregation)
+    kernel = jnp.ones((kernel_size_aggregation, kernel_size_aggregation))
 
     carry = key, map, -1
     carry = jax.lax.fori_loop(0, n_tiles_per_cluster * n_clusters, _loop, carry)
@@ -98,11 +99,12 @@ def generate_clustered_bitmap(
 if __name__ == "__main__":
     key = jax.random.PRNGKey(131)
     map, key = generate_clustered_bitmap(
+        10,
+        10,
+        4,
+        3,
+        5,
         key,
-        10,
-        10,
-        n_clusters=4,
-        n_tiles_per_cluster=5,
     )
     import numpy as np
 
