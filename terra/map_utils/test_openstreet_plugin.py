@@ -4,22 +4,40 @@ import cv2
 import numpy as np
 import skimage.measure
 
-w, h = 300, 300  # meters and pixels
-wm, hm = w // 10, h // 10
-i, j = 4, 5
+# TODO implement tile size
+wm, hm = 60, 60  # meters
+
+div = 10
+w, h = div * wm, div * hm
+
+for i in range(2700):
+    try:
+        with open(f"/home/antonio/Downloads/metadata/building_{i}.json") as f:
+            meta1 = json.load(f)
+        w1 = int(meta1["real_dimensions"]["length"])
+        h1 = int(meta1["real_dimensions"]["width"])
+        if w1 < 40 and h1 < 40:
+            break
+    except:
+        continue
+
+for j in range(i + 1, 2700):
+    try:
+        with open(f"/home/antonio/Downloads/metadata/building_{j}.json") as f:
+            meta2 = json.load(f)
+        w2 = int(meta2["real_dimensions"]["length"])
+        h2 = int(meta2["real_dimensions"]["width"])
+        if w2 < 40 and h2 < 40:
+            break
+    except:
+        continue
+
+print(f"{(w1, h1)=}")
+print(f"{(w2, h2)=}")
 
 building_img_path1 = f"/home/antonio/Downloads/images/building_{i}.png"
 building_img_path2 = f"/home/antonio/Downloads/images/building_{j}.png"
 
-with open(f"/home/antonio/Downloads/metadata/building_{i}.json") as f:
-    meta1 = json.load(f)
-w1 = int(meta1["real_dimensions"]["length"])
-h1 = int(meta1["real_dimensions"]["width"])
-
-with open(f"/home/antonio/Downloads/metadata/building_{j}.json") as f:
-    meta2 = json.load(f)
-w2 = int(meta2["real_dimensions"]["length"])
-h2 = int(meta2["real_dimensions"]["width"])
 
 pic1 = cv2.imread(building_img_path1)
 pic2 = cv2.imread(building_img_path2)
@@ -28,8 +46,12 @@ print(f"{pic2.shape=}")
 
 p = np.ones((w, h, 3)) * 255
 
-pic1 = cv2.resize(pic1, (w1, h1)).astype(np.uint8)  # , interpolation=cv2.INTER_AREA)
-pic2 = cv2.resize(pic2, (w2, h2)).astype(np.uint8)  # , interpolation=cv2.INTER_AREA)
+pic1 = cv2.resize(pic1, (w1 * div, h1 * div)).astype(
+    np.uint8
+)  # , interpolation=cv2.INTER_AREA)
+pic2 = cv2.resize(pic2, (w2 * div, h2 * div)).astype(
+    np.uint8
+)  # , interpolation=cv2.INTER_AREA)
 
 
 print(f"{pic1.shape=}")
@@ -48,7 +70,7 @@ pd = (
 print(f"{pd.shape=}")
 
 pd = np.where(pd == 255, 255, 0).astype(np.uint8)
-p_grey = np.where(p < 255, 100, p)
+p_grey = np.where(p < 255, 100, p).astype(np.uint8)
 # p += pic1 + pic2
 
 # cv2.imshow("building1", pic1)
