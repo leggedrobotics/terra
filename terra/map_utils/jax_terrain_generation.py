@@ -48,35 +48,50 @@ def generate_clustered_bitmap(
     key, map, _ = carry
 
     def _loop(i, carry):
-        key, map = carry
-        mask_dig = (map < 0).astype(IntMap)
-        mask_dump = (map > 0).astype(IntMap)
+        key, map, set_value = carry
 
-        mask_dump_probs = convolve2d(mask_dump, kernel, mode="same", boundary="fill")
-        mask_dump_probs = mask_dump_probs * (~(mask_dump).astype(jnp.bool_))
-        mask_dump_probs = mask_dump_probs / mask_dump_probs.sum()
-
-        mask_dig_probs = convolve2d(mask_dig, kernel, mode="same", boundary="fill")
-        mask_dig_probs = mask_dig_probs * (~(mask_dig).astype(jnp.bool_))
-        mask_dig_probs = mask_dig_probs / mask_dig_probs.sum()
-
-        key, *subkeys = jax.random.split(key, 3)
-        next_dump_tile_idx = jax.random.choice(
-            subkeys[0], jnp.arange(0, width * height), p=mask_dump_probs.reshape(-1)
+        mask = jax.lax.cond(
+            set_value < 0,
+            lambda: (map < 0).astype(IntMap),
+            lambda: (map > 0).astype(IntMap),
         )
-        map = map.reshape(-1).at[next_dump_tile_idx].set(1.0).reshape(width, height)
-        next_dig_tile_idx = jax.random.choice(
-            subkeys[1], jnp.arange(0, width * height), p=mask_dig_probs.reshape(-1)
-        )
-        map = map.reshape(-1).at[next_dig_tile_idx].set(-1.0).reshape(width, height)
-        carry = key, map
+
+        mask_probs = convolve2d(mask, kernel, mode="same", boundary="fill")
+        mask_probs = mask_probs * (~(mask).astype(jnp.bool_))
+        mask_probs = mask_probs / mask_probs.sum()
+
+        key, subkey = jax.random.split(key)
+        # 75% random sample, 25% argmax
+        do_random_sample = jax.random.randint(subkey, (), 0, 4).astype(jnp.bool_)
+
+        def _random_sample(key, map):
+            key, *subkeys = jax.random.split(key, 3)
+            next_tile_idx = jax.random.choice(
+                subkeys[1], jnp.arange(0, width * height), p=mask_probs.reshape(-1)
+            )
+            map = (
+                map.reshape(-1).at[next_tile_idx].set(set_value).reshape(width, height)
+            )
+            return key, map
+
+        def _argmax(key, map):
+            next_tile_idx = jnp.argmax(mask_probs.reshape(-1))
+            map = (
+                map.reshape(-1).at[next_tile_idx].set(set_value).reshape(width, height)
+            )
+            return key, map
+
+        key, map = jax.lax.cond(do_random_sample, _random_sample, _argmax, key, map)
+
+        set_value *= -1
+        carry = key, map, set_value
         return carry
 
     kernel = jnp.ones(kernel_size_aggregation)
 
-    carry = key, map
-    carry = jax.lax.fori_loop(0, n_tiles_per_cluster, _loop, carry)
-    key, map = carry
+    carry = key, map, -1
+    carry = jax.lax.fori_loop(0, n_tiles_per_cluster * n_clusters, _loop, carry)
+    key, map, _ = carry
     return map, key
 
 

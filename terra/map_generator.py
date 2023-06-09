@@ -439,10 +439,10 @@ def random_multishape(
     )
     return generate_clustered_bitmap_partial(
         key=key,
-        n_clusters=4,
-        n_tiles_per_cluster=5,
+        n_clusters=5,
+        n_tiles_per_cluster=10,
         kernel_size_aggregation=(3, 3),
-        kernel_size_initial_sampling=(5, 5),
+        kernel_size_initial_sampling=(10, 10),
     )
 
 
