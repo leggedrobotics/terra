@@ -42,6 +42,9 @@ class GridWorld(NamedTuple):
             map_params=env_cfg.target_map.params,
             width=env_cfg.target_map.width,
             height=env_cfg.target_map.height,
+            n_clusters=env_cfg.target_map.n_clusters,
+            n_tiles_per_cluster=env_cfg.target_map.n_tiles_per_cluster,
+            kernel_size_initial_sampling=env_cfg.target_map.kernel_size_initial_sampling,
         )
 
         world = GridWorld(key=key, target_map=target_map, action_map=action_map)

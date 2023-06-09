@@ -102,15 +102,35 @@ class TargetMapConfig(NamedTuple):
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)
 
+    # For clusters type of map
+    n_clusters: int = (5,)
+    n_tiles_per_cluster: int = (10,)
+    kernel_size_initial_sampling: tuple[int] = ((10, 10),)
+
     # Bounds on the volume per tile  # TODO implement in code
     min_height: int = -10
     max_height: int = 10
 
+    # @staticmethod
+    # def from_map_dims(map_dims: MapDims) -> "TargetMapConfig":
+    #     return TargetMapConfig(
+    #         width=round(map_dims.width_m / map_dims.tile_size),
+    #         height=round(map_dims.height_m / map_dims.tile_size),
+    #     )
+
     @staticmethod
-    def from_map_dims(map_dims: MapDims) -> "TargetMapConfig":
+    def parametrized(
+        map_dims: MapDims,
+        n_clusters: int,
+        n_tiles_per_cluster: int,
+        kernel_size_initial_sampling: tuple[int],
+    ) -> "TargetMapConfig":
         return TargetMapConfig(
             width=round(map_dims.width_m / map_dims.tile_size),
             height=round(map_dims.height_m / map_dims.tile_size),
+            n_clusters=n_clusters,
+            n_tiles_per_cluster=n_tiles_per_cluster,
+            kernel_size_initial_sampling=kernel_size_initial_sampling,
         )
 
 
@@ -221,12 +241,17 @@ class EnvConfig(NamedTuple):
     def parametrized(
         map_dims: MapDims,
         max_steps_in_episode: int,
+        n_clusters: int,
+        n_tiles_per_cluster: int,
+        kernel_size_initial_sampling: tuple[int],
     ) -> "EnvConfig":
         return EnvConfig(
             tile_size=map_dims.tile_size,
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
-            target_map=TargetMapConfig.from_map_dims(map_dims),
+            target_map=TargetMapConfig.parametrized(
+                map_dims, n_clusters, n_tiles_per_cluster, kernel_size_initial_sampling
+            ),
             action_map=ActionMapConfig.from_map_dims(map_dims),
         )
 
