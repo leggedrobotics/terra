@@ -1,6 +1,9 @@
+import os
+
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
+from tqdm import tqdm
 
 IntMap = jnp.int16
 INTMAP_MAX = jnp.iinfo(IntMap).max
@@ -111,3 +114,14 @@ def get_arm_angle_int(
     """
     angles_cabin_base_ratio = round(n_angles_cabin / n_angles_base)
     return (angles_cabin_base_ratio * angle_base + angle_cabin) % n_angles_cabin
+
+
+def load_maps_from_disk(folder_path: str) -> Array:
+    dataset_size = int(os.getenv("DATASET_SIZE", -1))
+    map = np.load(f"{folder_path}/img_0.npy")
+    maps = np.array(map[None])
+    for i in tqdm(range(1, dataset_size), desc="Data Loader"):
+        map = np.load(f"{folder_path}/img_{i}.npy")
+        maps = np.concatenate([maps, map[None]], axis=0)
+    print(f"Loaded {dataset_size} maps from disk.")
+    return jnp.array(maps, dtype=IntMap)

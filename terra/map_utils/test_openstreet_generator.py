@@ -13,7 +13,7 @@ def _convert_terra_img_to_cv2(img):
 
 if __name__ == "__main__":
     img_idx = 1
-    path = f"/home/antonio/Downloads/img_generator/3_buildings/img_{img_idx}.npy"
+    path = f"/home/antonio/Downloads/img_generator/3_buildings/60x60/img_{img_idx}.npy"
     img = np.load(path)
     print(img)
     print(img.shape)

@@ -111,7 +111,11 @@ class MapParamsOpenstreet3DigDigDump(MapParams):
 
 
 class TargetMapConfig(NamedTuple):
-    params: MapParams = MapParamsOpenstreet3DigDigDump()
+    params: MapParams = MapParamsOpenstreet2DigDump()
+    load_from_disk: bool = True
+    n_buildings_loaded_map: int = (
+        2  # 2 or 3 (number of buildings in each of the cached maps)
+    )
 
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)

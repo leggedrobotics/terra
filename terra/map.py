@@ -1,7 +1,10 @@
+import os
+from functools import partial
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from terra.config import EnvConfig
 from terra.map_generator import GridMap
@@ -30,21 +33,32 @@ class GridWorld(NamedTuple):
         return self.target_map.height
 
     @classmethod
-    def new(cls, key: jax.random.KeyArray, env_cfg: EnvConfig) -> "GridWorld":
+    def new(
+        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, maps_from_disk: Array
+    ) -> "GridWorld":
         action_map = GridMap.new(
             map=jnp.zeros(
                 (env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap
             )
         )
 
-        target_map, key = GridMap.random_map(
-            key=key,
-            map_params=env_cfg.target_map.params,
-            width=env_cfg.target_map.width,
-            height=env_cfg.target_map.height,
-            n_clusters=env_cfg.target_map.n_clusters,
-            n_tiles_per_cluster=env_cfg.target_map.n_tiles_per_cluster,
-            kernel_size_initial_sampling=env_cfg.target_map.kernel_size_initial_sampling,
+        target_map, key = jax.lax.cond(
+            env_cfg.target_map.load_from_disk,
+            partial(
+                GridMap.load_map,
+                max_idx=int(os.getenv("DATASET_SIZE", -1)),
+                maps=maps_from_disk,
+            ),
+            partial(
+                GridMap.random_map,
+                map_params=env_cfg.target_map.params,
+                width=env_cfg.target_map.width,
+                height=env_cfg.target_map.height,
+                n_clusters=env_cfg.target_map.n_clusters,
+                n_tiles_per_cluster=env_cfg.target_map.n_tiles_per_cluster,
+                kernel_size_initial_sampling=env_cfg.target_map.kernel_size_initial_sampling,
+            ),
+            key,
         )
 
         world = GridWorld(key=key, target_map=target_map, action_map=action_map)

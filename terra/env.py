@@ -1,3 +1,4 @@
+import os
 from collections.abc import Callable
 from functools import partial
 
@@ -9,6 +10,8 @@ from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.state import State
+from terra.utils import IntMap
+from terra.utils import load_maps_from_disk
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 
@@ -17,10 +20,12 @@ class TerraEnv:
     def __init__(
         self,
         env_cfg: EnvConfig = EnvConfig(),
+        maps_from_disk: Array | None = None,
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
         self.env_cfg = env_cfg
+        self.maps_from_disk = maps_from_disk
 
         if rendering:
             from viz.window import Window
@@ -41,7 +46,7 @@ class TerraEnv:
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, self.env_cfg)
+        state = State.new(key, self.env_cfg, self.maps_from_disk)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -233,7 +238,27 @@ class TerraEnvBatch:
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
-        self.terra_env = TerraEnv(env_cfg, rendering=rendering, n_imgs_row=n_imgs_row)
+        # Data Loading (if required)
+        width = env_cfg.target_map.width
+        height = env_cfg.target_map.height
+        folder_path = (
+            os.getenv("DATASET_PATH", "")
+            + f"/{env_cfg.target_map.n_buildings_loaded_map}_buildings"
+            + f"/{width}x{height}"
+        )
+        if env_cfg.target_map.load_from_disk:
+            maps_from_disk = load_maps_from_disk(folder_path)
+        else:
+            maps_from_disk = jnp.empty(
+                (1, env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap
+            )
+
+        self.terra_env = TerraEnv(
+            env_cfg,
+            rendering=rendering,
+            n_imgs_row=n_imgs_row,
+            maps_from_disk=maps_from_disk,
+        )
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
 

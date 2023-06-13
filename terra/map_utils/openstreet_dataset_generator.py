@@ -263,6 +263,6 @@ if __name__ == "__main__":
     # TODO implement tile size
     wm, hm = 60, 60  # meters
     div = 10
-    openstreet_path = "/media/openstreet"
-    target_path = "/media/img_generator"
-    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=None)
+    openstreet_path = "/home/antonio/Downloads/openstreet"
+    target_path = "/home/antonio/Downloads/img_generator"
+    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=10)
