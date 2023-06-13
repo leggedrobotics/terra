@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -9,7 +10,7 @@ def _filter_buildings_on_dims(w_max: float, h_max: float) -> list[int]:
     idx_list = []
     for i in range(2700):
         try:
-            with open(f"/home/antonio/Downloads/metadata/building_{i}.json") as f:
+            with open(f"{openstreet_path}/metadata/building_{i}.json") as f:
                 meta1 = json.load(f)
             w1 = int(meta1["real_dimensions"]["length"])
             h1 = int(meta1["real_dimensions"]["width"])
@@ -21,7 +22,7 @@ def _filter_buildings_on_dims(w_max: float, h_max: float) -> list[int]:
 
 
 def _get_building_h_w(idx: int) -> tuple[float, float]:
-    with open(f"/home/antonio/Downloads/metadata/building_{idx}.json") as f:
+    with open(f"{openstreet_path}/metadata/building_{idx}.json") as f:
         meta1 = json.load(f)
     w1 = int(meta1["real_dimensions"]["length"])
     h1 = int(meta1["real_dimensions"]["width"])
@@ -51,6 +52,8 @@ def _handle_options(img, option: int, img_path: str | None):
     1 --> save image at path (converted to [-1, 0, 1])
     2 --> show img
     """
+    target_path = Path(img_path).parent
+    target_path.mkdir(parents=True, exist_ok=True)
     if option == 1:
         img = _convert_img_to_terra(img)
         np.save(img_path, img)
@@ -83,6 +86,7 @@ def generate_openstreet_2(
     n_combinations = idx_list.shape[-1]
 
     n_overlapping = 0
+    img_idx = 0
     for i in range(n_combinations):
         if max_n_imgs is not None and i >= max_n_imgs:
             break
@@ -90,8 +94,8 @@ def generate_openstreet_2(
         idx1 = idx_list[0, i]
         idx2 = idx_list[1, i]
 
-        building_img_path1 = f"/home/antonio/Downloads/images/building_{idx1}.png"
-        building_img_path2 = f"/home/antonio/Downloads/images/building_{idx2}.png"
+        building_img_path1 = f"{openstreet_path}/images/building_{idx1}.png"
+        building_img_path2 = f"{openstreet_path}/images/building_{idx2}.png"
 
         w1, h1 = _get_building_h_w(idx1)
         w2, h2 = _get_building_h_w(idx2)
@@ -137,15 +141,16 @@ def generate_openstreet_2(
             _handle_options(
                 pd,
                 option,
-                f"/home/antonio/Downloads/img_generator/2_buildings/{wm}x{hm}/img_{i}.npy",
+                f"{target_path}/2_buildings/{wm}x{hm}/img_{img_idx}.npy",
             )
+            img_idx += 1
 
             continue
         else:
             n_overlapping += 1
             print(f"{n_overlapping=}")
 
-    print(f"Generated {i + 1} images.")
+    print(f"Generated {img_idx} images.")
 
 
 def generate_openstreet_3(
@@ -181,9 +186,9 @@ def generate_openstreet_3(
             idx1 = idx_list[0, i]
             idx2 = idx_list[1, i]
 
-            building_img_path1 = f"/home/antonio/Downloads/images/building_{idx1}.png"
-            building_img_path2 = f"/home/antonio/Downloads/images/building_{idx2}.png"
-            building_img_path3 = f"/home/antonio/Downloads/images/building_{idx3}.png"
+            building_img_path1 = f"{openstreet_path}/images/building_{idx1}.png"
+            building_img_path2 = f"{openstreet_path}/images/building_{idx2}.png"
+            building_img_path3 = f"{openstreet_path}/images/building_{idx3}.png"
 
             w1, h1 = _get_building_h_w(idx1)
             w2, h2 = _get_building_h_w(idx2)
@@ -243,7 +248,7 @@ def generate_openstreet_3(
                 _handle_options(
                     pd,
                     option,
-                    f"/home/antonio/Downloads/img_generator/3_buildings/{wm}x{hm}/img_{img_idx}.npy",
+                    f"{target_path}/3_buildings/{wm}x{hm}/img_{img_idx}.npy",
                 )
                 img_idx += 1
                 continue
@@ -251,11 +256,13 @@ def generate_openstreet_3(
                 n_overlapping += 1
                 print(f"{n_overlapping=}")
 
-    print(f"Generated {img_idx + 1} images.")
+    print(f"Generated {img_idx} images.")
 
 
 if __name__ == "__main__":
     # TODO implement tile size
     wm, hm = 60, 60  # meters
     div = 10
-    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=5)
+    openstreet_path = "/media/openstreet"
+    target_path = "/media/img_generator"
+    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=None)

@@ -117,5 +117,5 @@ def get_building_shapes_from_OSM(
 if __name__ == "__main__":
     # to get the bbox use https://colab.research.google.com/github/opengeos/segment-geospatial/blob/main/docs/examples/satellite.ipynb#scrollTo=kvB16LLk0qPY
     zurich_bbox = (47.378177, 47.364622, 8.526535, 8.544894)
-    folder_path = "/home/antonio/Downloads"
+    folder_path = "/media/openstreet"
     get_building_shapes_from_OSM(*zurich_bbox, option=2, folder_path=folder_path)
