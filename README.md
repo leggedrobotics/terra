@@ -16,6 +16,12 @@ To check which device you are using, you can:
 print(f"Device = {jnp.ones(1).device_buffer.device()}\n")
 ~~~
 
+## Use dataset saved on storage
+To be able to use a dataset saved on storage, define the following env variable when you launch the script.
+~~~
+DATASET_PATH=path_to_dataset
+~~~
+
 ## Tests
 The tests have to be run using the module option, for example:
 ~~~

@@ -9,9 +9,9 @@ from terra.utils import Float
 
 
 class MapDims(NamedTuple):
-    width_m: Float = 20.0  # in meters
-    height_m: Float = 20.0  # in meters
-    tile_size: Float = 1.5  # in meters
+    width_m: Float = 60.0  # in meters
+    height_m: Float = 60.0  # in meters
+    tile_size: Float = 1.0  # in meters
 
 
 # Map params #####
@@ -93,11 +93,25 @@ class MapParamsRandomMultishape(MapParams):
     depth: int = -1
 
 
+class MapParamsOpenstreet2DigDump(MapParams):
+    type: MapType = MapType.OPENSTREET_2_DIG_DUMP
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
+class MapParamsOpenstreet3DigDigDump(MapParams):
+    type: MapType = MapType.OPENSTREET_3_DIG_DIG_DUMP
+    edge_min: int = 1
+    edge_max: int = 1
+    depth: int = -1
+
+
 # end Map params #####
 
 
 class TargetMapConfig(NamedTuple):
-    params: MapParams = MapParamsRandomMultishape()
+    params: MapParams = MapParamsOpenstreet3DigDigDump()
 
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)
@@ -110,13 +124,6 @@ class TargetMapConfig(NamedTuple):
     # Bounds on the volume per tile  # TODO implement in code
     min_height: int = -10
     max_height: int = 10
-
-    # @staticmethod
-    # def from_map_dims(map_dims: MapDims) -> "TargetMapConfig":
-    #     return TargetMapConfig(
-    #         width=round(map_dims.width_m / map_dims.tile_size),
-    #         height=round(map_dims.height_m / map_dims.tile_size),
-    #     )
 
     @staticmethod
     def parametrized(

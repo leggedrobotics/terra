@@ -137,7 +137,7 @@ def generate_openstreet_2(
             _handle_options(
                 pd,
                 option,
-                f"/home/antonio/Downloads/img_generator/2_buildings/img_{i}.npy",
+                f"/home/antonio/Downloads/img_generator/2_buildings/{wm}x{hm}/img_{i}.npy",
             )
 
             continue
@@ -243,7 +243,7 @@ def generate_openstreet_3(
                 _handle_options(
                     pd,
                     option,
-                    f"/home/antonio/Downloads/img_generator/3_buildings/img_{img_idx}.npy",
+                    f"/home/antonio/Downloads/img_generator/3_buildings/{wm}x{hm}/img_{img_idx}.npy",
                 )
                 img_idx += 1
                 continue
@@ -258,4 +258,4 @@ if __name__ == "__main__":
     # TODO implement tile size
     wm, hm = 60, 60  # meters
     div = 10
-    generate_openstreet_3(wm, hm, div, option=1, max_n_imgs=5)
+    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=5)

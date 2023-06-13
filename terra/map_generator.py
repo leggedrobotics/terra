@@ -1,3 +1,4 @@
+import os
 from enum import IntEnum
 from functools import partial
 from typing import NamedTuple
@@ -8,8 +9,6 @@ from jax import Array
 
 from terra.map_utils.jax_terrain_generation import generate_clustered_bitmap
 from terra.utils import IntMap
-
-# from terra.map_utils.terrain_generation import generate_polygonal_bitmap
 
 
 class MapType(IntEnum):
@@ -24,6 +23,8 @@ class MapType(IntEnum):
     MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
     TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
     RANDOM_MULTISHAPE = 10
+    OPENSTREET_2_DIG_DUMP = 11
+    OPENSTREET_3_DIG_DIG_DUMP = 12
 
 
 class MapParams(NamedTuple):
@@ -113,6 +114,18 @@ class GridMap(NamedTuple):
                     params.n_tiles_per_cluster,
                     3,
                     params.kernel_size_initial_sampling,
+                ),
+                partial(
+                    openstreet_plugin_2,
+                    width,
+                    height,
+                    folder_path=os.getenv("DATASET_PATH", ""),
+                ),
+                partial(
+                    openstreet_plugin_3,
+                    width,
+                    height,
+                    folder_path=os.getenv("DATASET_PATH", ""),
                 ),
             ],
             key,
@@ -464,42 +477,64 @@ def single_square_ramp(
     return map, key
 
 
-# def random_multishape(
-#     width: IntMap, height: IntMap, key: jax.random.KeyArray, map_params: MapParams
-# ) -> Array:
-#     # TODO move to config
-#     key, *subkeys = jax.random.split(key, 4)
-#     n_triangles = jax.random.randint(subkeys[0], (), minval=1, maxval=3)
-#     n_pentagons = jax.random.randint(subkeys[1], (), minval=1, maxval=3)
-#     n_hexagons = jax.random.randint(subkeys[2], (), minval=0, maxval=2)
-#     map_dict = {
-#         "shapes": {
-#             "triangle": n_triangles,
-#             "trapezoid": 0,
-#             "rectangle": 0,
-#             "pentagon": n_pentagons,
-#             "hexagon": n_hexagons,
-#             "L": 0,
-#             "Z": 0,
-#             # 'regular_polygon': 6,
-#         },
-#         "dimensions": (width, height),
-#         "max_edge": max(2, min(width, height) // 4),
-#         "min_edge": max(1, min(width, height) // 20),
-#         "radius": 300,
-#         "regular_num_sides": [3, 4, 5],
-#         "scale_factor": 0.7,
-#         "min_area": max(1, width * height // 55),
-#         "max_trial_per_shape": 5,
-#     }
+def _load_map_from_npy(idx: int, folder_path: str):
+    """
+    Wrapper around jnp.load, used to have concrete value of idx parameter, instead of TracedArray.
+    """
+    return jnp.load(f"{folder_path}/img_{idx}.npy")
 
-#     # TODO convert following to JIT-compilable code
-#     image, key = jax.pure_callback(
-#         generate_polygonal_bitmap,
-#         (np.zeros((width, height), dtype=np.int8), key),
-#         key,
-#         map_dict,
-#     )
 
-#     # image, key = single_tile(width, height, key, map_params)
-#     return jnp.array(image, dtype=IntMap), key
+def _openstreet_plugin(
+    width: IntMap,
+    height: IntMap,
+    key: jax.random.KeyArray,
+    map_params: MapParams,
+    folder_path: str,
+    max_idx: int,
+) -> Array:
+    key, subkey = jax.random.split(key)
+    img_idx = jax.random.randint(subkey, (), 0, max_idx)
+
+    # TODO find a way to remove callback
+    img = jax.pure_callback(
+        partial(_load_map_from_npy, folder_path=f"{folder_path}/{width}x{height}"),
+        jnp.zeros((width, height), dtype=jnp.int8),
+        img_idx,
+    ).astype(IntMap)
+    return img, key
+
+
+def openstreet_plugin_2(
+    width: IntMap,
+    height: IntMap,
+    key: jax.random.KeyArray,
+    map_params: MapParams,
+    folder_path: str,
+    max_idx: int = 5,
+) -> Array:
+    """
+    Load from storage pre-computed maps that combine 2 buildings
+    from the openstreet plugin.
+    One is dig and one is dump.
+    """
+    return _openstreet_plugin(
+        width, height, key, map_params, folder_path + "/2_buildings", max_idx
+    )
+
+
+def openstreet_plugin_3(
+    width: IntMap,
+    height: IntMap,
+    key: jax.random.KeyArray,
+    map_params: MapParams,
+    folder_path: str,
+    max_idx: int = 5,
+) -> Array:
+    """
+    Load from storage pre-computed maps that combine 3 buildings
+    from the openstreet plugin.
+    Two are dig and one is dump.
+    """
+    return _openstreet_plugin(
+        width, height, key, map_params, folder_path + "/3_buildings", max_idx
+    )
