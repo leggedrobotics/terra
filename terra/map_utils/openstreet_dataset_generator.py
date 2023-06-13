@@ -76,7 +76,7 @@ def generate_openstreet_2(
     """
     w, h = div * wm, div * hm
 
-    idx_list = _filter_buildings_on_dims(40, 40)
+    idx_list = _filter_buildings_on_dims(int(0.65 * wm), int(0.65 * hm))
     n = len(idx_list)
     idx_list = np.array(idx_list)
     idx_list_a = idx_list[None].repeat(n, 0).reshape(-1)
@@ -163,7 +163,7 @@ def generate_openstreet_3(
     """
     w, h = div * wm, div * hm
 
-    idx_list = _filter_buildings_on_dims(40, 40)
+    idx_list = _filter_buildings_on_dims(int(0.65 * wm), int(0.65 * hm))
     n = len(idx_list)
     idx_list = np.array(idx_list)
     idx_list_plain = idx_list.copy()
@@ -261,8 +261,8 @@ def generate_openstreet_3(
 
 if __name__ == "__main__":
     # TODO implement tile size
-    wm, hm = 60, 60  # meters
+    wm, hm = 20, 20  # meters
     div = 10
-    openstreet_path = "/home/antonio/Downloads/openstreet"
-    target_path = "/home/antonio/Downloads/img_generator"
-    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=10)
+    openstreet_path = "/media/openstreet"
+    target_path = "/media/img_generator"
+    generate_openstreet_2(wm, hm, div, option=1, max_n_imgs=None)
