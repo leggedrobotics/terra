@@ -17,9 +17,9 @@ print(f"Device = {jnp.ones(1).device_buffer.device()}\n")
 ~~~
 
 ## Use dataset saved on storage
-To be able to use a dataset saved on storage, define the following env variable when you launch the script.
+To be able to use a dataset saved on storage, define the following env variables when you launch the script.
 ~~~
-DATASET_PATH=path_to_dataset
+DATASET_PATH=path_to_dataset DATASET_SIZE=dataset_size
 ~~~
 
 ## Tests

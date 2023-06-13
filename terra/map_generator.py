@@ -120,12 +120,14 @@ class GridMap(NamedTuple):
                     width,
                     height,
                     folder_path=os.getenv("DATASET_PATH", ""),
+                    max_idx=os.getenv("DATASET_SIZE", -1),
                 ),
                 partial(
                     openstreet_plugin_3,
                     width,
                     height,
                     folder_path=os.getenv("DATASET_PATH", ""),
+                    max_idx=os.getenv("DATASET_SIZE", -1),
                 ),
             ],
             key,
@@ -510,7 +512,7 @@ def openstreet_plugin_2(
     key: jax.random.KeyArray,
     map_params: MapParams,
     folder_path: str,
-    max_idx: int = 5,
+    max_idx: int,
 ) -> Array:
     """
     Load from storage pre-computed maps that combine 2 buildings
@@ -528,7 +530,7 @@ def openstreet_plugin_3(
     key: jax.random.KeyArray,
     map_params: MapParams,
     folder_path: str,
-    max_idx: int = 5,
+    max_idx: int,
 ) -> Array:
     """
     Load from storage pre-computed maps that combine 3 buildings
