@@ -5,7 +5,7 @@ import numpy as np
 from jax import Array
 from tqdm import tqdm
 
-IntMap = jnp.int16
+IntMap = jnp.int8
 INTMAP_MAX = jnp.iinfo(IntMap).max
 
 IntLowDim = jnp.int8
@@ -118,10 +118,9 @@ def get_arm_angle_int(
 
 def load_maps_from_disk(folder_path: str) -> Array:
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
-    map = np.load(f"{folder_path}/img_0.npy")
-    maps = np.array(map[None])
-    for i in tqdm(range(1, dataset_size), desc="Data Loader"):
+    maps = []
+    for i in tqdm(range(dataset_size), desc="Data Loader"):
         map = np.load(f"{folder_path}/img_{i}.npy")
-        maps = np.concatenate([maps, map[None]], axis=0)
+        maps.append(map)
     print(f"Loaded {dataset_size} maps from disk.")
     return jnp.array(maps, dtype=IntMap)
