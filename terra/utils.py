@@ -5,7 +5,7 @@ import numpy as np
 from jax import Array
 from tqdm import tqdm
 
-IntMap = jnp.int8
+IntMap = jnp.int16
 INTMAP_MAX = jnp.iinfo(IntMap).max
 
 IntLowDim = jnp.int8

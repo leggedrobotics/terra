@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.signal import convolve2d
 
-IntMap = jnp.int8  # TODO import
+IntMap = jnp.int16  # TODO import
 
 
 def generate_clustered_bitmap(
