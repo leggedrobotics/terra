@@ -135,14 +135,21 @@ class GridMap(NamedTuple):
         )
         return GridMap(map), key
 
+    # @staticmethod
+    # def load_map(key: jax.random.KeyArray, max_idx: int, maps: Array):
+    #     """
+    #     maps is an Array of shape (n_maps, W, H)
+    #     """
+    #     key, subkey = jax.random.split(key)
+    #     idx = jax.random.randint(subkey, (), 0, max_idx)
+    #     return GridMap(maps[idx]), key
+
     @staticmethod
-    def load_map(key: jax.random.KeyArray, max_idx: int, maps: Array):
+    def load_map(key: jax.random.KeyArray, map: Array):
         """
         maps is an Array of shape (n_maps, W, H)
         """
-        key, subkey = jax.random.split(key)
-        idx = jax.random.randint(subkey, (), 0, max_idx)
-        return GridMap(maps[idx]), key
+        return GridMap(map), key
 
 
 def _get_generic_rectangular_trench(

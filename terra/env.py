@@ -9,6 +9,7 @@ from jax import Array
 from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
+from terra.maps_buffer import MapsBuffer
 from terra.state import State
 from terra.utils import IntMap
 from terra.utils import load_maps_from_disk
@@ -20,12 +21,10 @@ class TerraEnv:
     def __init__(
         self,
         env_cfg: EnvConfig = EnvConfig(),
-        maps_from_disk: Array | None = None,
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
         self.env_cfg = env_cfg
-        self.maps_from_disk = maps_from_disk
 
         if rendering:
             from viz.window import Window
@@ -41,12 +40,12 @@ class TerraEnv:
         return hash((TerraEnv, self.env_cfg))
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seed: int) -> tuple[State, dict[str, Array]]:
+    def reset(self, seed: int, loaded_map: Array) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, self.env_cfg, self.maps_from_disk)
+        state = State.new(key, self.env_cfg, loaded_map)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -55,11 +54,13 @@ class TerraEnv:
         return state, observations
 
     @partial(jax.jit, static_argnums=(0,))
-    def _reset_existent(self, state: State) -> tuple[State, dict[str, Array]]:
+    def _reset_existent(
+        self, state: State, loaded_map: Array
+    ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
-        state = state._reset(self.env_cfg)
+        state = state._reset(self.env_cfg, loaded_map)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -157,7 +158,7 @@ class TerraEnv:
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, state: State, action: Action
+        self, state: State, action: Action, loaded_map: Array
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
@@ -194,8 +195,9 @@ class TerraEnv:
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x: (new_state, observations),
+            lambda x, y: (new_state, observations),
             new_state,
+            loaded_map,
         )
 
         infos = new_state._get_infos(action)
@@ -233,10 +235,12 @@ class TerraEnvBatch:
 
     def __init__(
         self,
+        n_envs: int,
         env_cfg: EnvConfig = EnvConfig(),
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
         n_imgs_row: int = 1,
+        maps_buffer_seed: int = 33,
     ) -> None:
         # Data Loading (if required)
         width = env_cfg.target_map.width
@@ -253,14 +257,20 @@ class TerraEnvBatch:
                 (1, env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap
             )
 
+        maps_buffer_key = jax.random.PRNGKey(maps_buffer_seed)
+        self.maps_buffer = MapsBuffer(
+            maps=maps_from_disk,
+            key=maps_buffer_key,
+        )
+
         self.terra_env = TerraEnv(
             env_cfg,
             rendering=rendering,
             n_imgs_row=n_imgs_row,
-            maps_from_disk=maps_from_disk,
         )
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
+        self.n_envs = n_envs
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, TerraEnvBatch) and self.env_cfg == __o.env_cfg
@@ -269,17 +279,27 @@ class TerraEnvBatch:
         return hash((TerraEnvBatch, self.env_cfg))
 
     @partial(jax.jit, static_argnums=(0,))
+    def _reset(self, seeds: Array, maps: Array) -> State:
+        return jax.vmap(self.terra_env.reset)(seeds, maps)
+
     def reset(self, seeds: Array) -> State:
-        return jax.vmap(self.terra_env.reset)(seeds)
+        self.maps_buffer, maps = self.maps_buffer.sample(self.n_envs)
+        return self._reset(seeds, maps)
 
     @partial(jax.jit, static_argnums=(0,))
+    def _step(
+        self, states: State, actions: Action, maps: Array
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
+            states, actions, maps
+        )
+        return states, (obs, rewards, dones, infos)
+
     def step(
         self, states: State, actions: Action
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states, actions
-        )
-        return states, (obs, rewards, dones, infos)
+        self.maps_buffer, maps = self.maps_buffer.sample(self.n_envs)
+        return self._step(states, actions, maps)
 
     @property
     def actions_size(self) -> int:

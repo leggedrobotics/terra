@@ -1,4 +1,3 @@
-import os
 from functools import partial
 from typing import NamedTuple
 
@@ -34,7 +33,7 @@ class GridWorld(NamedTuple):
 
     @classmethod
     def new(
-        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, maps_from_disk: Array
+        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, loaded_map: Array
     ) -> "GridWorld":
         action_map = GridMap.new(
             map=jnp.zeros(
@@ -46,8 +45,7 @@ class GridWorld(NamedTuple):
             env_cfg.target_map.load_from_disk,
             partial(
                 GridMap.load_map,
-                max_idx=int(os.getenv("DATASET_SIZE", -1)),
-                maps=maps_from_disk,
+                map=loaded_map,
             ),
             partial(
                 GridMap.random_map,
