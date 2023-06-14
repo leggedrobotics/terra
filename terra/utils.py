@@ -1,9 +1,14 @@
 import os
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
 from tqdm import tqdm
+
+from terra.maps_buffer import MapsBuffer
+
+# from terra.config import EnvConfig
 
 IntMap = jnp.int16
 INTMAP_MAX = jnp.iinfo(IntMap).max
@@ -124,3 +129,20 @@ def load_maps_from_disk(folder_path: str) -> Array:
         maps.append(map)
     print(f"Loaded {dataset_size} maps from disk.")
     return jnp.array(maps, dtype=IntMap)
+
+
+def init_maps_buffer(key: jax.random.KeyArray, env_cfg):
+    width = env_cfg.target_map.width
+    height = env_cfg.target_map.height
+    folder_path = (
+        os.getenv("DATASET_PATH", "")
+        + f"/{env_cfg.target_map.n_buildings_loaded_map}_buildings"
+        + f"/{width}x{height}"
+    )
+    if env_cfg.target_map.load_from_disk:
+        maps_from_disk = load_maps_from_disk(folder_path)
+    else:
+        maps_from_disk = jnp.empty(
+            (1, env_cfg.action_map.width, env_cfg.action_map.height), dtype=IntMap
+        )
+    return MapsBuffer(key=key, maps=maps_from_disk)
