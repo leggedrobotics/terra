@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from functools import partial
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -11,29 +12,31 @@ from terra.config import EnvConfig
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
+from viz.rendering import RenderingEngine
+from viz.window import Window
 
 
-class TerraEnv:
-    def __init__(
-        self,
-        env_cfg: EnvConfig = EnvConfig(),
-        rendering: bool = False,
-        n_imgs_row: int = 1,
-    ) -> None:
-        self.env_cfg = env_cfg
+class TerraEnv(NamedTuple):
+    env_cfg: EnvConfig
 
-        if rendering:
-            from viz.window import Window
-            from viz.rendering import RenderingEngine
-
-            self.window = Window("Terra", n_imgs_row)
-            self.rendering_engine = RenderingEngine()
+    window: Window | None = None
+    rendering_engine: RenderingEngine | None = None
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
 
     def __hash__(self) -> int:
         return hash((TerraEnv, self.env_cfg))
+
+    @classmethod
+    def new(
+        cls, env_cfg: EnvConfig, rendering: bool = False, n_imgs_row: int = 1
+    ) -> "TerraEnv":
+        window = Window("Terra", n_imgs_row) if rendering else None
+        rendering_engine = RenderingEngine() if rendering else None
+        return TerraEnv(
+            env_cfg=env_cfg, window=window, rendering_engine=rendering_engine
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, seed: int, loaded_map: Array) -> tuple[State, dict[str, Array]]:
@@ -236,19 +239,19 @@ class TerraEnvBatch:
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
-        self.terra_env = TerraEnv(
-            env_cfg,
+        self.terra_env = TerraEnv.new(
+            env_cfg=env_cfg,
             rendering=rendering,
             n_imgs_row=n_imgs_row,
         )
         self.batch_cfg = batch_cfg
         self.env_cfg = env_cfg
 
-    def __eq__(self, __o: object) -> bool:
-        return isinstance(__o, TerraEnvBatch) and self.env_cfg == __o.env_cfg
+    # def __eq__(self, __o: object) -> bool:
+    #     return isinstance(__o, TerraEnvBatch) and self.env_cfg == __o.env_cfg
 
-    def __hash__(self) -> int:
-        return hash((TerraEnvBatch, self.env_cfg))
+    # def __hash__(self) -> int:
+    #     return hash((TerraEnvBatch, self.env_cfg))
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, seeds: Array, maps: Array) -> State:
