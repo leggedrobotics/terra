@@ -33,3 +33,9 @@ class MapsBuffer(NamedTuple):
     def sample(self, n_envs: int) -> Array:
         maps = self.maps[:n_envs]
         return maps
+
+    def __hash__(self) -> int:
+        return hash(self.key)
+
+    def __eq__(self, __o: "MapsBuffer") -> bool:
+        return self.key == __o.key
