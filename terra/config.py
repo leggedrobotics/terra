@@ -3,9 +3,18 @@ from typing import NamedTuple
 from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
-from terra.map_generator import MapParams
 from terra.map_generator import MapType
 from terra.utils import Float
+
+
+class ImmutableMapsConfig(NamedTuple):
+    """
+    Define the max size of the map.
+    Used for padding in case it's needed.
+    """
+
+    max_width: int = 60  # number of tiles
+    max_height: int = 60  # number of tiles
 
 
 class MapDims(NamedTuple):
@@ -14,108 +23,9 @@ class MapDims(NamedTuple):
     tile_size: Float = 1.0  # in meters
 
 
-# Map params #####
-class MapParamsSquareSingleTile(MapParams):
-    type: MapType = MapType.SINGLE_TILE
-    depth: int = -1
-
-    edge_min: int = 2  # ignore
-    edge_max: int = 2  # ignore
-
-
-class MapParamsSquareSingleTrench(MapParams):
-    type: MapType = MapType.SQUARE_SINGLE_TRENCH
-    edge_min: int = 2
-    edge_max: int = 2
-    depth: int = -1
-
-
-class MapParamsRectangularSingleTrench(MapParams):
-    type: MapType = MapType.RECTANGULAR_SINGLE_TRENCH
-    edge_min: int = 2
-    edge_max: int = 2
-    depth: int = -1
-
-
-class MapParamsSquareSingleRamp(MapParams):
-    type: MapType = MapType.SQUARE_SINGLE_RAMP
-    edge_min: int = 4
-    edge_max: int = 4
-    depth: int = -97  # ignore
-
-
-class MapParamsSquareSingleTrenchRightSide(MapParams):
-    type: MapType = MapType.SQUARE_SINGLE_TRENCH_RIGHT_SIDE
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsSquareSingleTileSamePosition(MapParams):
-    type: MapType = MapType.SINGLE_TILE_SAME_POSITION
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsSquareSingleTileEasyPosition(MapParams):
-    type: MapType = MapType.SINGLE_TILE_EASY_POSITION
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsMultipleSingleTiles(MapParams):
-    type: MapType = MapType.MULTIPLE_SINGLE_TILES
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsMultipleSingleTilesWithDumpTiles(MapParams):
-    type: MapType = MapType.MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsTwoSquareTrenchesTwoDumpAreas(MapParams):
-    type: MapType = MapType.TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsRandomMultishape(MapParams):
-    type: MapType = MapType.RANDOM_MULTISHAPE
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsOpenstreet2DigDump(MapParams):
-    type: MapType = MapType.OPENSTREET_2_DIG_DUMP
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-class MapParamsOpenstreet3DigDigDump(MapParams):
-    type: MapType = MapType.OPENSTREET_3_DIG_DIG_DUMP
-    edge_min: int = 1
-    edge_max: int = 1
-    depth: int = -1
-
-
-# end Map params #####
-
-
 class TargetMapConfig(NamedTuple):
-    params: MapParams = MapParamsOpenstreet2DigDump()
-    load_from_disk: bool = True
-    n_buildings_loaded_map: int = (
-        2  # 2 or 3 (number of buildings in each of the cached maps)
-    )
+    type: int = MapType.OPENSTREET_2_DIG_DUMP
+    map_dof: int = 0  # for curriculum
 
     width: int = round(MapDims().width_m / MapDims().tile_size)
     height: int = round(MapDims().height_m / MapDims().tile_size)
@@ -161,24 +71,33 @@ class ActionMapConfig(NamedTuple):
         )
 
 
+class ImmutableAgentConfig(NamedTuple):
+    """
+    The part of the AgentConfig that won't change based on curriculum.
+    """
+
+    angles_base: int = 4
+    angles_cabin: int = 8
+    max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
+
+
 class AgentConfig(NamedTuple):
     random_init_pos: bool = True
     random_init_base_angle: bool = True
 
-    angles_base: int = 4
-    angles_cabin: int = 8
+    angles_base: int = ImmutableAgentConfig().angles_base
+    angles_cabin: int = ImmutableAgentConfig().angles_cabin
+    max_arm_extension: int = ImmutableAgentConfig().max_arm_extension
 
     move_tiles: int = 2  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
-    max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
-
     dig_depth: int = 1  # how much every dig action digs
     # max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
     # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
 
-    max_loaded: int = 100  # TODO implement
+    # max_loaded: int = 100  # TODO implement
 
     height: int = (
         round(6.08 / MapDims().tile_size)
@@ -266,6 +185,21 @@ class EnvConfig(NamedTuple):
             action_map=ActionMapConfig.from_map_dims(map_dims),
         )
 
+    @classmethod
+    def new(cls):
+        return EnvConfig()
+
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
+    load_maps_from_disk: bool = True
+    seed_maps_buffer: int = 876
+
+    # Config to get data for batched env initialization
+    agent: ImmutableAgentConfig = ImmutableAgentConfig()
+    maps: ImmutableMapsConfig = ImmutableMapsConfig()
+
+    # Maps folders (select here the data paths you want to load)
+    maps_paths = [
+        "2_buildings/60x60/",
+    ]

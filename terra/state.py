@@ -41,9 +41,9 @@ class State(NamedTuple):
 
     @classmethod
     def new(
-        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, loaded_map: Array
+        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, target_map: Array
     ) -> "State":
-        world, key = GridWorld.new(key, env_cfg, loaded_map)
+        world = GridWorld.new(target_map)
 
         agent, key = Agent.new(key, env_cfg)
         agent = jax.tree_map(
@@ -58,12 +58,12 @@ class State(NamedTuple):
             env_steps=0,
         )
 
-    def _reset(self, env_cfg, loaded_map) -> "State":
+    def _reset(self, env_cfg: EnvConfig, target_map: Array) -> "State":
         """
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
-        return self.new(key=key, env_cfg=env_cfg, loaded_map=loaded_map)
+        return self.new(key=key, env_cfg=env_cfg, target_map=target_map)
 
     def _step(self, action: Action) -> "State":
         """

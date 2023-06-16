@@ -10,6 +10,7 @@ from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.state import State
+from terra.utils import init_maps_buffer
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from viz.rendering import RenderingEngine
@@ -17,34 +18,24 @@ from viz.window import Window
 
 
 class TerraEnv(NamedTuple):
-    env_cfg: EnvConfig
-
     window: Window | None = None
     rendering_engine: RenderingEngine | None = None
 
-    def __eq__(self, __o: object) -> bool:
-        return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
-
-    def __hash__(self) -> int:
-        return hash((TerraEnv, self.env_cfg))
-
     @classmethod
-    def new(
-        cls, env_cfg: EnvConfig, rendering: bool = False, n_imgs_row: int = 1
-    ) -> "TerraEnv":
+    def new(cls, rendering: bool = False, n_imgs_row: int = 1) -> "TerraEnv":
         window = Window("Terra", n_imgs_row) if rendering else None
         rendering_engine = RenderingEngine() if rendering else None
-        return TerraEnv(
-            env_cfg=env_cfg, window=window, rendering_engine=rendering_engine
-        )
+        return TerraEnv(window=window, rendering_engine=rendering_engine)
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seed: int, loaded_map: Array) -> tuple[State, dict[str, Array]]:
+    def reset(
+        self, seed: int, target_map: Array, env_cfg: EnvConfig
+    ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, self.env_cfg, loaded_map)
+        state = State.new(key, env_cfg, target_map)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -54,12 +45,12 @@ class TerraEnv(NamedTuple):
 
     @partial(jax.jit, static_argnums=(0,))
     def _reset_existent(
-        self, state: State, loaded_map: Array
+        self, state: State, target_map: Array, env_cfg: EnvConfig
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
-        state = state._reset(self.env_cfg, loaded_map)
+        state = state._reset(env_cfg, target_map)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -87,8 +78,8 @@ class TerraEnv(NamedTuple):
             agent_pos=state.agent.agent_state.pos_base,
             base_dir=state.agent.agent_state.angle_base,
             cabin_dir=state.agent.agent_state.angle_cabin,
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
+            agent_width=state.agent.width,
+            agent_height=state.agent.height,
         )
 
         imgs_local = state.world.local_map_action.map
@@ -132,8 +123,8 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
+            agent_width=obs["agent_width"],
+            agent_height=obs["agent_width"],
         )
 
         imgs_local = obs["local_map_action"]
@@ -157,7 +148,7 @@ class TerraEnv(NamedTuple):
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, state: State, action: Action, loaded_map: Array
+        self, state: State, action: Action, target_map: Array, env_cfg: EnvConfig
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
@@ -194,9 +185,10 @@ class TerraEnv(NamedTuple):
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x, y: (new_state, observations),
+            lambda x, y, z: (new_state, observations),
             new_state,
-            loaded_map,
+            target_map,
+            env_cfg,
         )
 
         infos = new_state._get_infos(action)
@@ -224,6 +216,8 @@ class TerraEnv(NamedTuple):
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
+            "agent_width": state.agent.width,
+            "agent_height": state.agent.height,
         }
 
 
@@ -234,35 +228,46 @@ class TerraEnvBatch:
 
     def __init__(
         self,
-        env_cfg: EnvConfig = EnvConfig(),
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
         self.terra_env = TerraEnv.new(
-            env_cfg=env_cfg,
             rendering=rendering,
             n_imgs_row=n_imgs_row,
         )
         self.batch_cfg = batch_cfg
-        self.env_cfg = env_cfg
 
-    # def __eq__(self, __o: object) -> bool:
-    #     return isinstance(__o, TerraEnvBatch) and self.env_cfg == __o.env_cfg
+        print(f"{batch_cfg=}")
 
-    # def __hash__(self) -> int:
-    #     return hash((TerraEnvBatch, self.env_cfg))
+        key_maps_buffer_shuffle = jax.random.PRNGKey(batch_cfg.seed_maps_buffer)
+        self.maps_buffer = init_maps_buffer(key_maps_buffer_shuffle, batch_cfg)
+        self.maps_buffer_keys = None
+
+    def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
+        target_maps, self.maps_buffer_keys = jax.vmap(self.maps_buffer.get_map_init)(
+            seeds, env_cfgs
+        )
+        return self._reset(seeds, target_maps, env_cfgs)
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seeds: Array, maps: Array) -> State:
-        return jax.vmap(self.terra_env.reset)(seeds, maps)
+    def _reset(self, seeds: Array, target_maps: Array, env_cfgs: EnvConfig) -> State:
+        return jax.vmap(self.terra_env.reset)(seeds, target_maps, env_cfgs)
 
-    @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, states: State, actions: Action, maps: Array
+        self, states: State, actions: Action, env_cfgs: EnvConfig
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        target_maps, self.maps_buffer_keys = jax.vmap(self.maps_buffer.get_map)(
+            self.maps_buffer_keys, env_cfgs
+        )
+        return self._step(states, actions, target_maps, env_cfgs)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _step(
+        self, states: State, actions: Action, target_maps: Array, env_cfgs: EnvConfig
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states, actions, maps
+            states, actions, target_maps, env_cfgs
         )
         return states, (obs, rewards, dones, infos)
 
@@ -290,23 +295,23 @@ class TerraEnvBatch:
         return {
             "agent_states": (6,),
             "local_map_action": (
-                self.env_cfg.agent.angles_cabin,
-                self.env_cfg.agent.max_arm_extension + 1,
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
             ),
             "local_map_target": (
-                self.env_cfg.agent.angles_cabin,
-                self.env_cfg.agent.max_arm_extension + 1,
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
             ),
             "action_map": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
             "target_map": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
             "traversability_mask": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
         }

@@ -33,6 +33,9 @@ class Agent(NamedTuple):
 
     agent_state: AgentState
 
+    width: int
+    height: int
+
     @staticmethod
     def new(key: jax.random.PRNGKey, env_cfg: EnvConfig) -> "Agent":
         pos_base, key = jax.lax.cond(
@@ -59,7 +62,10 @@ class Agent(NamedTuple):
             loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim),
         )
 
-        return Agent(agent_state=agent_state), key
+        width = env_cfg.agent.width
+        height = env_cfg.agent.width
+
+        return Agent(agent_state=agent_state, width=width, height=height), key
 
 
 def _get_top_left_init_pos(key: jax.random.PRNGKey, env_cfg: EnvConfig):

@@ -1,4 +1,3 @@
-import os
 from enum import IntEnum
 from functools import partial
 from typing import NamedTuple
@@ -8,7 +7,9 @@ import jax.numpy as jnp
 from jax import Array
 
 from terra.map_utils.jax_terrain_generation import generate_clustered_bitmap
-from terra.utils import IntMap
+
+# from terra.utils import IntMap
+IntMap = jnp.int16  # TODO import
 
 
 class MapType(IntEnum):
@@ -23,6 +24,8 @@ class MapType(IntEnum):
     MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
     TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
     RANDOM_MULTISHAPE = 10
+
+    # Loaded from disk
     OPENSTREET_2_DIG_DUMP = 11
     OPENSTREET_3_DIG_DIG_DUMP = 12
 
@@ -74,7 +77,7 @@ class GridMap(NamedTuple):
         return GridMap.new(jnp.full((1, 1), fill_value=0, dtype=jnp.bool_))
 
     @staticmethod
-    def random_map(
+    def procedural_map(
         key: jax.random.KeyArray,
         width: IntMap,
         height: IntMap,
@@ -83,7 +86,9 @@ class GridMap(NamedTuple):
         n_tiles_per_cluster: int,
         kernel_size_initial_sampling: int,
     ) -> "GridMap":
-        # jax.debug.print("map_params.type={x}", x=map_params.type)
+        """
+        Procedurally generate a map.
+        """
         params = ExtendedMapParams(
             map_params.depth,
             map_params.edge_min,
@@ -115,20 +120,6 @@ class GridMap(NamedTuple):
                     3,
                     params.kernel_size_initial_sampling,
                 ),
-                partial(
-                    openstreet_plugin_2,
-                    width,
-                    height,
-                    folder_path=os.getenv("DATASET_PATH", ""),
-                    max_idx=int(os.getenv("DATASET_SIZE", -1)),
-                ),
-                partial(
-                    openstreet_plugin_3,
-                    width,
-                    height,
-                    folder_path=os.getenv("DATASET_PATH", ""),
-                    max_idx=int(os.getenv("DATASET_SIZE", -1)),
-                ),
             ],
             key,
             params,
@@ -136,20 +127,11 @@ class GridMap(NamedTuple):
         return GridMap(map), key
 
     # @staticmethod
-    # def load_map(key: jax.random.KeyArray, max_idx: int, maps: Array):
+    # def load_map(key: jax.random.KeyArray, map: Array):
     #     """
     #     maps is an Array of shape (n_maps, W, H)
     #     """
-    #     key, subkey = jax.random.split(key)
-    #     idx = jax.random.randint(subkey, (), 0, max_idx)
-    #     return GridMap(maps[idx]), key
-
-    @staticmethod
-    def load_map(key: jax.random.KeyArray, map: Array):
-        """
-        maps is an Array of shape (n_maps, W, H)
-        """
-        return GridMap(map), key
+    #     return GridMap(map), key
 
 
 def _get_generic_rectangular_trench(
@@ -495,64 +477,64 @@ def single_square_ramp(
     return map, key
 
 
-def _load_map_from_npy(idx: int, folder_path: str):
-    """
-    Wrapper around jnp.load, used to have concrete value of idx parameter, instead of TracedArray.
-    """
-    return jnp.load(f"{folder_path}/img_{idx}.npy")
+# def _load_map_from_npy(idx: int, folder_path: str):
+#     """
+#     Wrapper around jnp.load, used to have concrete value of idx parameter, instead of TracedArray.
+#     """
+#     return jnp.load(f"{folder_path}/img_{idx}.npy")
 
 
-def _openstreet_plugin(
-    width: IntMap,
-    height: IntMap,
-    key: jax.random.KeyArray,
-    map_params: MapParams,
-    folder_path: str,
-    max_idx: int,
-) -> Array:
-    key, subkey = jax.random.split(key)
-    img_idx = jax.random.randint(subkey, (), 0, max_idx)
+# def _openstreet_plugin(
+#     width: IntMap,
+#     height: IntMap,
+#     key: jax.random.KeyArray,
+#     map_params: MapParams,
+#     folder_path: str,
+#     max_idx: int,
+# ) -> Array:
+#     key, subkey = jax.random.split(key)
+#     img_idx = jax.random.randint(subkey, (), 0, max_idx)
 
-    # TODO find a way to remove callback
-    img = jax.pure_callback(
-        partial(_load_map_from_npy, folder_path=f"{folder_path}/{width}x{height}"),
-        jnp.zeros((width, height), dtype=jnp.int8),
-        img_idx,
-    ).astype(IntMap)
-    return img, key
-
-
-def openstreet_plugin_2(
-    width: IntMap,
-    height: IntMap,
-    key: jax.random.KeyArray,
-    map_params: MapParams,
-    folder_path: str,
-    max_idx: int,
-) -> Array:
-    """
-    Load from storage pre-computed maps that combine 2 buildings
-    from the openstreet plugin.
-    One is dig and one is dump.
-    """
-    return _openstreet_plugin(
-        width, height, key, map_params, folder_path + "/2_buildings", max_idx
-    )
+#     # TODO find a way to remove callback
+#     img = jax.pure_callback(
+#         partial(_load_map_from_npy, folder_path=f"{folder_path}/{width}x{height}"),
+#         jnp.zeros((width, height), dtype=jnp.int8),
+#         img_idx,
+#     ).astype(IntMap)
+#     return img, key
 
 
-def openstreet_plugin_3(
-    width: IntMap,
-    height: IntMap,
-    key: jax.random.KeyArray,
-    map_params: MapParams,
-    folder_path: str,
-    max_idx: int,
-) -> Array:
-    """
-    Load from storage pre-computed maps that combine 3 buildings
-    from the openstreet plugin.
-    Two are dig and one is dump.
-    """
-    return _openstreet_plugin(
-        width, height, key, map_params, folder_path + "/3_buildings", max_idx
-    )
+# def openstreet_plugin_2(
+#     width: IntMap,
+#     height: IntMap,
+#     key: jax.random.KeyArray,
+#     map_params: MapParams,
+#     folder_path: str,
+#     max_idx: int,
+# ) -> Array:
+#     """
+#     Load from storage pre-computed maps that combine 2 buildings
+#     from the openstreet plugin.
+#     One is dig and one is dump.
+#     """
+#     return _openstreet_plugin(
+#         width, height, key, map_params, folder_path + "/2_buildings", max_idx
+#     )
+
+
+# def openstreet_plugin_3(
+#     width: IntMap,
+#     height: IntMap,
+#     key: jax.random.KeyArray,
+#     map_params: MapParams,
+#     folder_path: str,
+#     max_idx: int,
+# ) -> Array:
+#     """
+#     Load from storage pre-computed maps that combine 3 buildings
+#     from the openstreet plugin.
+#     Two are dig and one is dump.
+#     """
+#     return _openstreet_plugin(
+#         width, height, key, map_params, folder_path + "/3_buildings", max_idx
+#     )
