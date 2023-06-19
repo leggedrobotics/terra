@@ -8,8 +8,6 @@ from jax import Array
 from terra.map_generator import GridMap
 from terra.map_generator import MapType
 
-# from terra.config import EnvConfig
-
 
 class TmpMapParams(NamedTuple):
     # TODO remove class
@@ -25,7 +23,7 @@ class MapsBuffer(NamedTuple):
     and the generation of the procedurally-generated maps.
     """
 
-    maps: list[Array]
+    maps: list[callable]  # [lambda: map_array_1, lambda: map_array_2]
     key_shuffle: jax.random.KeyArray
 
     map_params: TmpMapParams = TmpMapParams()  # TODO remove
@@ -37,38 +35,39 @@ class MapsBuffer(NamedTuple):
         ]
     )
 
+    def __hash__(self) -> int:
+        return hash((len(self.maps),))
+
+    def __eq__(self, __o: "MapsBuffer") -> bool:
+        return len(self.maps) == len(__o.maps)
+
     @classmethod
     def new(
-        self,
+        cls,
         maps: list[Array],
         key: jax.random.KeyArray,
     ) -> "MapsBuffer":
         return MapsBuffer(
-            maps=maps,
+            maps=[lambda: m for m in maps],
             key_shuffle=key,
         )
 
-    @jax.jit
-    def shuffle(self) -> "MapsBuffer":
-        # TODO change logic to handle dict
-        key_shuffle, subkey = jax.random.split(self.key_shuffle)
-        maps = [jax.random.permutation(subkey, map, 0) for map in self.maps]
-        return MapsBuffer.new(
-            maps=maps,
-            key_shuffle=key_shuffle,
-        )
-
-    # @partial(jax.jit, static_argnums=(1,))
-    # def sample(self, n_envs: int) -> Array:
+    # @jax.jit
+    # def shuffle(self) -> "MapsBuffer":
     #     # TODO change logic to handle dict
-    #     maps = self.maps[:n_envs]
-    #     return maps
+    #     key_shuffle, subkey = jax.random.split(self.key_shuffle)
+    #     maps = [jax.random.permutation(subkey, map, 0) for map in self.maps]
+    #     return MapsBuffer.new(
+    #         maps=maps,
+    #         key_shuffle=key_shuffle,
+    #     )
 
-    def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg, dof) -> Array:
-        # dof = env_cfg.target_map.map_dof
+    @partial(jax.jit, static_argnums=(0,))
+    def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:
+        maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
         key, subkey = jax.random.split(key)
-        idx = jax.random.randint(subkey, (), 0, self.maps[dof].shape[0])
-        map = self.maps[dof][idx]
+        idx = jax.random.randint(subkey, (), 0, maps_a.shape[0])
+        map = maps_a[idx]
         return map, key
 
     def _procedurally_generate_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
@@ -89,26 +88,22 @@ class MapsBuffer(NamedTuple):
         )
         return map, key
 
+    @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
-        map_type = env_cfg.target_map.type
-        map, key = jax.lax.cond(
-            jnp.any(jnp.isin(jnp.array([map_type]), self.map_types_from_disk)),
-            partial(self._get_map_from_disk, dof=env_cfg.target_map.map_dof),
-            self._procedurally_generate_map,
-            key,
-            env_cfg,
-        )
+        # map_type = env_cfg.target_map.type
+        # map, key = jax.lax.cond(
+        #     jnp.any(jnp.isin(jnp.array([map_type]), self.map_types_from_disk)),
+        #     partial(self._get_map_from_disk, maps_a=self.maps[0]),
+        #     # partial(self._get_map_from_disk, maps_a=self.maps[env_cfg.target_map.map_dof]),
+        #     partial(self._procedurally_generate_map, env_cfg=env_cfg),
+        #     key,
+        # )
 
         # TODO include procedural maps
-        # map, key = self._get_map_from_disk(key, env_cfg)
+        map, key = self._get_map_from_disk(key, env_cfg)
         return map, key
 
+    @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, seed: int, env_cfg):
         key = jax.random.PRNGKey(seed)
         return self.get_map(key, env_cfg)
-
-    def __hash__(self) -> int:
-        return hash(self.key_shuffle)
-
-    def __eq__(self, __o: "MapsBuffer") -> bool:
-        return self.key_shuffle == __o.key

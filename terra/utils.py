@@ -145,4 +145,4 @@ def init_maps_buffer(key: jax.random.KeyArray, batch_cfg):
     maps_from_disk = [
         load_maps_from_disk(folder_path) for folder_path in folder_paths_dict.keys()
     ]
-    return MapsBuffer(key_shuffle=key, maps=maps_from_disk)
+    return MapsBuffer.new(key=key, maps=maps_from_disk)
