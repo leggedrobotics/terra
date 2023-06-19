@@ -242,25 +242,28 @@ class TerraEnvBatch:
 
         key_maps_buffer_shuffle = jax.random.PRNGKey(batch_cfg.seed_maps_buffer)
         self.maps_buffer = init_maps_buffer(key_maps_buffer_shuffle, batch_cfg)
-        self.maps_buffer_keys = None
 
     def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
-        target_maps, self.maps_buffer_keys = jax.vmap(self.maps_buffer.get_map_init)(
+        target_maps, maps_buffer_keys = jax.vmap(self.maps_buffer.get_map_init)(
             seeds, env_cfgs
         )
-        return self._reset(seeds, target_maps, env_cfgs)
+        return *self._reset(seeds, target_maps, env_cfgs), maps_buffer_keys
 
     @partial(jax.jit, static_argnums=(0,))
     def _reset(self, seeds: Array, target_maps: Array, env_cfgs: EnvConfig) -> State:
         return jax.vmap(self.terra_env.reset)(seeds, target_maps, env_cfgs)
 
     def step(
-        self, states: State, actions: Action, env_cfgs: EnvConfig
+        self,
+        states: State,
+        actions: Action,
+        env_cfgs: EnvConfig,
+        maps_buffer_keys: jax.random.KeyArray,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        target_maps, self.maps_buffer_keys = jax.vmap(self.maps_buffer.get_map)(
-            self.maps_buffer_keys, env_cfgs
+        target_maps, maps_buffer_keys = jax.vmap(self.maps_buffer.get_map)(
+            maps_buffer_keys, env_cfgs
         )
-        return self._step(states, actions, target_maps, env_cfgs)
+        return *self._step(states, actions, target_maps, env_cfgs), maps_buffer_keys
 
     @partial(jax.jit, static_argnums=(0,))
     def _step(

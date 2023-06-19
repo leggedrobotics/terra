@@ -42,16 +42,16 @@ class TargetMapConfig(NamedTuple):
     @staticmethod
     def parametrized(
         map_dims: MapDims,
-        n_clusters: int,
-        n_tiles_per_cluster: int,
-        kernel_size_initial_sampling: tuple[int],
+        # n_clusters: int,
+        # n_tiles_per_cluster: int,
+        # kernel_size_initial_sampling: tuple[int],
     ) -> "TargetMapConfig":
         return TargetMapConfig(
             width=round(map_dims.width_m / map_dims.tile_size),
             height=round(map_dims.height_m / map_dims.tile_size),
-            n_clusters=n_clusters,
-            n_tiles_per_cluster=n_tiles_per_cluster,
-            kernel_size_initial_sampling=kernel_size_initial_sampling,
+            # n_clusters=n_clusters,
+            # n_tiles_per_cluster=n_tiles_per_cluster,
+            # kernel_size_initial_sampling=kernel_size_initial_sampling,
         )
 
 
@@ -169,18 +169,20 @@ class EnvConfig(NamedTuple):
 
     @staticmethod
     def parametrized(
-        map_dims: MapDims,
+        width_m: int,
+        height_m: int,
         max_steps_in_episode: int,
-        n_clusters: int,
-        n_tiles_per_cluster: int,
-        kernel_size_initial_sampling: tuple[int],
+        # n_clusters: int,
+        # n_tiles_per_cluster: int,
+        # kernel_size_initial_sampling: tuple[int],
     ) -> "EnvConfig":
+        map_dims = MapDims(width_m, height_m)
         return EnvConfig(
             tile_size=map_dims.tile_size,
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
             target_map=TargetMapConfig.parametrized(
-                map_dims, n_clusters, n_tiles_per_cluster, kernel_size_initial_sampling
+                map_dims,  # n_clusters, n_tiles_per_cluster, kernel_size_initial_sampling
             ),
             action_map=ActionMapConfig.from_map_dims(map_dims),
         )
@@ -201,5 +203,6 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (select here the data paths you want to load)
     maps_paths = [
+        "2_buildings/20x20/",
         "2_buildings/60x60/",
     ]
