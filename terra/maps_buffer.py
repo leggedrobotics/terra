@@ -24,7 +24,6 @@ class MapsBuffer(NamedTuple):
     """
 
     maps: list[callable]  # [lambda: map_array_1, lambda: map_array_2]
-    key_shuffle: jax.random.KeyArray
 
     map_params: TmpMapParams = TmpMapParams()  # TODO remove
 
@@ -45,22 +44,10 @@ class MapsBuffer(NamedTuple):
     def new(
         cls,
         maps: list[Array],
-        key: jax.random.KeyArray,
     ) -> "MapsBuffer":
         return MapsBuffer(
             maps=[lambda: m for m in maps],
-            key_shuffle=key,
         )
-
-    # @jax.jit
-    # def shuffle(self) -> "MapsBuffer":
-    #     # TODO change logic to handle dict
-    #     key_shuffle, subkey = jax.random.split(self.key_shuffle)
-    #     maps = [jax.random.permutation(subkey, map, 0) for map in self.maps]
-    #     return MapsBuffer.new(
-    #         maps=maps,
-    #         key_shuffle=key_shuffle,
-    #     )
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:

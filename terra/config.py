@@ -195,7 +195,6 @@ class EnvConfig(NamedTuple):
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
     load_maps_from_disk: bool = True
-    seed_maps_buffer: int = 876
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()

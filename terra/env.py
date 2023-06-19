@@ -237,11 +237,7 @@ class TerraEnvBatch:
             n_imgs_row=n_imgs_row,
         )
         self.batch_cfg = batch_cfg
-
-        print(f"{batch_cfg=}")
-
-        key_maps_buffer_shuffle = jax.random.PRNGKey(batch_cfg.seed_maps_buffer)
-        self.maps_buffer = init_maps_buffer(key_maps_buffer_shuffle, batch_cfg)
+        self.maps_buffer = init_maps_buffer(batch_cfg)
 
     def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
         target_maps, maps_buffer_keys = jax.vmap(self.maps_buffer.get_map_init)(

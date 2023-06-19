@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
@@ -137,7 +136,7 @@ def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
     return {map_paths[idx]: idx for idx in range(len(map_paths))}
 
 
-def init_maps_buffer(key: jax.random.KeyArray, batch_cfg):
+def init_maps_buffer(batch_cfg):
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
     ]
@@ -145,4 +144,4 @@ def init_maps_buffer(key: jax.random.KeyArray, batch_cfg):
     maps_from_disk = [
         load_maps_from_disk(folder_path) for folder_path in folder_paths_dict.keys()
     ]
-    return MapsBuffer.new(key=key, maps=maps_from_disk)
+    return MapsBuffer.new(maps=maps_from_disk)
