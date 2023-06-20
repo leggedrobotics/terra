@@ -7,3 +7,4 @@ tests/unit/__pycache__/*
 __pycache__/*
 *.egg*
 terra/map_utils/__pycache__/
+cache/
