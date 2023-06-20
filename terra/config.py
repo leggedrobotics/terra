@@ -40,18 +40,11 @@ class TargetMapConfig(NamedTuple):
     max_height: int = 10
 
     @staticmethod
-    def parametrized(
-        map_dims: MapDims,
-        # n_clusters: int,
-        # n_tiles_per_cluster: int,
-        # kernel_size_initial_sampling: tuple[int],
-    ) -> "TargetMapConfig":
+    def parametrized(map_dims: MapDims, map_dof: int) -> "TargetMapConfig":
         return TargetMapConfig(
             width=round(map_dims.width_m / map_dims.tile_size),
             height=round(map_dims.height_m / map_dims.tile_size),
-            # n_clusters=n_clusters,
-            # n_tiles_per_cluster=n_tiles_per_cluster,
-            # kernel_size_initial_sampling=kernel_size_initial_sampling,
+            map_dof=map_dof,
         )
 
 
@@ -169,12 +162,7 @@ class EnvConfig(NamedTuple):
 
     @staticmethod
     def parametrized(
-        width_m: int,
-        height_m: int,
-        max_steps_in_episode: int,
-        # n_clusters: int,
-        # n_tiles_per_cluster: int,
-        # kernel_size_initial_sampling: tuple[int],
+        width_m: int, height_m: int, max_steps_in_episode: int, map_dof: int
     ) -> "EnvConfig":
         map_dims = MapDims(width_m, height_m)
         return EnvConfig(
@@ -182,7 +170,8 @@ class EnvConfig(NamedTuple):
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
             target_map=TargetMapConfig.parametrized(
-                map_dims,  # n_clusters, n_tiles_per_cluster, kernel_size_initial_sampling
+                map_dims,
+                map_dof,
             ),
             action_map=ActionMapConfig.from_map_dims(map_dims),
         )

@@ -127,12 +127,11 @@ def load_maps_from_disk(folder_path: str) -> Array:
     for i in tqdm(range(dataset_size), desc="Data Loader"):
         map = np.load(f"{folder_path}/img_{i}.npy")
         maps.append(map)
-    print(f"Loaded {dataset_size} maps from disk.")
+    print(f"Loaded {dataset_size} maps from {folder_path}.")
     return jnp.array(maps, dtype=IntMap)
 
 
 def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
-    map_paths.sort()
     return {map_paths[idx]: idx for idx in range(len(map_paths))}
 
 
