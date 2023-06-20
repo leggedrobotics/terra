@@ -203,5 +203,6 @@ class BatchConfig(NamedTuple):
     # Maps folders (select here the data paths you want to load)
     maps_paths = [
         "2_buildings/20x20/",
+        "2_buildings/40x40/",
         "2_buildings/60x60/",
     ]
