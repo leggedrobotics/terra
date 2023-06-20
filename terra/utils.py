@@ -135,6 +135,22 @@ def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
     return {map_paths[idx]: idx for idx in range(len(map_paths))}
 
 
+def _pad_maps(maps: list[Array], batch_cfg):
+    max_w = batch_cfg.maps.max_width
+    max_h = batch_cfg.maps.max_h
+    padding_mask = []
+    maps_padded = []
+    for m in maps:
+        z = np.zeros((m.shape[0], max_w, max_h), dtype=IntMap)
+        z_mask = np.ones((m.shape[0], max_w, max_h), dtype=IntMap)  # 1 for obstacles
+        z[:, : m.shape[1], : m.shape[2]] = m
+        z_mask[:, : m.shape[1], : m.shape[2]] = np.zeros_like(m)  # 0 for free
+        maps_padded.append(z)
+        padding_mask.append(z_mask)
+
+    return np.array(maps_padded, dtype=IntMap), np.array(padding_mask, dtype=IntMap)
+
+
 def init_maps_buffer(batch_cfg):
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
@@ -143,4 +159,5 @@ def init_maps_buffer(batch_cfg):
     maps_from_disk = [
         load_maps_from_disk(folder_path) for folder_path in folder_paths_dict.keys()
     ]
-    return MapsBuffer.new(maps=maps_from_disk)
+    maps_from_disk_padded, padding_mask = _pad_maps(maps_from_disk, batch_cfg)
+    return MapsBuffer.new(maps=maps_from_disk_padded, padding_mask=padding_mask)

@@ -41,9 +41,13 @@ class State(NamedTuple):
 
     @classmethod
     def new(
-        cls, key: jax.random.KeyArray, env_cfg: EnvConfig, target_map: Array
+        cls,
+        key: jax.random.KeyArray,
+        env_cfg: EnvConfig,
+        target_map: Array,
+        padding_mask: Array,
     ) -> "State":
-        world = GridWorld.new(target_map)
+        world = GridWorld.new(target_map, padding_mask)
 
         agent, key = Agent.new(key, env_cfg)
         agent = jax.tree_map(
@@ -58,12 +62,16 @@ class State(NamedTuple):
             env_steps=0,
         )
 
-    def _reset(self, env_cfg: EnvConfig, target_map: Array) -> "State":
+    def _reset(
+        self, env_cfg: EnvConfig, target_map: Array, padding_mask: Array
+    ) -> "State":
         """
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
-        return self.new(key=key, env_cfg=env_cfg, target_map=target_map)
+        return self.new(
+            key=key, env_cfg=env_cfg, target_map=target_map, padding_mask=padding_mask
+        )
 
     def _step(self, action: Action) -> "State":
         """
@@ -183,15 +191,16 @@ class State(NamedTuple):
         return x, y
 
     @staticmethod
-    def _build_traversability_mask(map: Array) -> Array:
+    def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
         """
         Args:
             - map: (N, M) Array of ints
+            - padding_mask: (N, M) Array of ints, 1 if not traversable, 0 if traversable
         Returns:
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
         """
-        return (~(map == 0)).astype(IntLowDim)
+        return ((~(map == 0)) * padding_mask).astype(IntLowDim)
 
     def _is_valid_move(self, agent_corners_xy: Array) -> Array:
         """
@@ -219,7 +228,9 @@ class State(NamedTuple):
         )
 
         # Traversability constraints
-        traversability_mask = self._build_traversability_mask(self.world.action_map.map)
+        traversability_mask = self._build_traversability_mask(
+            self.world.action_map.map, self.world.padding_mask.map
+        )
         x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
 
         traversability_mask_reduced = jnp.where(

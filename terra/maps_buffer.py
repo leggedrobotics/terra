@@ -23,7 +23,9 @@ class MapsBuffer(NamedTuple):
     and the generation of the procedurally-generated maps.
     """
 
-    maps: list[callable]  # [lambda: map_array_1, lambda: map_array_2]
+    maps: Array  # [map_type, n_maps, W, H]
+    padding_mask: Array  # [map_type, n_maps, W, H]
+    n_maps: int  # number of maps for each map type
 
     map_params: TmpMapParams = TmpMapParams()  # TODO remove
 
@@ -41,21 +43,17 @@ class MapsBuffer(NamedTuple):
         return len(self.maps) == len(__o.maps)
 
     @classmethod
-    def new(
-        cls,
-        maps: list[Array],
-    ) -> "MapsBuffer":
-        return MapsBuffer(
-            maps=[lambda: m for m in maps],
-        )
+    def new(cls, maps: Array, padding_mask: Array) -> "MapsBuffer":
+        return MapsBuffer(maps=maps, padding_mask=padding_mask, n_maps=maps.shape[1])
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:
-        maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
+        # maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
         key, subkey = jax.random.split(key)
-        idx = jax.random.randint(subkey, (), 0, maps_a.shape[0])
-        map = maps_a[idx]
-        return map, key
+        idx = jax.random.randint(subkey, (), 0, self.n_maps)
+        map = self.maps[env_cfg.target_map.map_dof, idx]
+        padding_mask = self.padding_mask[env_cfg.target_map.map_dof, idx]
+        return map, padding_mask, key
 
     def _procedurally_generate_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
         key, subkey = jax.random.split(key)
@@ -87,8 +85,8 @@ class MapsBuffer(NamedTuple):
         # )
 
         # TODO include procedural maps
-        map, key = self._get_map_from_disk(key, env_cfg)
-        return map, key
+        map, padding_mask, key = self._get_map_from_disk(key, env_cfg)
+        return map, padding_mask, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, seed: int, env_cfg):

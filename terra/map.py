@@ -10,6 +10,7 @@ from terra.utils import IntMap
 class GridWorld(NamedTuple):
     target_map: GridMap
     action_map: GridMap
+    padding_mask: GridMap
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
@@ -27,11 +28,15 @@ class GridWorld(NamedTuple):
         return self.target_map.height
 
     @classmethod
-    def new(cls, target_map: Array) -> "GridWorld":
+    def new(cls, target_map: Array, padding_mask: Array) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
 
         target_map = GridMap.new(IntMap(target_map))
 
-        world = GridWorld(target_map=target_map, action_map=action_map)
+        padding_mask = GridMap.new(IntMap(padding_mask))  # TODO IntLowDim?
+
+        world = GridWorld(
+            target_map=target_map, action_map=action_map, padding_mask=padding_mask
+        )
 
         return world

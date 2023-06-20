@@ -51,10 +51,13 @@ class TraversabilityMaskWrapper:
             -1,
         )
 
+        padding_mask = state.world.padding_mask.map
+        tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
+
         return state._replace(
             world=state.world._replace(
                 traversability_mask=state.world.traversability_mask._replace(
-                    map=traversability_mask.astype(IntLowDim)
+                    map=tm.astype(IntLowDim)
                 )
             )
         )
@@ -118,8 +121,7 @@ class LocalMapWrapper:
         local_cyl_height_map = jax.vmap(
             jax.vmap(
                 lambda x: (
-                    (map_to_wrap)
-                    * x.reshape(state.world.width, state.world.height)
+                    (map_to_wrap) * x.reshape(state.world.width, state.world.height)
                 ).sum()
             )
         )(local_cartesian_masks)
@@ -130,7 +132,6 @@ class LocalMapWrapper:
         )
 
         return local_cyl_height_map.astype(IntLowDim)
-
 
     @staticmethod
     def wrap_target_map(state: State) -> State:
@@ -143,7 +144,6 @@ class LocalMapWrapper:
             )
         )
 
-    
     @staticmethod
     def wrap_action_map(state: State) -> State:
         local_map_action = LocalMapWrapper._wrap(state, state.world.action_map.map)
