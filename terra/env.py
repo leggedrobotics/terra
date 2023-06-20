@@ -190,9 +190,10 @@ class TerraEnv(NamedTuple):
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x, y, z: (new_state, observations),
+            lambda x, y, z, k: (new_state, observations),
             new_state,
             target_map,
+            padding_mask,
             env_cfg,
         )
 
