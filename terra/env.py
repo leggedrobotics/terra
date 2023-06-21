@@ -224,6 +224,7 @@ class TerraEnv(NamedTuple):
             "target_map": state.world.target_map.map,
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
+            "padding_mask": state.world.padding_mask.map,
         }
 
 
