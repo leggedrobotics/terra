@@ -57,8 +57,8 @@ class MapsBuffer(NamedTuple):
 
     def _procedurally_generate_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
         key, subkey = jax.random.split(key)
-        width = env_cfg.target_map.width
-        height = env_cfg.target_map.height
+        width = env_cfg.maps.max_width
+        height = env_cfg.maps.max_height
         n_clusters = env_cfg.target_map.n_clusters
         n_tiles_per_cluster = env_cfg.target_map.n_tiles_per_cluster
         kernel_size_initial_sampling = env_cfg.target_map.kernel_size_initial_sampling

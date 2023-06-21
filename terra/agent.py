@@ -97,8 +97,8 @@ def _get_random_init_pos(
     ).astype(IntMap)
     key, subkey = jax.random.split(key)
 
-    max_w = jnp.minimum(max_traversable_x, env_cfg.action_map.width)
-    max_h = jnp.minimum(max_traversable_y, env_cfg.action_map.height)
+    max_w = jnp.minimum(max_traversable_x, env_cfg.maps.max_width)
+    max_h = jnp.minimum(max_traversable_y, env_cfg.maps.max_height)
     x = jax.random.randint(
         subkey,
         (1,),

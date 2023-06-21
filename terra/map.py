@@ -19,12 +19,10 @@ class GridWorld(NamedTuple):
 
     @property
     def width(self) -> int:
-        assert self.target_map.width == self.action_map.width
         return self.target_map.width
 
     @property
     def height(self) -> int:
-        assert self.target_map.height == self.action_map.height
         return self.target_map.height
 
     @property

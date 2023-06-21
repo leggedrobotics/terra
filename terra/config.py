@@ -27,8 +27,8 @@ class TargetMapConfig(NamedTuple):
     type: int = MapType.OPENSTREET_2_DIG_DUMP
     map_dof: int = 0  # for curriculum
 
-    width: int = round(MapDims().width_m / MapDims().tile_size)
-    height: int = round(MapDims().height_m / MapDims().tile_size)
+    # width: int = round(MapDims().width_m / MapDims().tile_size)
+    # height: int = round(MapDims().height_m / MapDims().tile_size)
 
     # For clusters type of map
     n_clusters: int = 5
@@ -42,26 +42,26 @@ class TargetMapConfig(NamedTuple):
     @staticmethod
     def parametrized(map_dims: MapDims, map_dof: int) -> "TargetMapConfig":
         return TargetMapConfig(
-            width=round(map_dims.width_m / map_dims.tile_size),
-            height=round(map_dims.height_m / map_dims.tile_size),
+            # width=round(map_dims.width_m / map_dims.tile_size),
+            # height=round(map_dims.height_m / map_dims.tile_size),
             map_dof=map_dof,
         )
 
 
 class ActionMapConfig(NamedTuple):
-    width: int = round(MapDims().width_m / MapDims().tile_size)
-    height: int = round(MapDims().height_m / MapDims().tile_size)
+    # width: int = round(MapDims().width_m / MapDims().tile_size)
+    # height: int = round(MapDims().height_m / MapDims().tile_size)
 
     # Bounds on the volume per tile  # TODO implement in code
     min_height: int = -10
     max_height: int = 10
 
-    @staticmethod
-    def from_map_dims(map_dims: MapDims) -> "ActionMapConfig":
-        return ActionMapConfig(
-            width=round(map_dims.width_m / map_dims.tile_size),
-            height=round(map_dims.height_m / map_dims.tile_size),
-        )
+    # @staticmethod
+    # def from_map_dims(map_dims: MapDims) -> "ActionMapConfig":
+    #     return ActionMapConfig(
+    #         width=round(map_dims.width_m / map_dims.tile_size),
+    #         height=round(map_dims.height_m / map_dims.tile_size),
+    #     )
 
 
 class ImmutableAgentConfig(NamedTuple):
@@ -155,10 +155,12 @@ class EnvConfig(NamedTuple):
     target_map: TargetMapConfig = TargetMapConfig()
     action_map: ActionMapConfig = ActionMapConfig()
 
+    maps: ImmutableMapsConfig = ImmutableMapsConfig()
+
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 2
+    max_steps_in_episode: int = 20
 
     @staticmethod
     def parametrized(
@@ -173,7 +175,7 @@ class EnvConfig(NamedTuple):
                 map_dims,
                 map_dof,
             ),
-            action_map=ActionMapConfig.from_map_dims(map_dims),
+            # action_map=ActionMapConfig.from_map_dims(map_dims),
         )
 
     @classmethod
