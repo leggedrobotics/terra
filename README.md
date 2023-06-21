@@ -22,6 +22,11 @@ To be able to use a dataset saved on storage, define the following env variables
 DATASET_PATH=path_to_dataset DATASET_SIZE=dataset_size
 ~~~
 
+### Maps of different size
+Note: the environment supports maps of different sizes run on parallel environments at the same time.
+However, every map is padded to the right and to the bottom to reach the biggest map size defined in the config.
+The agent transition in these parts of the map is automatically blocked by the environment itself.
+
 ## Tests
 The tests have to be run using the module option, for example:
 ~~~
