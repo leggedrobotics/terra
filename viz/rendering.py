@@ -283,7 +283,7 @@ class RenderingEngine:
 
         return imgs
 
-    def _render_grids(self, tile_size, height_grid):
+    def _render_grids(self, tile_size, height_grid, padding_mask):
         x_dim = height_grid.shape[-2]
         y_dim = height_grid.shape[-1]
         width_px = x_dim * tile_size
@@ -302,13 +302,20 @@ class RenderingEngine:
         grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
         img[:, grid_idx_x] = np.array([100, 100, 100])
         img[:, :, grid_idx_y] = np.array([100, 100, 100])
-        img = img.astype(np.int16)
+
+        # Render padding mask
+        pm = padding_mask[..., None].repeat(3, -1)  # add 3 channels
+        pm = np.where(pm > 0, 255, pm)
+        pm = pm.repeat(tile_size, -2).repeat(tile_size, -3)
+
+        img = img.astype(np.int16) + pm.astype(np.int16)
         return img
 
     def render_active_grid(
         self,
         tile_size,
         height_grid,
+        padding_mask,
         agent_pos=None,
         base_dir=None,
         cabin_dir=None,
@@ -323,7 +330,7 @@ class RenderingEngine:
         """
         # s1 = time.time()
 
-        imgs = self._render_grids(tile_size, height_grid)
+        imgs = self._render_grids(tile_size, height_grid, padding_mask)
 
         # s2 = time.time()
 
@@ -367,14 +374,15 @@ class RenderingEngine:
 
         return imgs
 
-    def render_target_grids(self, tile_size, target_grid):
-        return self._render_grids(tile_size, target_grid)
+    def render_target_grids(self, tile_size, target_grid, padding_mask):
+        return self._render_grids(tile_size, target_grid, padding_mask)
 
     def render_global(
         self,
         tile_size,
         active_grid,
         target_grid,
+        padding_mask,
         agent_pos=None,
         base_dir=None,
         cabin_dir=None,
@@ -399,6 +407,7 @@ class RenderingEngine:
         imgs_active_grid = self.render_active_grid(
             tile_size,
             active_grid,
+            padding_mask,
             agent_pos,
             base_dir,
             cabin_dir,
@@ -407,7 +416,9 @@ class RenderingEngine:
             batch_size,
         )
 
-        imgs_target_grid = self.render_target_grids(tile_size, target_grid)
+        imgs_target_grid = self.render_target_grids(
+            tile_size, target_grid, padding_mask
+        )
 
         imgs = [
             np.hstack(
