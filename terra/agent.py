@@ -1,3 +1,4 @@
+from functools import partial
 from typing import NamedTuple
 
 import jax
@@ -37,10 +38,19 @@ class Agent(NamedTuple):
     height: int
 
     @staticmethod
-    def new(key: jax.random.PRNGKey, env_cfg: EnvConfig) -> "Agent":
+    def new(
+        key: jax.random.PRNGKey,
+        env_cfg: EnvConfig,
+        max_traversable_x: int,
+        max_traversable_y: int,
+    ) -> "Agent":
         pos_base, key = jax.lax.cond(
             env_cfg.agent.random_init_pos,
-            _get_random_init_pos,
+            partial(
+                _get_random_init_pos,
+                max_traversable_x=max_traversable_x,
+                max_traversable_y=max_traversable_y,
+            ),
             _get_top_left_init_pos,
             key,
             env_cfg,
@@ -76,22 +86,30 @@ def _get_top_left_init_pos(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     return pos_base, key
 
 
-def _get_random_init_pos(key: jax.random.PRNGKey, env_cfg: EnvConfig):
+def _get_random_init_pos(
+    key: jax.random.PRNGKey,
+    env_cfg: EnvConfig,
+    max_traversable_x: int,
+    max_traversable_y: int,
+):
     max_center_coord = jnp.ceil(
         jnp.max(jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1]))
     ).astype(IntMap)
     key, subkey = jax.random.split(key)
+
+    max_w = jnp.minimum(max_traversable_x, env_cfg.action_map.width)
+    max_h = jnp.minimum(max_traversable_y, env_cfg.action_map.height)
     x = jax.random.randint(
         subkey,
         (1,),
         minval=max_center_coord,
-        maxval=env_cfg.action_map.width - max_center_coord,
+        maxval=max_w - max_center_coord,
     )
     y = jax.random.randint(
         subkey,
         (1,),
         minval=max_center_coord,
-        maxval=env_cfg.action_map.height - max_center_coord,
+        maxval=max_h - max_center_coord,
     )
     pos_base = IntMap(jnp.concatenate((x, y)))
     return pos_base, key

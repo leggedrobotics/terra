@@ -27,6 +27,14 @@ class GridWorld(NamedTuple):
         assert self.target_map.height == self.action_map.height
         return self.target_map.height
 
+    @property
+    def max_traversable_x(self) -> int:
+        return (self.padding_mask.map[:, 0] == 0).sum()
+
+    @property
+    def max_traversable_y(self) -> int:
+        return (self.padding_mask.map[0] == 0).sum()
+
     @classmethod
     def new(cls, target_map: Array, padding_mask: Array) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))

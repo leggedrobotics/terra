@@ -49,7 +49,9 @@ class State(NamedTuple):
     ) -> "State":
         world = GridWorld.new(target_map, padding_mask)
 
-        agent, key = Agent.new(key, env_cfg)
+        agent, key = Agent.new(
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y
+        )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
