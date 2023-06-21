@@ -202,7 +202,6 @@ class State(NamedTuple):
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
         """
-        jax.debug.print("padding_mask={x}", x=padding_mask)
         return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
 
     def _is_valid_move(self, agent_corners_xy: Array) -> Array:
