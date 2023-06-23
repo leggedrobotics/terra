@@ -13,8 +13,8 @@ class ImmutableMapsConfig(NamedTuple):
     Used for padding in case it's needed.
     """
 
-    max_width: int = 60  # number of tiles
-    max_height: int = 60  # number of tiles
+    max_width: int = 40  # number of tiles
+    max_height: int = 40  # number of tiles
 
 
 class MapDims(NamedTuple):
@@ -195,5 +195,5 @@ class BatchConfig(NamedTuple):
     maps_paths = [
         "2_buildings/20x20/",
         "2_buildings/40x40/",
-        "2_buildings/60x60/",
+        # "2_buildings/60x60/",
     ]
