@@ -1,12 +1,6 @@
-import os
-from pathlib import Path
-
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
-from tqdm import tqdm
-
-from terra.maps_buffer import MapsBuffer
 
 # from terra.config import EnvConfig
 
@@ -119,47 +113,3 @@ def get_arm_angle_int(
     """
     angles_cabin_base_ratio = round(n_angles_cabin / n_angles_base)
     return (angles_cabin_base_ratio * angle_base + angle_cabin) % n_angles_cabin
-
-
-def load_maps_from_disk(folder_path: str) -> Array:
-    dataset_size = int(os.getenv("DATASET_SIZE", -1))
-    maps = []
-    for i in tqdm(range(dataset_size), desc="Data Loader"):
-        map = np.load(f"{folder_path}/img_{i}.npy")
-        maps.append(map)
-    print(f"Loaded {dataset_size} maps from {folder_path}.")
-    return jnp.array(maps, dtype=IntMap)
-
-
-def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
-    return {map_paths[idx]: idx for idx in range(len(map_paths))}
-
-
-def _pad_maps(maps: list[Array], batch_cfg):
-    max_w = batch_cfg.maps.max_width
-    max_h = batch_cfg.maps.max_height
-    padding_mask = []
-    maps_padded = []
-    for m in maps:
-        z = np.zeros((m.shape[0], max_w, max_h), dtype=IntMap)
-        z_mask = np.ones((m.shape[0], max_w, max_h), dtype=IntMap)  # 1 for obstacles
-        z[:, : m.shape[1], : m.shape[2]] = m
-        z_mask[:, : m.shape[1], : m.shape[2]] = np.zeros_like(m)  # 0 for free
-        maps_padded.append(z)
-        padding_mask.append(z_mask)
-
-    return np.array(maps_padded, dtype=IntMap), np.array(padding_mask, dtype=IntMap)
-
-
-def init_maps_buffer(batch_cfg):
-    folder_paths = [
-        str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
-    ]
-    folder_paths_dict = map_paths_to_idx(folder_paths)
-    maps_from_disk = [
-        load_maps_from_disk(folder_path) for folder_path in folder_paths_dict.keys()
-    ]
-    maps_from_disk_padded, padding_mask = _pad_maps(maps_from_disk, batch_cfg)
-    maps_from_disk_padded = jnp.array(maps_from_disk_padded)
-    padding_mask = jnp.array(padding_mask)
-    return MapsBuffer.new(maps=maps_from_disk_padded, padding_mask=padding_mask)

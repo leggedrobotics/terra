@@ -12,9 +12,11 @@ w, h = div * wm, div * hm
 
 for i in range(2700):
     try:
-        with open(f"/home/antonio/Downloads/metadata/building_{i}.json") as f:
+        with open(
+            f"/home/antonio/Downloads/openstreet_v1/metadata/building_{i}.json"
+        ) as f:
             meta1 = json.load(f)
-        w1 = int(meta1["real_dimensions"]["length"])
+        w1 = int(meta1["real_dimensions"]["height"])
         h1 = int(meta1["real_dimensions"]["width"])
         if w1 < 40 and h1 < 40:
             break
@@ -23,9 +25,11 @@ for i in range(2700):
 
 for j in range(i + 1, 2700):
     try:
-        with open(f"/home/antonio/Downloads/metadata/building_{j}.json") as f:
+        with open(
+            f"/home/antonio/Downloads/openstreet_v1/metadata/building_{j}.json"
+        ) as f:
             meta2 = json.load(f)
-        w2 = int(meta2["real_dimensions"]["length"])
+        w2 = int(meta2["real_dimensions"]["height"])
         h2 = int(meta2["real_dimensions"]["width"])
         if w2 < 40 and h2 < 40:
             break
@@ -35,8 +39,8 @@ for j in range(i + 1, 2700):
 print(f"{(w1, h1)=}")
 print(f"{(w2, h2)=}")
 
-building_img_path1 = f"/home/antonio/Downloads/images/building_{i}.png"
-building_img_path2 = f"/home/antonio/Downloads/images/building_{j}.png"
+building_img_path1 = f"/home/antonio/Downloads/openstreet_v1/images/building_{i}.png"
+building_img_path2 = f"/home/antonio/Downloads/openstreet_v1/images/building_{j}.png"
 
 
 pic1 = cv2.imread(building_img_path1)
@@ -75,8 +79,8 @@ p_grey = np.where(p < 255, 100, p).astype(np.uint8)
 
 # cv2.imshow("building1", pic1)
 # cv2.imshow("building2", pic2)
-cv2.imshow("buildings", p)
-cv2.imshow("building downsampled", pd)
+# cv2.imshow("buildings", p)
+# cv2.imshow("building downsampled", pd)
 cv2.imshow("building comparison", np.where(p_grey == 100, 100, pd).astype(np.uint8))
 cv2.waitKey(0)
 cv2.destroyAllWindows()

@@ -9,8 +9,8 @@ from jax import Array
 from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
+from terra.maps_buffer import init_maps_buffer
 from terra.state import State
-from terra.utils import init_maps_buffer
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from viz.rendering import RenderingEngine

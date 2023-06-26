@@ -1,10 +1,26 @@
+from enum import IntEnum
 from typing import NamedTuple
 
 from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
-from terra.map_generator import MapType
-from terra.utils import Float
+
+
+class MapType(IntEnum):
+    SINGLE_TILE = 0
+    SQUARE_SINGLE_TRENCH = 1
+    RECTANGULAR_SINGLE_TRENCH = 2
+    SQUARE_SINGLE_RAMP = 3
+    SQUARE_SINGLE_TRENCH_RIGHT_SIDE = 4
+    SINGLE_TILE_SAME_POSITION = 5
+    SINGLE_TILE_EASY_POSITION = 6
+    MULTIPLE_SINGLE_TILES = 7
+    MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
+    TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
+
+    # Loaded from disk
+    OPENSTREET_2_DIG_DUMP = 10
+    OPENSTREET_3_DIG_DIG_DUMP = 11
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -13,31 +29,38 @@ class ImmutableMapsConfig(NamedTuple):
     Used for padding in case it's needed.
     """
 
+    min_width: int = 16  # number of tiles
+    min_height: int = 16  # number of tiles
+
     max_width: int = 40  # number of tiles
     max_height: int = 40  # number of tiles
 
 
 class MapDims(NamedTuple):
-    width_m: Float = 60.0  # in meters
-    height_m: Float = 60.0  # in meters
-    tile_size: Float = 1.0  # in meters
+    width_m: float = 60.0  # in meters
+    height_m: float = 60.0  # in meters
+    tile_size: float = 1.0  # in meters
 
 
 class TargetMapConfig(NamedTuple):
-    type: int = MapType.OPENSTREET_2_DIG_DUMP
+    type: int = MapType.TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS
     map_dof: int = 0  # for curriculum
+
+    # Used only for procedural maps with elements bigger than 1 tile
+    element_edge_min: int = 2
+    element_edge_max: int = 6
 
     # width: int = round(MapDims().width_m / MapDims().tile_size)
     # height: int = round(MapDims().height_m / MapDims().tile_size)
 
     # For clusters type of map
-    n_clusters: int = 5
-    n_tiles_per_cluster: int = 10
-    kernel_size_initial_sampling: tuple[int] = 10
+    # n_clusters: int = 5
+    # n_tiles_per_cluster: int = 10
+    # kernel_size_initial_sampling: tuple[int] = 10
 
     # Bounds on the volume per tile  # TODO implement in code
-    min_height: int = -10
-    max_height: int = 10
+    # min_height: int = -10
+    # max_height: int = 10
 
     @staticmethod
     def parametrized(map_dims: MapDims, map_dof: int) -> "TargetMapConfig":
@@ -53,8 +76,8 @@ class ActionMapConfig(NamedTuple):
     # height: int = round(MapDims().height_m / MapDims().tile_size)
 
     # Bounds on the volume per tile  # TODO implement in code
-    min_height: int = -10
-    max_height: int = 10
+    # min_height: int = -10
+    # max_height: int = 10
 
     # @staticmethod
     # def from_map_dims(map_dims: MapDims) -> "ActionMapConfig":
@@ -62,6 +85,7 @@ class ActionMapConfig(NamedTuple):
     #         width=round(map_dims.width_m / map_dims.tile_size),
     #         height=round(map_dims.height_m / map_dims.tile_size),
     #     )
+    pass
 
 
 class ImmutableAgentConfig(NamedTuple):
@@ -120,35 +144,35 @@ class AgentConfig(NamedTuple):
 
 
 class Rewards(NamedTuple):
-    existence: Float = -0.01
+    existence: float = -0.01
 
-    collision_move: Float = -0.2
-    move_while_loaded: Float = 0.0
-    move: Float = -0.05
+    collision_move: float = -0.2
+    move_while_loaded: float = 0.0
+    move: float = -0.05
 
-    collision_turn: Float = -0.2
-    base_turn: Float = -0.1
+    collision_turn: float = -0.2
+    base_turn: float = -0.1
 
-    cabin_turn: Float = -0.01
+    cabin_turn: float = -0.01
 
-    dig_wrong: Float = (
+    dig_wrong: float = (
         -0.2
     )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: Float = -0.2  # given if loaded stayed the same
-    dump_no_dump_area: Float = (
+    dump_wrong: float = -0.2  # given if loaded stayed the same
+    dump_no_dump_area: float = (
         -0.02
     )  # given if dumps in an area that is not the dump area
 
-    dig_correct: Float = (
+    dig_correct: float = (
         2.0  # dig where the target map is negative, and not more than required
     )
-    dump_correct: Float = 2.0  # dump where the target map is positive
+    dump_correct: float = 2.0  # dump where the target map is positive
 
-    terminal: Float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
 
 class EnvConfig(NamedTuple):
-    tile_size: Float = MapDims().tile_size
+    tile_size: float = MapDims().tile_size
 
     agent: AgentConfig = AgentConfig()
 
@@ -160,7 +184,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 20
+    max_steps_in_episode: int = 1
 
     @staticmethod
     def parametrized(
