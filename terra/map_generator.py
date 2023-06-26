@@ -216,8 +216,7 @@ def _sample_width_height(
     key, *subkeys = jax.random.split(key, 3)
     width = jax.random.randint(subkeys[0], (), min_width, max_width, IntMap)
     height = jax.random.randint(subkeys[1], (), min_height, max_height, IntMap)
-    # padding_mask = jnp.zeros((max_width, max_height), dtype=IntMap)
-    padding_mask = jnp.zeros((40, 40), dtype=IntMap)  # TODO change
+    padding_mask = jnp.zeros((max_width, max_height), dtype=IntMap)
     padding_mask = jnp.where(
         jnp.logical_or(
             (jnp.arange(max_width) >= width)[:, None].repeat(max_height, -1),
