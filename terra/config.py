@@ -39,7 +39,7 @@ class ImmutableMapsConfig(NamedTuple):
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 1.0  # in meters
+    tile_size: float = 1.0  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
 
 
 class TargetMapConfig(NamedTuple):
@@ -63,11 +63,10 @@ class TargetMapConfig(NamedTuple):
     # max_height: int = 10
 
     @staticmethod
-    def parametrized(map_dims: MapDims, map_dof: int) -> "TargetMapConfig":
+    def parametrized(map_dof: int, map_type: int) -> "TargetMapConfig":
         return TargetMapConfig(
-            # width=round(map_dims.width_m / map_dims.tile_size),
-            # height=round(map_dims.height_m / map_dims.tile_size),
             map_dof=map_dof,
+            type=map_type,
         )
 
 
@@ -188,17 +187,18 @@ class EnvConfig(NamedTuple):
 
     @staticmethod
     def parametrized(
-        width_m: int, height_m: int, max_steps_in_episode: int, map_dof: int
+        width_m: int,
+        height_m: int,
+        max_steps_in_episode: int,
+        map_dof: int,
+        map_type: int,
     ) -> "EnvConfig":
         map_dims = MapDims(width_m, height_m)
         return EnvConfig(
             tile_size=map_dims.tile_size,
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
-            target_map=TargetMapConfig.parametrized(
-                map_dims,
-                map_dof,
-            ),
+            target_map=TargetMapConfig.parametrized(map_dof, map_type),
             # action_map=ActionMapConfig.from_map_dims(map_dims),
         )
 
