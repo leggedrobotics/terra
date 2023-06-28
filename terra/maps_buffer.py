@@ -127,6 +127,14 @@ def _pad_maps(maps: list[Array], batch_cfg):
 
 
 def init_maps_buffer(batch_cfg):
+    if os.getenv("DATASET_PATH", "") == "":
+        print("DATASET_PATH not defined, skipping maps loading from disk...")
+        return MapsBuffer.new(
+            maps=jnp.zeros((1, batch_cfg.maps.max_width, batch_cfg.maps.max_height)),
+            padding_mask=jnp.zeros(
+                (1, batch_cfg.maps.max_width, batch_cfg.maps.max_height)
+            ),
+        )
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
     ]
