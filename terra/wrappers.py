@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from jax import Array
 
 from terra.config import EnvConfig
 from terra.state import State
@@ -50,10 +51,13 @@ class TraversabilityMaskWrapper:
             -1,
         )
 
+        padding_mask = state.world.padding_mask.map
+        tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
+
         return state._replace(
             world=state.world._replace(
                 traversability_mask=state.world.traversability_mask._replace(
-                    map=traversability_mask.astype(IntLowDim)
+                    map=tm.astype(IntLowDim)
                 )
             )
         )
@@ -61,7 +65,7 @@ class TraversabilityMaskWrapper:
 
 class LocalMapWrapper:
     @staticmethod
-    def wrap(state: State) -> State:
+    def _wrap(state: State, map_to_wrap: Array) -> Array:
         """
         Encodes the local map in the GridWorld.
 
@@ -70,7 +74,7 @@ class LocalMapWrapper:
         """
         current_pos_idx = state._get_current_pos_vector_idx(
             pos_base=state.agent.agent_state.pos_base,
-            map_height=state.env_cfg.action_map.height,
+            map_height=state.env_cfg.maps.max_height,
         )
         map_global_coords = state._map_to_flattened_global_coords(
             state.world.width, state.world.height, state.env_cfg.tile_size
@@ -117,8 +121,7 @@ class LocalMapWrapper:
         local_cyl_height_map = jax.vmap(
             jax.vmap(
                 lambda x: (
-                    state.world.action_map.map
-                    * x.reshape(state.world.width, state.world.height)
+                    (map_to_wrap) * x.reshape(state.world.width, state.world.height)
                 ).sum()
             )
         )(local_cartesian_masks)
@@ -128,10 +131,26 @@ class LocalMapWrapper:
             local_cyl_height_map, -current_arm_angle, axis=0
         )
 
+        return local_cyl_height_map.astype(IntLowDim)
+
+    @staticmethod
+    def wrap_target_map(state: State) -> State:
+        local_map_target = LocalMapWrapper._wrap(state, state.world.target_map.map)
         return state._replace(
             world=state.world._replace(
-                local_map=state.world.local_map._replace(
-                    map=local_cyl_height_map.astype(IntLowDim)
+                local_map_target=state.world.local_map_target._replace(
+                    map=local_map_target
+                )
+            )
+        )
+
+    @staticmethod
+    def wrap_action_map(state: State) -> State:
+        local_map_action = LocalMapWrapper._wrap(state, state.world.action_map.map)
+        return state._replace(
+            world=state.world._replace(
+                local_map_action=state.world.local_map_action._replace(
+                    map=local_map_action
                 )
             )
         )

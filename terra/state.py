@@ -40,10 +40,18 @@ class State(NamedTuple):
     env_steps: int
 
     @classmethod
-    def new(cls, key: jax.random.KeyArray, env_cfg: EnvConfig) -> "State":
-        world, key = GridWorld.new(key, env_cfg)
+    def new(
+        cls,
+        key: jax.random.KeyArray,
+        env_cfg: EnvConfig,
+        target_map: Array,
+        padding_mask: Array,
+    ) -> "State":
+        world = GridWorld.new(target_map, padding_mask)
 
-        agent = Agent.new(env_cfg)
+        agent, key = Agent.new(
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y
+        )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
@@ -56,14 +64,15 @@ class State(NamedTuple):
             env_steps=0,
         )
 
-    def _reset(self, env_cfg) -> "State":
+    def _reset(
+        self, env_cfg: EnvConfig, target_map: Array, padding_mask: Array
+    ) -> "State":
         """
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
         return self.new(
-            key=key,
-            env_cfg=env_cfg,
+            key=key, env_cfg=env_cfg, target_map=target_map, padding_mask=padding_mask
         )
 
     def _step(self, action: Action) -> "State":
@@ -100,7 +109,11 @@ class State(NamedTuple):
             IntLowDim
         )
 
-        state = jax.lax.switch(offset_idx + action.action[0], handlers_list)
+        state = jax.lax.cond(
+            action.action[0] == -1,
+            self._do_nothing,
+            lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
+        )
 
         return state._replace(env_steps=state.env_steps + 1)
 
@@ -180,15 +193,16 @@ class State(NamedTuple):
         return x, y
 
     @staticmethod
-    def _build_traversability_mask(map: Array) -> Array:
+    def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
         """
         Args:
             - map: (N, M) Array of ints
+            - padding_mask: (N, M) Array of ints, 1 if not traversable, 0 if traversable
         Returns:
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
         """
-        return (~(map == 0)).astype(IntLowDim)
+        return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
 
     def _is_valid_move(self, agent_corners_xy: Array) -> Array:
         """
@@ -216,7 +230,9 @@ class State(NamedTuple):
         )
 
         # Traversability constraints
-        traversability_mask = self._build_traversability_mask(self.world.action_map.map)
+        traversability_mask = self._build_traversability_mask(
+            self.world.action_map.map, self.world.padding_mask.map
+        )
         x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
 
         traversability_mask_reduced = jnp.where(
@@ -724,18 +740,20 @@ class State(NamedTuple):
         dig_dump_mask_cart_x = map_local_coords[0].copy()  # TODO is copy necessary?
         dig_dump_mask_cart_y = map_local_coords[1].copy()  # TODO is copy necessary?
 
+        eps = self.env_cfg.tile_size / 2  # add margin to avoid rounding errors
+
         dig_dump_mask_cart_x = jnp.where(
             jnp.logical_or(
-                dig_dump_mask_cart_x >= jnp.floor(agent_width / 2),
-                dig_dump_mask_cart_x <= -jnp.floor(agent_width / 2),
+                dig_dump_mask_cart_x >= jnp.floor((agent_width + eps) / 2),
+                dig_dump_mask_cart_x <= -jnp.floor((agent_width + eps) / 2),
             ),
             1,
             0,
         )
         dig_dump_mask_cart_y = jnp.where(
             jnp.logical_or(
-                dig_dump_mask_cart_y >= jnp.floor(agent_height / 2),
-                dig_dump_mask_cart_y <= -jnp.floor(agent_height / 2),
+                dig_dump_mask_cart_y >= jnp.floor((agent_height + eps) / 2),
+                dig_dump_mask_cart_y <= -jnp.floor((agent_height + eps) / 2),
             ),
             1,
             0,
@@ -743,7 +761,6 @@ class State(NamedTuple):
         dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(
             jnp.bool_
         )
-
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
@@ -764,6 +781,7 @@ class State(NamedTuple):
         dump_mask: Array,
         even_volume_per_tile: IntLowDim,
         remaining_volume: IntLowDim,
+        target_map: Array,
     ) -> Array:
         """
         TODO: delta_dig_remaining now is added with a naive approach - should be added
@@ -777,14 +795,28 @@ class State(NamedTuple):
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        dump_mask = dump_mask.astype(IntMap)
+        # Check if there is any target dump tile within the mask
+        target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
+        target_dump_volume = target_map_dump_mask.sum()
+        dump_mask, dump_volume = jax.lax.cond(
+            target_dump_volume > 0,
+            lambda: (IntMap(target_map_dump_mask), target_dump_volume),
+            lambda: (IntMap(dump_mask), dump_mask.sum()),
+        )
+
+        loaded_volume = self.agent.agent_state.loaded
+        remaining_volume = loaded_volume % dump_volume
+        even_volume_per_tile = (loaded_volume - remaining_volume) / dump_volume
+
         delta_dig = self.env_cfg.agent.dig_depth * dump_mask * even_volume_per_tile
         delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
+
         delta_dig_remaining = jnp.where(
             jnp.logical_and(jnp.cumsum(dump_mask) <= remaining_volume, dump_mask),
             1,
             delta_dig_remaining,
         )
+
         return (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
 
     def _get_map_local_and_cyl_coords(self):
@@ -795,7 +827,7 @@ class State(NamedTuple):
         """
         current_pos_idx = self._get_current_pos_vector_idx(
             pos_base=self.agent.agent_state.pos_base,
-            map_height=self.env_cfg.action_map.height,
+            map_height=self.env_cfg.maps.max_height,
         )
         map_global_coords = self._map_to_flattened_global_coords(
             self.world.width, self.world.height, self.env_cfg.tile_size
@@ -894,7 +926,11 @@ class State(NamedTuple):
         def _apply_dump():
             flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map, dump_mask, even_volume_per_tile, remaining_volume
+                flattened_action_map,
+                dump_mask,
+                even_volume_per_tile,
+                remaining_volume,
+                self.world.target_map.map,
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
@@ -974,6 +1010,28 @@ class State(NamedTuple):
         # Cabin turn
         return self.env_cfg.rewards.cabin_turn
 
+    @staticmethod
+    def _get_action_map_positive_progress(
+        action_map_old: Array, action_map_new: Array, target_map: Array
+    ) -> IntMap:
+        """
+        Computes the difference between the delta old and delta new.
+
+        The delta is defined as the absolute sum of the height differences between
+        the clipped action map (to only make the dump count) and the target map.
+
+        A positive value means progress in the dumping task (positioning the dirt on the dump terrain).
+        """
+        action_map_clip_old = jnp.clip(action_map_old, a_min=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=0)
+
+        target_map_clip = jnp.clip(target_map, a_min=0)
+
+        delta_old = jnp.sum(jnp.abs(action_map_clip_old - target_map_clip))
+        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map_clip))
+
+        return IntMap(delta_old - delta_new)
+
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
@@ -983,7 +1041,18 @@ class State(NamedTuple):
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dump_wrong,
-            lambda: self.env_cfg.rewards.dump_correct,
+            lambda: jax.lax.cond(
+                jnp.all(
+                    self._get_action_map_positive_progress(
+                        self.world.action_map.map,
+                        new_state.world.action_map.map,
+                        self.world.target_map.map,
+                    )
+                    <= 0
+                ),
+                lambda: self.env_cfg.rewards.dump_no_dump_area,
+                lambda: self.env_cfg.rewards.dump_correct,
+            ),
         )
 
     @staticmethod
@@ -1023,7 +1092,18 @@ class State(NamedTuple):
                     > 0
                 ),
                 lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: self.env_cfg.rewards.dig_correct,
+                lambda: jax.lax.cond(
+                    jnp.all(
+                        self._get_action_map_progress(
+                            self.world.action_map.map,
+                            new_state.world.action_map.map,
+                            self.world.target_map.map,
+                        )
+                        == 0
+                    ),
+                    lambda: 0.0,
+                    lambda: self.env_cfg.rewards.dig_correct,
+                ),
             ),
         )
 
@@ -1161,10 +1241,27 @@ class State(NamedTuple):
 
         The relevant tiles are defined as the tiles where the target map is not zero.
         """
-        relevant_action_map = jnp.where(target_map != 0, action_map, target_map)
-        done_task = jnp.all(target_map - relevant_action_map >= 0) & (
-            agent_loaded[0] == 0
+
+        def _check_done_dump():
+            relevant_action_map_positive_inverse = jnp.where(
+                target_map > 0, 0, action_map
+            )
+            done_dump = jnp.all(relevant_action_map_positive_inverse <= 0)
+            return done_dump
+
+        done_dump = jax.lax.cond(
+            jnp.all(target_map <= 0),
+            lambda: True,
+            _check_done_dump,
         )
+
+        relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
+        target_map_negative = jnp.clip(target_map, a_max=0)
+        done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
+
+        done_unload = agent_loaded[0] == 0
+
+        done_task = done_dump & done_dig & done_unload
         return done_task
 
     def _is_done(

@@ -2,6 +2,8 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
+# from terra.config import EnvConfig
+
 IntMap = jnp.int16
 INTMAP_MAX = jnp.iinfo(IntMap).max
 

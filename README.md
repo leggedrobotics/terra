@@ -16,6 +16,17 @@ To check which device you are using, you can:
 print(f"Device = {jnp.ones(1).device_buffer.device()}\n")
 ~~~
 
+## Use dataset saved on storage
+To be able to use a dataset saved on storage, define the following env variables when you launch the script.
+~~~
+DATASET_PATH=path_to_dataset DATASET_SIZE=dataset_size
+~~~
+
+### Maps of different size
+Note: the environment supports maps of different sizes run on parallel environments at the same time.
+However, every map is padded to the right and to the bottom to reach the biggest map size defined in the config.
+The agent transition in these parts of the map is automatically blocked by the environment itself.
+
 ## Tests
 The tests have to be run using the module option, for example:
 ~~~
@@ -23,10 +34,17 @@ python3 -m tests.test_agent
 ~~~
 
 ## Visualization
-If you want to render the environment, you are going to need the following Python modules:
+If you want to render the environment, you are going to need the following:
+
+on Ubuntu:
+~~~
+sudo apt install libcairo2-dev
+sudo apt install libgirepository1.0-dev
+~~~
+
 ~~~
 matplotlib
-PyQt5
+PyGObject (you could use another backend like PyQt5 but it will clash with cv2 as it's QT-based)
 ~~~
 
 ## Pre-commit

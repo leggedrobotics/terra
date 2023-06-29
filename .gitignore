@@ -6,3 +6,5 @@ tests/unit/__pycache__/*
 .coverage
 __pycache__/*
 *.egg*
+terra/map_utils/__pycache__/
+cache/

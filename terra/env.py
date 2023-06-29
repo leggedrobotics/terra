@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from functools import partial
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -8,57 +9,52 @@ from jax import Array
 from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
+from terra.maps_buffer import init_maps_buffer
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
+from viz.rendering import RenderingEngine
+from viz.window import Window
 
 
-class TerraEnv:
-    def __init__(
-        self,
-        env_cfg: EnvConfig = EnvConfig(),
-        rendering: bool = False,
-        n_imgs_row: int = 1,
-    ) -> None:
-        self.env_cfg = env_cfg
+class TerraEnv(NamedTuple):
+    window: Window | None = None
+    rendering_engine: RenderingEngine | None = None
 
-        if rendering:
-            from viz.window import Window
-            from viz.rendering import RenderingEngine
-
-            self.window = Window("Terra", n_imgs_row)
-            self.rendering_engine = RenderingEngine(
-                x_dim=env_cfg.target_map.width, y_dim=env_cfg.target_map.height
-            )
-
-    def __eq__(self, __o: object) -> bool:
-        return isinstance(__o, TerraEnv) and self.env_cfg == __o.env_cfg
-
-    def __hash__(self) -> int:
-        return hash((TerraEnv, self.env_cfg))
+    @classmethod
+    def new(cls, rendering: bool = False, n_imgs_row: int = 1) -> "TerraEnv":
+        window = Window("Terra", n_imgs_row) if rendering else None
+        rendering_engine = RenderingEngine() if rendering else None
+        return TerraEnv(window=window, rendering_engine=rendering_engine)
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seed: int) -> tuple[State, dict[str, Array]]:
+    def reset(
+        self, seed: int, target_map: Array, padding_mask: Array, env_cfg: EnvConfig
+    ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, self.env_cfg)
+        state = State.new(key, env_cfg, target_map, padding_mask)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap(state)
+        state = LocalMapWrapper.wrap_target_map(state)
+        state = LocalMapWrapper.wrap_action_map(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
     @partial(jax.jit, static_argnums=(0,))
-    def _reset_existent(self, state: State) -> tuple[State, dict[str, Array]]:
+    def _reset_existent(
+        self, state: State, target_map: Array, padding_mask: Array, env_cfg: EnvConfig
+    ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
-        state = state._reset(self.env_cfg)
+        state = state._reset(env_cfg, target_map, padding_mask)
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap(state)
+        state = LocalMapWrapper.wrap_target_map(state)
+        state = LocalMapWrapper.wrap_action_map(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -79,15 +75,15 @@ class TerraEnv:
             tile_size=tile_size,
             active_grid=state.world.action_map.map,
             target_grid=state.world.target_map.map,
+            padding_mask=state.world.padding_mask.map,
             agent_pos=state.agent.agent_state.pos_base,
             base_dir=state.agent.agent_state.angle_base,
             cabin_dir=state.agent.agent_state.angle_cabin,
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
+            agent_width=state.agent.width,
+            agent_height=state.agent.height,
         )
-        img_global = imgs_global[0]
 
-        img_local = state.world.local_map.map
+        imgs_local = state.world.local_map_action.map
 
         if key_handler:
             if mode == "human":
@@ -95,7 +91,7 @@ class TerraEnv:
                     title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
                     idx=0,
                 )
-                self.window.show_img([img_global], [img_local], mode)
+                self.window.show_img(imgs_global, [imgs_local], mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
         if mode == "gif":
@@ -103,10 +99,10 @@ class TerraEnv:
                 title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
                 idx=0,
             )
-            self.window.show_img([img_global], [img_local], mode)
+            self.window.show_img(imgs_global, [imgs_local], mode)
             # self.window.show(block)
 
-        return img_global, img_local
+        return imgs_global, imgs_local
 
     def render_obs(
         self,
@@ -125,20 +121,21 @@ class TerraEnv:
             tile_size=tile_size,
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
+            padding_mask=obs["padding_mask"],
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
+            agent_width=obs["agent_width"],
+            agent_height=obs["agent_width"],
         )
 
-        imgs_local = obs["local_map"]
+        imgs_local = obs["local_map_action"]
 
         if key_handler:
             if mode == "human":
-                self.window.set_title(
-                    title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
-                )
+                # self.window.set_title(
+                #     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
+                # )
                 self.window.show_img(imgs_global, imgs_local, mode)
                 self.window.reg_key_handler(key_handler)
                 self.window.show(block)
@@ -153,7 +150,12 @@ class TerraEnv:
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, state: State, action: Action
+        self,
+        state: State,
+        action: Action,
+        target_map: Array,
+        padding_mask: Array,
+        env_cfg: EnvConfig,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
@@ -176,7 +178,8 @@ class TerraEnv:
         reward = state._get_reward(new_state, action)
 
         new_state = TraversabilityMaskWrapper.wrap(new_state)
-        new_state = LocalMapWrapper.wrap(new_state)
+        new_state = LocalMapWrapper.wrap_target_map(new_state)
+        new_state = LocalMapWrapper.wrap_action_map(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
@@ -189,8 +192,11 @@ class TerraEnv:
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x: (new_state, observations),
+            lambda x, y, z, k: (new_state, observations),
             new_state,
+            target_map,
+            padding_mask,
+            env_cfg,
         )
 
         infos = new_state._get_infos(action)
@@ -213,10 +219,14 @@ class TerraEnv:
         )
         return {
             "agent_state": agent_state,
-            "local_map": state.world.local_map.map,
+            "local_map_action": state.world.local_map_action.map,
+            "local_map_target": state.world.local_map_target.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
+            "agent_width": state.agent.width,
+            "agent_height": state.agent.height,
+            "padding_mask": state.world.padding_mask.map,
         }
 
 
@@ -227,25 +237,64 @@ class TerraEnvBatch:
 
     def __init__(
         self,
-        env_cfg: EnvConfig = EnvConfig(),
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
         n_imgs_row: int = 1,
     ) -> None:
-        self.terra_env = TerraEnv(env_cfg, rendering=rendering, n_imgs_row=n_imgs_row)
+        self.terra_env = TerraEnv.new(
+            rendering=rendering,
+            n_imgs_row=n_imgs_row,
+        )
         self.batch_cfg = batch_cfg
-        self.env_cfg = env_cfg
+        self.maps_buffer = init_maps_buffer(batch_cfg)
+
+    def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
+        target_maps, padding_masks, maps_buffer_keys = jax.vmap(
+            self.maps_buffer.get_map_init
+        )(seeds, env_cfgs)
+        return (
+            *self._reset(seeds, target_maps, padding_masks, env_cfgs),
+            maps_buffer_keys,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seeds: Array) -> State:
-        return jax.vmap(self.terra_env.reset)(seeds)
+    def _reset(
+        self,
+        seeds: Array,
+        target_maps: Array,
+        padding_masks: Array,
+        env_cfgs: EnvConfig,
+    ) -> State:
+        return jax.vmap(self.terra_env.reset)(
+            seeds, target_maps, padding_masks, env_cfgs
+        )
 
-    @partial(jax.jit, static_argnums=(0,))
     def step(
-        self, states: State, actions: Action
+        self,
+        states: State,
+        actions: Action,
+        env_cfgs: EnvConfig,
+        maps_buffer_keys: jax.random.KeyArray,
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        target_maps, padding_masks, maps_buffer_keys = jax.vmap(
+            self.maps_buffer.get_map
+        )(maps_buffer_keys, env_cfgs)
+        return (
+            *self._step(states, actions, target_maps, padding_masks, env_cfgs),
+            maps_buffer_keys,
+        )
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _step(
+        self,
+        states: State,
+        actions: Action,
+        target_maps: Array,
+        padding_masks: Array,
+        env_cfgs: EnvConfig,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states, actions
+            states, actions, target_maps, padding_masks, env_cfgs
         )
         return states, (obs, rewards, dones, infos)
 
@@ -263,85 +312,6 @@ class TerraEnvBatch:
         """
         return self.batch_cfg.action_type.get_num_actions()
 
-    # @property
-    # def observation_space(self) -> Dict[str, Dict[str, Array]]:
-    #     """
-    #     box around:
-    #         angle_base: 0, 3 -- discrete
-    #         angle_cabin: 0, 7 -- discrete
-    #         arm_extension: 0, 1 -- discrete
-    #         loaded: 0, N -- discrete
-
-    #         local_map: 8 x 2 x [-M, M] -- discrete
-    #         action_map: L1 x L2 x [-M, M] -- discrete
-    #         target_map: L1 x L2 x [-M, 0] -- discrete
-    #         traversability mask: L1 x L2 x [-1, 1] -- discrete
-
-    #     Note: both low and high values are inclusive.
-    #     """
-    #     observation_space = {"low": {},
-    #                          "high": {}}
-
-    #     low_agent_state = jnp.array(
-    #         [
-    #             0,  # angle_base
-    #             0,  # angle_cabin
-    #             0,  # arm_extension
-    #             0,  # loaded
-    #         ],
-    #         dtype=IntMap
-    #     )
-    #     high_agent_state = jnp.array(
-    #         [
-    #             self.env_cfg.agent.angles_base - 1,  # angle_base
-    #             self.env_cfg.agent.angles_cabin - 1,  # angle_cabin
-    #             self.env_cfg.agent.max_arm_extension,  # arm_extension
-    #             self.env_cfg.agent.max_loaded,  # loaded
-    #         ],
-    #         dtype=IntMap
-    #     )
-    #     observation_space["low"]["agent_states"] = low_agent_state
-    #     observation_space["high"]["agent_states"] = high_agent_state
-
-    #     arm_extensions = self.env_cfg.agent.max_arm_extension + 1
-    #     angles_cabin = self.env_cfg.agent.angles_cabin
-    #     low_local_map = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.min_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(arm_extensions, 0)[None].repeat(angles_cabin, 0)
-    #     high_local_map = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.max_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(arm_extensions, 0)[None].repeat(angles_cabin, 0)
-    #     observation_space["low"]["local_map"] = low_local_map
-    #     observation_space["high"]["local_map"] = high_local_map
-
-    #     n_grid_maps = 2
-    #     grid_map_width = self.env_cfg.action_map.width
-    #     grid_map_height = self.env_cfg.action_map.height
-    #     low_grid_maps = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.min_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(grid_map_height, 0)[None].repeat(grid_map_width, 0)
-    #     high_grid_maps = jnp.array(
-    #         [
-    #             self.env_cfg.action_map.max_height
-    #         ],
-    #         dtype=IntMap
-    #     )[None].repeat(grid_map_height, 0)[None].repeat(grid_map_width, 0)
-    #     observation_space["low"]["active_map"] = low_local_map
-    #     observation_space["high"]["active_map"] = high_local_map
-
-    #     # TODO target map and traversability mask
-
-    #     return observation_space
-
     @property
     def observation_shapes(self) -> dict[str, tuple]:
         """
@@ -351,20 +321,24 @@ class TerraEnvBatch:
         """
         return {
             "agent_states": (6,),
-            "local_map": (
-                self.env_cfg.agent.angles_cabin,
-                self.env_cfg.agent.max_arm_extension + 1,
+            "local_map_action": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
             ),
             "action_map": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
             "target_map": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
             "traversability_mask": (
-                self.env_cfg.action_map.width,
-                self.env_cfg.action_map.height,
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
             ),
         }

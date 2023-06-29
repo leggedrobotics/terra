@@ -127,8 +127,8 @@ def parse_step(obs, reward, done, info):
 
 batch_cfg = BatchConfig()
 action_type = batch_cfg.action_type
-n_envs = 1
-seeds = jnp.array([24])
+n_envs = 3
+seeds = jnp.array([24, 35245, 65])
 env = TerraEnvBatch(rendering=True, n_imgs_row=n_envs)
 
 env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))

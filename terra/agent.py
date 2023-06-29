@@ -1,7 +1,8 @@
+from functools import partial
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
-import numpy as np
 
 from terra.config import EnvConfig
 from terra.utils import IntLowDim
@@ -33,17 +34,90 @@ class Agent(NamedTuple):
 
     agent_state: AgentState
 
+    width: int
+    height: int
+
     @staticmethod
-    def new(env_cfg: EnvConfig) -> "Agent":
-        max_center_coord = np.ceil(
-            np.max([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1])
-        ).astype(IntMap)
+    def new(
+        key: jax.random.PRNGKey,
+        env_cfg: EnvConfig,
+        max_traversable_x: int,
+        max_traversable_y: int,
+    ) -> "Agent":
+        pos_base, key = jax.lax.cond(
+            env_cfg.agent.random_init_pos,
+            partial(
+                _get_random_init_pos,
+                max_traversable_x=max_traversable_x,
+                max_traversable_y=max_traversable_y,
+            ),
+            _get_top_left_init_pos,
+            key,
+            env_cfg,
+        )
+
+        angle_base, key = jax.lax.cond(
+            env_cfg.agent.random_init_base_angle,
+            _get_random_init_base_angle,
+            lambda x, y: (jnp.full((1,), fill_value=0, dtype=IntLowDim), key),
+            key,
+            env_cfg,
+        )
+
         agent_state = AgentState(
-            pos_base=IntMap(jnp.array([max_center_coord, max_center_coord])),
-            angle_base=jnp.full((1,), fill_value=0, dtype=IntLowDim),
+            pos_base=pos_base,
+            angle_base=angle_base,
             angle_cabin=jnp.full((1,), fill_value=0, dtype=IntLowDim),
             arm_extension=jnp.full((1,), fill_value=0, dtype=IntLowDim),
             loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim),
         )
 
-        return Agent(agent_state=agent_state)
+        width = env_cfg.agent.width
+        height = env_cfg.agent.width
+
+        return Agent(agent_state=agent_state, width=width, height=height), key
+
+
+def _get_top_left_init_pos(key: jax.random.PRNGKey, env_cfg: EnvConfig):
+    max_center_coord = jnp.ceil(
+        jnp.max(jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1]))
+    ).astype(IntMap)
+    pos_base = IntMap(jnp.array([max_center_coord, max_center_coord]))
+    return pos_base, key
+
+
+def _get_random_init_pos(
+    key: jax.random.PRNGKey,
+    env_cfg: EnvConfig,
+    max_traversable_x: int,
+    max_traversable_y: int,
+):
+    max_center_coord = jnp.ceil(
+        jnp.max(jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1]))
+    ).astype(IntMap)
+    key, subkey = jax.random.split(key)
+
+    max_w = jnp.minimum(max_traversable_x, env_cfg.maps.max_width)
+    max_h = jnp.minimum(max_traversable_y, env_cfg.maps.max_height)
+    x = jax.random.randint(
+        subkey,
+        (1,),
+        minval=max_center_coord,
+        maxval=max_w - max_center_coord,
+    )
+    y = jax.random.randint(
+        subkey,
+        (1,),
+        minval=max_center_coord,
+        maxval=max_h - max_center_coord,
+    )
+    pos_base = IntMap(jnp.concatenate((x, y)))
+    return pos_base, key
+
+
+def _get_random_init_base_angle(key: jax.random.PRNGKey, env_cfg: EnvConfig):
+    key, subkey = jax.random.split(key)
+    theta = jax.random.randint(
+        subkey, (1,), minval=0, maxval=env_cfg.agent.angles_base + 1
+    )
+    return IntLowDim(theta), key
