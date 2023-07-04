@@ -21,6 +21,8 @@ class MapType(IntEnum):
     # Loaded from disk
     OPENSTREET_2_DIG_DUMP = 10
     OPENSTREET_3_DIG_DIG_DUMP = 11
+    TRENCHES = 12
+    FOUNDATIONS = 13
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -215,9 +217,15 @@ class BatchConfig(NamedTuple):
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
     maps: ImmutableMapsConfig = ImmutableMapsConfig()
 
-    # Maps folders (select here the data paths you want to load)
+    # Maps folders (the order matters -> DOF)
     maps_paths = [
-        "2_buildings/20x20/",
-        "2_buildings/40x40/",
+        # "2_buildings/20x20/",
+        # "2_buildings/40x40/",
         # "2_buildings/60x60/",
+        "trenches/easy/images",
+        "trenches/medium/images",
+        "trenches/hard/images",
+        "foundations/easy/images",
+        "foundations/medium/images",
+        "foundations/hard/images",
     ]

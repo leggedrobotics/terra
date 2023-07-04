@@ -27,10 +27,13 @@ class MapsBuffer(NamedTuple):
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
 
+    # Set this array with the DOF you want to be considered (e.g. the first element will be considered as dof=0).
     map_types_from_disk: Array = jnp.array(
         [
             MapType.OPENSTREET_2_DIG_DUMP,
             MapType.OPENSTREET_3_DIG_DIG_DUMP,
+            MapType.TRENCHES,
+            MapType.FOUNDATIONS,
         ]
     )
 
@@ -110,16 +113,24 @@ def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
     return {map_paths[idx]: idx for idx in range(len(map_paths))}
 
 
+def _pad_map_array(m: Array, max_w: int, max_h: int) -> Array:
+    """
+    Pads the map array and returns the padded maps and the padding masks.
+    """
+    z = np.zeros((m.shape[0], max_w, max_h), dtype=IntMap)
+    z_mask = np.ones((m.shape[0], max_w, max_h), dtype=IntMap)  # 1 for obstacles
+    z[:, : m.shape[1], : m.shape[2]] = m
+    z_mask[:, : m.shape[1], : m.shape[2]] = np.zeros_like(m)  # 0 for free
+    return z, z_mask
+
+
 def _pad_maps(maps: list[Array], batch_cfg):
     max_w = batch_cfg.maps.max_width
     max_h = batch_cfg.maps.max_height
     padding_mask = []
     maps_padded = []
     for m in maps:
-        z = np.zeros((m.shape[0], max_w, max_h), dtype=IntMap)
-        z_mask = np.ones((m.shape[0], max_w, max_h), dtype=IntMap)  # 1 for obstacles
-        z[:, : m.shape[1], : m.shape[2]] = m
-        z_mask[:, : m.shape[1], : m.shape[2]] = np.zeros_like(m)  # 0 for free
+        z, z_mask = _pad_map_array(m, max_w, max_h)
         maps_padded.append(z)
         padding_mask.append(z_mask)
 
