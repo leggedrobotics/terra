@@ -102,11 +102,14 @@ class MapsBuffer(NamedTuple):
 def load_maps_from_disk(folder_path: str) -> Array:
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
     maps = []
+    occupancies = []
     for i in tqdm(range(dataset_size), desc="Data Loader"):
-        map = np.load(f"{folder_path}/img_{i}.npy")
+        map = np.load(f"{folder_path}/images/img_{i}.npy")
+        occupancy = np.load(f"{folder_path}/occupancy/img_{i}.npy")
         maps.append(map)
+        occupancies.append(occupancy)
     print(f"Loaded {dataset_size} maps from {folder_path}.")
-    return jnp.array(maps, dtype=IntMap)
+    return jnp.array(maps, dtype=IntMap), jnp.array(occupancies, dtype=IntMap)
 
 
 def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
@@ -124,13 +127,14 @@ def _pad_map_array(m: Array, max_w: int, max_h: int) -> Array:
     return z, z_mask
 
 
-def _pad_maps(maps: list[Array], batch_cfg):
+def _pad_maps(maps: list[Array], occupancies: list[Array], batch_cfg):
     max_w = batch_cfg.maps.max_width
     max_h = batch_cfg.maps.max_height
     padding_mask = []
     maps_padded = []
-    for m in maps:
+    for m, o in zip(maps, occupancies):
         z, z_mask = _pad_map_array(m, max_w, max_h)
+        z_mask[: o.shape[0], : o.shape[1]] = o  # use occupancies from dataset
         maps_padded.append(z)
         padding_mask.append(z_mask)
 
@@ -150,10 +154,15 @@ def init_maps_buffer(batch_cfg):
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
     ]
     folder_paths_dict = map_paths_to_idx(folder_paths)
-    maps_from_disk = [
-        load_maps_from_disk(folder_path) for folder_path in folder_paths_dict.keys()
-    ]
-    maps_from_disk_padded, padding_mask = _pad_maps(maps_from_disk, batch_cfg)
+    maps_from_disk = []
+    occupancies_from_disk = []
+    for folder_path in folder_paths_dict.keys():
+        maps, occupancies = load_maps_from_disk(folder_path)
+        maps_from_disk.append(maps)
+        occupancies_from_disk.append(occupancies)
+    maps_from_disk_padded, padding_mask = _pad_maps(
+        maps_from_disk, occupancies_from_disk, batch_cfg
+    )
     maps_from_disk_padded = jnp.array(maps_from_disk_padded)
     padding_mask = jnp.array(padding_mask)
     return MapsBuffer.new(maps=maps_from_disk_padded, padding_mask=padding_mask)
