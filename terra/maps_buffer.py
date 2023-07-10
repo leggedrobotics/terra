@@ -134,7 +134,7 @@ def _pad_maps(maps: list[Array], occupancies: list[Array], batch_cfg):
     maps_padded = []
     for m, o in zip(maps, occupancies):
         z, z_mask = _pad_map_array(m, max_w, max_h)
-        z_mask[: o.shape[0], : o.shape[1]] = o  # use occupancies from dataset
+        z_mask[:, : o.shape[1], : o.shape[2]] = o  # use occupancies from dataset
         maps_padded.append(z)
         padding_mask.append(z_mask)
 
