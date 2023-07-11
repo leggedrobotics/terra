@@ -45,7 +45,7 @@ class MapDims(NamedTuple):
 
 
 class TargetMapConfig(NamedTuple):
-    type: int = MapType.TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS
+    type: int = MapType.TRENCHES
     map_dof: int = 0  # for curriculum
 
     # Used only for procedural maps with elements bigger than 1 tile
@@ -171,6 +171,10 @@ class Rewards(NamedTuple):
 
     terminal: float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
+    force_reset: float = (
+        -5.0
+    )  # given if the training algorithm calls a force reset on the environment
+
 
 class EnvConfig(NamedTuple):
     tile_size: float = MapDims().tile_size
@@ -185,7 +189,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 1
+    max_steps_in_episode: int = 50
 
     @staticmethod
     def parametrized(

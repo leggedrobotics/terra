@@ -1201,7 +1201,9 @@ class State(NamedTuple):
         )
         return reward
 
-    def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
+    def _get_reward(
+        self, new_state: "State", action_handler: Action, force_reset: jnp.bool_
+    ) -> Float:
         action = action_handler.action
 
         reward = 0.0
@@ -1228,6 +1230,11 @@ class State(NamedTuple):
 
         # Existence
         reward += self.env_cfg.rewards.existence
+
+        # Force reset
+        reward += jax.lax.cond(
+            force_reset, lambda: self.env_cfg.rewards.force_reset, lambda: 0.0
+        )
 
         return reward
 

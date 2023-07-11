@@ -156,6 +156,7 @@ class TerraEnv(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         env_cfg: EnvConfig,
+        force_reset: jnp.bool_,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
@@ -175,7 +176,7 @@ class TerraEnv(NamedTuple):
         """
         new_state = state._step(action)
 
-        reward = state._get_reward(new_state, action)
+        reward = state._get_reward(new_state, action, force_reset)
 
         new_state = TraversabilityMaskWrapper.wrap(new_state)
         new_state = LocalMapWrapper.wrap_target_map(new_state)
@@ -183,7 +184,7 @@ class TerraEnv(NamedTuple):
 
         observations = self._state_to_obs_dict(new_state)
 
-        done = state._is_done(
+        done = force_reset | state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
@@ -275,12 +276,15 @@ class TerraEnvBatch:
         actions: Action,
         env_cfgs: EnvConfig,
         maps_buffer_keys: jax.random.KeyArray,
+        force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         target_maps, padding_masks, maps_buffer_keys = jax.vmap(
             self.maps_buffer.get_map
         )(maps_buffer_keys, env_cfgs)
         return (
-            *self._step(states, actions, target_maps, padding_masks, env_cfgs),
+            *self._step(
+                states, actions, target_maps, padding_masks, env_cfgs, force_resets
+            ),
             maps_buffer_keys,
         )
 
@@ -292,9 +296,10 @@ class TerraEnvBatch:
         target_maps: Array,
         padding_masks: Array,
         env_cfgs: EnvConfig,
+        force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states, actions, target_maps, padding_masks, env_cfgs
+            states, actions, target_maps, padding_masks, env_cfgs, force_resets
         )
         return states, (obs, rewards, dones, infos)
 
