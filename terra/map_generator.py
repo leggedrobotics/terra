@@ -121,6 +121,13 @@ class GridMap(NamedTuple):
                     max_width,
                     max_height,
                 ),
+                # partial(
+                #     rotated_rectangle_max_width,
+                #     min_width,
+                #     min_height,
+                #     max_width,
+                #     max_height,
+                # ),
             ],
             key,
             params,
@@ -572,3 +579,57 @@ def single_square_ramp(
         orientation,
     )
     return map, padding_mask, key
+
+
+# def rotated_rectangle_max_width(
+#     min_width: IntMap,
+#     min_height: IntMap,
+#     max_width: IntMap,
+#     max_height: IntMap,
+#     key: jax.random.KeyArray,
+#     map_params: MapParams,
+# ) -> Array:
+#     margin_x = int(0.2 * max_width)
+#     margin_y = int(0.2 * max_height)
+#     key, *subkeys = jax.random.split(key, 3)
+#     xv = jax.random.randint(subkeys[0], (2,), minval=margin_x, maxval=max_width - margin_x)
+#     yv = jax.random.randint(subkeys[1], (2,), minval=margin_y, maxval=max_height - margin_y)
+#     # x_v = jnp.array([[xv[0], xv[0], xv[1], xv[1]]])
+#     # y_v = jnp.array([[yv[0], yv[1], yv[0], yv[1]]])
+#     # v = jnp.concatenate((x_v[..., None], y_v[..., None]), axis=1)
+
+#     idx_x = jnp.arange(jnp.min(xv), jnp.max(xv) + 1)
+#     idx_y = jnp.arange(jnp.min(yv), jnp.max(yv) + 1)
+
+#     rectangle = jnp.concatenate(
+#         [
+#             idx_x[None].repeat(jnp.abs(yv[0]-yv[1]), 0).reshape(-1)[:, None],
+#             idx_y[:, None].repeat(jnp.abs(xv[0]-xv[1]), 1).reshape(-1)[:, None],
+#         ],
+#         axis=1,
+#         dtype=IntMap
+#     )
+
+#     def _rotate_v(v):
+#         key, subkey = jax.random.split(key)
+#         theta = jax.random.uniform(subkey, (), minval=0., maxval=2.*jnp.pi)
+#         R = jnp.array([[jnp.cos(theta), -jnp.sin(theta)], [jnp.sin(theta), jnp.cos(theta)]])
+#         v_rot = R @ v
+#         return (v_rot, key)
+
+#     v_rot = _rotate_v(rectangle)
+#     v_rot, key = jax.lax.while_loop(
+#         lambda x, key: ~(jnp.all(x >= 0) & jnp.all(x[:, 0] < max_width) & jnp.all(x[:, 1] < max_height)),
+#         _rotate_v,
+#         v_rot
+#     )
+
+#     map = jnp.zeros((max_width, max_height), dtype=IntMap)
+#     map = jnp.where(
+#         jnp.any(jnp.arange(max_width) == v_rot[:, 0]) & jnp.any(jnp.arange(max_height) == v_rot[:, 1]),
+#         -1,
+#         map
+#     )
+
+#     padding_mask = jnp.zeros_like(map)
+#     return map, padding_mask, key

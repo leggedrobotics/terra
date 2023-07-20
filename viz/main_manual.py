@@ -27,25 +27,41 @@ def key_handler(event):
 
     if event.key == "left":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.anticlock()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.anticlock()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "right":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.clock()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.clock()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "up":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.forward()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.forward()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "down":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.backward()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.backward()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -55,24 +71,37 @@ def key_handler(event):
             repeat_action(action_type.cabin_anticlock()),
             env_cfgs,
             key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "d":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.cabin_clock()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.cabin_clock()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "e":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.extend_arm()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.extend_arm()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == "r":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.retract_arm()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.retract_arm()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -82,6 +111,7 @@ def key_handler(event):
             repeat_action(action_type.clock_forward()),
             env_cfgs,
             key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -91,6 +121,7 @@ def key_handler(event):
             repeat_action(action_type.clock_backward()),
             env_cfgs,
             key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -100,6 +131,7 @@ def key_handler(event):
             repeat_action(action_type.anticlock_forward()),
             env_cfgs,
             key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -109,12 +141,17 @@ def key_handler(event):
             repeat_action(action_type.anticlock_backward()),
             env_cfgs,
             key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
     if event.key == " ":
         states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states, repeat_action(action_type.do()), env_cfgs, key_maps_buffer
+            states,
+            repeat_action(action_type.do()),
+            env_cfgs,
+            key_maps_buffer,
+            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         parse_step(states, reward, done, info)
 
@@ -141,5 +178,6 @@ states, (obs, rewards, dones, infos), key_maps_buffer = env.step(
     action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
     env_cfgs,
     key_maps_buffer,
+    jnp.zeros((n_envs,), dtype=jnp.bool_),
 )
 env.terra_env.render_obs(obs, key_handler=key_handler, block=True, tile_size=tile_size)

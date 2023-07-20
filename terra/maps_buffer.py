@@ -34,6 +34,7 @@ class MapsBuffer(NamedTuple):
             MapType.OPENSTREET_3_DIG_DIG_DUMP,
             MapType.TRENCHES,
             MapType.FOUNDATIONS,
+            MapType.RECTANGLES,
         ]
     )
 

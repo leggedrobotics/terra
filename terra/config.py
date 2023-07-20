@@ -17,12 +17,14 @@ class MapType(IntEnum):
     MULTIPLE_SINGLE_TILES = 7
     MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
     TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
+    ROTATED_RECTANGLE_MAX_WIDTH = 10
 
     # Loaded from disk
-    OPENSTREET_2_DIG_DUMP = 10
-    OPENSTREET_3_DIG_DIG_DUMP = 11
-    TRENCHES = 12
-    FOUNDATIONS = 13
+    OPENSTREET_2_DIG_DUMP = 11
+    OPENSTREET_3_DIG_DIG_DUMP = 12
+    TRENCHES = 13
+    FOUNDATIONS = 14
+    RECTANGLES = 15
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -31,21 +33,21 @@ class ImmutableMapsConfig(NamedTuple):
     Used for padding in case it's needed.
     """
 
-    min_width: int = 16  # number of tiles
-    min_height: int = 16  # number of tiles
+    min_width: int = 20  # number of tiles
+    min_height: int = 20  # number of tiles
 
-    max_width: int = 40  # number of tiles
-    max_height: int = 40  # number of tiles
+    max_width: int = 20  # number of tiles
+    max_height: int = 20  # number of tiles
 
 
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 1.0  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
+    tile_size: float = 1.5  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
 
 
 class TargetMapConfig(NamedTuple):
-    type: int = MapType.TRENCHES
+    type: int = MapType.RECTANGLES
     map_dof: int = 0  # for curriculum
 
     # Used only for procedural maps with elements bigger than 1 tile
@@ -169,7 +171,7 @@ class Rewards(NamedTuple):
     )
     dump_correct: float = 2.0  # dump where the target map is positive
 
-    terminal: float = 5.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: float = 5000.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float = (
         -5.0
@@ -189,7 +191,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 50
+    max_steps_in_episode: int = 15
 
     @staticmethod
     def parametrized(
@@ -226,10 +228,11 @@ class BatchConfig(NamedTuple):
         # "2_buildings/20x20/",
         # "2_buildings/40x40/",
         # "2_buildings/60x60/",
-        "trenches/easy",
-        "trenches/medium",
-        "trenches/hard",
-        "foundations/easy",
-        "foundations/medium",
-        "foundations/hard",
+        # "trenches/easy",
+        # "trenches/medium",
+        # "trenches/hard",
+        # "foundations/easy",
+        # "foundations/medium",
+        # "foundations/hard",
+        "rectangles",
     ]
