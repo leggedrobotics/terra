@@ -339,8 +339,8 @@ class RenderingEngine:
             lambda agent_pos, base_dir: State._get_agent_corners(
                 pos_base=agent_pos,
                 base_orientation=base_dir,
-                agent_width=agent_width,
-                agent_height=agent_height,
+                agent_width=agent_width[0],
+                agent_height=agent_height[0],
             )
         )(agent_pos, base_dir)
 

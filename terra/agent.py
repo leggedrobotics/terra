@@ -73,7 +73,7 @@ class Agent(NamedTuple):
         )
 
         width = env_cfg.agent.width
-        height = env_cfg.agent.width
+        height = env_cfg.agent.height
 
         return Agent(agent_state=agent_state, width=width, height=height), key
 

@@ -43,7 +43,7 @@ class ImmutableMapsConfig(NamedTuple):
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 1.5  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
+    tile_size: float = 2  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
 
 
 class TargetMapConfig(NamedTuple):

@@ -126,7 +126,7 @@ class TerraEnv(NamedTuple):
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
             agent_width=obs["agent_width"],
-            agent_height=obs["agent_width"],
+            agent_height=obs["agent_height"],
         )
 
         imgs_local = obs["local_map_action"]
