@@ -171,7 +171,7 @@ class Rewards(NamedTuple):
     )
     dump_correct: float = 2.0  # dump where the target map is positive
 
-    terminal: float = 5000.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: float = 2000.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float = (
         -5.0
@@ -191,7 +191,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 15
+    max_steps_in_episode: int = 150
 
     @staticmethod
     def parametrized(
@@ -234,5 +234,6 @@ class BatchConfig(NamedTuple):
         # "foundations/easy",
         # "foundations/medium",
         # "foundations/hard",
+        "rectangles_small",
         "rectangles",
     ]
