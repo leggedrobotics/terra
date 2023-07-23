@@ -153,28 +153,28 @@ class Rewards(NamedTuple):
     move_while_loaded: float = 0.0
     move: float = -0.05
 
-    collision_turn: float = -0.2
+    collision_turn: float = -0.1
     base_turn: float = -0.1
 
     cabin_turn: float = -0.01
 
     dig_wrong: float = (
-        -0.1
+        -0.4
     )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float = -0.1  # given if loaded stayed the same
+    dump_wrong: float = -0.4  # given if loaded stayed the same
     dump_no_dump_area: float = (
         -0.02
     )  # given if dumps in an area that is not the dump area
 
     dig_correct: float = (
-        0.1  # dig where the target map is negative, and not more than required
+        0.4  # dig where the target map is negative, and not more than required
     )
-    dump_correct: float = 0.1  # dump where the target map is positive
+    dump_correct: float = 0.4  # dump where the target map is positive
 
     terminal: float = 50.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float = (
-        -5.0
+        0.0
     )  # given if the training algorithm calls a force reset on the environment
 
 
