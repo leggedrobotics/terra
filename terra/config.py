@@ -1,6 +1,8 @@
 from enum import IntEnum
 from typing import NamedTuple
 
+import jax
+
 from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
@@ -25,6 +27,11 @@ class MapType(IntEnum):
     TRENCHES = 13
     FOUNDATIONS = 14
     RECTANGLES = 15
+
+
+class RewardsType(IntEnum):
+    DENSE = 0
+    SPARSE = 1
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -147,35 +154,65 @@ class AgentConfig(NamedTuple):
 
 
 class Rewards(NamedTuple):
-    existence: float = -0.01
+    existence: float
 
-    collision_move: float = -0.1
-    move_while_loaded: float = 0.0
-    move: float = -0.05
+    collision_move: float
+    move_while_loaded: float
+    move: float
 
-    collision_turn: float = -0.1
-    base_turn: float = -0.1
+    collision_turn: float
+    base_turn: float
 
-    cabin_turn: float = -0.01
+    cabin_turn: float
 
-    dig_wrong: float = (
-        -0.4
-    )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float = -0.4  # given if loaded stayed the same
-    dump_no_dump_area: float = (
-        -0.02
-    )  # given if dumps in an area that is not the dump area
+    dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
+    dump_wrong: float  # given if loaded stayed the same
+    dump_no_dump_area: float  # given if dumps in an area that is not the dump area
 
-    dig_correct: float = (
-        0.4  # dig where the target map is negative, and not more than required
-    )
-    dump_correct: float = 0.4  # dump where the target map is positive
+    dig_correct: float  # dig where the target map is negative, and not more than required
+    dump_correct: float  # dump where the target map is positive
 
-    terminal: float = 50.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
-    force_reset: float = (
-        0.0
-    )  # given if the training algorithm calls a force reset on the environment
+    force_reset: float  # given if the training algorithm calls a force reset on the environment
+
+    @staticmethod
+    def dense():
+        return Rewards(
+            existence=-0.01,
+            collision_move=-0.1,
+            move_while_loaded=0.0,
+            move=-0.05,
+            collision_turn=-0.1,
+            base_turn=-0.1,
+            cabin_turn=-0.01,
+            dig_wrong=-0.4,
+            dump_wrong=-0.4,
+            dump_no_dump_area=-0.02,
+            dig_correct=0.4,
+            dump_correct=0.4,
+            terminal=50.0,
+            force_reset=0.0,
+        )
+
+    @staticmethod
+    def sparse():
+        return Rewards(
+            existence=-0.01,
+            collision_move=0.0,
+            move_while_loaded=0.0,
+            move=0.0,
+            collision_turn=0.0,
+            base_turn=0.0,
+            cabin_turn=0.0,
+            dig_wrong=0.0,
+            dump_wrong=0.0,
+            dump_no_dump_area=0.0,
+            dig_correct=0.0,
+            dump_correct=0.0,
+            terminal=50.0,
+            force_reset=0.0,
+        )
 
 
 class EnvConfig(NamedTuple):
@@ -188,7 +225,7 @@ class EnvConfig(NamedTuple):
 
     maps: ImmutableMapsConfig = ImmutableMapsConfig()
 
-    rewards = Rewards()
+    rewards: Rewards = Rewards.dense()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
     max_steps_in_episode: int = 50
@@ -200,14 +237,28 @@ class EnvConfig(NamedTuple):
         max_steps_in_episode: int,
         map_dof: int,
         map_type: int,
+        rewards_type: int,
     ) -> "EnvConfig":
         map_dims = MapDims(width_m, height_m)
+
+        # if rewards_type == RewardsType.DENSE:
+        #     rewards = DenseRewards()
+        # elif rewards_type == RewardsType.SPARSE:
+        #     rewards = SparseRewards()
+        # else:
+        #     raise ValueError(f"{rewards_type=} doesn't exist.")
+
+        rewards_list = [Rewards.dense, Rewards.sparse]
+
+        rewards = jax.lax.switch(rewards_type, rewards_list)
+
         return EnvConfig(
             tile_size=map_dims.tile_size,
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
             target_map=TargetMapConfig.parametrized(map_dof, map_type),
             # action_map=ActionMapConfig.from_map_dims(map_dims),
+            rewards=rewards,
         )
 
     @classmethod
