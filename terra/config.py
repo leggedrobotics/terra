@@ -149,7 +149,7 @@ class AgentConfig(NamedTuple):
 class Rewards(NamedTuple):
     existence: float = -0.01
 
-    collision_move: float = -0.2
+    collision_move: float = -0.1
     move_while_loaded: float = 0.0
     move: float = -0.05
 
@@ -159,19 +159,19 @@ class Rewards(NamedTuple):
     cabin_turn: float = -0.01
 
     dig_wrong: float = (
-        -0.2
+        -0.1
     )  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float = -0.2  # given if loaded stayed the same
+    dump_wrong: float = -0.1  # given if loaded stayed the same
     dump_no_dump_area: float = (
         -0.02
     )  # given if dumps in an area that is not the dump area
 
     dig_correct: float = (
-        2.0  # dig where the target map is negative, and not more than required
+        0.1  # dig where the target map is negative, and not more than required
     )
-    dump_correct: float = 2.0  # dump where the target map is positive
+    dump_correct: float = 0.1  # dump where the target map is positive
 
-    terminal: float = 2000.0  # given if the action map is the same as the target map where it matters (digged tiles)
+    terminal: float = 50.0  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float = (
         -5.0
@@ -191,7 +191,7 @@ class EnvConfig(NamedTuple):
     rewards = Rewards()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 150
+    max_steps_in_episode: int = 50
 
     @staticmethod
     def parametrized(
@@ -235,5 +235,4 @@ class BatchConfig(NamedTuple):
         # "foundations/medium",
         # "foundations/hard",
         "rectangles_small",
-        "rectangles",
     ]
