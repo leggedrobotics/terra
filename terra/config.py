@@ -185,20 +185,20 @@ class Rewards(NamedTuple):
             move=-0.05,
             collision_turn=-0.1,
             base_turn=-0.1,
-            cabin_turn=-0.01,
-            dig_wrong=-0.4,
-            dump_wrong=-0.4,
+            cabin_turn=-0.02,
+            dig_wrong=-0.3,
+            dump_wrong=-0.3,
             dump_no_dump_area=-0.02,
-            dig_correct=0.4,
-            dump_correct=0.4,
-            terminal=50.0,
-            force_reset=0.0,
+            dig_correct=0.3,
+            dump_correct=0.3,
+            terminal=20.0,
+            force_reset=-2.0,
         )
 
     @staticmethod
     def sparse():
         return Rewards(
-            existence=-0.01,
+            existence=0.0,
             collision_move=0.0,
             move_while_loaded=0.0,
             move=0.0,
@@ -210,7 +210,7 @@ class Rewards(NamedTuple):
             dump_no_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
-            terminal=50.0,
+            terminal=20.0,
             force_reset=0.0,
         )
 
