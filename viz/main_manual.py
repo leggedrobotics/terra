@@ -15,7 +15,9 @@ def redraw():
 
 
 def key_handler(event):
-    global states, action_type, obs, n_envs, key_maps_buffer, info
+    global states, action_type, obs, n_envs, key_maps_buffer, info, i
+    i += 1
+    print(f"step {i}")
 
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
@@ -180,6 +182,7 @@ states, (obs, rewards, dones, info), key_maps_buffer = env.step(
     key_maps_buffer,
     jnp.zeros((n_envs,), dtype=jnp.bool_),
 )
+i = 0
 env.terra_env.render_obs(
     obs, key_handler=key_handler, block=True, tile_size=tile_size, info=info
 )

@@ -847,7 +847,10 @@ class State(NamedTuple):
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
 
-    def _build_dig_dump_mask(self) -> Array:
+    def _build_dig_dump_cone(self) -> Array:
+        """
+        Returns the masked cone in cartesian coords. Every tile in the cone is included as +1.
+        """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
@@ -879,12 +882,30 @@ class State(NamedTuple):
         dig_mask_action_map = self.world.action_map.map > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
-        dig_mask_already_done = self.world.target_map.map < self.world.action_map.map
+        # dig_mask_already_done = self.world.target_map.map < self.world.action_map.map
 
-        return dig_mask * dig_mask_maps.reshape(-1) * dig_mask_already_done.reshape(-1)
+        # if anything > 0 in the mask, only select that - else select everything
+        action_map_filtered = self.world.action_map.map.reshape(-1) * dig_mask
+        ambiguity_mask_dig_movesoil = jax.lax.cond(
+            jnp.any(action_map_filtered > 0),
+            lambda: action_map_filtered > 0,
+            lambda: jnp.ones_like(dig_mask),
+        )
+
+        # respect max dig limit
+        max_dig_limit_mask = (
+            self.world.action_map.map > -self.env_cfg.agent.dig_depth
+        ).reshape(-1)
+
+        return (
+            dig_mask
+            * dig_mask_maps.reshape(-1)
+            * ambiguity_mask_dig_movesoil
+            * max_dig_limit_mask
+        )  # * dig_mask_already_done.reshape(-1)
 
     def _handle_dig(self) -> "State":
-        dig_mask = self._build_dig_dump_mask()
+        dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
         dig_volume = dig_mask.sum()
@@ -910,7 +931,7 @@ class State(NamedTuple):
         return jax.lax.cond(dig_volume > 0, _apply_dig, self._do_nothing)
 
     def _handle_dump(self) -> "State":
-        dump_mask = self._build_dig_dump_mask()
+        dump_mask = self._build_dig_dump_cone()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
@@ -1457,6 +1478,6 @@ class State(NamedTuple):
     def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
         return {
             "action_mask": self._get_action_mask(dummy_action),
-            "target_tiles": self._build_dig_dump_mask(),
+            "target_tiles": self._build_dig_dump_cone(),
             "do_preview": self._handle_do().world.action_map.map,
         }
