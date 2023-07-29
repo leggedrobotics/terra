@@ -286,5 +286,6 @@ class BatchConfig(NamedTuple):
         # "foundations/medium",
         # "foundations/hard",
         # "rectangles_1",
-        "rectangles_60",
+        "rectangles_60_1",
+        "rectangles_60_2",
     ]
