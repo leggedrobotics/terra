@@ -283,7 +283,7 @@ class RenderingEngine:
 
         return imgs
 
-    def _render_grids(self, tile_size, height_grid, padding_mask):
+    def _render_grids(self, tile_size, height_grid, padding_mask, target_tiles=None):
         x_dim = height_grid.shape[-2]
         y_dim = height_grid.shape[-1]
         width_px = x_dim * tile_size
@@ -296,6 +296,22 @@ class RenderingEngine:
             (height_grid.repeat(tile_size, axis=-2).repeat(tile_size, axis=-1) + 3) / 7
         )[..., None]
         img = (np.array([[[255, 255, 255]]]) * x).astype(np.int16)
+
+        # highlight target tiles
+        if target_tiles is not None:
+            print(f"{target_tiles.shape=}")
+            target_tiles = (
+                target_tiles.reshape(
+                    target_tiles.shape[0], height_grid.shape[-2], height_grid.shape[-1]
+                )[..., None]
+                .repeat(3, -1)
+                .astype(np.bool_)
+            )
+            print(f"{target_tiles.shape=}")
+            target_tiles = target_tiles.repeat(tile_size, axis=-3).repeat(
+                tile_size, axis=-2
+            )
+            img = np.where(target_tiles, 255, img)
 
         # apply grid
         grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
@@ -322,6 +338,7 @@ class RenderingEngine:
         agent_width=None,
         agent_height=None,
         batch_size=1,
+        target_tiles=None,
     ):
         """
         Render this grid at a given scale
@@ -330,7 +347,7 @@ class RenderingEngine:
         """
         # s1 = time.time()
 
-        imgs = self._render_grids(tile_size, height_grid, padding_mask)
+        imgs = self._render_grids(tile_size, height_grid, padding_mask, target_tiles)
 
         # s2 = time.time()
 
@@ -388,6 +405,7 @@ class RenderingEngine:
         cabin_dir=None,
         agent_width=None,
         agent_height=None,
+        target_tiles=None,
     ):
         # Add batch dim in case it's not there
         if len(active_grid.shape) < 3:
@@ -400,6 +418,8 @@ class RenderingEngine:
             base_dir = base_dir[None]
         if cabin_dir is not None and len(cabin_dir.shape) < 2:
             cabin_dir = cabin_dir[None]
+        if target_tiles is not None and len(target_tiles.shape) < 2:
+            target_tiles = target_tiles[None]
 
         white_margin = 0.05  # percentage
         batch_size = active_grid.shape[0]
@@ -414,6 +434,7 @@ class RenderingEngine:
             agent_width,
             agent_height,
             batch_size,
+            target_tiles,
         )
 
         imgs_target_grid = self.render_target_grids(

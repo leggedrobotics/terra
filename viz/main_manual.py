@@ -8,14 +8,14 @@ from terra.env import TerraEnvBatch
 
 
 def redraw():
-    global obs, states, tile_size, batch_cfg
+    global obs, states, tile_size, batch_cfg, info
     env.terra_env.render_obs(
-        obs, mode="human", tile_size=tile_size, key_handler=key_handler
+        obs, mode="human", tile_size=tile_size, key_handler=key_handler, info=info
     )
 
 
 def key_handler(event):
-    global states, action_type, obs, n_envs, key_maps_buffer
+    global states, action_type, obs, n_envs, key_maps_buffer, info
 
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
@@ -173,11 +173,13 @@ states, obs, key_maps_buffer = env.reset(seeds, env_cfgs)
 
 tile_size = 16
 
-states, (obs, rewards, dones, infos), key_maps_buffer = env.step(
+states, (obs, rewards, dones, info), key_maps_buffer = env.step(
     states,
     action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
     env_cfgs,
     key_maps_buffer,
     jnp.zeros((n_envs,), dtype=jnp.bool_),
 )
-env.terra_env.render_obs(obs, key_handler=key_handler, block=True, tile_size=tile_size)
+env.terra_env.render_obs(
+    obs, key_handler=key_handler, block=True, tile_size=tile_size, info=info
+)

@@ -111,12 +111,18 @@ class TerraEnv(NamedTuple):
         mode: str = "human",
         block: bool = False,
         tile_size: int = 32,
+        info=None,
     ) -> Array:
         """
         Renders the environment at a given observation.
 
         # TODO write a cleaner rendering engine
         """
+        if info is not None:
+            target_tiles = info["target_tiles"]
+        else:
+            target_tiles = None
+
         imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=obs["action_map"],
@@ -127,6 +133,7 @@ class TerraEnv(NamedTuple):
             cabin_dir=obs["agent_state"][..., [3]],
             agent_width=obs["agent_width"],
             agent_height=obs["agent_height"],
+            target_tiles=target_tiles,
         )
 
         imgs_local = obs["local_map_action"]

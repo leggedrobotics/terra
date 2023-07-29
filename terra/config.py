@@ -40,17 +40,17 @@ class ImmutableMapsConfig(NamedTuple):
     Used for padding in case it's needed.
     """
 
-    min_width: int = 20  # number of tiles
-    min_height: int = 20  # number of tiles
+    min_width: int = 60  # number of tiles
+    min_height: int = 60  # number of tiles
 
-    max_width: int = 20  # number of tiles
-    max_height: int = 20  # number of tiles
+    max_width: int = 60  # number of tiles
+    max_height: int = 60  # number of tiles
 
 
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 2  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
+    tile_size: float = 0.67  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
 
 
 class TargetMapConfig(NamedTuple):
@@ -116,7 +116,7 @@ class AgentConfig(NamedTuple):
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
     max_arm_extension: int = ImmutableAgentConfig().max_arm_extension
 
-    move_tiles: int = 2  # number of tiles of progress for every move action
+    move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
@@ -228,7 +228,7 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
-    max_steps_in_episode: int = 50
+    max_steps_in_episode: int = 1000
 
     @staticmethod
     def parametrized(
@@ -285,5 +285,6 @@ class BatchConfig(NamedTuple):
         # "foundations/easy",
         # "foundations/medium",
         # "foundations/hard",
-        "rectangles_small",
+        # "rectangles_1",
+        "rectangles_60",
     ]

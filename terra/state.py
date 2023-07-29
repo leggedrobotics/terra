@@ -1455,4 +1455,7 @@ class State(NamedTuple):
         return action_mask
 
     def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
-        return {"action_mask": self._get_action_mask(dummy_action)}
+        return {
+            "action_mask": self._get_action_mask(dummy_action),
+            "target_tiles": self._build_dig_dump_mask(),
+        }
