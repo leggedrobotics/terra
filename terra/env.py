@@ -120,8 +120,10 @@ class TerraEnv(NamedTuple):
         """
         if info is not None:
             target_tiles = info["target_tiles"]
+            do_preview = info["do_preview"]
         else:
             target_tiles = None
+            do_preview = None
 
         imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
@@ -134,6 +136,7 @@ class TerraEnv(NamedTuple):
             agent_width=obs["agent_width"],
             agent_height=obs["agent_height"],
             target_tiles=target_tiles,
+            do_preview=do_preview,
         )
 
         imgs_local = obs["local_map_action"]
