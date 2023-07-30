@@ -947,19 +947,19 @@ class State(NamedTuple):
             self.world.action_map.map.reshape(-1) * radial_mask
         )
 
-        jax.debug.print(
-            "jnp.any(action_map_filtered_radially > 0) = {x}",
-            x=jnp.any(action_map_filtered_radially > 0),
-        )
+        # jax.debug.print(
+        #     "jnp.any(action_map_filtered_radially > 0) = {x}",
+        #     x=jnp.any(action_map_filtered_radially > 0),
+        # )
         ambiguity_mask_dig_movesoil = jax.lax.cond(
             jnp.any(action_map_filtered_radially > 0),
             lambda: (action_map_filtered_radially > 0) * radial_mask,
             lambda: self.world.action_map.map.reshape(-1) == 0,
         )
-        jax.debug.print(
-            "ambiguity_mask_dig_movesoil.sum() = {x}",
-            x=ambiguity_mask_dig_movesoil.sum(),
-        )
+        # jax.debug.print(
+        #     "ambiguity_mask_dig_movesoil.sum() = {x}",
+        #     x=ambiguity_mask_dig_movesoil.sum(),
+        # )
 
         # respect max dig limit
         max_dig_limit_mask = (
