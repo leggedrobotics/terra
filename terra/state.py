@@ -920,17 +920,10 @@ class State(NamedTuple):
             dig_mask_cone = jnp.logical_and(dig_mask_r, dig_mask_theta)
 
             r_distance = map_cyl_coords[0].copy()
-            jax.debug.print("r_distance.shape = {x}", x=r_distance.shape)
             action_map = self.world.action_map.map.copy().reshape(-1)
-            jax.debug.print("action_map.shape = {x}", x=action_map.shape)
             action_map_cone = action_map * dig_mask_cone
             sorted_idxs_radial_distance = jnp.argsort(r_distance)
-            jax.debug.print(
-                "sorted_idxs_radial_distance[:15] = {x}",
-                x=sorted_idxs_radial_distance[:15],
-            )
             sorted_action_map = action_map_cone[sorted_idxs_radial_distance]
-            jax.debug.print("sorted_action_map[:15] = {x}", x=sorted_action_map[:15])
             sorted_action_map_mask = sorted_action_map < 0
             sorted_action_map_mask_cum = ~(
                 jnp.cumsum(sorted_action_map_mask).astype(jnp.bool_)
@@ -952,14 +945,10 @@ class State(NamedTuple):
             "jnp.any(action_map_filtered_radially > 0) = {x}",
             x=jnp.any(action_map_filtered_radially > 0),
         )
-        jax.debug.print(
-            "action_map_filtered_radially[:20] = {x}",
-            x=action_map_filtered_radially[:20],
-        )
         ambiguity_mask_dig_movesoil = jax.lax.cond(
             jnp.any(action_map_filtered_radially > 0),
-            lambda: action_map_filtered_radially > 0,
-            lambda: (action_map_filtered_radially <= 0) * radial_mask,
+            lambda: (action_map_filtered_radially > 0) * radial_mask,
+            lambda: self.world.action_map.map.reshape(-1) == 0,
         )
         jax.debug.print(
             "ambiguity_mask_dig_movesoil.sum() = {x}",
