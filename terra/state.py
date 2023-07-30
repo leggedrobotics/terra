@@ -764,7 +764,9 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
-    def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
+    def _apply_dig_mask(
+        self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
+    ) -> Array:
         """
         Args:
             - flattened_map: (N, ) Array flattened height map
@@ -773,7 +775,11 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
-        return flattened_map - delta_dig
+        return jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: flattened_map * (~dig_mask),
+            lambda: flattened_map - delta_dig,
+        )
 
     def _apply_dump_mask(
         self,
@@ -971,11 +977,19 @@ class State(NamedTuple):
         dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-        dig_volume = dig_mask.sum()
+        flattened_action_map = self.world.action_map.map.reshape(-1)
+        moving_dumped_dirt = (flattened_action_map * dig_mask).sum() > 0
+        # if moving dumped dirt, move it all at once
+        dig_volume = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: (flattened_action_map * dig_mask).sum(),
+            lambda: dig_mask.sum(),
+        )
 
         def _apply_dig():
-            flattened_action_map = self.world.action_map.map.reshape(-1)
-            new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
+            new_map_global_coords = self._apply_dig_mask(
+                flattened_action_map, dig_mask, moving_dumped_dirt
+            )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
