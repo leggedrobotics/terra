@@ -1170,15 +1170,26 @@ class State(NamedTuple):
                 lambda: self.env_cfg.rewards.dig_wrong,
                 lambda: jax.lax.cond(
                     jnp.all(
-                        self._get_action_map_progress(
+                        self._get_action_map_positive_progress(
                             self.world.action_map.map,
                             new_state.world.action_map.map,
                             self.world.target_map.map,
                         )
-                        == 0
+                        < 0
                     ),
-                    lambda: 0.0,
-                    lambda: self.env_cfg.rewards.dig_correct,
+                    lambda: self.env_cfg.rewards.dig_dump_area,
+                    lambda: jax.lax.cond(
+                        jnp.all(
+                            self._get_action_map_progress(
+                                self.world.action_map.map,
+                                new_state.world.action_map.map,
+                                self.world.target_map.map,
+                            )
+                            == 0
+                        ),
+                        lambda: 0.0,
+                        lambda: self.env_cfg.rewards.dig_correct,
+                    ),
                 ),
             ),
         )
