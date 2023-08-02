@@ -764,7 +764,9 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
-    def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
+    def _apply_dig_mask(
+        self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
+    ) -> Array:
         """
         Args:
             - flattened_map: (N, ) Array flattened height map
@@ -773,7 +775,13 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
-        return flattened_map - delta_dig
+        m = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: jnp.where(dig_mask, 0, flattened_map),
+            #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
+            lambda: flattened_map - delta_dig,
+        )
+        return m
 
     def _apply_dump_mask(
         self,
@@ -965,33 +973,55 @@ class State(NamedTuple):
             * dig_mask_maps.reshape(-1)
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
-        )
+        ).astype(jnp.bool_)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-        dig_volume = dig_mask.sum()
+        flattened_action_map = self.world.action_map.map.reshape(
+            -1
+        )  # BUG: this line for some reason makes it buggy!
+        masked_flattened_action_map = flattened_action_map.astype(
+            jnp.int32
+        ) @ dig_mask.astype(
+            jnp.int32
+        )  # jnp.ones_like(dig_mask).astype(jnp.int32) @ dig_mask  # dig_mask.sum() # (flattened_action_map * dig_mask).sum()  # jnp.where(dig_mask, flattened_action_map, 0).sum()
+        moving_dumped_dirt = masked_flattened_action_map > 0
+        # if moving dumped dirt, move it all at once
+        dig_volume = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: masked_flattened_action_map,
+            lambda: dig_mask.sum(),
+        )
 
-        def _apply_dig():
-            flattened_action_map = self.world.action_map.map.reshape(-1)
-            new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
+        def _apply_dig(volume):
+            new_map_global_coords = self._apply_dig_mask(
+                flattened_action_map, dig_mask, moving_dumped_dirt
+            )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    action_map=self.world.action_map._replace(
+                        map=IntMap(new_map_global_coords)
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.full((1,), fill_value=dig_volume, dtype=IntLowDim)
+                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
                     )
                 ),
             )
 
-        return jax.lax.cond(dig_volume > 0, _apply_dig, self._do_nothing)
+        return jax.lax.cond(
+            dig_volume > 0,
+            lambda v: _apply_dig(v),
+            lambda v: self._do_nothing(),
+            dig_volume,
+        )
 
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
@@ -1022,7 +1052,9 @@ class State(NamedTuple):
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    action_map=self.world.action_map._replace(
+                        map=IntMap(new_map_global_coords)
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
