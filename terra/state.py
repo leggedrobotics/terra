@@ -777,7 +777,7 @@ class State(NamedTuple):
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
         m = jax.lax.cond(
             moving_dumped_dirt,
-            lambda: jnp.where(dig_mask, 0, flattened_map),
+            lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
             #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
             lambda: flattened_map - delta_dig,
         )
@@ -979,25 +979,18 @@ class State(NamedTuple):
         dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-        flattened_action_map = self.world.action_map.map.reshape(
-            -1
-        )  # BUG: this line for some reason makes it buggy!
-        masked_flattened_action_map = flattened_action_map.astype(
-            jnp.int32
-        ) @ dig_mask.astype(
-            jnp.int32
-        )  # jnp.ones_like(dig_mask).astype(jnp.int32) @ dig_mask  # dig_mask.sum() # (flattened_action_map * dig_mask).sum()  # jnp.where(dig_mask, flattened_action_map, 0).sum()
+        flattened_action_map = self.world.action_map.map.reshape(-1)
+        masked_flattened_action_map = flattened_action_map @ dig_mask
         moving_dumped_dirt = masked_flattened_action_map > 0
         # if moving dumped dirt, move it all at once
         dig_volume = jax.lax.cond(
             moving_dumped_dirt,
-            lambda: masked_flattened_action_map,
+            lambda: masked_flattened_action_map.astype(jnp.int32),
             lambda: dig_mask.sum(),
         )
-
-        def _apply_dig(volume):
+        def _apply_dig(volume, fam):
             new_map_global_coords = self._apply_dig_mask(
-                flattened_action_map, dig_mask, moving_dumped_dirt
+                fam, dig_mask, moving_dumped_dirt
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
@@ -1016,12 +1009,14 @@ class State(NamedTuple):
                 ),
             )
 
-        return jax.lax.cond(
+        s = jax.lax.cond(
             dig_volume > 0,
-            lambda v: _apply_dig(v),
-            lambda v: self._do_nothing(),
+            lambda v, fam: _apply_dig(v, fam),
+            lambda v, fam: self._do_nothing(),
             dig_volume,
+            flattened_action_map,
         )
+        return s
 
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
