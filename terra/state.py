@@ -775,11 +775,13 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
-        return jax.lax.cond(
+        m = jax.lax.cond(
             moving_dumped_dirt,
-            lambda: flattened_map * (~dig_mask),
+            lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
+            #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
             lambda: flattened_map - delta_dig,
         )
+        return m
 
     def _apply_dump_mask(
         self,
@@ -971,24 +973,25 @@ class State(NamedTuple):
             * dig_mask_maps.reshape(-1)
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
-        )
+        ).astype(jnp.bool_)
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
         flattened_action_map = self.world.action_map.map.reshape(-1)
-        moving_dumped_dirt = (flattened_action_map * dig_mask).sum() > 0
+        masked_flattened_action_map = flattened_action_map @ dig_mask
+        moving_dumped_dirt = masked_flattened_action_map > 0
         # if moving dumped dirt, move it all at once
         dig_volume = jax.lax.cond(
             moving_dumped_dirt,
-            lambda: (flattened_action_map * dig_mask).sum(),
+            lambda: masked_flattened_action_map.astype(jnp.int32),
             lambda: dig_mask.sum(),
         )
 
-        def _apply_dig():
+        def _apply_dig(volume, fam):
             new_map_global_coords = self._apply_dig_mask(
-                flattened_action_map, dig_mask, moving_dumped_dirt
+                fam, dig_mask, moving_dumped_dirt
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
@@ -996,16 +999,25 @@ class State(NamedTuple):
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    action_map=self.world.action_map._replace(
+                        map=IntMap(new_map_global_coords)
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.full((1,), fill_value=dig_volume, dtype=IntLowDim)
+                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
                     )
                 ),
             )
 
-        return jax.lax.cond(dig_volume > 0, _apply_dig, self._do_nothing)
+        s = jax.lax.cond(
+            dig_volume > 0,
+            lambda v, fam: _apply_dig(v, fam),
+            lambda v, fam: self._do_nothing(),
+            dig_volume,
+            flattened_action_map,
+        )
+        return s
 
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
@@ -1036,7 +1048,9 @@ class State(NamedTuple):
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    action_map=self.world.action_map._replace(
+                        map=IntMap(new_map_global_coords)
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(

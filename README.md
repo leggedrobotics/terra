@@ -16,6 +16,19 @@ To check which device you are using, you can:
 print(f"Device = {jnp.ones(1).device_buffer.device()}\n")
 ~~~
 
+## Run manual mode
+To run in manual mode:
+~~~
+DATASET_PATH="/path/to/dataset/folders" DATASET_SIZE=1000 python -m viz.main_manual
+~~~
+This commands loads DATASET_SIZE maps defined in the `BatchConfig` in `config.py`, from DATASET_PATH (being the folder containing all the maps folders defined in the config).
+Then, one is sampled and you can play with it using the keyboard.
+
+Mind that the maps are padded to the max dimensions defined in `ImmutableMapsConfig` in `config.py` - and you can't have maps bigger than that value.
+Also, in the config you can set `move_tiles` to select how many tiles per move actions are traversed, and `tile_size` to control how big the agent is compared to the map. The reach of the agent arm is automatically adjusted.
+
+You can generate maps from the `digbench` repo (for simple rectangles you can use `generate_rectangles.py`).
+
 ## Use dataset saved on storage
 To be able to use a dataset saved on storage, define the following env variables when you launch the script.
 ~~~

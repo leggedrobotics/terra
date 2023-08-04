@@ -41,6 +41,10 @@ class TerraEnv(NamedTuple):
         state = LocalMapWrapper.wrap_target_map(state)
         state = LocalMapWrapper.wrap_action_map(state)
         observations = self._state_to_obs_dict(state)
+
+        # TODO make it nicer
+        observations["do_preview"] = state._handle_do().world.action_map.map
+
         return state, observations
 
     @partial(jax.jit, static_argnums=(0,))
@@ -212,7 +216,14 @@ class TerraEnv(NamedTuple):
 
         infos = new_state._get_infos(action)
 
+        observations = self._update_obs_with_info(observations, infos)
+
         return new_state, (observations, reward, done, infos)
+
+    @staticmethod
+    def _update_obs_with_info(obs, info):
+        obs["do_preview"] = info["do_preview"]
+        return obs
 
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
@@ -353,6 +364,10 @@ class TerraEnvBatch:
                 self.batch_cfg.maps.max_height,
             ),
             "traversability_mask": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
+            "do_preview": (
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,
             ),
