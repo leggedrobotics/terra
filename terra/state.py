@@ -880,6 +880,13 @@ class State(NamedTuple):
         # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
+    def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """
+        Removes the possibility of moving some dump tiles in the same spot.
+        """
+        dig_map_mask = (self.world.dig_map.map == self.world.action_map.map).reshape(-1)
+        return dump_mask * dig_map_mask
+
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
         Takes the dig mask and turns into False the elements that do not correspond to
@@ -958,42 +965,8 @@ class State(NamedTuple):
 
         # ~~~~~~~~~~~~~~~~~
 
-        def _get_dig_mask_cone():
-            dig_portion_radius = self.env_cfg.agent.move_tiles
-            tile_size = self.env_cfg.tile_size
-            arm_extension = self.agent.agent_state.arm_extension
-
-            map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
-
-            # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
-            max_agent_dim = jnp.max(
-                jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
-            )
-            min_distance_from_agent = tile_size * max_agent_dim
-
-            r_max = (
-                arm_extension + 1
-            ) * dig_portion_radius * tile_size + min_distance_from_agent
-            r_min = (
-                arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
-            )
-
-            theta_max = np.pi / self.env_cfg.agent.angles_cabin
-            theta_min = -theta_max
-
-            dig_mask_r = jnp.logical_and(
-                map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
-            )
-
-            dig_mask_theta = jnp.logical_and(
-                map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
-            )
-
-            dig_mask_cone = jnp.logical_and(dig_mask_r, dig_mask_theta)
-            return dig_mask_cone
-
         flat_action_map = self.world.action_map.map.reshape(-1)
-        dig_mask_cone = _get_dig_mask_cone()
+        dig_mask_cone = self._build_dig_dump_cone()
         ambiguity_mask_dig_movesoil = jax.lax.cond(
             jnp.any(flat_action_map * dig_mask_cone.reshape(-1) > 0),
             lambda: flat_action_map > 0,
@@ -1036,7 +1009,7 @@ class State(NamedTuple):
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(
+                    dig_map=self.world.dig_map._replace(
                         map=IntMap(new_map_global_coords)
                     )
                 ),
@@ -1059,6 +1032,7 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
         # dump_volume_per_tile = jnp.rint(
@@ -1071,9 +1045,9 @@ class State(NamedTuple):
         ) / dump_volume
 
         def _apply_dump():
-            flattened_action_map = self.world.action_map.map.reshape(-1)
+            flattened_dig_map = self.world.dig_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map,
+                flattened_dig_map,
                 dump_mask,
                 even_volume_per_tile,
                 remaining_volume,
@@ -1087,7 +1061,10 @@ class State(NamedTuple):
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntMap(new_map_global_coords)
-                    )
+                    ),
+                    dig_map=self.world.dig_map._replace(
+                        map=IntMap(new_map_global_coords)
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -1618,5 +1595,5 @@ class State(NamedTuple):
         return {
             "action_mask": self._get_action_mask(dummy_action),
             "target_tiles": self._build_dig_dump_cone(),
-            "do_preview": self._handle_do().world.action_map.map,
+            "do_preview": self._handle_do().world.dig_map.map,
         }

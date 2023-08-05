@@ -11,6 +11,7 @@ class GridWorld(NamedTuple):
     target_map: GridMap
     action_map: GridMap
     padding_mask: GridMap
+    dig_map: GridMap  # map where the dig action is applied before being applied to the action map (at dump time).
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
@@ -36,13 +37,17 @@ class GridWorld(NamedTuple):
     @classmethod
     def new(cls, target_map: Array, padding_mask: Array) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
+        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
 
         target_map = GridMap.new(IntMap(target_map))
 
         padding_mask = GridMap.new(IntMap(padding_mask))  # TODO IntLowDim?
 
         world = GridWorld(
-            target_map=target_map, action_map=action_map, padding_mask=padding_mask
+            target_map=target_map,
+            action_map=action_map,
+            padding_mask=padding_mask,
+            dig_map=dig_map,
         )
 
         return world
