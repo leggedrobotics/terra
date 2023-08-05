@@ -890,11 +890,75 @@ class State(NamedTuple):
         dig_mask_action_map = self.world.action_map.map > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
-        def _get_radial_mask():
-            """
-            Mask out tiles coming after a digged tile in terms of radial distance.
-            Also apply the radial dig mask in terms of what's within reach.
-            """
+        # ~~~~~~~~~~~~~~~~~ Radial mask approach
+        # def _get_radial_mask():
+        #     """
+        #     Mask out tiles coming after a digged tile in terms of radial distance.
+        #     Also apply the radial dig mask in terms of what's within reach.
+        #     """
+        #     dig_portion_radius = self.env_cfg.agent.move_tiles
+        #     tile_size = self.env_cfg.tile_size
+        #     arm_extension = self.agent.agent_state.arm_extension
+
+        #     map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
+
+        #     # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
+        #     max_agent_dim = jnp.max(
+        #         jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
+        #     )
+        #     min_distance_from_agent = tile_size * max_agent_dim
+
+        #     r_max = (
+        #         arm_extension + 1
+        #     ) * dig_portion_radius * tile_size + min_distance_from_agent
+        #     r_min = (
+        #         arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        #     )
+
+        #     theta_max = np.pi / self.env_cfg.agent.angles_cabin
+        #     theta_min = -theta_max
+
+        #     dig_mask_r = jnp.logical_and(
+        #         map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
+        #     )
+
+        #     dig_mask_theta = jnp.logical_and(
+        #         map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
+        #     )
+
+        #     dig_mask_cone = jnp.logical_and(dig_mask_r, dig_mask_theta)
+
+        #     r_distance = map_cyl_coords[0].copy()
+        #     action_map = self.world.action_map.map.copy().reshape(-1)
+        #     action_map_cone = action_map * dig_mask_cone
+        #     sorted_idxs_radial_distance = jnp.argsort(r_distance)
+        #     sorted_action_map = action_map_cone[sorted_idxs_radial_distance]
+        #     sorted_action_map_mask = sorted_action_map < 0
+        #     sorted_action_map_mask_cum = ~(
+        #         jnp.cumsum(sorted_action_map_mask).astype(jnp.bool_)
+        #     )
+
+        #     radial_mask = sorted_action_map_mask_cum[
+        #         jnp.argsort(sorted_idxs_radial_distance)
+        #     ]  # original order
+        #     return radial_mask * dig_mask_cone
+
+        # # Only select +1 if within cone, but only if closer radially compared to closest -1
+        # # If no +1, then take -1s to dig.
+        # radial_mask = _get_radial_mask()  # mask out everything coming after a -1
+        # action_map_filtered_radially = (
+        #     self.world.action_map.map.reshape(-1) * radial_mask
+        # )
+
+        # ambiguity_mask_dig_movesoil = jax.lax.cond(
+        #     jnp.any(action_map_filtered_radially > 0),
+        #     lambda: (action_map_filtered_radially > 0) * radial_mask,
+        #     lambda: self.world.action_map.map.reshape(-1) == 0,
+        # )
+
+        # ~~~~~~~~~~~~~~~~~
+
+        def _get_dig_mask_cone():
             dig_portion_radius = self.env_cfg.agent.move_tiles
             tile_size = self.env_cfg.tile_size
             arm_extension = self.agent.agent_state.arm_extension
@@ -926,42 +990,15 @@ class State(NamedTuple):
             )
 
             dig_mask_cone = jnp.logical_and(dig_mask_r, dig_mask_theta)
+            return dig_mask_cone
 
-            r_distance = map_cyl_coords[0].copy()
-            action_map = self.world.action_map.map.copy().reshape(-1)
-            action_map_cone = action_map * dig_mask_cone
-            sorted_idxs_radial_distance = jnp.argsort(r_distance)
-            sorted_action_map = action_map_cone[sorted_idxs_radial_distance]
-            sorted_action_map_mask = sorted_action_map < 0
-            sorted_action_map_mask_cum = ~(
-                jnp.cumsum(sorted_action_map_mask).astype(jnp.bool_)
-            )
-
-            radial_mask = sorted_action_map_mask_cum[
-                jnp.argsort(sorted_idxs_radial_distance)
-            ]  # original order
-            return radial_mask * dig_mask_cone
-
-        # Only select +1 if within cone, but only if closer radially compared to closest -1
-        # If no +1, then take -1s to dig.
-        radial_mask = _get_radial_mask()  # mask out everything coming after a -1
-        action_map_filtered_radially = (
-            self.world.action_map.map.reshape(-1) * radial_mask
-        )
-
-        # jax.debug.print(
-        #     "jnp.any(action_map_filtered_radially > 0) = {x}",
-        #     x=jnp.any(action_map_filtered_radially > 0),
-        # )
+        flat_action_map = self.world.action_map.map.reshape(-1)
+        dig_mask_cone = _get_dig_mask_cone()
         ambiguity_mask_dig_movesoil = jax.lax.cond(
-            jnp.any(action_map_filtered_radially > 0),
-            lambda: (action_map_filtered_radially > 0) * radial_mask,
-            lambda: self.world.action_map.map.reshape(-1) == 0,
+            jnp.any(flat_action_map * dig_mask_cone.reshape(-1) > 0),
+            lambda: flat_action_map > 0,
+            lambda: flat_action_map == 0,
         )
-        # jax.debug.print(
-        #     "ambiguity_mask_dig_movesoil.sum() = {x}",
-        #     x=ambiguity_mask_dig_movesoil.sum(),
-        # )
 
         # respect max dig limit
         max_dig_limit_mask = (
