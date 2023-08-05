@@ -249,6 +249,7 @@ class TerraEnv(NamedTuple):
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
+            "dig_map": state.world.dig_map.map,
         }
 
 
@@ -368,6 +369,10 @@ class TerraEnvBatch:
                 self.batch_cfg.maps.max_height,
             ),
             "do_preview": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
+            "dig_map": (
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,
             ),
