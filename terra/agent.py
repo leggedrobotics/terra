@@ -117,7 +117,5 @@ def _get_random_init_pos(
 
 def _get_random_init_base_angle(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     key, subkey = jax.random.split(key)
-    theta = jax.random.randint(
-        subkey, (1,), minval=0, maxval=env_cfg.agent.angles_base + 1
-    )
+    theta = jax.random.randint(subkey, (1,), minval=0, maxval=env_cfg.agent.angles_base)
     return IntLowDim(theta), key
