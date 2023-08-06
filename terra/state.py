@@ -883,8 +883,22 @@ class State(NamedTuple):
     def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
         Removes the possibility of moving some dump tiles in the same spot.
+
+        Also, removes the possibility of moving the tiles within the same workspace,
+        even if not all tiles are occupied.
         """
-        dig_map_mask = (self.world.dig_map.map == self.world.action_map.map).reshape(-1)
+        cone_mask = self._build_dig_dump_cone()
+        dig_map_mask = jax.lax.cond(
+            (
+                (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
+                * (self.world.action_map.map.reshape(-1) > 0)
+                * cone_mask
+            ).sum()
+            > 0,
+            lambda: ~cone_mask,
+            lambda: jnp.ones_like(dump_mask),
+        )
+
         return dump_mask * dig_map_mask
 
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
