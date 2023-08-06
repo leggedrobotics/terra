@@ -1141,107 +1141,101 @@ class State(NamedTuple):
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
-        Computes the difference between the delta old and delta new.
-
-        The delta is defined as the absolute sum of the height differences between
-        the clipped action map (to only make the dump count) and the target map.
-
-        A positive value means progress in the dumping task (positioning the dirt on the dump terrain).
+        Returns
+        > 0 if there was progress on the dump tiles
+        < 0 if there was -progress on the dump tiles
+        = 0 if there was no progress on the dump tiles
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=0)
 
-        target_map_clip = jnp.clip(target_map, a_min=0)
+        target_map_dump_mask = target_map > 0
 
-        delta_old = jnp.sum(jnp.abs(action_map_clip_old - target_map_clip))
-        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map_clip))
+        action_map_progress = (
+            (action_map_clip_new - action_map_clip_old) * target_map_dump_mask
+        ).sum()
 
-        return IntMap(delta_old - delta_new)
+        return action_map_progress
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dump wrong or correct
-        return jax.lax.cond(
+        """
+        Handles reward assignment at dump time.
+        This includes both the dump part and the realization
+        of the previously digged terrain.
+        """
+
+        # Dig
+        action_map_negative_progress = self._get_action_map_negative_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        dig_reward = jax.lax.cond(
+            action_map_negative_progress > 0,
+            lambda: self.env_cfg.rewards.dig_correct,
+            lambda: 0.0,
+        )
+
+        # jax.debug.print("action_map_negative_progress = {x}", x=action_map_negative_progress)
+
+        # Dump
+        action_map_positive_progress = self._get_action_map_positive_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        # jax.debug.print("action_map_positive_progress = {x}", x=action_map_positive_progress)
+        dump_reward = jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dump_wrong,
             lambda: jax.lax.cond(
-                jnp.all(
-                    self._get_action_map_positive_progress(
-                        self.world.action_map.map,
-                        new_state.world.action_map.map,
-                        self.world.target_map.map,
-                    )
-                    <= 0
-                ),
+                action_map_positive_progress < 0,
                 lambda: self.env_cfg.rewards.dump_no_dump_area,
-                lambda: self.env_cfg.rewards.dump_correct,
+                lambda: jax.lax.cond(
+                    action_map_negative_progress == 0,
+                    lambda: 0.0,
+                    lambda: self.env_cfg.rewards.dump_correct,
+                ),
             ),
         )
+        # jax.debug.print("dig_reward = {x}", x=dig_reward)
+        # jax.debug.print("dump_reward = {x}", x=dump_reward)
+        return dig_reward + dump_reward
 
     @staticmethod
-    def _get_action_map_progress(
+    def _get_action_map_negative_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
-        Computes the difference between the delta old and delta new.
-
-        The delta is defined as the absolute sum of the height differences between
-        the clipped action map (to only make the dig count) and the target map.
+        Returns
+        > 0 if there was progress on the dig tiles
+        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
+        = 0 if there was no progress on the dig tiles
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
 
-        delta_old = jnp.sum(jnp.abs(action_map_clip_old - target_map))
-        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map))
+        target_map_mask = target_map < 0
+        action_map_progress = (
+            (action_map_clip_old - action_map_clip_new) * target_map_mask
+        ).sum()
 
-        return IntMap(delta_new - delta_old)
+        return action_map_progress
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dig wrong or correct
+        # Dig
         return jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
-            lambda: jax.lax.cond(
-                jnp.all(
-                    self._get_action_map_progress(
-                        self.world.action_map.map,
-                        new_state.world.action_map.map,
-                        self.world.target_map.map,
-                    )
-                    > 0
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: jax.lax.cond(
-                    jnp.all(
-                        self._get_action_map_positive_progress(
-                            self.world.action_map.map,
-                            new_state.world.action_map.map,
-                            self.world.target_map.map,
-                        )
-                        < 0
-                    ),
-                    lambda: self.env_cfg.rewards.dig_dump_area,
-                    lambda: jax.lax.cond(
-                        jnp.all(
-                            self._get_action_map_progress(
-                                self.world.action_map.map,
-                                new_state.world.action_map.map,
-                                self.world.target_map.map,
-                            )
-                            == 0
-                        ),
-                        lambda: 0.0,
-                        lambda: self.env_cfg.rewards.dig_correct,
-                    ),
-                ),
-            ),
+            lambda: 0.0,
         )
 
     def _handle_rewards_do(
