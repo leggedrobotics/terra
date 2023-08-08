@@ -180,7 +180,7 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.01,
+            existence=-0.1,
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
@@ -189,18 +189,18 @@ class Rewards(NamedTuple):
             cabin_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=-0.02,
+            dump_no_dump_area=0.0,
             # dig_dump_area=-0.3,
-            dig_correct=0.3,
-            dump_correct=0.3,
-            terminal=20.0,
-            force_reset=-2.0,
+            dig_correct=3.0,
+            dump_correct=3.0,
+            terminal=50.0,
+            force_reset=0.0,
         )
 
     @staticmethod
     def sparse():
         return Rewards(
-            existence=-0.01,
+            existence=-0.1,
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
@@ -209,12 +209,12 @@ class Rewards(NamedTuple):
             cabin_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=-0.02,
+            dump_no_dump_area=0.0,
             # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
-            terminal=20.0,
-            force_reset=-2.0,
+            terminal=50.0,
+            force_reset=0.0,
         )
 
 
@@ -289,6 +289,12 @@ class BatchConfig(NamedTuple):
         # "foundations/medium",
         # "foundations/hard",
         # "rectangles_1",
-        "rectangles_60_1",
-        "rectangles_60_2",
+        # "rectangles_60_1",
+        # "rectangles_60_2",
+        "trenches_60_1/easy",
+        "trenches_60_2/easy",
+        "trenches_60_1/medium",
+        "trenches_60_2/medium",
+        "trenches_60_1/hard",
+        "trenches_60_2/hard",
     ]
