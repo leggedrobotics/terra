@@ -1418,14 +1418,17 @@ class State(NamedTuple):
 
     def _is_done(
         self, action_map: Array, target_map: Array, agent_loaded: Array
-    ) -> jnp.bool_:
+    ) -> tuple[jnp.bool_, jnp.bool_]:
         """
         Checks if the task is done or if the env reached its max number of steps.
+        Returns:
+        - global done
+        - task done (true if the task is completed)
         """
         done_task = self._is_done_task(action_map, target_map, agent_loaded)
 
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
-        return jnp.logical_or(done_task, done_steps)
+        return jnp.logical_or(done_task, done_steps), done_task
 
     def _get_action_mask_tracked(self):
         # forward
@@ -1599,9 +1602,10 @@ class State(NamedTuple):
 
         return action_mask
 
-    def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
+    def _get_infos(self, dummy_action: Action, done_task: bool) -> dict[str, Any]:
         return {
             "action_mask": self._get_action_mask(dummy_action),
             "target_tiles": self._build_dig_dump_cone(),
             "do_preview": self._handle_do().world.dig_map.map,
+            "done_task": done_task,
         }

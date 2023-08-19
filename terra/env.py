@@ -198,11 +198,13 @@ class TerraEnv(NamedTuple):
 
         observations = self._state_to_obs_dict(new_state)
 
-        done = force_reset | state._is_done(
+        done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
         )
+
+        done = done | force_reset
 
         new_state, observations = jax.lax.cond(
             done,
@@ -214,7 +216,7 @@ class TerraEnv(NamedTuple):
             env_cfg,
         )
 
-        infos = new_state._get_infos(action)
+        infos = new_state._get_infos(action, task_done)
 
         observations = self._update_obs_with_info(observations, infos)
 
