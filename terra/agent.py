@@ -95,18 +95,18 @@ def _get_random_init_pos(
     max_center_coord = jnp.ceil(
         jnp.max(jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1]))
     ).astype(IntMap)
-    key, subkey = jax.random.split(key)
+    key, subkey_x, subkey_y = jax.random.split(key, 3)
 
     max_w = jnp.minimum(max_traversable_x, env_cfg.maps.max_width)
     max_h = jnp.minimum(max_traversable_y, env_cfg.maps.max_height)
     x = jax.random.randint(
-        subkey,
+        subkey_x,
         (1,),
         minval=max_center_coord,
         maxval=max_w - max_center_coord,
     )
     y = jax.random.randint(
-        subkey,
+        subkey_y,
         (1,),
         minval=max_center_coord,
         maxval=max_h - max_center_coord,
