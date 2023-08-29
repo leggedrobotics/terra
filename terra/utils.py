@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
@@ -117,10 +118,48 @@ def get_arm_angle_int(
 
 def get_distance_point_to_line(p, abc):
     """
-    abc = Array[A, B, C]
     p = Array[x, y]
+    abc = Array[A, B, C]
     """
-    numerator = jnp.abs(abc[0] * p[0] + abc[1] * p[1] + abc[2])
+    # TODO change the map convention such that this is swapped...
+    p_x = p[1]
+    p_y = p[0]
+    # p_x = p[0]
+    # p_y = p[1]
+
+    # jax.debug.print("\nabc = {x}\n", x=abc)
+
+    numerator = jnp.abs(abc[0] * p_x + abc[1] * p_y + abc[2])
     denominator = jnp.sqrt(abc[0] ** 2 + abc[1] ** 2)
     distance = numerator / denominator
-    return distance
+    return jnp.array([distance])
+
+
+def get_min_distance_point_to_lines(p, lines, trench_type):
+    """
+    p = Array[x, y]
+    lines = Array[Array[A, B, C]]
+    trench_type = int, number of axis of a trench (-1 if not a trench)
+    """
+    p = p.astype(Float)
+    lines = lines.astype(Float)
+
+    def _for_body_it(i, d_min):
+        d = get_distance_point_to_line(p, lines[i])
+        # jax.debug.print("p = {x}", x=p)
+        # jax.debug.print("i={x}, d={y}", x=i, y=d)
+        return jnp.min(
+            jnp.concatenate((d, d_min)),
+            axis=0,
+            keepdims=True,
+        ).astype(Float)
+
+    d_min = jax.lax.fori_loop(
+        0,
+        trench_type,
+        _for_body_it,
+        jnp.full((1,), 9999.0, dtype=Float),
+    )
+
+    # jax.debug.print("d_min = {x}", x=d_min)
+    return d_min[0]

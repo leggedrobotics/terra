@@ -18,6 +18,7 @@ from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import decrease_angle_circular
 from terra.utils import Float
+from terra.utils import get_min_distance_point_to_lines
 from terra.utils import increase_angle_circular
 from terra.utils import IntLowDim
 from terra.utils import IntMap
@@ -47,8 +48,9 @@ class State(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
+        trench_type: Array,
     ) -> "State":
-        world = GridWorld.new(target_map, padding_mask, trench_axes)
+        world = GridWorld.new(target_map, padding_mask, trench_axes, trench_type)
 
         agent, key = Agent.new(
             key, env_cfg, world.max_traversable_x, world.max_traversable_y
@@ -71,6 +73,7 @@ class State(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
+        trench_type: Array,
     ) -> "State":
         """
         Resets the already-existing State
@@ -82,6 +85,7 @@ class State(NamedTuple):
             target_map=target_map,
             padding_mask=padding_mask,
             trench_axes=trench_axes,
+            trench_type=trench_type,
         )
 
     def _step(self, action: Action) -> "State":
@@ -1225,9 +1229,11 @@ class State(NamedTuple):
                 ),
             ),
         )
+
+        r_trenches = self._get_trench_specific_rewards()
         # jax.debug.print("dig_reward = {x}", x=dig_reward)
         # jax.debug.print("dump_reward = {x}", x=dump_reward)
-        return dig_reward + dump_reward
+        return dig_reward + dump_reward + r_trenches
 
     @staticmethod
     def _get_action_map_negative_progress(
@@ -1354,6 +1360,30 @@ class State(NamedTuple):
             action,
         )
         return reward
+
+    def _get_trench_specific_rewards(
+        self,
+    ) -> Float:
+        def _get_trench_reward():
+            agent_pos = self.agent.agent_state.pos_base
+            trench_axes = self.world.trench_axes
+            trench_type = self.world.trench_type
+
+            d = get_min_distance_point_to_lines(
+                agent_pos, trench_axes, trench_type
+            )  # in tiles
+            # jax.debug.print("d in tiles = {x}", x=d)
+            d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
+            d *= self.env_cfg.tile_size  # in meters
+            return d * self.env_cfg.trench_rewards.distance_coefficient
+
+        r = jax.lax.cond(
+            self.env_cfg.apply_trench_rewards,
+            _get_trench_reward,
+            lambda: 0.0,
+        )
+        # jax.debug.print("r_trench = {x}", x=r)
+        return r
 
     def _get_reward(
         self, new_state: "State", action_handler: Action, force_reset: jnp.bool_

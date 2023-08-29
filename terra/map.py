@@ -12,7 +12,9 @@ class GridWorld(NamedTuple):
     action_map: GridMap
     padding_mask: GridMap
     dig_map: GridMap  # map where the dig action is applied before being applied to the action map (at dump time).
+
     trench_axes: Array
+    trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
@@ -37,7 +39,11 @@ class GridWorld(NamedTuple):
 
     @classmethod
     def new(
-        cls, target_map: Array, padding_mask: Array, trench_axes: Array
+        cls,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
     ) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
         dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
@@ -52,6 +58,7 @@ class GridWorld(NamedTuple):
             padding_mask=padding_mask,
             dig_map=dig_map,
             trench_axes=trench_axes,
+            trench_type=trench_type,
         )
 
         return world

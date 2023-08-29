@@ -34,13 +34,16 @@ class TerraEnv(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
+        trench_type: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, env_cfg, target_map, padding_mask, trench_axes)
+        state = State.new(
+            key, env_cfg, target_map, padding_mask, trench_axes, trench_type
+        )
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -59,12 +62,15 @@ class TerraEnv(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
+        trench_type: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
-        state = state._reset(env_cfg, target_map, padding_mask, trench_axes)
+        state = state._reset(
+            env_cfg, target_map, padding_mask, trench_axes, trench_type
+        )
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
@@ -180,6 +186,7 @@ class TerraEnv(NamedTuple):
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
+        trench_type: Array,
         env_cfg: EnvConfig,
         force_reset: jnp.bool_,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
@@ -220,11 +227,12 @@ class TerraEnv(NamedTuple):
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x, y, z, k, w: (new_state, observations),
+            lambda x, y, z, k, w, j: (new_state, observations),
             new_state,
             target_map,
             padding_mask,
             trench_axes,
+            trench_type,
             env_cfg,
         )
 
@@ -286,11 +294,17 @@ class TerraEnvBatch:
         self.maps_buffer = init_maps_buffer(batch_cfg)
 
     def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
-        target_maps, padding_masks, trench_axes, maps_buffer_keys = jax.vmap(
-            self.maps_buffer.get_map_init
-        )(seeds, env_cfgs)
+        (
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            maps_buffer_keys,
+        ) = jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
         return (
-            *self._reset(seeds, target_maps, padding_masks, trench_axes, env_cfgs),
+            *self._reset(
+                seeds, target_maps, padding_masks, trench_axes, trench_type, env_cfgs
+            ),
             maps_buffer_keys,
         )
 
@@ -301,10 +315,11 @@ class TerraEnvBatch:
         target_maps: Array,
         padding_masks: Array,
         trench_axes: Array,
+        trench_type: Array,
         env_cfgs: EnvConfig,
     ) -> State:
         return jax.vmap(self.terra_env.reset)(
-            seeds, target_maps, padding_masks, trench_axes, env_cfgs
+            seeds, target_maps, padding_masks, trench_axes, trench_type, env_cfgs
         )
 
     def step(
@@ -315,9 +330,13 @@ class TerraEnvBatch:
         maps_buffer_keys: jax.random.KeyArray,
         force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        target_maps, padding_masks, trench_axes, maps_buffer_keys = jax.vmap(
-            self.maps_buffer.get_map
-        )(maps_buffer_keys, env_cfgs)
+        (
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            maps_buffer_keys,
+        ) = jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
         return (
             *self._step(
                 states,
@@ -325,6 +344,7 @@ class TerraEnvBatch:
                 target_maps,
                 padding_masks,
                 trench_axes,
+                trench_type,
                 env_cfgs,
                 force_resets,
             ),
@@ -339,6 +359,7 @@ class TerraEnvBatch:
         target_maps: Array,
         padding_masks: Array,
         trench_axes: Array,
+        trench_type: Array,
         env_cfgs: EnvConfig,
         force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
@@ -348,6 +369,7 @@ class TerraEnvBatch:
             target_maps,
             padding_masks,
             trench_axes,
+            trench_type,
             env_cfgs,
             force_resets,
         )

@@ -218,6 +218,12 @@ class Rewards(NamedTuple):
         )
 
 
+class TrenchRewards(NamedTuple):
+    distance_coefficient: float = (
+        -0.2
+    )  # distance_coefficient * distance, if distance > agent_width / 2
+
+
 class EnvConfig(NamedTuple):
     tile_size: float = MapDims().tile_size
 
@@ -230,7 +236,9 @@ class EnvConfig(NamedTuple):
 
     rewards: Rewards = Rewards.dense()
 
-    # rewards_level: int = 0  # 0 to N, the level of the rewards to assign in curriculum learning (the higher, the more sparse)
+    apply_trench_rewards: bool = True
+    trench_rewards: TrenchRewards = TrenchRewards()
+
     max_steps_in_episode: int = 1000
 
     @staticmethod
@@ -241,6 +249,7 @@ class EnvConfig(NamedTuple):
         map_dof: int,
         map_type: int,
         rewards_type: int,
+        apply_trench_rewards: bool,
     ) -> "EnvConfig":
         map_dims = MapDims(width_m, height_m)
 
@@ -262,6 +271,7 @@ class EnvConfig(NamedTuple):
             target_map=TargetMapConfig.parametrized(map_dof, map_type),
             # action_map=ActionMapConfig.from_map_dims(map_dims),
             rewards=rewards,
+            apply_trench_rewards=apply_trench_rewards,
         )
 
     @classmethod
@@ -291,14 +301,21 @@ class BatchConfig(NamedTuple):
         # "rectangles_1",
         # "rectangles_60_1",
         # "rectangles_60_2",
-
-        "trenches_60_1/easy",
-        "trenches_60_2/easy",
-        "trenches_60_1/medium",
-        "trenches_60_2/medium",
-        "trenches_60_1/hard",
-        "trenches_60_2/hard",
         
+        # "trenches_60_1/easy",
+        # "trenches_60_2/easy",
+        # "trenches_60_1/medium",
+        # "trenches_60_2/medium",
+        # "trenches_60_1/hard",
+        # "trenches_60_2/hard",
+
+        "trenches_metadata_60_1/easy",
+        "trenches_metadata_60_2/easy",
+        "trenches_metadata_60_1/medium",
+        "trenches_metadata_60_2/medium",
+        "trenches_metadata_60_1/hard",
+        "trenches_metadata_60_2/hard",
+
         # "small-rectangles_1",
         # "small-rectangles_2",
         # "rectangles_60_1",
