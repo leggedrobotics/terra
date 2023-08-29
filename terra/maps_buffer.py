@@ -1,3 +1,4 @@
+import json
 import os
 from functools import partial
 from pathlib import Path
@@ -23,6 +24,7 @@ class MapsBuffer(NamedTuple):
 
     maps: Array  # [map_type, n_maps, W, H]
     padding_mask: Array  # [map_type, n_maps, W, H]
+    trench_axes: Array  # [map_type, n_maps, n_axes_per_map, 3] -- (A, B, C) coefficients for trench axes (-97 if not a trench)
     n_maps: int  # number of maps for each map type
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
@@ -45,8 +47,14 @@ class MapsBuffer(NamedTuple):
         return len(self.maps) == len(__o.maps)
 
     @classmethod
-    def new(cls, maps: Array, padding_mask: Array) -> "MapsBuffer":
-        return MapsBuffer(maps=maps, padding_mask=padding_mask, n_maps=maps.shape[1])
+    def new(cls, maps: Array, padding_mask: Array, trench_axes: Array) -> "MapsBuffer":
+        jax.debug.print("trench_axes.shape = {x}", x=trench_axes.shape)
+        return MapsBuffer(
+            maps=maps,
+            padding_mask=padding_mask,
+            trench_axes=trench_axes,
+            n_maps=maps.shape[1],
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:
@@ -55,7 +63,8 @@ class MapsBuffer(NamedTuple):
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
         map = self.maps[env_cfg.target_map.map_dof, idx]
         padding_mask = self.padding_mask[env_cfg.target_map.map_dof, idx]
-        return map, padding_mask, key
+        trench_axes = self.trench_axes[env_cfg.target_map.map_dof, idx]
+        return map, padding_mask, trench_axes, key
 
     def _procedurally_generate_map(
         self, key: jax.random.KeyArray, env_cfg, map_type
@@ -77,12 +86,13 @@ class MapsBuffer(NamedTuple):
             element_edge_max=element_edge_max,
             map_type=map_type,
         )
-        return map, padding_mask, key
+        trench_axes_dummy = -97.0 * jnp.ones((3,))
+        return map, padding_mask, trench_axes_dummy, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
         map_type = env_cfg.target_map.type
-        map, padding_mask, key = jax.lax.cond(
+        map, padding_mask, trench_axes, key = jax.lax.cond(
             jnp.any(jnp.isin(jnp.array([map_type]), self.map_types_from_disk)),
             self._get_map_from_disk,
             partial(self._procedurally_generate_map, map_type=map_type),
@@ -92,7 +102,7 @@ class MapsBuffer(NamedTuple):
 
         # TODO include procedural maps
         # map, padding_mask, key = self._get_map_from_disk(key, env_cfg)
-        return map, padding_mask, key
+        return map, padding_mask, trench_axes, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, seed: int, env_cfg):
@@ -104,13 +114,42 @@ def load_maps_from_disk(folder_path: str) -> Array:
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
     maps = []
     occupancies = []
-    for i in tqdm(range(dataset_size), desc="Data Loader"):
+    trench_axes = []
+    n_loaded_metadata = 0
+    for i in tqdm(range(1, dataset_size + 1), desc="Data Loader"):
         map = np.load(f"{folder_path}/images/img_{i}.npy")
         occupancy = np.load(f"{folder_path}/occupancy/img_{i}.npy")
         maps.append(map)
         occupancies.append(occupancy)
+
+        try:
+            # Metadata needs to be loaded only for trenches (A, B, C coefficients)
+            with open(f"{folder_path}/metadata/trench_{i}.json") as f:
+                trench_ax = json.load(f)["axes_ABC"]
+            trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
+            trench_axes.append(trench_ax)
+            n_loaded_metadata += 1
+        except:
+            if n_loaded_metadata > 0:
+                raise (RuntimeError("Imported some trench metadata, but one failed."))
+            continue
     print(f"Loaded {dataset_size} maps from {folder_path}.")
-    return jnp.array(maps, dtype=IntMap), jnp.array(occupancies, dtype=IntMap)
+    if n_loaded_metadata > 0:
+        print(f"Loaded {n_loaded_metadata} metadata files from {folder_path}.")
+    else:
+        trench_axes = -97.0 * jnp.ones(
+            (
+                1,
+                1,
+                3,
+            )
+        )
+        print(f"Did NOT load any metadata file from {folder_path}.")
+    return (
+        jnp.array(maps, dtype=IntMap),
+        jnp.array(occupancies, dtype=IntMap),
+        jnp.array(trench_axes),
+    )
 
 
 def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
@@ -150,6 +189,7 @@ def init_maps_buffer(batch_cfg):
             padding_mask=jnp.zeros(
                 (1, batch_cfg.maps.max_width, batch_cfg.maps.max_height)
             ),
+            trench_axes=-97.0 * jnp.ones((3,)),
         )
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
@@ -158,7 +198,7 @@ def init_maps_buffer(batch_cfg):
     maps_from_disk = []
     occupancies_from_disk = []
     for folder_path in folder_paths_dict.keys():
-        maps, occupancies = load_maps_from_disk(folder_path)
+        maps, occupancies, trench_axes = load_maps_from_disk(folder_path)
         maps_from_disk.append(maps)
         occupancies_from_disk.append(occupancies)
     maps_from_disk_padded, padding_mask = _pad_maps(
@@ -166,4 +206,6 @@ def init_maps_buffer(batch_cfg):
     )
     maps_from_disk_padded = jnp.array(maps_from_disk_padded)
     padding_mask = jnp.array(padding_mask)
-    return MapsBuffer.new(maps=maps_from_disk_padded, padding_mask=padding_mask)
+    return MapsBuffer.new(
+        maps=maps_from_disk_padded, padding_mask=padding_mask, trench_axes=trench_axes
+    )

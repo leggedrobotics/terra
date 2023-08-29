@@ -113,3 +113,14 @@ def get_arm_angle_int(
     """
     angles_cabin_base_ratio = round(n_angles_cabin / n_angles_base)
     return (angles_cabin_base_ratio * angle_base + angle_cabin) % n_angles_cabin
+
+
+def get_distance_point_to_line(p, abc):
+    """
+    abc = Array[A, B, C]
+    p = Array[x, y]
+    """
+    numerator = jnp.abs(abc[0] * p[0] + abc[1] * p[1] + abc[2])
+    denominator = jnp.sqrt(abc[0] ** 2 + abc[1] ** 2)
+    distance = numerator / denominator
+    return distance

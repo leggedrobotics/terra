@@ -46,8 +46,9 @@ class State(NamedTuple):
         env_cfg: EnvConfig,
         target_map: Array,
         padding_mask: Array,
+        trench_axes: Array,
     ) -> "State":
-        world = GridWorld.new(target_map, padding_mask)
+        world = GridWorld.new(target_map, padding_mask, trench_axes)
 
         agent, key = Agent.new(
             key, env_cfg, world.max_traversable_x, world.max_traversable_y
@@ -65,14 +66,22 @@ class State(NamedTuple):
         )
 
     def _reset(
-        self, env_cfg: EnvConfig, target_map: Array, padding_mask: Array
+        self,
+        env_cfg: EnvConfig,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
     ) -> "State":
         """
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
         return self.new(
-            key=key, env_cfg=env_cfg, target_map=target_map, padding_mask=padding_mask
+            key=key,
+            env_cfg=env_cfg,
+            target_map=target_map,
+            padding_mask=padding_mask,
+            trench_axes=trench_axes,
         )
 
     def _step(self, action: Action) -> "State":
