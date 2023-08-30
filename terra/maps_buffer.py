@@ -224,6 +224,7 @@ def init_maps_buffer(batch_cfg):
                     3,
                 )
             ),
+            trench_types=-1,
         )
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
