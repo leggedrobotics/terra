@@ -91,13 +91,15 @@ class MapsBuffer(NamedTuple):
             element_edge_max=element_edge_max,
             map_type=map_type,
         )
-        trench_axes_dummy = -97.0 * jnp.ones(
+        trench_axes_dummy = jnp.full(
             (
                 3,
                 3,
-            )
+            ),
+            -97.0,
+            dtype=jnp.float32,
         )
-        trench_type_dummy = -1
+        trench_type_dummy = jnp.full((), -1, dtype=jnp.int32)
         return map, padding_mask, trench_axes_dummy, trench_type_dummy, key
 
     @partial(jax.jit, static_argnums=(0,))
@@ -167,6 +169,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
         trench_axes = -97.0 * jnp.ones(
             (
                 1,
+                1,
                 3,
                 3,
             )
@@ -213,18 +216,24 @@ def init_maps_buffer(batch_cfg):
     if os.getenv("DATASET_PATH", "") == "":
         print("DATASET_PATH not defined, skipping maps loading from disk...")
         return MapsBuffer.new(
-            maps=jnp.zeros((1, batch_cfg.maps.max_width, batch_cfg.maps.max_height)),
+            maps=jnp.zeros(
+                (1, 1, batch_cfg.maps.max_width, batch_cfg.maps.max_height),
+                dtype=IntMap,
+            ),
             padding_mask=jnp.zeros(
-                (1, batch_cfg.maps.max_width, batch_cfg.maps.max_height)
+                (1, 1, batch_cfg.maps.max_width, batch_cfg.maps.max_height),
+                dtype=IntMap,
             ),
             trench_axes=-97.0
             * jnp.ones(
                 (
+                    1,
+                    1,
                     3,
                     3,
                 )
             ),
-            trench_types=-1,
+            trench_types=-1 * jnp.ones((3,), dtype=jnp.int32),
         )
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths

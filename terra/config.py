@@ -32,6 +32,7 @@ class MapType(IntEnum):
 class RewardsType(IntEnum):
     DENSE = 0
     SPARSE = 1
+    TERMINAL_ONLY = 2
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -217,6 +218,26 @@ class Rewards(NamedTuple):
             force_reset=0.0,
         )
 
+    @staticmethod
+    def terminal_only():
+        return Rewards(
+            existence=0.0,
+            collision_move=0.0,
+            move_while_loaded=0.0,
+            move=0.0,
+            collision_turn=0.0,
+            base_turn=0.0,
+            cabin_turn=0.0,
+            dig_wrong=0.0,
+            dump_wrong=0.0,
+            dump_no_dump_area=0.0,
+            # dig_dump_area=0.0,
+            dig_correct=0.0,
+            dump_correct=0.0,
+            terminal=1.0,
+            force_reset=0.0,
+        )
+
 
 class TrenchRewards(NamedTuple):
     distance_coefficient: float = (
@@ -260,7 +281,7 @@ class EnvConfig(NamedTuple):
         # else:
         #     raise ValueError(f"{rewards_type=} doesn't exist.")
 
-        rewards_list = [Rewards.dense, Rewards.sparse]
+        rewards_list = [Rewards.dense, Rewards.sparse, Rewards.terminal_only]
 
         rewards = jax.lax.switch(rewards_type, rewards_list)
 
@@ -301,7 +322,7 @@ class BatchConfig(NamedTuple):
         # "rectangles_1",
         # "rectangles_60_1",
         # "rectangles_60_2",
-        
+
         # "trenches_60_1/easy",
         # "trenches_60_2/easy",
         # "trenches_60_1/medium",
@@ -315,8 +336,13 @@ class BatchConfig(NamedTuple):
         "trenches_metadata_60_2/medium",
         "trenches_metadata_60_1/hard",
         "trenches_metadata_60_2/hard",
-
+        
         # "small-rectangles_1",
         # "small-rectangles_2",
         # "rectangles_60_1",
     ]
+
+
+class TestbenchConfig(BatchConfig):
+    # Maps folders (the order matters -> DOF)
+    maps_paths = []
