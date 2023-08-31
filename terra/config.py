@@ -221,7 +221,7 @@ class Rewards(NamedTuple):
     @staticmethod
     def terminal_only():
         return Rewards(
-            existence=0.0,
+            existence=-0.01,
             collision_move=0.0,
             move_while_loaded=0.0,
             move=0.0,
@@ -257,7 +257,7 @@ class EnvConfig(NamedTuple):
 
     rewards: Rewards = Rewards.dense()
 
-    apply_trench_rewards: bool = True
+    apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
     max_steps_in_episode: int = 1000
@@ -328,18 +328,15 @@ class BatchConfig(NamedTuple):
         # "trenches_60_2/medium",
         # "trenches_60_1/hard",
         # "trenches_60_2/hard",
-
         # "trenches_metadata_60_1/easy",
         # "trenches_metadata_60_2/easy",
         # "trenches_metadata_60_1/medium",
         # "trenches_metadata_60_2/medium",
         # "trenches_metadata_60_1/hard",
         # "trenches_metadata_60_2/hard",
-
         # "small-rectangles_1",
         # "small-rectangles_2",
         # "rectangles_60_1",
-        
         "onetile"
     ]
 
