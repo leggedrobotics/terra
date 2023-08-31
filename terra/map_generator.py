@@ -247,7 +247,7 @@ def single_tile(
     width, height, padding_mask, key = _sample_width_height(
         key, min_width, min_height, max_width, max_height
     )
-    map = jnp.zeros((max_width, max_height), dtype=IntMap)
+    map = jnp.ones((max_width, max_height), dtype=IntMap)
     key, subkey = jax.random.split(key)
     x = jax.random.randint(subkey, (1,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)

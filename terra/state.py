@@ -59,6 +59,8 @@ class State(NamedTuple):
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
+        # jax.debug.print("world.target_map.map.sum()={x}", x=world.target_map.map.sum())
+
         return State(
             key=key,
             env_cfg=env_cfg,

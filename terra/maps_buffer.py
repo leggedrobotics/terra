@@ -169,7 +169,6 @@ def load_maps_from_disk(folder_path: str) -> Array:
         trench_axes = -97.0 * jnp.ones(
             (
                 1,
-                1,
                 3,
                 3,
             )

@@ -322,7 +322,6 @@ class BatchConfig(NamedTuple):
         # "rectangles_1",
         # "rectangles_60_1",
         # "rectangles_60_2",
-
         # "trenches_60_1/easy",
         # "trenches_60_2/easy",
         # "trenches_60_1/medium",
@@ -345,4 +344,4 @@ class BatchConfig(NamedTuple):
 
 class TestbenchConfig(BatchConfig):
     # Maps folders (the order matters -> DOF)
-    maps_paths = []
+    maps_paths = ["onetile"]
