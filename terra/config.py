@@ -194,7 +194,7 @@ class Rewards(NamedTuple):
             # dig_dump_area=-0.3,
             dig_correct=3.0,
             dump_correct=3.0,
-            terminal=100.0,
+            terminal=500.0,
             force_reset=0.0,
         )
 
@@ -214,7 +214,7 @@ class Rewards(NamedTuple):
             # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
-            terminal=100.0,
+            terminal=500.0,
             force_reset=0.0,
         )
 
