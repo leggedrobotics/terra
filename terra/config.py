@@ -329,12 +329,19 @@ class BatchConfig(NamedTuple):
         # "trenches_60_1/hard",
         # "trenches_60_2/hard",
 
+        # "trenches_metadata_60_1/easy",
+        # "trenches_metadata_60_2/easy",
+        # "trenches_metadata_60_1/medium",
+        # "trenches_metadata_60_2/medium",
+        # "trenches_metadata_60_1/hard",
+        # "trenches_metadata_60_2/hard",
+
+        "onetile",
+        "squares_2",
+        "squares_5",
         "trenches_metadata_60_1/easy",
-        "trenches_metadata_60_2/easy",
         "trenches_metadata_60_1/medium",
-        "trenches_metadata_60_2/medium",
         "trenches_metadata_60_1/hard",
-        "trenches_metadata_60_2/hard",
 
         # "small-rectangles_1",
         # "small-rectangles_2",
