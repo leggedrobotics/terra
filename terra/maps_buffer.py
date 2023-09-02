@@ -168,7 +168,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
     else:
         trench_axes = -97.0 * jnp.ones(
             (
-                1,
+                dataset_size,
                 3,
                 3,
             )
