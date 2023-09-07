@@ -175,10 +175,12 @@ class Rewards(NamedTuple):
     dig_correct: float  # dig where the target map is negative, and not more than required
     dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
 
-    terminal_completed_tiles: float  # gets linearly scaled by ratio of completed tiles
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float  # given if the training algorithm calls a force reset on the environment
+    
+    # TODO quickfix for compatibility -> remove the '=0.0'  
+    terminal_completed_tiles: float = 0.0  # gets linearly scaled by ratio of completed tiles
 
     @staticmethod
     def dense():
