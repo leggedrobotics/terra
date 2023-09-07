@@ -1386,6 +1386,13 @@ class State(NamedTuple):
         )
         # jax.debug.print("r_trench = {x}", x=r)
         return r
+    
+    def _get_terminal_completed_tiles_reward(
+        self,
+    ) -> Float:
+        tiles_digged = (self.world.action_map.map == -1).sum()
+        total_tiles = (self.world.target_map.map == -1).sum()
+        return (tiles_digged / total_tiles) * self.env_cfg.rewards.terminal_completed_tiles
 
     def _get_reward(
         self, new_state: "State", action_handler: Action, force_reset: jnp.bool_
@@ -1411,6 +1418,17 @@ class State(NamedTuple):
                 new_state.agent.agent_state.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
+            lambda: 0.0,
+        )
+
+        # Terminal completed tiles
+        reward += jax.lax.cond(
+            self._is_done(
+                new_state.world.action_map.map,
+                self.world.target_map.map,
+                new_state.agent.agent_state.loaded,
+            )[0],
+            self._get_terminal_completed_tiles_reward,
             lambda: 0.0,
         )
 

@@ -33,6 +33,7 @@ class RewardsType(IntEnum):
     DENSE = 0
     SPARSE = 1
     TERMINAL_ONLY = 2
+    MIXED = 3
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -174,6 +175,7 @@ class Rewards(NamedTuple):
     dig_correct: float  # dig where the target map is negative, and not more than required
     dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
 
+    terminal_completed_tiles: float  # gets linearly scaled by ratio of completed tiles
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
     force_reset: float  # given if the training algorithm calls a force reset on the environment
@@ -194,7 +196,29 @@ class Rewards(NamedTuple):
             # dig_dump_area=-0.3,
             dig_correct=3.0,
             dump_correct=3.0,
+            terminal_completed_tiles=0.0,
             terminal=200.0,
+            force_reset=0.0,
+        )
+    
+    @staticmethod
+    def mixed():
+        return Rewards(
+            existence=-0.1,
+            collision_move=-0.1,
+            move_while_loaded=0.0,
+            move=-0.05,
+            collision_turn=-0.1,
+            base_turn=-0.1,
+            cabin_turn=-0.02,
+            dig_wrong=-0.3,
+            dump_wrong=-0.3,
+            dump_no_dump_area=0.0,
+            # dig_dump_area=-0.3,
+            dig_correct=3.0,
+            dump_correct=3.0,
+            terminal_completed_tiles=200.0,  # gets linearly scaled by ratio of completed tiles
+            terminal=0.0,
             force_reset=0.0,
         )
 
@@ -214,6 +238,7 @@ class Rewards(NamedTuple):
             # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
+            terminal_completed_tiles=0.0,
             terminal=200.0,
             force_reset=0.0,
         )
@@ -234,6 +259,7 @@ class Rewards(NamedTuple):
             # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
+            terminal_completed_tiles=0.0,
             terminal=1.0,
             force_reset=0.0,
         )
@@ -281,7 +307,7 @@ class EnvConfig(NamedTuple):
         # else:
         #     raise ValueError(f"{rewards_type=} doesn't exist.")
 
-        rewards_list = [Rewards.dense, Rewards.sparse, Rewards.terminal_only]
+        rewards_list = [Rewards.dense, Rewards.sparse, Rewards.terminal_only, Rewards.mixed]
 
         rewards = jax.lax.switch(rewards_type, rewards_list)
 
