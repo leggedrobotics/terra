@@ -215,8 +215,8 @@ class Rewards(NamedTuple):
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
             # dig_dump_area=-0.3,
-            dig_correct=3.0,
-            dump_correct=3.0,
+            dig_correct=0.0,
+            dump_correct=0.0,
             terminal_completed_tiles=200.0,  # gets linearly scaled by ratio of completed tiles
             terminal=0.0,
             force_reset=0.0,
