@@ -376,11 +376,11 @@ class BatchConfig(NamedTuple):
         # "dumping_constraints/lev3-T-trenches-contour",
         # "dumping_constraints/squares_10/terra",
         # "dumping_constraints/lev4-T-trenches-contour",
-        # "dumping_constraints/trenches_metadata_60/easy",
+        "dumping_constraints/trenches_metadata_60/easy",
         # "dumping_constraints/trenches_metadata_60/medium",
         # "dumping_constraints/trenches_metadata_60/hard",
 
-        "dumping_constraints/trenches_metadata_60/all",
+        # "dumping_constraints/trenches_metadata_60/all",
 
         # "small-rectangles_1",
         # "small-rectangles_2",
