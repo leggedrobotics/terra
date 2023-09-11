@@ -891,7 +891,7 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a digged tile.
         """
-        digged_mask_action_map = self.world.action_map.map < 0
+        digged_mask_action_map = self.world.dig_map.map < 0
         # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
