@@ -581,20 +581,60 @@ class State(NamedTuple):
         )
 
     def _handle_move_clock_forward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_forward()._handle_clock()._handle_move_forward()
+        valid_chain = True
+        s0 = self._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_clock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_clock_backward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_backward()._handle_clock()._handle_move_backward()
+        valid_chain = True
+        s0 = self._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_clock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_anticlock_forward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_forward()._handle_anticlock()._handle_move_forward()
+        valid_chain = True
+        s0 = self._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_anticlock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_anticlock_backward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_backward()._handle_anticlock()._handle_move_backward()
+        valid_chain = True
+        s0 = self._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_anticlock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_extend_arm(self) -> "State":
         new_arm_extension = jnp.min(
@@ -1114,6 +1154,22 @@ class State(NamedTuple):
         # jax.debug.print("action map = {x}", x=state.world.action_map.map)
         # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
+    
+    @staticmethod
+    def _check_agent_moved_on_move_action(old_state: "State", new_state: "State") -> bool:
+        """True if agent moved"""
+        return ~jnp.allclose(
+            old_state.agent.agent_state.pos_base,
+            new_state.agent.agent_state.pos_base
+            )
+    
+    @staticmethod
+    def _check_agent_turn_on_turn_action(old_state: "State", new_state: "State") -> bool:
+        """True if agent turned"""
+        return ~jnp.allclose(
+                old_state.agent.agent_state.angle_base,
+                new_state.agent.agent_state.angle_base,
+            )
 
     def _handle_rewards_move(
         self, new_state: "State", action: TrackedActionType
@@ -1121,9 +1177,7 @@ class State(NamedTuple):
         reward = 0.0
         # Collision
         reward += jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base
-            ),
+            ~self._check_agent_moved_on_move_action(self, new_state),
             lambda: self.env_cfg.rewards.collision_move,
             lambda: 0.0,
         )
@@ -1147,10 +1201,7 @@ class State(NamedTuple):
 
         # Collision turn
         reward += jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.angle_base,
-                new_state.agent.agent_state.angle_base,
-            ),
+            ~self._check_agent_turn_on_turn_action(self, new_state),
             lambda: self.env_cfg.rewards.collision_turn,
             lambda: 0.0,
         )
