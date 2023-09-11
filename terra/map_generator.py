@@ -7,6 +7,7 @@ from jax import Array
 
 # from terra.utils import IntMap
 IntMap = jnp.int16  # TODO import
+IntLowDim = jnp.int8  # TODO import
 
 
 class MapParams(NamedTuple):
@@ -132,6 +133,8 @@ class GridMap(NamedTuple):
             key,
             params,
         )
+        map = map.astype(IntLowDim)
+        padding_mask = padding_mask.astype(IntLowDim)
         return map, padding_mask, key
 
 

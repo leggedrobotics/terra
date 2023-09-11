@@ -14,6 +14,7 @@ from terra.config import ImmutableMapsConfig
 from terra.config import MapType
 from terra.map_generator import GridMap
 from terra.utils import IntMap
+from terra.utils import IntLowDim
 
 
 class MapsBuffer(NamedTuple):
@@ -53,9 +54,9 @@ class MapsBuffer(NamedTuple):
     ) -> "MapsBuffer":
         jax.debug.print("trench_axes.shape = {x}", x=trench_axes.shape)
         return MapsBuffer(
-            maps=maps,
-            padding_mask=padding_mask,
-            trench_axes=trench_axes,
+            maps=maps.astype(IntLowDim),
+            padding_mask=padding_mask.astype(IntLowDim),
+            trench_axes=trench_axes.astype(jnp.float16),
             trench_types=trench_types,
             n_maps=maps.shape[1],
         )
@@ -97,7 +98,7 @@ class MapsBuffer(NamedTuple):
                 3,
             ),
             -97.0,
-            dtype=jnp.float32,
+            dtype=jnp.float16,
         )
         trench_type_dummy = jnp.full((), -1, dtype=jnp.int32)
         return map, padding_mask, trench_axes_dummy, trench_type_dummy, key

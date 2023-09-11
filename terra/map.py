@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from terra.map_generator import GridMap
-from terra.utils import IntMap
+from terra.utils import IntLowDim
 
 
 class GridWorld(NamedTuple):
@@ -45,12 +45,12 @@ class GridWorld(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
     ) -> "GridWorld":
-        action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
-        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
+        action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
+        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
 
-        target_map = GridMap.new(IntMap(target_map))
+        target_map = GridMap.new(IntLowDim(target_map))
 
-        padding_mask = GridMap.new(IntMap(padding_mask))  # TODO IntLowDim?
+        padding_mask = GridMap.new(IntLowDim(padding_mask))
 
         world = GridWorld(
             target_map=target_map,

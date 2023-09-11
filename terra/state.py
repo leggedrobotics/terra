@@ -1039,7 +1039,7 @@ class State(NamedTuple):
             return self._replace(
                 world=self.world._replace(
                     dig_map=self.world.dig_map._replace(
-                        map=IntMap(new_map_global_coords)
+                        map=IntLowDim(new_map_global_coords)
                     )
                 ),
                 agent=self.agent._replace(
@@ -1089,10 +1089,10 @@ class State(NamedTuple):
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
-                        map=IntMap(new_map_global_coords)
+                        map=IntLowDim(new_map_global_coords)
                     ),
                     dig_map=self.world.dig_map._replace(
-                        map=IntMap(new_map_global_coords)
+                        map=IntLowDim(new_map_global_coords)
                     ),
                 ),
                 agent=self.agent._replace(
