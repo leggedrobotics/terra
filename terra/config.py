@@ -364,7 +364,7 @@ class BatchConfig(NamedTuple):
         # "trenches_metadata_60_1/hard",
         # "trenches_metadata_60_2/hard",
 
-        "onetile_testing",
+        # "onetile",
         # "dumping_constraints/squares_2/terra",
         # "dumping_constraints/squares_5/terra",
         # "dumping_constraints/squares_6/terra",
@@ -379,6 +379,8 @@ class BatchConfig(NamedTuple):
         # "dumping_constraints/trenches_metadata_60/easy",
         # "dumping_constraints/trenches_metadata_60/medium",
         # "dumping_constraints/trenches_metadata_60/hard",
+
+        "trenches_occ_dmp_met/all",
 
         # "dumping_constraints/trenches_metadata_60/all",
 
