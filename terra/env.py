@@ -439,4 +439,8 @@ class TerraEnvBatch:
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,
             ),
+            "dumpability_mask": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
         }
