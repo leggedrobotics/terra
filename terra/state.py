@@ -941,6 +941,10 @@ class State(NamedTuple):
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """Applies dumpability mask to the dump mask"""
         return dump_mask * self.world.dumpability_mask.map.reshape(-1)
+    
+    def _exclude_traversability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """Applies traversability mask to the dump mask"""
+        return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
 
     def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
@@ -1109,6 +1113,7 @@ class State(NamedTuple):
         dump_mask = self._build_dig_dump_cone()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
