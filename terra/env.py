@@ -35,6 +35,7 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
@@ -42,7 +43,7 @@ class TerraEnv(NamedTuple):
         """
         key = jax.random.PRNGKey(seed)
         state = State.new(
-            key, env_cfg, target_map, padding_mask, trench_axes, trench_type
+            key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
@@ -63,13 +64,14 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
         state = state._reset(
-            env_cfg, target_map, padding_mask, trench_axes, trench_type
+            env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
         # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
@@ -187,6 +189,7 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfg: EnvConfig,
         force_reset: jnp.bool_,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
@@ -227,12 +230,13 @@ class TerraEnv(NamedTuple):
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x, y, z, k, w, j: (new_state, observations),
+            lambda x, y, z, k, w, j, l: (new_state, observations),
             new_state,
             target_map,
             padding_mask,
             trench_axes,
             trench_type,
+            dumpability_mask_init,
             env_cfg,
         )
 
@@ -299,11 +303,12 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            dumpability_mask_init,
             maps_buffer_keys,
         ) = jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
         return (
             *self._reset(
-                seeds, target_maps, padding_masks, trench_axes, trench_type, env_cfgs
+                seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
             ),
             maps_buffer_keys,
         )
@@ -316,10 +321,11 @@ class TerraEnvBatch:
         padding_masks: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfgs: EnvConfig,
     ) -> State:
         return jax.vmap(self.terra_env.reset)(
-            seeds, target_maps, padding_masks, trench_axes, trench_type, env_cfgs
+            seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )
 
     def step(
@@ -335,6 +341,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            dumpability_mask_init,
             maps_buffer_keys,
         ) = jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
         return (
@@ -345,6 +352,7 @@ class TerraEnvBatch:
                 padding_masks,
                 trench_axes,
                 trench_type,
+                dumpability_mask_init,
                 env_cfgs,
                 force_resets,
             ),
@@ -360,6 +368,7 @@ class TerraEnvBatch:
         padding_masks: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfgs: EnvConfig,
         force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
@@ -370,6 +379,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            dumpability_mask_init,
             env_cfgs,
             force_resets,
         )

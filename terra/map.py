@@ -12,6 +12,8 @@ class GridWorld(NamedTuple):
     action_map: GridMap
     padding_mask: GridMap
     dig_map: GridMap  # map where the dig action is applied before being applied to the action map (at dump time).
+    dumpability_mask: GridMap
+    dumpability_mask_init: GridMap
 
     trench_axes: Array
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
@@ -44,6 +46,7 @@ class GridWorld(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        dumpability_mask_init: Array,
     ) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
         dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
@@ -52,6 +55,9 @@ class GridWorld(NamedTuple):
 
         padding_mask = GridMap.new(IntLowDim(padding_mask))
 
+        dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+        dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+
         world = GridWorld(
             target_map=target_map,
             action_map=action_map,
@@ -59,6 +65,8 @@ class GridWorld(NamedTuple):
             dig_map=dig_map,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            dumpability_mask=dumpability_mask,
+            dumpability_mask_init=dumpability_mask_init_gm,
         )
 
         return world

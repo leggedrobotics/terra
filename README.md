@@ -35,6 +35,33 @@ To be able to use a dataset saved on storage, define the following env variables
 DATASET_PATH=path_to_dataset DATASET_SIZE=dataset_size
 ~~~
 
+## Environment details
+### Maps
+Terra relies on multiple maps per environment instance to support multiple functionalities and usecases.
+
+In every environment the following maps are defined:
+- target map
+    - 1: must dump here to terminate the episode
+    - 0: free
+    - -1: must dig here 
+- action map
+    - -1: dug here during the episode
+    - 0: free
+    - greater than 0: dumped here
+- dig map (same as action map but updated on the dig action & before the dump action is complete)
+- dumpability map
+    - 1: can dump
+    - 0: can't dump
+- padding mask
+    - 0: traversable
+    - 1: non traversable
+- traversability mask
+    - -1: agent occupancy
+    - 0: traversable
+    - 1: non traversable
+- local map target (contains the sum of all the target map tiles in a given workspace)
+- local map action (contains the sum of all the action map tiles in a given workspace)
+
 ### Maps of different size
 Note: the environment supports maps of different sizes run on parallel environments at the same time.
 However, every map is padded to the right and to the bottom to reach the biggest map size defined in the config.
