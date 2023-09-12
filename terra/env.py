@@ -98,6 +98,7 @@ class TerraEnv(NamedTuple):
             active_grid=state.world.action_map.map,
             target_grid=state.world.target_map.map,
             padding_mask=state.world.padding_mask.map,
+            dumpability_mask=state.world.dumpability_mask.map,
             agent_pos=state.agent.agent_state.pos_base,
             base_dir=state.agent.agent_state.angle_base,
             cabin_dir=state.agent.agent_state.angle_cabin,
@@ -152,6 +153,7 @@ class TerraEnv(NamedTuple):
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
+            dumpability_mask=obs["dumpability_mask"],
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
@@ -276,6 +278,7 @@ class TerraEnv(NamedTuple):
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
             "dig_map": state.world.dig_map.map,
+            "dumpability_mask": state.world.dumpability_mask.map,
         }
 
 

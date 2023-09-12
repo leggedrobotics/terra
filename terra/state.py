@@ -937,6 +937,10 @@ class State(NamedTuple):
         digged_mask_action_map = self.world.dig_map.map < 0
         # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
+    
+    def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """Applies dumpability mask to the dump mask"""
+        return dump_mask * self.world.dumpability_mask.map.reshape(-1)
 
     def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
@@ -1104,6 +1108,7 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
