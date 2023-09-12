@@ -211,7 +211,7 @@ def parse_step(obs, reward, done, info):
     print("Done: ", done)
 
 
-ACTIVATE_ACTION_MASKING = True
+ACTIVATE_ACTION_MASKING = False
 
 batch_cfg = BatchConfig()
 action_type = batch_cfg.action_type

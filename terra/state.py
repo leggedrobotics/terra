@@ -1065,6 +1065,20 @@ class State(NamedTuple):
             * max_dig_limit_mask
         ).astype(jnp.bool_)
 
+    def _get_new_dumpability_mask(self, action_map: Array) -> Array:
+        new_dumpability_mask = self.world.dumpability_mask_init.map
+        action_mask = (action_map < 0).astype(jnp.float16)
+        kernel = jnp.ones((3, 3), dtype=jnp.float16)
+        action_mask_contoured = jax.scipy.signal.convolve2d(
+            action_mask,
+            kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        return new_dumpability_mask * (action_mask_contoured == 0)
+
+
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
@@ -1139,6 +1153,10 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
+
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
@@ -1147,6 +1165,9 @@ class State(NamedTuple):
                     dig_map=self.world.dig_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(

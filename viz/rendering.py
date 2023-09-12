@@ -311,27 +311,6 @@ class RenderingEngine:
             target_tiles = target_tiles.repeat(tile_size, axis=-3).repeat(
                 tile_size, axis=-2
             )
-            if do_preview is not None:
-                do_preview = np.array([[[255, 255, 255]]]) * (
-                    (
-                        (
-                            do_preview.repeat(tile_size, axis=-2).repeat(
-                                tile_size, axis=-1
-                            )
-                            + 3
-                        )
-                        / 7
-                    )[..., None]
-                )
-                img = np.where(target_tiles, do_preview.astype(np.int16), img)
-            else:
-                img = np.where(target_tiles, 255, img)
-
-        # apply grid
-        grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
-        grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
-        img[:, grid_idx_x] = np.array([100, 100, 100])
-        img[:, :, grid_idx_y] = np.array([100, 100, 100])
 
         # Render padding mask
         pm = padding_mask[..., None].repeat(3, -1)  # add 3 channels
@@ -360,19 +339,54 @@ class RenderingEngine:
         dm = dm.repeat(tile_size, -2).repeat(tile_size, -3)
         b = np.zeros_like(dm[..., 0])
         b = np.where(
-            dm[..., 0] == 255,
-            139,
-            0,
+            (dm[..., 0] == 255),
+            255,
+            b,
         )
-        b = b[..., None]
+        b = np.where(
+            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) < 0),
+            97,
+            b,
+        )
+
         g = np.zeros_like(b)
-        r = np.zeros_like(b)
+        g = np.where(
+            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) > 0),
+            173,
+            g,
+        )
+        r = g
+        r = r[..., None]
+        g = g[..., None]
+        b = b[..., None]
         dm_rgb = np.concatenate((r, g, b), axis=-1)
         img = np.where(
             dm == 255,
             dm_rgb,
             img
         )
+
+        if do_preview is not None and target_tiles is not None:
+            do_preview = np.array([[[255, 255, 255]]]) * (
+                (
+                    (
+                        do_preview.repeat(tile_size, axis=-2).repeat(
+                            tile_size, axis=-1
+                        )
+                        + 3
+                    )
+                    / 7
+                )[..., None]
+            )
+            img = np.where(target_tiles, do_preview.astype(np.int16), img)
+        else:
+            img = np.where(target_tiles, 255, img)
+
+        # apply grid
+        grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
+        grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
+        img[:, grid_idx_x] = np.array([100, 100, 100])
+        img[:, :, grid_idx_y] = np.array([100, 100, 100])
 
         img = img.astype(np.int16)
         return img
