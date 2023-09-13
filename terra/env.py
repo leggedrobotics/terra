@@ -269,8 +269,10 @@ class TerraEnv(NamedTuple):
         )
         return {
             "agent_state": agent_state,
-            "local_map_action": state.world.local_map_action.map,
-            "local_map_target": state.world.local_map_target.map,
+            "local_map_action_neg": state.world.local_map_action_neg.map,
+            "local_map_action_pos": state.world.local_map_action_pos.map,
+            "local_map_target_neg": state.world.local_map_target_neg.map,
+            "local_map_target_pos": state.world.local_map_target_pos.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
@@ -411,11 +413,19 @@ class TerraEnvBatch:
         """
         return {
             "agent_states": (6,),
-            "local_map_action": (
+            "local_map_action_neg": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),
-            "local_map_target": (
+            "local_map_action_pos": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target_neg": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target_pos": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),

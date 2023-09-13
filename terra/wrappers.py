@@ -135,22 +135,34 @@ class LocalMapWrapper:
 
     @staticmethod
     def wrap_target_map(state: State) -> State:
-        local_map_target = LocalMapWrapper._wrap(state, state.world.target_map.map)
+        target_map_pos = jnp.clip(state.world.target_map.map, a_min=0)
+        target_map_neg = jnp.clip(state.world.target_map.map, a_max=0)
+        local_map_target_pos = LocalMapWrapper._wrap(state, target_map_pos)
+        local_map_target_neg = LocalMapWrapper._wrap(state, target_map_neg)
         return state._replace(
             world=state.world._replace(
-                local_map_target=state.world.local_map_target._replace(
-                    map=local_map_target
-                )
+                local_map_target_pos=state.world.local_map_target_pos._replace(
+                    map=local_map_target_pos
+                ),
+                local_map_target_neg=state.world.local_map_target_neg._replace(
+                    map=local_map_target_neg
+                ),
             )
         )
 
     @staticmethod
     def wrap_action_map(state: State) -> State:
-        local_map_action = LocalMapWrapper._wrap(state, state.world.action_map.map)
+        action_map_pos = jnp.clip(state.world.action_map.map, a_min=0)
+        action_map_neg = jnp.clip(state.world.action_map.map, a_max=0)
+        local_map_action_pos = LocalMapWrapper._wrap(state, action_map_pos)
+        local_map_action_neg = LocalMapWrapper._wrap(state, action_map_neg)
         return state._replace(
             world=state.world._replace(
-                local_map_action=state.world.local_map_action._replace(
-                    map=local_map_action
-                )
+                local_map_action_pos=state.world.local_map_action_pos._replace(
+                    map=local_map_action_pos
+                ),
+                local_map_action_neg=state.world.local_map_action_neg._replace(
+                    map=local_map_action_neg
+                ),
             )
         )
