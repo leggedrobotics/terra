@@ -380,7 +380,7 @@ class BatchConfig(NamedTuple):
         # "dumping_constraints/trenches_metadata_60/medium",
         # "dumping_constraints/trenches_metadata_60/hard",
 
-        "trenches_occ_dmp_met/all",
+        "trenches_occ_dmp_met_alldumpable/all",
 
         # "dumping_constraints/trenches_metadata_60/all",
 
