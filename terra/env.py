@@ -106,7 +106,7 @@ class TerraEnv(NamedTuple):
             agent_height=state.agent.height,
         )
 
-        imgs_local = state.world.local_map_action.map
+        imgs_local = state.world.local_map_action_neg.map
 
         if key_handler:
             if mode == "human":
@@ -163,7 +163,7 @@ class TerraEnv(NamedTuple):
             do_preview=do_preview,
         )
 
-        imgs_local = obs["local_map_action"]
+        imgs_local = obs["local_map_action_neg"]
 
         if key_handler:
             if mode == "human":

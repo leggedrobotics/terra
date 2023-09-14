@@ -49,21 +49,17 @@ def apply_rot_transl(anchor_state: Array, global_coords: Array) -> Array:
     Returns:
         - local_coords: (2, N) Array containing local [x, y]
     """
-    costheta = jnp.cos(anchor_state @ jnp.array([0.0, 0.0, 1.0]))
-    sintheta = jnp.sin(anchor_state @ jnp.array([0.0, 0.0, 1.0]))
+    theta = anchor_state[2]
+    costheta, sintheta = jnp.cos(theta), jnp.sin(theta)
+    R_t = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
 
-    R = jnp.array([[costheta, -sintheta], [sintheta, costheta]])
     t = anchor_state[:2]
+    neg_Rt_t = -R_t @ t
 
     # Build the inverse transformation matrix
-    R_t = R.T
-    T_left = jnp.vstack([R_t, jnp.array([[0.0, 0.0]])])
-    T_right = jnp.vstack([(-R_t @ t)[:, None], jnp.array([[1.0]])])
-    T = jnp.hstack([T_left, T_right])
+    T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0., 0., 1.])]])
 
-    local_coords = T @ jnp.vstack(
-        [global_coords, jnp.ones((1, global_coords.shape[1]))]
-    )
+    local_coords = jnp.einsum('ij,jk->ik', T, jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]))
     return local_coords[:2]
 
 
@@ -82,11 +78,10 @@ def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:
         - cyl_coords: (2, N) Array with [r, theta] rows,
             Note: theta belongs to [-pi, pi]
     """
-    r = jnp.sqrt(jnp.sum(local_coords**2, axis=0, keepdims=True))
-    # theta = jnp.arctan2(local_coords[1], local_coords[0])
-    theta = jnp.arctan2(-local_coords[0], local_coords[1])
-    # theta = wrap_angle_rad(theta)
-    return jnp.vstack([r, theta[None]])
+    x, y = local_coords[0], local_coords[1]
+    r = jnp.sqrt(x*x + y*y)
+    theta = jnp.arctan2(-x, y)
+    return jnp.vstack([r, theta])
 
 
 def wrap_angle_rad(angle: Float) -> Float:
