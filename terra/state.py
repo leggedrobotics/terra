@@ -1312,7 +1312,11 @@ class State(NamedTuple):
                 lambda: jax.lax.cond(
                     action_map_negative_progress == 0,
                     lambda: 0.0,
-                    lambda: self.env_cfg.rewards.dump_correct,
+                    lambda: jax.lax.cond(
+                        action_map_positive_progress > 0,
+                        lambda: self.env_cfg.rewards.dump_correct,
+                        lambda: 0.0,
+                    )
                 ),
             ),
         )
