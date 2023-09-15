@@ -837,7 +837,7 @@ class State(NamedTuple):
             moving_dumped_dirt,
             lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
             #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
-            lambda: flattened_map - delta_dig,
+            lambda: (flattened_map - delta_dig).astype(IntMap),
         )
         return m
 
