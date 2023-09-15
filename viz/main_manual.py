@@ -43,7 +43,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -56,7 +55,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -69,7 +67,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -82,7 +79,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -95,7 +91,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -108,7 +103,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -121,7 +115,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -134,7 +127,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -147,7 +139,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -160,7 +151,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -173,7 +163,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -186,7 +175,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -199,7 +187,6 @@ def key_handler(event):
             repeat_action(action),
             env_cfgs,
             key_maps_buffer,
-            jnp.zeros((n_envs,), dtype=jnp.bool_),
         )
         action_mask = info["action_mask"]
         parse_step(states, reward, done, info)
@@ -229,7 +216,6 @@ states, (obs, rewards, dones, info), key_maps_buffer = env.step(
     action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
     env_cfgs,
     key_maps_buffer,
-    jnp.zeros((n_envs,), dtype=jnp.bool_),
 )
 action_mask = info["action_mask"]
 i = 0
