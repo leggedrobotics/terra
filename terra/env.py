@@ -193,7 +193,6 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
-        force_reset: jnp.bool_,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
         Step the env given an action
@@ -213,7 +212,7 @@ class TerraEnv(NamedTuple):
         """
         new_state = state._step(action)
 
-        reward = state._get_reward(new_state, action, force_reset)
+        reward = state._get_reward(new_state, action)
 
         new_state = TraversabilityMaskWrapper.wrap(new_state)
         new_state = LocalMapWrapper.wrap_target_map(new_state)
@@ -226,8 +225,6 @@ class TerraEnv(NamedTuple):
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
         )
-
-        done = done | force_reset
 
         new_state, observations = jax.lax.cond(
             done,
@@ -339,7 +336,6 @@ class TerraEnvBatch:
         actions: Action,
         env_cfgs: EnvConfig,
         maps_buffer_keys: jax.random.KeyArray,
-        force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         (
             target_maps,
@@ -359,7 +355,6 @@ class TerraEnvBatch:
                 trench_type,
                 dumpability_mask_init,
                 env_cfgs,
-                force_resets,
             ),
             maps_buffer_keys,
         )
@@ -375,7 +370,6 @@ class TerraEnvBatch:
         trench_type: Array,
         dumpability_mask_init: Array,
         env_cfgs: EnvConfig,
-        force_resets: Array,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
             states,
@@ -386,7 +380,6 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             env_cfgs,
-            force_resets,
         )
         return states, (obs, rewards, dones, infos)
 

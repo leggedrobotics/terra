@@ -1480,7 +1480,7 @@ class State(NamedTuple):
         return (tiles_digged / total_tiles) * self.env_cfg.rewards.terminal_completed_tiles
 
     def _get_reward(
-        self, new_state: "State", action_handler: Action, force_reset: jnp.bool_
+        self, new_state: "State", action_handler: Action
     ) -> Float:
         action = action_handler.action
 
@@ -1519,12 +1519,7 @@ class State(NamedTuple):
 
         # Existence
         reward += self.env_cfg.rewards.existence
-
-        # Force reset
-        reward += jax.lax.cond(
-            force_reset, lambda: self.env_cfg.rewards.force_reset, lambda: 0.0
-        )
-
+        
         return reward
 
     @staticmethod
