@@ -1270,6 +1270,27 @@ class State(NamedTuple):
         ).sum()
 
         return action_map_progress
+    
+    @staticmethod
+    def _get_action_map_spread_out_rate(
+        action_map_old: Array, action_map_new: Array, target_map: Array, loaded: int
+    ) -> IntMap:
+        """
+        Returns the spread-out rate of the terrain that has just been dumped.
+        The rate is defined as (#tiles-dumped / #tiles-loaded)
+        """
+        action_map_mask_old = (action_map_old > 0).astype(IntLowDim)
+        action_map_mask_new = (action_map_new > 0).astype(IntLowDim)
+
+        target_map_mask = target_map >= 0  # include also neutral tiles
+
+        action_map_progress = (
+            (action_map_mask_new - action_map_mask_old) * target_map_mask
+        ).sum()
+        
+        jax.debug.print("action_map_progress.astype(jnp.float32) = {x}", x=action_map_progress.astype(jnp.float32))
+        jax.debug.print("loaded[0].astype(jnp.float32) = {x}", x=loaded[0].astype(jnp.float32))
+        return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
@@ -1296,10 +1317,17 @@ class State(NamedTuple):
 
         # Dump
         action_map_positive_progress = self._get_action_map_positive_progress(
-            self.world.action_map.map,
+            self.world.dig_map.map,  # note dig_map here
             new_state.world.action_map.map,
             self.world.target_map.map,
         )
+        spread_out_rate = self._get_action_map_spread_out_rate(
+            self.world.dig_map.map,  # note dig_map here
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+            self.agent.agent_state.loaded,
+        )
+        jax.debug.print("spread_out_rate = {x}", x=spread_out_rate)
         # jax.debug.print("action_map_positive_progress = {x}", x=action_map_positive_progress)
         dump_reward = jax.lax.cond(
             jnp.allclose(
@@ -1314,7 +1342,7 @@ class State(NamedTuple):
                     lambda: 0.0,
                     lambda: jax.lax.cond(
                         action_map_positive_progress > 0,
-                        lambda: self.env_cfg.rewards.dump_correct,
+                        lambda: spread_out_rate * self.env_cfg.rewards.dump_correct,
                         lambda: 0.0,
                     )
                 ),
