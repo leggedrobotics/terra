@@ -1287,9 +1287,6 @@ class State(NamedTuple):
         action_map_progress = (
             (action_map_mask_new - action_map_mask_old) * target_map_mask
         ).sum()
-        
-        jax.debug.print("action_map_progress.astype(jnp.float32) = {x}", x=action_map_progress.astype(jnp.float32))
-        jax.debug.print("loaded[0].astype(jnp.float32) = {x}", x=loaded[0].astype(jnp.float32))
         return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
     def _handle_rewards_dump(
@@ -1313,8 +1310,6 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
-        # jax.debug.print("action_map_negative_progress = {x}", x=action_map_negative_progress)
-
         # Dump
         action_map_positive_progress = self._get_action_map_positive_progress(
             self.world.dig_map.map,  # note dig_map here
@@ -1327,8 +1322,6 @@ class State(NamedTuple):
             self.world.target_map.map,
             self.agent.agent_state.loaded,
         )
-        jax.debug.print("spread_out_rate = {x}", x=spread_out_rate)
-        # jax.debug.print("action_map_positive_progress = {x}", x=action_map_positive_progress)
         dump_reward = jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
