@@ -269,7 +269,7 @@ class Rewards(NamedTuple):
 
 class TrenchRewards(NamedTuple):
     distance_coefficient: float = (
-        -0.2
+        -0.4
     )  # distance_coefficient * distance, if distance > agent_width / 2
 
 
