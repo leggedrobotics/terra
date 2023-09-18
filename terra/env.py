@@ -15,17 +15,36 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from viz.rendering import RenderingEngine
 from viz.window import Window
+import pygame as pg
+from viz_pygame.game.game import Game
 
 
 class TerraEnv(NamedTuple):
-    window: Window | None = None
-    rendering_engine: RenderingEngine | None = None
+    rendering_engine: Game | RenderingEngine | None = None
+    window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, rendering: bool = False, n_imgs_row: int = 1) -> "TerraEnv":
-        window = Window("Terra", n_imgs_row) if rendering else None
-        rendering_engine = RenderingEngine() if rendering else None
-        return TerraEnv(window=window, rendering_engine=rendering_engine)
+    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
+        if rendering:
+            print(f"Using {rendering_engine} rendering_engine")
+            if rendering_engine == "numpy":
+                window = Window("Terra", n_envs_x)
+                rendering_engine = RenderingEngine()
+            elif rendering_engine == "pygame":
+                pg.init()
+                pg.mixer.init()
+                if not display:
+                    print("TerraEnv: disabling display...")
+                    screen = pg.display.set_mode((1920 // 2, 1080 // 2), pg.FULLSCREEN | pg.HIDDEN)
+                else:
+                    screen = pg.display.set_mode((1920 // 2, 1080 // 2))
+
+                clock = pg.time.Clock()
+                rendering_engine = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
+                window = None
+            else:
+                raise(ValueError(f"{rendering_engine=}"))
+        return TerraEnv(rendering_engine=rendering_engine, window=window)
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
@@ -126,6 +145,35 @@ class TerraEnv(NamedTuple):
             # self.window.show(block)
 
         return imgs_global, imgs_local
+
+    def render_obs_pygame(
+        self,
+        obs: dict[str, Array],
+        info=None,
+        generate_gif : bool = False,
+    ) -> Array:
+        """
+        Renders the environment at a given observation.
+
+        # TODO write a cleaner rendering engine
+        """
+        if info is not None:
+            target_tiles = info["target_tiles"]
+            do_preview = info["do_preview"]
+        else:
+            target_tiles = None
+            do_preview = None
+
+        self.rendering_engine.run(
+            active_grid=obs["action_map"],
+            target_grid=obs["target_map"],
+            agent_pos=obs["agent_state"][..., [0, 1]],
+            base_dir=obs["agent_state"][..., [2]],
+            cabin_dir=obs["agent_state"][..., [3]],
+            generate_gif=generate_gif,
+            # agent_width=obs["agent_width"],
+            # agent_height=obs["agent_height"],
+        )
 
     def render_obs(
         self,
@@ -290,11 +338,17 @@ class TerraEnvBatch:
         self,
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
-        n_imgs_row: int = 1,
+        n_envs_x_rendering: int = 1,
+        n_envs_y_rendering: int = 1,
+        display: bool = False,
+        rendering_engine: str = "numpy",
     ) -> None:
         self.terra_env = TerraEnv.new(
             rendering=rendering,
-            n_imgs_row=n_imgs_row,
+            n_envs_x=n_envs_x_rendering,
+            n_envs_y=n_envs_y_rendering,
+            display=display,
+            rendering_engine=rendering_engine,
         )
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)

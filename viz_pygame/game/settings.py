@@ -1,12 +1,12 @@
-TILE_SIZE = 64
+TILE_SIZE = 2
 
 COLORS = {
-    0: (82, 79, 57),
-    1: (115, 110, 79),
-    -1: (54, 52, 38),
-    "agent_body": (181, 164, 0),
+    0: "#B5C99A",
+    1: "#FFC95F",
+    -1: "#862B0D",
+    "agent_body": "#2C2E43",
     "agent_cabin": {
-        "loaded": (247, 244, 223),
-        "not_loaded": (247, 232, 124),
+        "loaded": "#FFD523",
+        "not_loaded": "#FFD523",
     }
 }
