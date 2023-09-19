@@ -25,13 +25,13 @@ class TerraEnv(NamedTuple):
 
     @classmethod
     def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
-        rendering_engine = None
+        re = None
         window = None
         if rendering:
             print(f"Using {rendering_engine} rendering_engine")
             if rendering_engine == "numpy":
                 window = Window("Terra", n_envs_x)
-                rendering_engine = RenderingEngine()
+                re = RenderingEngine()
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
@@ -42,10 +42,10 @@ class TerraEnv(NamedTuple):
                     screen = pg.display.set_mode((1920 // 2, 1080 // 2))
 
                 clock = pg.time.Clock()
-                rendering_engine = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
+                re = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
             else:
                 raise(ValueError(f"{rendering_engine=}"))
-        return TerraEnv(rendering_engine=rendering_engine, window=window)
+        return TerraEnv(rendering_engine=re, window=window)
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
