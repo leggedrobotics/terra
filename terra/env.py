@@ -25,6 +25,8 @@ class TerraEnv(NamedTuple):
 
     @classmethod
     def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
+        rendering_engine = None
+        window = None
         if rendering:
             print(f"Using {rendering_engine} rendering_engine")
             if rendering_engine == "numpy":
@@ -41,7 +43,6 @@ class TerraEnv(NamedTuple):
 
                 clock = pg.time.Clock()
                 rendering_engine = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
-                window = None
             else:
                 raise(ValueError(f"{rendering_engine=}"))
         return TerraEnv(rendering_engine=rendering_engine, window=window)
