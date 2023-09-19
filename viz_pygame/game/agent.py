@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from .settings import TILE_SIZE
 from .settings import COLORS
 from .utils import agent_base_to_angle
@@ -7,21 +8,27 @@ from .utils import rotate_triangle
 
 class Agent:
     def __init__(self, width, height) -> None:
-        # Opposite convention w.r.t. Terra
         self.width = width
         self.height = height
 
     def create_agent(self, px_center, py_center, angle_base, angle_cabin):
-        px = px_center - self.height // 2
-        py = py_center - self.width // 2
+        # px = px_center - math.ceil(self.width / 2)
+        # py = py_center - math.ceil(self.height / 2)
+        px = px_center - self.width // 2
+        py = py_center - self.height // 2
+
 
         if angle_base in (0, 2):
+            px = px_center - self.height // 2
+            py = py_center - self.width // 2
             agent_body = [
                 (py * TILE_SIZE, px * TILE_SIZE),
             ]
             w = self.width
             h = self.height
         elif angle_base in (1, 3):
+            px = px_center - self.width // 2
+            py = py_center - self.height // 2
             agent_body = [
                 (py * TILE_SIZE, px * TILE_SIZE),
             ]
@@ -32,7 +39,7 @@ class Agent:
 
         # Cabin (triangle)
         deg_angle_cabin = agent_cabin_to_angle(angle_cabin)
-        points = [(2, 0), (-1, -1), (-1, 1)]
+        points = [(3, 0), (-1.5, -1.5), (-1.5, 1.5)]
         a_center_x = agent_body[0][0] + w * TILE_SIZE // 2
         a_center_y = agent_body[0][1] + h * TILE_SIZE // 2
         agent_cabin = rotate_triangle((a_center_x, a_center_y), points, TILE_SIZE, deg_angle_cabin)

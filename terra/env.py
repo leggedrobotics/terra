@@ -17,6 +17,7 @@ from viz.rendering import RenderingEngine
 from viz.window import Window
 import pygame as pg
 from viz_pygame.game.game import Game
+from viz_pygame.game.settings import TILE_SIZE
 
 
 class TerraEnv(NamedTuple):
@@ -37,9 +38,9 @@ class TerraEnv(NamedTuple):
                 pg.mixer.init()
                 if not display:
                     print("TerraEnv: disabling display...")
-                    screen = pg.display.set_mode((1920 // 2, 1080 // 2), pg.FULLSCREEN | pg.HIDDEN)
+                    screen = pg.display.set_mode((2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE), pg.FULLSCREEN | pg.HIDDEN)
                 else:
-                    screen = pg.display.set_mode((1920 // 2, 1080 // 2))
+                    screen = pg.display.set_mode((2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE))
 
                 clock = pg.time.Clock()
                 re = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
@@ -168,6 +169,8 @@ class TerraEnv(NamedTuple):
         self.rendering_engine.run(
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
+            padding_mask=obs["padding_mask"],
+            dumpability_mask=obs["dumpability_mask"],
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],

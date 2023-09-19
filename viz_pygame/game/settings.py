@@ -1,12 +1,14 @@
-TILE_SIZE = 2
+TILE_SIZE = 3
 
 COLORS = {
-    0: "#B5C99A",
-    1: "#FFC95F",
-    -1: "#862B0D",
-    "agent_body": "#2C2E43",
+    0: "#E4DCCF",
+    1: "#002B5B",
+    -1: "#C98474",
+    2: "#EA5455",  # obstacle
+    3: "#A7D2CB",  # non-dumpable
+    "agent_body": "#002B5B",
     "agent_cabin": {
-        "loaded": "#FFD523",
-        "not_loaded": "#FFD523",
+        "loaded": "#EA5455",
+        "not_loaded": "#EA5455",
     }
 }

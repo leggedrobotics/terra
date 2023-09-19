@@ -29,6 +29,8 @@ class Game:
             self,
             active_grid,
             target_grid,
+            padding_mask,
+            dumpability_mask,
             agent_pos,
             base_dir,
             cabin_dir,
@@ -38,6 +40,8 @@ class Game:
         self.update(
             active_grid,
             target_grid,
+            padding_mask,
+            dumpability_mask,
             agent_pos,
             base_dir,
             cabin_dir,
@@ -67,6 +71,8 @@ class Game:
             self,
             active_grid,
             target_grid,
+            padding_mask,
+            dumpability_mask,
             agent_pos,
             base_dir,
             cabin_dir,
@@ -74,21 +80,23 @@ class Game:
         for i in range(self.n_envs):
             ag = active_grid[i]
             tg = target_grid[i]
+            pm = padding_mask[i]
+            dm = dumpability_mask[i]
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
-            self.worlds[i].update(ag, tg)
+            self.worlds[i].update(ag, tg, pm, dm)
             self.agents[i].update(ap, bd, cd)
 
     def draw(self):
-        self.screen.fill((255, 255, 255,))
+        self.screen.fill("#F0F0F0")
 
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
-            
-            ix = i % self.n_envs_x
+            ix = i % (self.n_envs_x + 1)
             iy = i // self.n_envs_y
-            total_offset_x = 2 * ix * 61 * TILE_SIZE
-            total_offset_y = iy * 61 * TILE_SIZE
+
+            total_offset_x = 2 * ix * 65 * TILE_SIZE + 8*TILE_SIZE
+            total_offset_y = iy * 69 * TILE_SIZE + 8*TILE_SIZE
 
             # Target map
             for x in range(world.grid_length_x):
@@ -97,7 +105,7 @@ class Game:
                     sq = world.target_map[x][y]["cart_rect"]
                     c = world.target_map[x][y]["color"]
                     rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
-                    pg.draw.rect(self.screen, c, rect)
+                    pg.draw.rect(self.screen, c, rect, 0, 5)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
 
@@ -109,7 +117,7 @@ class Game:
                     sq = world.action_map[x][y]["cart_rect"]
                     c = world.action_map[x][y]["color"]
                     rect = pg.Rect(sq[0][0] + offset + total_offset_x, sq[0][1] + total_offset_y, TILE_SIZE, TILE_SIZE)
-                    pg.draw.rect(self.screen, c, rect)
+                    pg.draw.rect(self.screen, c, rect, 0, 5)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
             a = agent.agent["body"]["vertices"]
@@ -118,7 +126,7 @@ class Game:
 
             ca = agent.agent["body"]["color"]
             a_rect = pg.Rect(a[0][0] + offset + total_offset_x, a[0][1] + total_offset_y, w * TILE_SIZE, h * TILE_SIZE)
-            pg.draw.rect(self.screen, ca, a_rect)
+            pg.draw.rect(self.screen, ca, a_rect, 0, 3)
 
             cabin = agent.agent["cabin"]["vertices"]
             cabin = [(el[0] + offset + total_offset_x, el[1] + total_offset_y) for el in cabin]
