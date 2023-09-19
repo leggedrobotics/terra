@@ -158,3 +158,46 @@ def get_min_distance_point_to_lines(p, lines, trench_type):
 
     # jax.debug.print("d_min = {x}", x=d_min)
     return d_min[0]
+
+def get_agent_corners(
+    pos_base: Array,
+    base_orientation: IntLowDim,
+    agent_width: IntLowDim,
+    agent_height: IntLowDim,
+    ):
+    """
+    Gets the coordinates of the 4 corners of the agent.
+    """
+    orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
+    agent_xy_matrix = jnp.array(
+        [[agent_width, agent_height], [agent_height, agent_width]], dtype=IntLowDim
+    )
+    agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
+
+    x_base = pos_base[0]
+    y_base = pos_base[1]
+    x_half_dim = jnp.floor(agent_xy_dimensions[0, 0] / 2)
+    y_half_dim = jnp.floor(agent_xy_dimensions[0, 1] / 2)
+
+    agent_corners = jnp.array(
+        [
+            [x_base + x_half_dim, y_base + y_half_dim],
+            [x_base - x_half_dim, y_base + y_half_dim],
+            [x_base + x_half_dim, y_base - y_half_dim],
+            [x_base - x_half_dim, y_base - y_half_dim],
+        ]
+    )
+    return agent_corners
+
+def get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
+    """
+    Args:
+        - agent_corners: (4, 2) Array with agent corners [x, y] column order
+    Returns:
+        - x: (2, ) Array of min and max x values as [min, max]
+        - y: (2, ) Array of min and max y values as [min, max]
+    """
+
+    x = jnp.array([jnp.min(agent_corners[:, 0]), jnp.max(agent_corners[:, 0])])
+    y = jnp.array([jnp.min(agent_corners[:, 1]), jnp.max(agent_corners[:, 1])])
+    return x, y

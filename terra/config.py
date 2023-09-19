@@ -111,8 +111,7 @@ class ImmutableAgentConfig(NamedTuple):
 
 
 class AgentConfig(NamedTuple):
-    random_init_pos: bool = True
-    random_init_base_angle: bool = True
+    random_init_state: bool = True
 
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
