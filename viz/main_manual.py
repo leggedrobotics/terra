@@ -202,9 +202,11 @@ ACTIVATE_ACTION_MASKING = False
 
 batch_cfg = BatchConfig()
 action_type = batch_cfg.action_type
-n_envs = 1
+n_envs_x = 1
+n_envs_y = 1
+n_envs = n_envs_x * n_envs_y
 seeds = jnp.array([24])
-env = TerraEnvBatch(rendering=True, n_imgs_row=n_envs)
+env = TerraEnvBatch(rendering=True, n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
 
 env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
 states, obs, key_maps_buffer = env.reset(seeds, env_cfgs)
