@@ -70,6 +70,8 @@ class TerraEnv(NamedTuple):
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
         state = LocalMapWrapper.wrap_action_map(state)
+        state = LocalMapWrapper.wrap_dumpability_mask(state)
+        state = LocalMapWrapper.wrap_obstacles_mask(state)
         observations = self._state_to_obs_dict(state)
 
         # TODO make it nicer
@@ -98,6 +100,8 @@ class TerraEnv(NamedTuple):
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
         state = LocalMapWrapper.wrap_action_map(state)
+        state = LocalMapWrapper.wrap_dumpability_mask(state)
+        state = LocalMapWrapper.wrap_obstacles_mask(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -269,6 +273,8 @@ class TerraEnv(NamedTuple):
         new_state = TraversabilityMaskWrapper.wrap(new_state)
         new_state = LocalMapWrapper.wrap_target_map(new_state)
         new_state = LocalMapWrapper.wrap_action_map(new_state)
+        new_state = LocalMapWrapper.wrap_dumpability_mask(new_state)
+        new_state = LocalMapWrapper.wrap_obstacles_mask(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
@@ -322,6 +328,8 @@ class TerraEnv(NamedTuple):
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,
             "local_map_target_pos": state.world.local_map_target_pos.map,
+            "local_map_dumpability": state.world.local_map_dumpability.map,
+            "local_map_obstacles": state.world.local_map_obstacles.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
@@ -477,6 +485,14 @@ class TerraEnvBatch:
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),
             "local_map_target_pos": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_dumpability": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_obstacles": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),

@@ -24,6 +24,8 @@ class GridWorld(NamedTuple):
     local_map_target_neg: GridMap = GridMap.dummy_map()
     local_map_action_pos: GridMap = GridMap.dummy_map()
     local_map_action_neg: GridMap = GridMap.dummy_map()
+    local_map_dumpability: GridMap = GridMap.dummy_map()
+    local_map_obstacles: GridMap = GridMap.dummy_map()
 
     @property
     def width(self) -> int:

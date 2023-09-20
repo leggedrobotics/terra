@@ -166,3 +166,27 @@ class LocalMapWrapper:
                 ),
             )
         )
+
+    @staticmethod
+    def wrap_dumpability_mask(state: State) -> State:
+        dumpability_mask = state.world.dumpability_mask.map
+        local_map_dumpability = LocalMapWrapper._wrap(state, dumpability_mask)
+        return state._replace(
+            world=state.world._replace(
+                local_map_dumpability=state.world.local_map_dumpability._replace(
+                    map=local_map_dumpability
+                )
+            )
+        )
+    
+    @staticmethod
+    def wrap_obstacles_mask(state: State) -> State:
+        obstacles_mask = state.world.padding_mask.map
+        local_map_obstacles = LocalMapWrapper._wrap(state, obstacles_mask)
+        return state._replace(
+            world=state.world._replace(
+                local_map_obstacles=state.world.local_map_obstacles._replace(
+                    map=local_map_obstacles
+                )
+            )
+        )
