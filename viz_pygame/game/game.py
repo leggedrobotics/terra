@@ -7,10 +7,12 @@ from .settings import TILE_SIZE
 
 class Game:
 
-    def __init__(self, screen, clock, n_envs_x=1, n_envs_y=1, display=True):
+    def __init__(self, screen, surface, clock, n_envs_x=1, n_envs_y=1, display=True, progressive_gif=False):
         self.screen = screen
+        self.surface = surface
         self.clock = clock
         self.display = display
+        self.progressive_gif = progressive_gif
         self.width, self.height = self.screen.get_size()
 
         self.n_envs_x = n_envs_x
@@ -23,6 +25,10 @@ class Game:
             self.agents.append(Agent(9, 5))
 
         self.frames = []
+
+        self.old_agents = []
+        self.count = 0
+        
         
 
     def run(
@@ -89,7 +95,10 @@ class Game:
             self.agents[i].update(ap, bd, cd)
 
     def draw(self):
-        self.screen.fill("#F0F0F0")
+        self.surface.fill("#F0F0F0")
+        agent_surfaces = []
+        agent_positions = []
+        cabin_positions = []
 
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
             ix = i % (self.n_envs_x + 1)
@@ -105,7 +114,7 @@ class Game:
                     sq = world.target_map[x][y]["cart_rect"]
                     c = world.target_map[x][y]["color"]
                     rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
-                    pg.draw.rect(self.screen, c, rect, 0, 5)
+                    pg.draw.rect(self.surface, c, rect, 0)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
 
@@ -117,7 +126,7 @@ class Game:
                     sq = world.action_map[x][y]["cart_rect"]
                     c = world.action_map[x][y]["color"]
                     rect = pg.Rect(sq[0][0] + offset + total_offset_x, sq[0][1] + total_offset_y, TILE_SIZE, TILE_SIZE)
-                    pg.draw.rect(self.screen, c, rect, 0, 5)
+                    pg.draw.rect(self.surface, c, rect, 0)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
             a = agent.agent["body"]["vertices"]
@@ -125,13 +134,33 @@ class Game:
             h = agent.agent["body"]["height"]
 
             ca = agent.agent["body"]["color"]
-            a_rect = pg.Rect(a[0][0] + offset + total_offset_x, a[0][1] + total_offset_y, w * TILE_SIZE, h * TILE_SIZE)
-            pg.draw.rect(self.screen, ca, a_rect, 0, 3)
+            agent_x = a[0][0] + offset + total_offset_x
+            agent_y = a[0][1] + total_offset_y
+            a_rect = pg.Rect(0, 0, w * TILE_SIZE, h * TILE_SIZE)
+            agent_surfaces.append(pg.Surface((w*TILE_SIZE, h*TILE_SIZE), pg.SRCALPHA))
+            if self.progressive_gif:
+                agent_surfaces[-1].set_alpha(50)
+            
+            agent_positions.append((agent_x, agent_y))
+            pg.draw.rect(agent_surfaces[-1], ca, a_rect, 0, 3)
 
             cabin = agent.agent["cabin"]["vertices"]
-            cabin = [(el[0] + offset + total_offset_x, el[1] + total_offset_y) for el in cabin]
+            cabin = [(el[0] - a[0][0], el[1] - a[0][1]) for el in cabin]
             cabin_color = agent.agent["cabin"]["color"]
-            pg.draw.polygon(self.screen, cabin_color, cabin)
+            pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
+
+        self.screen.blit(self.surface, (0, 0))
+
+        if self.progressive_gif:
+            if self.count % 5 == 0:
+                self.old_agents.append((agent_surfaces, agent_positions))
+            for s in self.old_agents:
+                for agent_surface, agent_position in zip(s[0], s[1]):
+                    self.screen.blit(agent_surface, agent_position)
+            self.count += 1
+        else:
+            for agent_surface, agent_position in zip(agent_surfaces, agent_positions):
+                self.screen.blit(agent_surface, agent_position)
 
         if self.display:
             pg.display.flip()

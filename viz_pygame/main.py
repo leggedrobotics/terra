@@ -6,15 +6,18 @@ from game.settings import TILE_SIZE
 
 
 def main():
-    nx = 4
-    ny = 5
+    nx = 2
+    ny = 3
 
     pg.init()
     pg.mixer.init()
     clock = pg.time.Clock()
-    screen = pg.display.set_mode((2 * ny * 65 * TILE_SIZE + 8*TILE_SIZE, nx * 69 * TILE_SIZE + 8*TILE_SIZE))
+    x = 2 * ny * 65 * TILE_SIZE + 8*TILE_SIZE
+    y = nx * 69 * TILE_SIZE + 8*TILE_SIZE
+    screen = pg.display.set_mode((x, y))
+    surface = pg.Surface((x, y), pg.SRCALPHA)
     
-    game = Game(screen, clock, n_envs_x=nx, n_envs_y=ny)
+    game = Game(screen, surface, clock, n_envs_x=nx, n_envs_y=ny, progressive_gif=False)
     n_envs = nx*ny
 
     mock_target_map = np.ones((1, 60, 60))
@@ -37,6 +40,7 @@ def main():
     
     playing = True
     while playing:
+        playing = False
         game.run(
             active_grid=mock_action_map,
             target_grid=mock_target_map,
@@ -47,6 +51,8 @@ def main():
             cabin_dir=np.array([[2]], dtype=np.int32).repeat(n_envs, 0),
             generate_gif=False,
         )
+        import time
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()

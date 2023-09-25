@@ -25,7 +25,7 @@ class TerraEnv(NamedTuple):
     window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
+    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
         re = None
         window = None
         if rendering:
@@ -36,14 +36,15 @@ class TerraEnv(NamedTuple):
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
+                display_dims = (2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE)
                 if not display:
                     print("TerraEnv: disabling display...")
-                    screen = pg.display.set_mode((2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE), pg.FULLSCREEN | pg.HIDDEN)
+                    screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)
                 else:
-                    screen = pg.display.set_mode((2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE))
-
+                    screen = pg.display.set_mode(display_dims)
+                surface = pg.Surface(display_dims, pg.SRCALPHA)
                 clock = pg.time.Clock()
-                re = Game(screen, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display)
+                re = Game(screen, surface, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display, progressive_gif=progressive_gif)
             else:
                 raise(ValueError(f"{rendering_engine=}"))
         return TerraEnv(rendering_engine=re, window=window)
@@ -353,6 +354,7 @@ class TerraEnvBatch:
         n_envs_x_rendering: int = 1,
         n_envs_y_rendering: int = 1,
         display: bool = False,
+        progressive_gif: bool = False,
         rendering_engine: str = "numpy",
     ) -> None:
         self.terra_env = TerraEnv.new(
@@ -361,6 +363,7 @@ class TerraEnvBatch:
             n_envs_y=n_envs_y_rendering,
             display=display,
             rendering_engine=rendering_engine,
+            progressive_gif=progressive_gif,
         )
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
