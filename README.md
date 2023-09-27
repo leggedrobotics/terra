@@ -67,12 +67,6 @@ Note: the environment supports maps of different sizes run on parallel environme
 However, every map is padded to the right and to the bottom to reach the biggest map size defined in the config.
 The agent transition in these parts of the map is automatically blocked by the environment itself.
 
-## Tests
-The tests have to be run using the module option, for example:
-~~~
-python3 -m tests.test_agent
-~~~
-
 ## Visualization
 If you want to render the environment, you are going to need the following:
 
