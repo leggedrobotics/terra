@@ -67,7 +67,6 @@ class TerraEnv(NamedTuple):
         state = State.new(
             key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
-        # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
         state = LocalMapWrapper.wrap_action_map(state)
@@ -75,7 +74,6 @@ class TerraEnv(NamedTuple):
         state = LocalMapWrapper.wrap_obstacles_mask(state)
         observations = self._state_to_obs_dict(state)
 
-        # TODO make it nicer
         observations["do_preview"] = state._handle_do().world.action_map.map
 
         return state, observations
@@ -97,7 +95,6 @@ class TerraEnv(NamedTuple):
         state = state._reset(
             env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
-        # TODO remove wrappers from state
         state = TraversabilityMaskWrapper.wrap(state)
         state = LocalMapWrapper.wrap_target_map(state)
         state = LocalMapWrapper.wrap_action_map(state)
@@ -116,8 +113,6 @@ class TerraEnv(NamedTuple):
     ) -> Array:
         """
         Renders the environment at a given state.
-
-        # TODO write a cleaner rendering engine
         """
         imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
@@ -161,8 +156,6 @@ class TerraEnv(NamedTuple):
     ) -> Array:
         """
         Renders the environment at a given observation.
-
-        # TODO write a cleaner rendering engine
         """
         if info is not None:
             target_tiles = info["target_tiles"]
@@ -195,8 +188,6 @@ class TerraEnv(NamedTuple):
     ) -> Array:
         """
         Renders the environment at a given observation.
-
-        # TODO write a cleaner rendering engine
         """
         if info is not None:
             target_tiles = info["target_tiles"]

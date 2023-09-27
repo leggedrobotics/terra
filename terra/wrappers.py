@@ -8,7 +8,7 @@ from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import get_arm_angle_int
-from terra.utils import IntLowDim
+from terra.settings import IntLowDim
 
 
 class TraversabilityMaskWrapper:
@@ -92,7 +92,7 @@ class LocalMapWrapper:
         # Get the cumsum of the action height map in cyl coords, for every of [r, theta] portion of local space
         angles_cabin = (
             EnvConfig().agent.angles_cabin
-        )  # TODO: state.env_cfg... does not work -- why?
+        )  # TODO: make state.env_cfg work instead of recreating the object every time
         arm_angles_ints = jnp.arange(angles_cabin)
         arm_extensions = jnp.arange(EnvConfig().agent.max_arm_extension + 1)
         arm_angles_rads = jax.vmap(

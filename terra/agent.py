@@ -6,8 +6,8 @@ import jax.numpy as jnp
 from jax import Array
 
 from terra.config import EnvConfig
-from terra.utils import IntLowDim
-from terra.utils import IntMap
+from terra.settings import IntLowDim
+from terra.settings import IntMap
 from terra.utils import get_agent_corners
 from terra.utils import get_agent_corners_xy
 

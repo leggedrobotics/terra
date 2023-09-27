@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jax import Array
 
 from terra.map_generator import GridMap
-from terra.utils import IntLowDim
+from terra.settings import IntLowDim
 
 
 class GridWorld(NamedTuple):

@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import skimage.measure
 
-# TODO implement tile size
 wm, hm = 60, 60  # meters
 
 div = 10

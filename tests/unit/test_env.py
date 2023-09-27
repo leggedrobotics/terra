@@ -19,8 +19,6 @@ class TestEnv(unittest.TestCase):
         state, obs = env.reset(seed)
         _, (state1, reward, dones, infos) = env.step(state, action)
 
-        # self.assertFalse(state == state1)  # TODO implement __eq__
-
         return state1
 
     def test_step_fwd(self):

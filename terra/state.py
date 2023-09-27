@@ -17,11 +17,11 @@ from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import decrease_angle_circular
-from terra.utils import Float
+from terra.settings import Float
 from terra.utils import get_min_distance_point_to_lines
 from terra.utils import increase_angle_circular
-from terra.utils import IntLowDim
-from terra.utils import IntMap
+from terra.settings import IntLowDim
+from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
 
@@ -59,8 +59,6 @@ class State(NamedTuple):
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
-
-        # jax.debug.print("world.target_map.map.sum()={x}", x=world.target_map.map.sum())
 
         return State(
             key=key,
@@ -362,8 +360,6 @@ class State(NamedTuple):
         self, old_angle_base: Array, new_angle_base: Array, clockwise: jnp.bool_
     ) -> Array:
         """
-        TODO: change the approach to a more sophisticated and exact one (e.g. based on cylindrical r distance)
-
         This function creates a move mask and applies it to the new angle of the base.
 
         The approach is a simplified one: the agent is split in two parts (front and rear), and on each part
@@ -498,17 +494,6 @@ class State(NamedTuple):
         valid_move_corners = self._is_valid_move(new_agent_corners)
         valid_move = valid_move_front * valid_move_back * valid_move_corners
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-
-        # jax.debug.print("front_corners = {x}", x=front_corners)
-        # jax.debug.print("valid_move_front = {x}", x=valid_move_front)
-
-        # jax.debug.print("back_corners = {x}", x=back_corners)
-        # jax.debug.print("valid_move_back = {x}", x=valid_move_back)
-
-        # jax.debug.print("new_agent_corners = {x}", x=new_agent_corners)
-        # jax.debug.print("valid_move_corners = {x}", x=valid_move_corners)
-
-        # jax.debug.print("valid_move_mask = {x}", x=valid_move_mask)
 
         old_new_angle_base = jnp.array(
             [self.agent.agent_state.angle_base, new_angle_base]
@@ -751,7 +736,6 @@ class State(NamedTuple):
         dig_portion_radius = self.env_cfg.agent.move_tiles
         tile_size = self.env_cfg.tile_size
 
-        # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
         max_agent_dim = jnp.max(
             jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
         )
@@ -795,8 +779,8 @@ class State(NamedTuple):
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
 
-        dig_dump_mask_cart_x = map_local_coords[0].copy()  # TODO is copy necessary?
-        dig_dump_mask_cart_y = map_local_coords[1].copy()  # TODO is copy necessary?
+        dig_dump_mask_cart_x = map_local_coords[0].copy()
+        dig_dump_mask_cart_y = map_local_coords[1].copy()
 
         eps = self.env_cfg.tile_size / 2  # add margin to avoid rounding errors
 
@@ -920,22 +904,12 @@ class State(NamedTuple):
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
-    # def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
-    #     """
-    #     Takes the dig mask and turns into False the elements that correspond to
-    #     a dumped tile.
-    #     """
-    #     dumped_mask_action_map = self.world.action_map.map > 0
-    #     # jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
-    #     return dig_mask * (~dumped_mask_action_map).reshape(-1)
-
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
         Takes the dump mask and turns into False the elements that correspond to
         a digged tile.
         """
         digged_mask_action_map = self.world.dig_map.map < 0
-        # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
     
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -976,74 +950,6 @@ class State(NamedTuple):
         dig_mask_target_map = self.world.target_map.map < 0
         dig_mask_action_map = self.world.action_map.map > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
-
-        # ~~~~~~~~~~~~~~~~~ Radial mask approach
-        # def _get_radial_mask():
-        #     """
-        #     Mask out tiles coming after a digged tile in terms of radial distance.
-        #     Also apply the radial dig mask in terms of what's within reach.
-        #     """
-        #     dig_portion_radius = self.env_cfg.agent.move_tiles
-        #     tile_size = self.env_cfg.tile_size
-        #     arm_extension = self.agent.agent_state.arm_extension
-
-        #     map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
-
-        #     # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
-        #     max_agent_dim = jnp.max(
-        #         jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
-        #     )
-        #     min_distance_from_agent = tile_size * max_agent_dim
-
-        #     r_max = (
-        #         arm_extension + 1
-        #     ) * dig_portion_radius * tile_size + min_distance_from_agent
-        #     r_min = (
-        #         arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        #     )
-
-        #     theta_max = np.pi / self.env_cfg.agent.angles_cabin
-        #     theta_min = -theta_max
-
-        #     dig_mask_r = jnp.logical_and(
-        #         map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
-        #     )
-
-        #     dig_mask_theta = jnp.logical_and(
-        #         map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
-        #     )
-
-        #     dig_mask_cone = jnp.logical_and(dig_mask_r, dig_mask_theta)
-
-        #     r_distance = map_cyl_coords[0].copy()
-        #     action_map = self.world.action_map.map.copy().reshape(-1)
-        #     action_map_cone = action_map * dig_mask_cone
-        #     sorted_idxs_radial_distance = jnp.argsort(r_distance)
-        #     sorted_action_map = action_map_cone[sorted_idxs_radial_distance]
-        #     sorted_action_map_mask = sorted_action_map < 0
-        #     sorted_action_map_mask_cum = ~(
-        #         jnp.cumsum(sorted_action_map_mask).astype(jnp.bool_)
-        #     )
-
-        #     radial_mask = sorted_action_map_mask_cum[
-        #         jnp.argsort(sorted_idxs_radial_distance)
-        #     ]  # original order
-        #     return radial_mask * dig_mask_cone
-
-        # # Only select +1 if within cone, but only if closer radially compared to closest -1
-        # # If no +1, then take -1s to dig.
-        # radial_mask = _get_radial_mask()  # mask out everything coming after a -1
-        # action_map_filtered_radially = (
-        #     self.world.action_map.map.reshape(-1) * radial_mask
-        # )
-
-        # ambiguity_mask_dig_movesoil = jax.lax.cond(
-        #     jnp.any(action_map_filtered_radially > 0),
-        #     lambda: (action_map_filtered_radially > 0) * radial_mask,
-        #     lambda: self.world.action_map.map.reshape(-1) == 0,
-        # )
-
-        # ~~~~~~~~~~~~~~~~~
 
         flat_action_map = self.world.action_map.map.reshape(-1)
         dig_mask_cone = self._build_dig_dump_cone()
@@ -1184,9 +1090,6 @@ class State(NamedTuple):
             self._handle_dump,
             self._handle_dig,
         )
-
-        # jax.debug.print("action map = {x}", x=state.world.action_map.map)
-        # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
     
     @staticmethod
@@ -1343,8 +1246,6 @@ class State(NamedTuple):
         )
 
         r_trenches = self._get_trench_specific_rewards()
-        # jax.debug.print("dig_reward = {x}", x=dig_reward)
-        # jax.debug.print("dump_reward = {x}", x=dump_reward)
         return dig_reward + dump_reward + r_trenches
 
     @staticmethod
@@ -1484,7 +1385,6 @@ class State(NamedTuple):
             d = get_min_distance_point_to_lines(
                 agent_pos, trench_axes, trench_type
             )  # in tiles
-            # jax.debug.print("d in tiles = {x}", x=d)
             d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
             d *= self.env_cfg.tile_size  # in meters
             return d * self.env_cfg.trench_rewards.distance_coefficient
@@ -1494,7 +1394,6 @@ class State(NamedTuple):
             _get_trench_reward,
             lambda: 0.0,
         )
-        # jax.debug.print("r_trench = {x}", x=r)
         return r
     
     def _get_terminal_completed_tiles_reward(

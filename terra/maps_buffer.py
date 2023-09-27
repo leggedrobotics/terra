@@ -13,8 +13,8 @@ from tqdm import tqdm
 from terra.config import ImmutableMapsConfig
 from terra.config import MapType
 from terra.map_generator import GridMap
-from terra.utils import IntMap
-from terra.utils import IntLowDim
+from terra.settings import IntMap
+from terra.settings import IntLowDim
 
 
 class MapsBuffer(NamedTuple):
@@ -117,9 +117,6 @@ class MapsBuffer(NamedTuple):
             key,
             env_cfg,
         )
-
-        # TODO include procedural maps
-        # map, padding_mask, key = self._get_map_from_disk(key, env_cfg)
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
     @partial(jax.jit, static_argnums=(0,))
@@ -130,7 +127,7 @@ class MapsBuffer(NamedTuple):
 
 def load_maps_from_disk(folder_path: str) -> Array:
     # Set the max number of branches the trench has
-    max_trench_type = 3  # TODO move to config
+    max_trench_type = 3
 
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
     maps = []

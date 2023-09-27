@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from terra.actions import TrackedAction
 from terra.config import EnvConfig
 from terra.state import State
-from terra.utils import IntMap
+from terra.settings import IntMap
 
 
 class TestAgent(unittest.TestCase):

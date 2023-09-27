@@ -52,7 +52,7 @@ class ImmutableMapsConfig(NamedTuple):
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 0.67  # in meters  # TODO changing tile_size to smtg not 1.0 can make stuff not work as intended
+    tile_size: float = 0.67  # in meters
 
 
 class TargetMapConfig(NamedTuple):
@@ -63,18 +63,6 @@ class TargetMapConfig(NamedTuple):
     element_edge_min: int = 2
     element_edge_max: int = 6
 
-    # width: int = round(MapDims().width_m / MapDims().tile_size)
-    # height: int = round(MapDims().height_m / MapDims().tile_size)
-
-    # For clusters type of map
-    # n_clusters: int = 5
-    # n_tiles_per_cluster: int = 10
-    # kernel_size_initial_sampling: tuple[int] = 10
-
-    # Bounds on the volume per tile  # TODO implement in code
-    # min_height: int = -10
-    # max_height: int = 10
-
     @staticmethod
     def parametrized(map_dof: int, map_type: int) -> "TargetMapConfig":
         return TargetMapConfig(
@@ -84,19 +72,6 @@ class TargetMapConfig(NamedTuple):
 
 
 class ActionMapConfig(NamedTuple):
-    # width: int = round(MapDims().width_m / MapDims().tile_size)
-    # height: int = round(MapDims().height_m / MapDims().tile_size)
-
-    # Bounds on the volume per tile  # TODO implement in code
-    # min_height: int = -10
-    # max_height: int = 10
-
-    # @staticmethod
-    # def from_map_dims(map_dims: MapDims) -> "ActionMapConfig":
-    #     return ActionMapConfig(
-    #         width=round(map_dims.width_m / map_dims.tile_size),
-    #         height=round(map_dims.height_m / map_dims.tile_size),
-    #     )
     pass
 
 
@@ -122,10 +97,6 @@ class AgentConfig(NamedTuple):
     #       (we dig as much as move_tiles in the radial distance)
 
     dig_depth: int = 1  # how much every dig action digs
-    # max_dig: int = -3  # soft max after which the agent pays a cost  # TODO implement
-    # max_dump: int = 3  # soft max after which the agent pays a cost  # TODO implement
-
-    # max_loaded: int = 100  # TODO implement
 
     height: int = (
         round(6.08 / MapDims().tile_size)
@@ -169,17 +140,13 @@ class Rewards(NamedTuple):
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
     dump_no_dump_area: float  # given if dumps in an area that is not the dump area
-    # dig_dump_area: float  # dig dumped terrain on the dump area (prevents loops)
 
     dig_correct: float  # dig where the target map is negative, and not more than required
     dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
-    force_reset: float  # given if the training algorithm calls a force reset on the environment
-    
-    # TODO quickfix for compatibility -> remove the '=0.0'  
-    terminal_completed_tiles: float = 0.0  # gets linearly scaled by ratio of completed tiles
+    terminal_completed_tiles: float  # gets linearly scaled by ratio of completed tiles
 
     @staticmethod
     def dense():
@@ -194,12 +161,10 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
-            # dig_dump_area=-0.3,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
             terminal=200.0,
-            force_reset=0.0,
         )
     
     @staticmethod
@@ -215,12 +180,10 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
-            # dig_dump_area=-0.3,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=200.0,  # gets linearly scaled by ratio of completed tiles
             terminal=0.0,
-            force_reset=0.0,
         )
 
     @staticmethod
@@ -236,12 +199,10 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
-            # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
             terminal=200.0,
-            force_reset=0.0,
         )
 
     @staticmethod
@@ -257,12 +218,10 @@ class Rewards(NamedTuple):
             dig_wrong=0.0,
             dump_wrong=0.0,
             dump_no_dump_area=0.0,
-            # dig_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
             terminal=1.0,
-            force_reset=0.0,
         )
 
 
@@ -301,13 +260,6 @@ class EnvConfig(NamedTuple):
     ) -> "EnvConfig":
         map_dims = MapDims(width_m, height_m)
 
-        # if rewards_type == RewardsType.DENSE:
-        #     rewards = DenseRewards()
-        # elif rewards_type == RewardsType.SPARSE:
-        #     rewards = SparseRewards()
-        # else:
-        #     raise ValueError(f"{rewards_type=} doesn't exist.")
-
         rewards_list = [Rewards.dense, Rewards.sparse, Rewards.terminal_only, Rewards.mixed]
 
         rewards = jax.lax.switch(rewards_type, rewards_list)
@@ -317,7 +269,6 @@ class EnvConfig(NamedTuple):
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
             target_map=TargetMapConfig.parametrized(map_dof, map_type),
-            # action_map=ActionMapConfig.from_map_dims(map_dims),
             rewards=rewards,
             apply_trench_rewards=apply_trench_rewards,
         )
@@ -335,62 +286,12 @@ class BatchConfig(NamedTuple):
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
     maps: ImmutableMapsConfig = ImmutableMapsConfig()
 
-    # Maps folders (the order matters -> DOF)
+    # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        # "2_buildings/20x20/",
-        # "2_buildings/40x40/",
-        # "2_buildings/60x60/",
-        # "trenches/easy",
-        # "trenches/medium",
-        # "trenches/hard",
-        # "foundations/easy",
-        # "foundations/medium",
-        # "foundations/hard",
-        # "rectangles_1",
-        # "rectangles_60_1",
-        # "rectangles_60_2",
-        # "trenches_60_1/easy",
-        # "trenches_60_2/easy",
-        # "trenches_60_1/medium",
-        # "trenches_60_2/medium",
-        # "trenches_60_1/hard",
-        # "trenches_60_2/hard",
-
-        # "trenches_metadata_60_1/easy",
-        # "trenches_metadata_60_2/easy",
-        # "trenches_metadata_60_1/medium",
-        # "trenches_metadata_60_2/medium",
-        # "trenches_metadata_60_1/hard",
-        # "trenches_metadata_60_2/hard",
-
-        # "onetile",
-        # "dumping_constraints/squares_2/terra",
-        # "dumping_constraints/squares_5/terra",
-        # "dumping_constraints/squares_6/terra",
-        # "dumping_constraints/lev1-T-trenches-contour",
-        # "dumping_constraints/squares_7/terra",
-        # "dumping_constraints/squares_8/terra",
-        # "dumping_constraints/lev2-T-trenches-contour",
-        # "dumping_constraints/squares_9/terra",
-        # "dumping_constraints/lev3-T-trenches-contour",
-        # "dumping_constraints/squares_10/terra",
-        # "dumping_constraints/lev4-T-trenches-contour",
-        # "dumping_constraints/trenches_metadata_60/easy",
-        # "dumping_constraints/trenches_metadata_60/medium",
-        # "dumping_constraints/trenches_metadata_60/hard",
-
         "trenches_occ_dmp_met_v2/all",
-
-        # "dumping_constraints/trenches_metadata_60/all",
-
-        # "small-rectangles_1",
-        # "small-rectangles_2",
-        # "rectangles_60_1",
-
-        # "onetile"
     ]
 
 
 class TestbenchConfig(BatchConfig):
-    # Maps folders (the order matters -> DOF)
+    # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = ["onetile"]

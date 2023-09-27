@@ -35,8 +35,6 @@ class TestEnvBatch(unittest.TestCase):
         for i in range(episode_length):
             actions = jax.vmap(batch_cfg.action_type.random)(subkeys)
 
-            # jax.debug.print("actions {i} = {x}", x=actions, i=i)
-
             states, (obs, reward, dones, infos) = env_batch.step(states, actions)
             ks = jax.vmap(jax.random.split)(keys)
             keys = ks[..., 0]
