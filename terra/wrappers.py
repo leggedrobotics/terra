@@ -190,3 +190,11 @@ class LocalMapWrapper:
                 )
             )
         )
+    
+    @staticmethod
+    def wrap(state: State) -> State:
+        state = LocalMapWrapper.wrap_target_map(state)
+        state = LocalMapWrapper.wrap_action_map(state)
+        state = LocalMapWrapper.wrap_dumpability_mask(state)
+        state = LocalMapWrapper.wrap_obstacles_mask(state)
+        return state

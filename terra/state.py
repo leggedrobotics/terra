@@ -495,6 +495,8 @@ class State(NamedTuple):
         valid_move = valid_move_front * valid_move_back * valid_move_corners
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
 
+        # Concatenate new and old angles to then matmul and pick only one of them
+        #   this operation is equivalent to an if else statement
         old_new_angle_base = jnp.array(
             [self.agent.agent_state.angle_base, new_angle_base]
         )
@@ -810,6 +812,10 @@ class State(NamedTuple):
         self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
     ) -> Array:
         """
+        this function does the following:
+            if we are moving dumped dirt, we move all of it regardless of the amount
+            if we are instead digging dirt, then we dig as much as self.env_cfg.agent.dig_depth
+
         Args:
             - flattened_map: (N, ) Array flattened height map
             - dig_mask: (N, ) Array of where to dig bools

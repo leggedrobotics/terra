@@ -67,16 +67,19 @@ class TerraEnv(NamedTuple):
         state = State.new(
             key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
-        state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap_target_map(state)
-        state = LocalMapWrapper.wrap_action_map(state)
-        state = LocalMapWrapper.wrap_dumpability_mask(state)
-        state = LocalMapWrapper.wrap_obstacles_mask(state)
+        state = self.wrap_state(state)
+        
         observations = self._state_to_obs_dict(state)
 
         observations["do_preview"] = state._handle_do().world.action_map.map
 
         return state, observations
+    
+    @staticmethod
+    def wrap_state(state: State) -> State:
+        state = TraversabilityMaskWrapper.wrap(state)
+        state = LocalMapWrapper.wrap(state)
+        return state
 
     @partial(jax.jit, static_argnums=(0,))
     def _reset_existent(
@@ -95,11 +98,7 @@ class TerraEnv(NamedTuple):
         state = state._reset(
             env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
-        state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap_target_map(state)
-        state = LocalMapWrapper.wrap_action_map(state)
-        state = LocalMapWrapper.wrap_dumpability_mask(state)
-        state = LocalMapWrapper.wrap_obstacles_mask(state)
+        state = self.wrap_state(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -262,11 +261,7 @@ class TerraEnv(NamedTuple):
 
         reward = state._get_reward(new_state, action)
 
-        new_state = TraversabilityMaskWrapper.wrap(new_state)
-        new_state = LocalMapWrapper.wrap_target_map(new_state)
-        new_state = LocalMapWrapper.wrap_action_map(new_state)
-        new_state = LocalMapWrapper.wrap_dumpability_mask(new_state)
-        new_state = LocalMapWrapper.wrap_obstacles_mask(new_state)
+        new_state = self.wrap_state(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
@@ -359,37 +354,21 @@ class TerraEnvBatch:
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
 
-    def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
-        (
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            dumpability_mask_init,
-            maps_buffer_keys,
-        ) = jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
-        return (
-            *self._reset(
-                seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
-            ),
-            maps_buffer_keys,
-        )
+    def _get_map_init(self, seeds: Array, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
 
+    def _get_map(self, maps_buffer_keys: jax.random.KeyArray, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
+    
     @partial(jax.jit, static_argnums=(0,))
-    def _reset(
-        self,
-        seeds: Array,
-        target_maps: Array,
-        padding_masks: Array,
-        trench_axes: Array,
-        trench_type: Array,
-        dumpability_mask_init: Array,
-        env_cfgs: EnvConfig,
-    ) -> State:
-        return jax.vmap(self.terra_env.reset)(
+    def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
+        target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, maps_buffer_keys = self._get_map_init(seeds, env_cfgs)
+        state, observations = jax.vmap(self.terra_env.reset)(
             seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )
+        return state, observations, maps_buffer_keys
 
+    @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
         states: State,
@@ -404,33 +383,7 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             maps_buffer_keys,
-        ) = jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
-        return (
-            *self._step(
-                states,
-                actions,
-                target_maps,
-                padding_masks,
-                trench_axes,
-                trench_type,
-                dumpability_mask_init,
-                env_cfgs,
-            ),
-            maps_buffer_keys,
-        )
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _step(
-        self,
-        states: State,
-        actions: Action,
-        target_maps: Array,
-        padding_masks: Array,
-        trench_axes: Array,
-        trench_type: Array,
-        dumpability_mask_init: Array,
-        env_cfgs: EnvConfig,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        ) = self._get_map(maps_buffer_keys, env_cfgs)
         states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
             states,
             actions,
@@ -441,7 +394,11 @@ class TerraEnvBatch:
             dumpability_mask_init,
             env_cfgs,
         )
-        return states, (obs, rewards, dones, infos)
+        return (
+            states,
+            (obs, rewards, dones, infos),
+            maps_buffer_keys,
+        )
 
     @property
     def actions_size(self) -> int:

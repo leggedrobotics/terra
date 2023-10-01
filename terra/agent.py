@@ -47,28 +47,23 @@ class Agent(NamedTuple):
         max_traversable_x: int,
         max_traversable_y: int,
         padding_mask: Array,
-    ) -> "Agent":
+    ) -> tuple["Agent", jax.random.PRNGKey]:
         pos_base, angle_base, key = jax.lax.cond(
             env_cfg.agent.random_init_state,
-            partial(
-                _get_random_init_state,
-                max_traversable_x=max_traversable_x,
-                max_traversable_y=max_traversable_y,
-                padding_mask=padding_mask,
-                agent_width=env_cfg.agent.width,
-                agent_height=env_cfg.agent.height,
+            lambda k: _get_random_init_state(
+                k, env_cfg, max_traversable_x, max_traversable_y, padding_mask,
+                env_cfg.agent.width, env_cfg.agent.height
             ),
-            _get_top_left_init_state,
+            lambda k: _get_top_left_init_state(k, env_cfg),
             key,
-            env_cfg,
         )
 
         agent_state = AgentState(
             pos_base=pos_base,
             angle_base=angle_base,
-            angle_cabin=jnp.full((1,), fill_value=0, dtype=IntLowDim),
-            arm_extension=jnp.full((1,), fill_value=0, dtype=IntLowDim),
-            loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim),
+            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+            arm_extension=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded=jnp.full((1,), 0, dtype=IntLowDim),
         )
 
         width = env_cfg.agent.width
@@ -79,7 +74,7 @@ class Agent(NamedTuple):
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     max_center_coord = jnp.ceil(
-        jnp.max(jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1]))
+        jnp.max(jnp.array([env_cfg.agent.width // 2 - 1, env_cfg.agent.height // 2 - 1]))
     ).astype(IntMap)
     pos_base = IntMap(jnp.array([max_center_coord, max_center_coord]))
     theta = jnp.full((1,), fill_value=0, dtype=IntMap)
@@ -118,8 +113,7 @@ def _get_random_init_state(
             maxval=max_h - max_center_coord,
         )
         pos_base = IntMap(jnp.concatenate((x, y)))
-
-        angle_base = jax.random.randint(subkey_angle, (1,), minval=0, maxval=env_cfg.agent.angles_base, dtype=IntMap)
+        angle_base = jax.random.randint(subkey_angle, (1,), 0, env_cfg.agent.angles_base, dtype=IntMap)
         return key, padding_mask, pos_base, angle_base
     
     def _check_agent_obstacles_intersection(carry):
@@ -128,6 +122,12 @@ def _get_random_init_state(
         map_height = padding_mask.shape[1]
         
         def _check_intersection():
+            """
+            Checks that the agent does not spawn where an obstacle is (or else it will get stuck forever).
+            The check takes the four agent corners and checks that in the tiles included
+            within the corners there is no obstacle-encoded tile.
+            The padding mask is the map encoding obstacles (1 for obstacle and 0 for no obstacle).
+            """
             agent_corners_xy = get_agent_corners(pos_base, angle_base, agent_width, agent_height)
             x_minmax_agent, y_minmax_agent = get_agent_corners_xy(agent_corners_xy)
 

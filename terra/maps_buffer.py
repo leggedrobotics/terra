@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 from tqdm import tqdm
+from typing import Any
 
 from terra.config import ImmutableMapsConfig
 from terra.config import MapType
@@ -125,6 +126,33 @@ class MapsBuffer(NamedTuple):
         return self.get_map(key, env_cfg)
 
 
+def map_sanity_check(map: Array) -> None:
+    valid = np.all((map == 0) | (map == 1) | (map == -1))
+    if not valid:
+        raise RuntimeError("Loaded target map is not valid.")
+    
+def occupancy_sanity_check(map: Array) -> None:
+    valid = np.all((map == 0) | (map == 1))
+    if not valid:
+        raise RuntimeError("Loaded occupancy is not valid.")
+    
+def dumpability_sanity_check(map: Array) -> None:
+    valid = np.all((map == 0) | (map == 1))
+    if not valid:
+        raise RuntimeError("Loaded dumpability mask is not valid.")
+    
+def metadata_sanity_check(metadata: dict[str, Any]) -> None:
+    valid = True
+    k = metadata.keys()
+    valid &= "A" in k
+    valid &= "B" in k
+    valid &= "C" in k
+    valid &= isinstance(metadata["A"], float)
+    valid &= isinstance(metadata["B"], float)
+    valid &= isinstance(metadata["C"], float)
+    if not valid:
+        raise RuntimeError("Loaded metadata is not valid.")
+
 def load_maps_from_disk(folder_path: str) -> Array:
     # Set the max number of branches the trench has
     max_trench_type = 3
@@ -138,8 +166,11 @@ def load_maps_from_disk(folder_path: str) -> Array:
     trench_type = -1
     for i in tqdm(range(1, dataset_size + 1), desc="Data Loader"):
         map = np.load(f"{folder_path}/images/img_{i}.npy")
+        map_sanity_check(map)
         occupancy = np.load(f"{folder_path}/occupancy/img_{i}.npy")
+        occupancy_sanity_check(occupancy)
         dumpability_mask_init = np.load(f"{folder_path}/dumpability/img_{i}.npy")
+        dumpability_sanity_check(dumpability_mask_init)
         maps.append(map)
         occupancies.append(occupancy)
         dumpability_masks_init.append(dumpability_mask_init)
@@ -148,6 +179,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
             # Metadata needs to be loaded only for trenches (A, B, C coefficients)
             with open(f"{folder_path}/metadata/trench_{i}.json") as f:
                 trench_ax = json.load(f)["axes_ABC"]
+            metadata_sanity_check(trench_ax)
             trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
             trench_type = len(trench_ax)
 
@@ -192,13 +224,22 @@ def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
     return {map_paths[idx]: idx for idx in range(len(map_paths))}
 
 
-def _pad_map_array(m: Array, max_w: int, max_h: int) -> Array:
+def _pad_map_array(m: Array, max_w: int, max_h: int) -> tuple[Array, Array]:
     """
-    Pads the map array and returns the padded maps and the padding masks.
+    Pads the map array to dimensions (max_w, max_h) and returns the padded map and padding mask.
+
+    Args:
+        m (Array): The input map array.
+        max_w (int): The maximum width for padding.
+        max_h (int): The maximum height for padding.
+    Returns:
+        Tuple[Array, Array]: Padded map and padding mask.
     """
+
     z = np.zeros((m.shape[0], max_w, max_h), dtype=IntMap)
     z_mask = np.ones((m.shape[0], max_w, max_h), dtype=IntMap)  # 1 for obstacles
     z[:, : m.shape[1], : m.shape[2]] = m
+    # Set mask to zero where original map is present
     z_mask[:, : m.shape[1], : m.shape[2]] = np.zeros_like(m)  # 0 for free
     return z, z_mask
 
@@ -209,6 +250,18 @@ def _pad_maps(
         dumpability_masks: list[Array],
         batch_cfg
         ):
+    """
+    Pads multiple maps along with their occupancies and dumpability masks.
+
+    Args:
+    maps (List[Array]): List of map arrays.
+    occupancies (List[Array]): List of occupancy arrays.
+    dumpability_masks (List[Array]): List of dumpability mask arrays.
+    batch_cfg: Configuration object containing map dimensions.
+    
+    Returns:
+    Tuple[Array, Array, Array]: Padded maps, padding masks, and padded dumpability masks.
+    """
     max_w = batch_cfg.maps.max_width
     max_h = batch_cfg.maps.max_height
     padding_mask = []
