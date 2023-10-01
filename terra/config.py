@@ -7,6 +7,10 @@ from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
 
+class ExcavatorDims(NamedTuple):
+    WIDTH: float = 6.08  # longer side
+    HEIGHT: float = 3.5  # shorter side
+
 
 class MapType(IntEnum):
     SINGLE_TILE = 0
@@ -99,28 +103,28 @@ class AgentConfig(NamedTuple):
     dig_depth: int = 1  # how much every dig action digs
 
     height: int = (
-        round(6.08 / MapDims().tile_size)
-        if (round(6.08 / MapDims().tile_size)) % 2 != 0
-        else round(6.08 / MapDims().tile_size) + 1
+        round(ExcavatorDims().WIDTH / MapDims().tile_size)
+        if (round(ExcavatorDims().WIDTH / MapDims().tile_size)) % 2 != 0
+        else round(ExcavatorDims().WIDTH / MapDims().tile_size) + 1
     )
     width: int = (
-        round(3.5 / MapDims().tile_size)
-        if (round(3.5 / MapDims().tile_size)) % 2 != 0
-        else round(3.5 / MapDims().tile_size) + 1
+        round(ExcavatorDims().HEIGHT / MapDims().tile_size)
+        if (round(ExcavatorDims().HEIGHT / MapDims().tile_size)) % 2 != 0
+        else round(ExcavatorDims().HEIGHT / MapDims().tile_size) + 1
     )
 
     @staticmethod
     def from_map_dims(map_dims: MapDims) -> "AgentConfig":
         return AgentConfig(
             height=(
-                round(6.08 / map_dims.tile_size)
-                if (round(6.08 / map_dims.tile_size)) % 2 != 0
-                else round(6.08 / map_dims.tile_size) + 1
+                round(ExcavatorDims().WIDTH / map_dims.tile_size)
+                if (round(ExcavatorDims().WIDTH / map_dims.tile_size)) % 2 != 0
+                else round(ExcavatorDims().WIDTH / map_dims.tile_size) + 1
             ),
             width=(
-                round(3.5 / map_dims.tile_size)
-                if (round(3.5 / map_dims.tile_size)) % 2 != 0
-                else round(3.5 / map_dims.tile_size) + 1
+                round(ExcavatorDims().HEIGHT / map_dims.tile_size)
+                if (round(ExcavatorDims().HEIGHT / map_dims.tile_size)) % 2 != 0
+                else round(ExcavatorDims().HEIGHT / map_dims.tile_size) + 1
             ),
         )
 

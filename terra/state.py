@@ -905,7 +905,7 @@ class State(NamedTuple):
 
     def _build_dig_dump_cone(self) -> Array:
         """
-        Returns the masked cone in cartesian coords. Every tile in the cone is included as +1.
+        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
         """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
@@ -913,7 +913,7 @@ class State(NamedTuple):
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
         Takes the dump mask and turns into False the elements that correspond to
-        a digged tile.
+        a dug tile.
         """
         digged_mask_action_map = self.world.dig_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
@@ -996,12 +996,12 @@ class State(NamedTuple):
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
         flattened_action_map = self.world.action_map.map.reshape(-1)
-        masked_flattened_action_map = flattened_action_map @ dig_mask
-        moving_dumped_dirt = masked_flattened_action_map > 0
+        selected_tiles_sum = flattened_action_map @ dig_mask
+        moving_dumped_dirt = selected_tiles_sum > 0
         # if moving dumped dirt, move it all at once
         dig_volume = jax.lax.cond(
             moving_dumped_dirt,
-            lambda: masked_flattened_action_map.astype(jnp.int32),
+            lambda: selected_tiles_sum.astype(jnp.int32),
             lambda: dig_mask.sum(),
         )
 
@@ -1231,12 +1231,13 @@ class State(NamedTuple):
             self.world.target_map.map,
             self.agent.agent_state.loaded,
         )
-        dump_reward = jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
-            ),
-            lambda: self.env_cfg.rewards.dump_wrong,
-            lambda: jax.lax.cond(
+
+        dump_reward_condition = jnp.allclose(
+            self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
+        )
+
+        def dump_reward_fn() -> Float:
+            return jax.lax.cond(
                 action_map_positive_progress < 0,
                 lambda: self.env_cfg.rewards.dump_no_dump_area,
                 lambda: jax.lax.cond(
@@ -1246,9 +1247,14 @@ class State(NamedTuple):
                         action_map_positive_progress > 0,
                         lambda: spread_out_rate * self.env_cfg.rewards.dump_correct,
                         lambda: 0.0,
-                    )
+                    ),
                 ),
-            ),
+            )
+
+        dump_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            dump_reward_fn,
         )
 
         r_trenches = self._get_trench_specific_rewards()

@@ -179,7 +179,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
             # Metadata needs to be loaded only for trenches (A, B, C coefficients)
             with open(f"{folder_path}/metadata/trench_{i}.json") as f:
                 trench_ax = json.load(f)["axes_ABC"]
-            metadata_sanity_check(trench_ax)
+            metadata_sanity_check(trench_ax[0])
             trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
             trench_type = len(trench_ax)
 
