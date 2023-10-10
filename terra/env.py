@@ -15,46 +15,90 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from viz.rendering import RenderingEngine
 from viz.window import Window
+import pygame as pg
+from viz_pygame.game.game import Game
+from viz_pygame.game.settings import TILE_SIZE
 
 
 class TerraEnv(NamedTuple):
-    window: Window | None = None
-    rendering_engine: RenderingEngine | None = None
+    rendering_engine: Game | RenderingEngine | None = None
+    window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, rendering: bool = False, n_imgs_row: int = 1) -> "TerraEnv":
-        window = Window("Terra", n_imgs_row) if rendering else None
-        rendering_engine = RenderingEngine() if rendering else None
-        return TerraEnv(window=window, rendering_engine=rendering_engine)
+    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
+        re = None
+        window = None
+        if rendering:
+            print(f"Using {rendering_engine} rendering_engine")
+            if rendering_engine == "numpy":
+                window = Window("Terra", n_envs_x)
+                re = RenderingEngine()
+            elif rendering_engine == "pygame":
+                pg.init()
+                pg.mixer.init()
+                display_dims = (2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE)
+                if not display:
+                    print("TerraEnv: disabling display...")
+                    screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)
+                else:
+                    screen = pg.display.set_mode(display_dims)
+                surface = pg.Surface(display_dims, pg.SRCALPHA)
+                clock = pg.time.Clock()
+                re = Game(screen, surface, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display, progressive_gif=progressive_gif)
+            else:
+                raise(ValueError(f"{rendering_engine=}"))
+        return TerraEnv(rendering_engine=re, window=window)
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
-        self, seed: int, target_map: Array, padding_mask: Array, env_cfg: EnvConfig
+        self,
+        seed: int,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
+        env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
         """
         key = jax.random.PRNGKey(seed)
-        state = State.new(key, env_cfg, target_map, padding_mask)
-        # TODO remove wrappers from state
-        state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap_target_map(state)
-        state = LocalMapWrapper.wrap_action_map(state)
+        state = State.new(
+            key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+        )
+        state = self.wrap_state(state)
+        
         observations = self._state_to_obs_dict(state)
+
+        observations["do_preview"] = state._handle_do().world.action_map.map
+
         return state, observations
+    
+    @staticmethod
+    def wrap_state(state: State) -> State:
+        state = TraversabilityMaskWrapper.wrap(state)
+        state = LocalMapWrapper.wrap(state)
+        return state
 
     @partial(jax.jit, static_argnums=(0,))
     def _reset_existent(
-        self, state: State, target_map: Array, padding_mask: Array, env_cfg: EnvConfig
+        self,
+        state: State,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
+        env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the env, assuming that it already exists.
         """
-        state = state._reset(env_cfg, target_map, padding_mask)
-        # TODO remove wrappers from state
-        state = TraversabilityMaskWrapper.wrap(state)
-        state = LocalMapWrapper.wrap_target_map(state)
-        state = LocalMapWrapper.wrap_action_map(state)
+        state = state._reset(
+            env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+        )
+        state = self.wrap_state(state)
         observations = self._state_to_obs_dict(state)
         return state, observations
 
@@ -68,14 +112,13 @@ class TerraEnv(NamedTuple):
     ) -> Array:
         """
         Renders the environment at a given state.
-
-        # TODO write a cleaner rendering engine
         """
         imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=state.world.action_map.map,
             target_grid=state.world.target_map.map,
             padding_mask=state.world.padding_mask.map,
+            dumpability_mask=state.world.dumpability_mask.map,
             agent_pos=state.agent.agent_state.pos_base,
             base_dir=state.agent.agent_state.angle_base,
             cabin_dir=state.agent.agent_state.angle_cabin,
@@ -83,7 +126,7 @@ class TerraEnv(NamedTuple):
             agent_height=state.agent.height,
         )
 
-        imgs_local = state.world.local_map_action.map
+        imgs_local = state.world.local_map_action_neg.map
 
         if key_handler:
             if mode == "human":
@@ -104,6 +147,35 @@ class TerraEnv(NamedTuple):
 
         return imgs_global, imgs_local
 
+    def render_obs_pygame(
+        self,
+        obs: dict[str, Array],
+        info=None,
+        generate_gif : bool = False,
+    ) -> Array:
+        """
+        Renders the environment at a given observation.
+        """
+        if info is not None:
+            target_tiles = info["target_tiles"]
+            do_preview = info["do_preview"]
+        else:
+            target_tiles = None
+            do_preview = None
+
+        self.rendering_engine.run(
+            active_grid=obs["action_map"],
+            target_grid=obs["target_map"],
+            padding_mask=obs["padding_mask"],
+            dumpability_mask=obs["dumpability_mask"],
+            agent_pos=obs["agent_state"][..., [0, 1]],
+            base_dir=obs["agent_state"][..., [2]],
+            cabin_dir=obs["agent_state"][..., [3]],
+            generate_gif=generate_gif,
+            # agent_width=obs["agent_width"],
+            # agent_height=obs["agent_height"],
+        )
+
     def render_obs(
         self,
         obs: dict[str, Array],
@@ -111,25 +183,34 @@ class TerraEnv(NamedTuple):
         mode: str = "human",
         block: bool = False,
         tile_size: int = 32,
+        info=None,
     ) -> Array:
         """
         Renders the environment at a given observation.
-
-        # TODO write a cleaner rendering engine
         """
+        if info is not None:
+            target_tiles = info["target_tiles"]
+            do_preview = info["do_preview"]
+        else:
+            target_tiles = None
+            do_preview = None
+
         imgs_global = self.rendering_engine.render_global(
             tile_size=tile_size,
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
+            dumpability_mask=obs["dumpability_mask"],
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
             agent_width=obs["agent_width"],
-            agent_height=obs["agent_width"],
+            agent_height=obs["agent_height"],
+            target_tiles=target_tiles,
+            do_preview=do_preview,
         )
 
-        imgs_local = obs["local_map_action"]
+        imgs_local = obs["local_map_action_neg"]
 
         if key_handler:
             if mode == "human":
@@ -155,6 +236,9 @@ class TerraEnv(NamedTuple):
         action: Action,
         target_map: Array,
         padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         """
@@ -177,13 +261,11 @@ class TerraEnv(NamedTuple):
 
         reward = state._get_reward(new_state, action)
 
-        new_state = TraversabilityMaskWrapper.wrap(new_state)
-        new_state = LocalMapWrapper.wrap_target_map(new_state)
-        new_state = LocalMapWrapper.wrap_action_map(new_state)
+        new_state = self.wrap_state(new_state)
 
         observations = self._state_to_obs_dict(new_state)
 
-        done = state._is_done(
+        done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
@@ -192,16 +274,26 @@ class TerraEnv(NamedTuple):
         new_state, observations = jax.lax.cond(
             done,
             self._reset_existent,
-            lambda x, y, z, k: (new_state, observations),
+            lambda x, y, z, k, w, j, l: (new_state, observations),
             new_state,
             target_map,
             padding_mask,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
             env_cfg,
         )
 
-        infos = new_state._get_infos(action)
+        infos = new_state._get_infos(action, task_done)
+
+        observations = self._update_obs_with_info(observations, infos)
 
         return new_state, (observations, reward, done, infos)
+
+    @staticmethod
+    def _update_obs_with_info(obs, info):
+        obs["do_preview"] = info["do_preview"]
+        return obs
 
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
@@ -219,14 +311,20 @@ class TerraEnv(NamedTuple):
         )
         return {
             "agent_state": agent_state,
-            "local_map_action": state.world.local_map_action.map,
-            "local_map_target": state.world.local_map_target.map,
+            "local_map_action_neg": state.world.local_map_action_neg.map,
+            "local_map_action_pos": state.world.local_map_action_pos.map,
+            "local_map_target_neg": state.world.local_map_target_neg.map,
+            "local_map_target_pos": state.world.local_map_target_pos.map,
+            "local_map_dumpability": state.world.local_map_dumpability.map,
+            "local_map_obstacles": state.world.local_map_obstacles.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
+            "dig_map": state.world.dig_map.map,
+            "dumpability_mask": state.world.dumpability_mask.map,
         }
 
 
@@ -239,36 +337,38 @@ class TerraEnvBatch:
         self,
         batch_cfg: BatchConfig = BatchConfig(),
         rendering: bool = False,
-        n_imgs_row: int = 1,
+        n_envs_x_rendering: int = 1,
+        n_envs_y_rendering: int = 1,
+        display: bool = False,
+        progressive_gif: bool = False,
+        rendering_engine: str = "numpy",
     ) -> None:
         self.terra_env = TerraEnv.new(
             rendering=rendering,
-            n_imgs_row=n_imgs_row,
+            n_envs_x=n_envs_x_rendering,
+            n_envs_y=n_envs_y_rendering,
+            display=display,
+            rendering_engine=rendering_engine,
+            progressive_gif=progressive_gif,
         )
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
 
+    def _get_map_init(self, seeds: Array, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
+
+    def _get_map(self, maps_buffer_keys: jax.random.KeyArray, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
+    
+    @partial(jax.jit, static_argnums=(0,))
     def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
-        target_maps, padding_masks, maps_buffer_keys = jax.vmap(
-            self.maps_buffer.get_map_init
-        )(seeds, env_cfgs)
-        return (
-            *self._reset(seeds, target_maps, padding_masks, env_cfgs),
-            maps_buffer_keys,
+        target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, maps_buffer_keys = self._get_map_init(seeds, env_cfgs)
+        state, observations = jax.vmap(self.terra_env.reset)(
+            seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )
+        return state, observations, maps_buffer_keys
 
     @partial(jax.jit, static_argnums=(0,))
-    def _reset(
-        self,
-        seeds: Array,
-        target_maps: Array,
-        padding_masks: Array,
-        env_cfgs: EnvConfig,
-    ) -> State:
-        return jax.vmap(self.terra_env.reset)(
-            seeds, target_maps, padding_masks, env_cfgs
-        )
-
     def step(
         self,
         states: State,
@@ -276,27 +376,29 @@ class TerraEnvBatch:
         env_cfgs: EnvConfig,
         maps_buffer_keys: jax.random.KeyArray,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        target_maps, padding_masks, maps_buffer_keys = jax.vmap(
-            self.maps_buffer.get_map
-        )(maps_buffer_keys, env_cfgs)
+        (
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            maps_buffer_keys,
+        ) = self._get_map(maps_buffer_keys, env_cfgs)
+        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
+            states,
+            actions,
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            env_cfgs,
+        )
         return (
-            *self._step(states, actions, target_maps, padding_masks, env_cfgs),
+            states,
+            (obs, rewards, dones, infos),
             maps_buffer_keys,
         )
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _step(
-        self,
-        states: State,
-        actions: Action,
-        target_maps: Array,
-        padding_masks: Array,
-        env_cfgs: EnvConfig,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states, actions, target_maps, padding_masks, env_cfgs
-        )
-        return states, (obs, rewards, dones, infos)
 
     @property
     def actions_size(self) -> int:
@@ -321,11 +423,27 @@ class TerraEnvBatch:
         """
         return {
             "agent_states": (6,),
-            "local_map_action": (
+            "local_map_action_neg": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),
-            "local_map_target": (
+            "local_map_action_pos": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target_neg": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_target_pos": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_dumpability": (
+                self.batch_cfg.agent.angles_cabin,
+                self.batch_cfg.agent.max_arm_extension + 1,
+            ),
+            "local_map_obstacles": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
             ),
@@ -338,6 +456,18 @@ class TerraEnvBatch:
                 self.batch_cfg.maps.max_height,
             ),
             "traversability_mask": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
+            "do_preview": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
+            "dig_map": (
+                self.batch_cfg.maps.max_width,
+                self.batch_cfg.maps.max_height,
+            ),
+            "dumpability_mask": (
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,
             ),

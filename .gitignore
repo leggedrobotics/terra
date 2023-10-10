@@ -8,3 +8,5 @@ __pycache__/*
 *.egg*
 terra/map_utils/__pycache__/
 cache/
+docs/
+viz_pygame/game/__pycache__/*

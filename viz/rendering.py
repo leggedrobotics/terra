@@ -283,7 +283,9 @@ class RenderingEngine:
 
         return imgs
 
-    def _render_grids(self, tile_size, height_grid, padding_mask):
+    def _render_grids(
+        self, tile_size, height_grid, padding_mask, dumpability_mask, target_tiles=None, do_preview=None, map_type="",
+    ):
         x_dim = height_grid.shape[-2]
         y_dim = height_grid.shape[-1]
         width_px = x_dim * tile_size
@@ -297,18 +299,96 @@ class RenderingEngine:
         )[..., None]
         img = (np.array([[[255, 255, 255]]]) * x).astype(np.int16)
 
+        # highlight target tiles
+        if target_tiles is not None:
+            target_tiles = (
+                target_tiles.reshape(
+                    target_tiles.shape[0], height_grid.shape[-2], height_grid.shape[-1]
+                )[..., None]
+                .repeat(3, -1)
+                .astype(np.bool_)
+            )
+            target_tiles = target_tiles.repeat(tile_size, axis=-3).repeat(
+                tile_size, axis=-2
+            )
+
+        # Render padding mask
+        pm = padding_mask[..., None].repeat(3, -1)  # add 3 channels
+        pm = np.where(pm > 0, 255, pm)
+        pm = pm.repeat(tile_size, -2).repeat(tile_size, -3)
+        r = np.zeros_like(pm[..., 0])
+        r = np.where(
+            pm[..., 0] == 255,
+            139,
+            0,
+        )
+        r = r[..., None]
+        g = np.zeros_like(r)
+        b = np.zeros_like(r)
+        pm_rgb = np.concatenate((r, g, b), axis=-1)
+        img = np.where(
+            pm == 255,
+            pm_rgb,
+            img
+        )
+
+        # Render dumpability mask (non-dumpable tiles)
+        # if map_type == "target_map":
+        dm = dumpability_mask[..., None].repeat(3, -1)  # add 3 channels
+        dm = np.where(dm == 0, 255, dm)
+        dm = dm.repeat(tile_size, -2).repeat(tile_size, -3)
+        b = np.zeros_like(dm[..., 0])
+        b = np.where(
+            (dm[..., 0] == 255),
+            255,
+            b,
+        )
+        b = np.where(
+            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) < 0),
+            97,
+            b,
+        )
+
+        g = np.zeros_like(b)
+        g = np.where(
+            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) > 0),
+            173,
+            g,
+        )
+        r = g
+        r = r[..., None]
+        g = g[..., None]
+        b = b[..., None]
+        dm_rgb = np.concatenate((r, g, b), axis=-1)
+        img = np.where(
+            dm == 255,
+            dm_rgb,
+            img
+        )
+
+        if do_preview is not None and target_tiles is not None:
+            do_preview = np.array([[[255, 255, 255]]]) * (
+                (
+                    (
+                        do_preview.repeat(tile_size, axis=-2).repeat(
+                            tile_size, axis=-1
+                        )
+                        + 3
+                    )
+                    / 7
+                )[..., None]
+            )
+            img = np.where(target_tiles, do_preview.astype(np.int16), img)
+        else:
+            img = np.where(target_tiles, 255, img)
+
         # apply grid
         grid_idx_x = np.arange(start=0, stop=width_px, step=tile_size)
         grid_idx_y = np.arange(start=0, stop=height_px, step=tile_size)
         img[:, grid_idx_x] = np.array([100, 100, 100])
         img[:, :, grid_idx_y] = np.array([100, 100, 100])
 
-        # Render padding mask
-        pm = padding_mask[..., None].repeat(3, -1)  # add 3 channels
-        pm = np.where(pm > 0, 255, pm)
-        pm = pm.repeat(tile_size, -2).repeat(tile_size, -3)
-
-        img = img.astype(np.int16) + pm.astype(np.int16)
+        img = img.astype(np.int16)
         return img
 
     def render_active_grid(
@@ -316,12 +396,15 @@ class RenderingEngine:
         tile_size,
         height_grid,
         padding_mask,
+        dumpability_mask,
         agent_pos=None,
         base_dir=None,
         cabin_dir=None,
         agent_width=None,
         agent_height=None,
         batch_size=1,
+        target_tiles=None,
+        do_preview=None,
     ):
         """
         Render this grid at a given scale
@@ -330,7 +413,9 @@ class RenderingEngine:
         """
         # s1 = time.time()
 
-        imgs = self._render_grids(tile_size, height_grid, padding_mask)
+        imgs = self._render_grids(
+            tile_size, height_grid, padding_mask, dumpability_mask, target_tiles, do_preview, map_type="active_map",
+        )
 
         # s2 = time.time()
 
@@ -339,8 +424,8 @@ class RenderingEngine:
             lambda agent_pos, base_dir: State._get_agent_corners(
                 pos_base=agent_pos,
                 base_orientation=base_dir,
-                agent_width=agent_width,
-                agent_height=agent_height,
+                agent_width=agent_width[0],
+                agent_height=agent_height[0],
             )
         )(agent_pos, base_dir)
 
@@ -374,8 +459,8 @@ class RenderingEngine:
 
         return imgs
 
-    def render_target_grids(self, tile_size, target_grid, padding_mask):
-        return self._render_grids(tile_size, target_grid, padding_mask)
+    def render_target_grids(self, tile_size, target_grid, padding_mask, dumpability_mask):
+        return self._render_grids(tile_size, target_grid, padding_mask, dumpability_mask, map_type="target_map")
 
     def render_global(
         self,
@@ -383,11 +468,14 @@ class RenderingEngine:
         active_grid,
         target_grid,
         padding_mask,
+        dumpability_mask,
         agent_pos=None,
         base_dir=None,
         cabin_dir=None,
         agent_width=None,
         agent_height=None,
+        target_tiles=None,
+        do_preview=None,
     ):
         # Add batch dim in case it's not there
         if len(active_grid.shape) < 3:
@@ -400,6 +488,10 @@ class RenderingEngine:
             base_dir = base_dir[None]
         if cabin_dir is not None and len(cabin_dir.shape) < 2:
             cabin_dir = cabin_dir[None]
+        if target_tiles is not None and len(target_tiles.shape) < 2:
+            target_tiles = target_tiles[None]
+        if do_preview is not None and len(do_preview.shape) < 2:
+            do_preview = do_preview[None]
 
         white_margin = 0.05  # percentage
         batch_size = active_grid.shape[0]
@@ -408,16 +500,19 @@ class RenderingEngine:
             tile_size,
             active_grid,
             padding_mask,
+            dumpability_mask,
             agent_pos,
             base_dir,
             cabin_dir,
             agent_width,
             agent_height,
             batch_size,
+            target_tiles,
+            do_preview,
         )
 
         imgs_target_grid = self.render_target_grids(
-            tile_size, target_grid, padding_mask
+            tile_size, target_grid, padding_mask, dumpability_mask,
         )
 
         imgs = [

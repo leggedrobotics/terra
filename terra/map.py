@@ -4,18 +4,28 @@ import jax.numpy as jnp
 from jax import Array
 
 from terra.map_generator import GridMap
-from terra.utils import IntMap
+from terra.settings import IntLowDim
 
 
 class GridWorld(NamedTuple):
     target_map: GridMap
     action_map: GridMap
     padding_mask: GridMap
+    dig_map: GridMap  # map where the dig action is applied before being applied to the action map (at dump time).
+    dumpability_mask: GridMap
+    dumpability_mask_init: GridMap
+
+    trench_axes: Array
+    trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
-    local_map_target: GridMap = GridMap.dummy_map()
-    local_map_action: GridMap = GridMap.dummy_map()
+    local_map_target_pos: GridMap = GridMap.dummy_map()
+    local_map_target_neg: GridMap = GridMap.dummy_map()
+    local_map_action_pos: GridMap = GridMap.dummy_map()
+    local_map_action_neg: GridMap = GridMap.dummy_map()
+    local_map_dumpability: GridMap = GridMap.dummy_map()
+    local_map_obstacles: GridMap = GridMap.dummy_map()
 
     @property
     def width(self) -> int:
@@ -34,15 +44,33 @@ class GridWorld(NamedTuple):
         return (self.padding_mask.map[0] == 0).sum()
 
     @classmethod
-    def new(cls, target_map: Array, padding_mask: Array) -> "GridWorld":
-        action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntMap))
+    def new(
+        cls,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
+    ) -> "GridWorld":
+        action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
+        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
 
-        target_map = GridMap.new(IntMap(target_map))
+        target_map = GridMap.new(IntLowDim(target_map))
 
-        padding_mask = GridMap.new(IntMap(padding_mask))  # TODO IntLowDim?
+        padding_mask = GridMap.new(IntLowDim(padding_mask))
 
-        world = GridWorld(
-            target_map=target_map, action_map=action_map, padding_mask=padding_mask
+        dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+        dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+
+        world = cls(
+            target_map=target_map,
+            action_map=action_map,
+            padding_mask=padding_mask,
+            dig_map=dig_map,
+            trench_axes=trench_axes,
+            trench_type=trench_type,
+            dumpability_mask=dumpability_mask,
+            dumpability_mask_init=dumpability_mask_init_gm,
         )
 
         return world

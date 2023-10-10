@@ -260,7 +260,6 @@ def generate_openstreet_3(
 
 
 if __name__ == "__main__":
-    # TODO implement tile size
     wm, hm = 20, 20  # meters
     div = 10
     openstreet_path = "/media/openstreet"

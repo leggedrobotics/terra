@@ -17,10 +17,11 @@ from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import decrease_angle_circular
-from terra.utils import Float
+from terra.settings import Float
+from terra.utils import get_min_distance_point_to_lines
 from terra.utils import increase_angle_circular
-from terra.utils import IntLowDim
-from terra.utils import IntMap
+from terra.settings import IntLowDim
+from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
 
@@ -46,11 +47,14 @@ class State(NamedTuple):
         env_cfg: EnvConfig,
         target_map: Array,
         padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
     ) -> "State":
-        world = GridWorld.new(target_map, padding_mask)
+        world = GridWorld.new(target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init)
 
         agent, key = Agent.new(
-            key, env_cfg, world.max_traversable_x, world.max_traversable_y
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
@@ -65,14 +69,26 @@ class State(NamedTuple):
         )
 
     def _reset(
-        self, env_cfg: EnvConfig, target_map: Array, padding_mask: Array
+        self,
+        env_cfg: EnvConfig,
+        target_map: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
     ) -> "State":
         """
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
         return self.new(
-            key=key, env_cfg=env_cfg, target_map=target_map, padding_mask=padding_mask
+            key=key,
+            env_cfg=env_cfg,
+            target_map=target_map,
+            padding_mask=padding_mask,
+            trench_axes=trench_axes,
+            trench_type=trench_type,
+            dumpability_mask_init=dumpability_mask_init,
         )
 
     def _step(self, action: Action) -> "State":
@@ -344,8 +360,6 @@ class State(NamedTuple):
         self, old_angle_base: Array, new_angle_base: Array, clockwise: jnp.bool_
     ) -> Array:
         """
-        TODO: change the approach to a more sophisticated and exact one (e.g. based on cylindrical r distance)
-
         This function creates a move mask and applies it to the new angle of the base.
 
         The approach is a simplified one: the agent is split in two parts (front and rear), and on each part
@@ -481,17 +495,8 @@ class State(NamedTuple):
         valid_move = valid_move_front * valid_move_back * valid_move_corners
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
 
-        # jax.debug.print("front_corners = {x}", x=front_corners)
-        # jax.debug.print("valid_move_front = {x}", x=valid_move_front)
-
-        # jax.debug.print("back_corners = {x}", x=back_corners)
-        # jax.debug.print("valid_move_back = {x}", x=valid_move_back)
-
-        # jax.debug.print("new_agent_corners = {x}", x=new_agent_corners)
-        # jax.debug.print("valid_move_corners = {x}", x=valid_move_corners)
-
-        # jax.debug.print("valid_move_mask = {x}", x=valid_move_mask)
-
+        # Concatenate new and old angles to then matmul and pick only one of them
+        #   this operation is equivalent to an if else statement
         old_new_angle_base = jnp.array(
             [self.agent.agent_state.angle_base, new_angle_base]
         )
@@ -566,20 +571,60 @@ class State(NamedTuple):
         )
 
     def _handle_move_clock_forward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_forward()._handle_clock()._handle_move_forward()
+        valid_chain = True
+        s0 = self._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_clock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_clock_backward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_backward()._handle_clock()._handle_move_backward()
+        valid_chain = True
+        s0 = self._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_clock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_anticlock_forward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_forward()._handle_anticlock()._handle_move_forward()
+        valid_chain = True
+        s0 = self._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_anticlock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_forward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_move_anticlock_backward(self) -> "State":
-        # TODO: implement a better collision check - this is just putting together 3 independent checks
-        return self._handle_move_backward()._handle_anticlock()._handle_move_backward()
+        valid_chain = True
+        s0 = self._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
+        s1 = s0._handle_anticlock()
+        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
+        s2 = s1._handle_move_backward()
+        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
+        return jax.lax.cond(
+            valid_chain,
+            lambda: s2,
+            lambda: self,
+        )
 
     def _handle_extend_arm(self) -> "State":
         new_arm_extension = jnp.min(
@@ -693,7 +738,6 @@ class State(NamedTuple):
         dig_portion_radius = self.env_cfg.agent.move_tiles
         tile_size = self.env_cfg.tile_size
 
-        # TODO: the following is rough.. make it better (compute ellipse around machine and get min distance based on arm angle)
         max_agent_dim = jnp.max(
             jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
         )
@@ -737,8 +781,8 @@ class State(NamedTuple):
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
 
-        dig_dump_mask_cart_x = map_local_coords[0].copy()  # TODO is copy necessary?
-        dig_dump_mask_cart_y = map_local_coords[1].copy()  # TODO is copy necessary?
+        dig_dump_mask_cart_x = map_local_coords[0].copy()
+        dig_dump_mask_cart_y = map_local_coords[1].copy()
 
         eps = self.env_cfg.tile_size / 2  # add margin to avoid rounding errors
 
@@ -764,8 +808,14 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
-    def _apply_dig_mask(self, flattened_map: Array, dig_mask: Array) -> Array:
+    def _apply_dig_mask(
+        self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
+    ) -> Array:
         """
+        this function does the following:
+            if we are moving dumped dirt, we move all of it regardless of the amount
+            if we are instead digging dirt, then we dig as much as self.env_cfg.agent.dig_depth
+
         Args:
             - flattened_map: (N, ) Array flattened height map
             - dig_mask: (N, ) Array of where to dig bools
@@ -773,7 +823,13 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
-        return flattened_map - delta_dig
+        m = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
+            #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
+            lambda: (flattened_map - delta_dig).astype(IntMap),
+        )
+        return m
 
     def _apply_dump_mask(
         self,
@@ -847,27 +903,49 @@ class State(NamedTuple):
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
 
-    def _build_dig_dump_mask(self) -> Array:
+    def _build_dig_dump_cone(self) -> Array:
+        """
+        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
+        """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
-
-    # def _exclude_dump_tiles_from_dig_mask(self, dig_mask: Array) -> Array:
-    #     """
-    #     Takes the dig mask and turns into False the elements that correspond to
-    #     a dumped tile.
-    #     """
-    #     dumped_mask_action_map = self.world.action_map.map > 0
-    #     # jax.debug.print("dumped_mask_action_map= {x}", x=dumped_mask_action_map)
-    #     return dig_mask * (~dumped_mask_action_map).reshape(-1)
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
         Takes the dump mask and turns into False the elements that correspond to
-        a digged tile.
+        a dug tile.
         """
-        digged_mask_action_map = self.world.action_map.map < 0
-        # jax.debug.print("digged_mask_action_map= {x}", x=digged_mask_action_map)
+        digged_mask_action_map = self.world.dig_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
+    
+    def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """Applies dumpability mask to the dump mask"""
+        return dump_mask * self.world.dumpability_mask.map.reshape(-1)
+    
+    def _exclude_traversability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """Applies traversability mask to the dump mask"""
+        return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
+
+    def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """
+        Removes the possibility of moving some dump tiles in the same spot.
+
+        Also, removes the possibility of moving the tiles within the same workspace,
+        even if not all tiles are occupied.
+        """
+        cone_mask = self._build_dig_dump_cone()
+        dig_map_mask = jax.lax.cond(
+            (
+                (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
+                * (self.world.action_map.map.reshape(-1) > 0)
+                * cone_mask
+            ).sum()
+            > 0,
+            lambda: ~cone_mask,
+            lambda: jnp.ones_like(dump_mask),
+        )
+
+        return dump_mask * dig_map_mask
 
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
@@ -879,39 +957,90 @@ class State(NamedTuple):
         dig_mask_action_map = self.world.action_map.map > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
-        dig_mask_already_done = self.world.target_map.map < self.world.action_map.map
+        flat_action_map = self.world.action_map.map.reshape(-1)
+        dig_mask_cone = self._build_dig_dump_cone()
+        ambiguity_mask_dig_movesoil = jax.lax.cond(
+            jnp.any(flat_action_map * dig_mask_cone.reshape(-1) > 0),
+            lambda: flat_action_map > 0,
+            lambda: flat_action_map == 0,
+        )
 
-        return dig_mask * dig_mask_maps.reshape(-1) * dig_mask_already_done.reshape(-1)
+        # respect max dig limit
+        max_dig_limit_mask = (
+            self.world.action_map.map > -self.env_cfg.agent.dig_depth
+        ).reshape(-1)
+
+        return (
+            dig_mask
+            * dig_mask_maps.reshape(-1)
+            * ambiguity_mask_dig_movesoil
+            * max_dig_limit_mask
+        ).astype(jnp.bool_)
+
+    def _get_new_dumpability_mask(self, action_map: Array) -> Array:
+        new_dumpability_mask = self.world.dumpability_mask_init.map
+        action_mask = (action_map < 0).astype(jnp.float16)
+        kernel = jnp.ones((3, 3), dtype=jnp.float16)
+        action_mask_contoured = jax.scipy.signal.convolve2d(
+            action_mask,
+            kernel,
+            mode="same",
+            boundary="fill",
+            fillvalue=0,
+        )
+        return new_dumpability_mask * (action_mask_contoured == 0)
+
 
     def _handle_dig(self) -> "State":
-        dig_mask = self._build_dig_dump_mask()
+        dig_mask = self._build_dig_dump_cone()
         # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-        dig_volume = dig_mask.sum()
+        flattened_action_map = self.world.action_map.map.reshape(-1)
+        selected_tiles_sum = flattened_action_map @ dig_mask
+        moving_dumped_dirt = selected_tiles_sum > 0
+        # if moving dumped dirt, move it all at once
+        dig_volume = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: selected_tiles_sum.astype(jnp.int32),
+            lambda: dig_mask.sum(),
+        )
 
-        def _apply_dig():
-            flattened_action_map = self.world.action_map.map.reshape(-1)
-            new_map_global_coords = self._apply_dig_mask(flattened_action_map, dig_mask)
+        def _apply_dig(volume, fam):
+            new_map_global_coords = self._apply_dig_mask(
+                fam, dig_mask, moving_dumped_dirt
+            )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
 
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    dig_map=self.world.dig_map._replace(
+                        map=IntLowDim(new_map_global_coords)
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.full((1,), fill_value=dig_volume, dtype=IntLowDim)
+                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
                     )
                 ),
             )
 
-        return jax.lax.cond(dig_volume > 0, _apply_dig, self._do_nothing)
+        s = jax.lax.cond(
+            dig_volume > 0,
+            lambda v, fam: _apply_dig(v, fam),
+            lambda v, fam: self._do_nothing(),
+            dig_volume,
+            flattened_action_map,
+        )
+        return s
 
     def _handle_dump(self) -> "State":
-        dump_mask = self._build_dig_dump_mask()
+        dump_mask = self._build_dig_dump_cone()
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
+        dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
         # dump_volume_per_tile = jnp.rint(
@@ -924,9 +1053,9 @@ class State(NamedTuple):
         ) / dump_volume
 
         def _apply_dump():
-            flattened_action_map = self.world.action_map.map.reshape(-1)
+            flattened_dig_map = self.world.dig_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map,
+                flattened_dig_map,
                 dump_mask,
                 even_volume_per_tile,
                 remaining_volume,
@@ -936,9 +1065,21 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
+
             return self._replace(
                 world=self.world._replace(
-                    action_map=self.world.action_map._replace(map=new_map_global_coords)
+                    action_map=self.world.action_map._replace(
+                        map=IntLowDim(new_map_global_coords)
+                    ),
+                    dig_map=self.world.dig_map._replace(
+                        map=IntLowDim(new_map_global_coords)
+                    ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -955,10 +1096,23 @@ class State(NamedTuple):
             self._handle_dump,
             self._handle_dig,
         )
-
-        # jax.debug.print("action map = {x}", x=state.world.action_map.map)
-        # jax.debug.print("loaded = {x}", x=state.agent.agent_state.loaded)
         return state
+    
+    @staticmethod
+    def _check_agent_moved_on_move_action(old_state: "State", new_state: "State") -> bool:
+        """True if agent moved"""
+        return ~jnp.allclose(
+            old_state.agent.agent_state.pos_base,
+            new_state.agent.agent_state.pos_base
+            )
+    
+    @staticmethod
+    def _check_agent_turn_on_turn_action(old_state: "State", new_state: "State") -> bool:
+        """True if agent turned"""
+        return ~jnp.allclose(
+                old_state.agent.agent_state.angle_base,
+                new_state.agent.agent_state.angle_base,
+            )
 
     def _handle_rewards_move(
         self, new_state: "State", action: TrackedActionType
@@ -966,9 +1120,7 @@ class State(NamedTuple):
         reward = 0.0
         # Collision
         reward += jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base
-            ),
+            ~self._check_agent_moved_on_move_action(self, new_state),
             lambda: self.env_cfg.rewards.collision_move,
             lambda: 0.0,
         )
@@ -992,10 +1144,7 @@ class State(NamedTuple):
 
         # Collision turn
         reward += jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.angle_base,
-                new_state.agent.agent_state.angle_base,
-            ),
+            ~self._check_agent_turn_on_turn_action(self, new_state),
             lambda: self.env_cfg.rewards.collision_turn,
             lambda: 0.0,
         )
@@ -1015,96 +1164,132 @@ class State(NamedTuple):
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
-        Computes the difference between the delta old and delta new.
-
-        The delta is defined as the absolute sum of the height differences between
-        the clipped action map (to only make the dump count) and the target map.
-
-        A positive value means progress in the dumping task (positioning the dirt on the dump terrain).
+        Returns
+        > 0 if there was progress on the dump tiles
+        < 0 if there was -progress on the dump tiles
+        = 0 if there was no progress on the dump tiles
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=0)
 
-        target_map_clip = jnp.clip(target_map, a_min=0)
+        target_map_dump_mask = target_map > 0
 
-        delta_old = jnp.sum(jnp.abs(action_map_clip_old - target_map_clip))
-        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map_clip))
+        action_map_progress = (
+            (action_map_clip_new - action_map_clip_old) * target_map_dump_mask
+        ).sum()
 
-        return IntMap(delta_old - delta_new)
+        return action_map_progress
+    
+    @staticmethod
+    def _get_action_map_spread_out_rate(
+        action_map_old: Array, action_map_new: Array, target_map: Array, loaded: int
+    ) -> IntMap:
+        """
+        Returns the spread-out rate of the terrain that has just been dumped.
+        The rate is defined as (#tiles-dumped / #tiles-loaded)
+        """
+        action_map_mask_old = (action_map_old > 0).astype(IntLowDim)
+        action_map_mask_new = (action_map_new > 0).astype(IntLowDim)
+
+        target_map_mask = target_map >= 0  # include also neutral tiles
+
+        action_map_progress = (
+            (action_map_mask_new - action_map_mask_old) * target_map_mask
+        ).sum()
+        return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dump wrong or correct
-        return jax.lax.cond(
-            jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
-            ),
-            lambda: self.env_cfg.rewards.dump_wrong,
-            lambda: jax.lax.cond(
-                jnp.all(
-                    self._get_action_map_positive_progress(
-                        self.world.action_map.map,
-                        new_state.world.action_map.map,
-                        self.world.target_map.map,
-                    )
-                    <= 0
-                ),
-                lambda: self.env_cfg.rewards.dump_no_dump_area,
-                lambda: self.env_cfg.rewards.dump_correct,
-            ),
+        """
+        Handles reward assignment at dump time.
+        This includes both the dump part and the realization
+        of the previously digged terrain.
+        """
+
+        # Dig
+        action_map_negative_progress = self._get_action_map_negative_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        dig_reward = jax.lax.cond(
+            action_map_negative_progress > 0,
+            lambda: self.env_cfg.rewards.dig_correct,
+            lambda: 0.0,
         )
 
+        # Dump
+        action_map_positive_progress = self._get_action_map_positive_progress(
+            self.world.dig_map.map,  # note dig_map here
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        spread_out_rate = self._get_action_map_spread_out_rate(
+            self.world.dig_map.map,  # note dig_map here
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+            self.agent.agent_state.loaded,
+        )
+
+        dump_reward_condition = jnp.allclose(
+            self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
+        )
+
+        def dump_reward_fn() -> Float:
+            return jax.lax.cond(
+                action_map_positive_progress < 0,
+                lambda: self.env_cfg.rewards.dump_no_dump_area,
+                lambda: jax.lax.cond(
+                    action_map_negative_progress == 0,
+                    lambda: 0.0,
+                    lambda: jax.lax.cond(
+                        action_map_positive_progress > 0,
+                        lambda: spread_out_rate * self.env_cfg.rewards.dump_correct,
+                        lambda: 0.0,
+                    ),
+                ),
+            )
+
+        dump_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            dump_reward_fn,
+        )
+
+        r_trenches = self._get_trench_specific_rewards()
+        return dig_reward + dump_reward + r_trenches
+
     @staticmethod
-    def _get_action_map_progress(
+    def _get_action_map_negative_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
-        Computes the difference between the delta old and delta new.
-
-        The delta is defined as the absolute sum of the height differences between
-        the clipped action map (to only make the dig count) and the target map.
+        Returns
+        > 0 if there was progress on the dig tiles
+        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
+        = 0 if there was no progress on the dig tiles
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
 
-        delta_old = jnp.sum(jnp.abs(action_map_clip_old - target_map))
-        delta_new = jnp.sum(jnp.abs(action_map_clip_new - target_map))
+        target_map_mask = target_map < 0
+        action_map_progress = (
+            (action_map_clip_old - action_map_clip_new) * target_map_mask
+        ).sum()
 
-        return IntMap(delta_new - delta_old)
+        return action_map_progress
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dig wrong or correct
+        # Dig
         return jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
-            lambda: jax.lax.cond(
-                jnp.all(
-                    self._get_action_map_progress(
-                        self.world.action_map.map,
-                        new_state.world.action_map.map,
-                        self.world.target_map.map,
-                    )
-                    > 0
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: jax.lax.cond(
-                    jnp.all(
-                        self._get_action_map_progress(
-                            self.world.action_map.map,
-                            new_state.world.action_map.map,
-                            self.world.target_map.map,
-                        )
-                        == 0
-                    ),
-                    lambda: 0.0,
-                    lambda: self.env_cfg.rewards.dig_correct,
-                ),
-            ),
+            lambda: 0.0,
         )
 
     def _handle_rewards_do(
@@ -1201,7 +1386,38 @@ class State(NamedTuple):
         )
         return reward
 
-    def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
+    def _get_trench_specific_rewards(
+        self,
+    ) -> Float:
+        def _get_trench_reward():
+            agent_pos = self.agent.agent_state.pos_base
+            trench_axes = self.world.trench_axes
+            trench_type = self.world.trench_type
+
+            d = get_min_distance_point_to_lines(
+                agent_pos, trench_axes, trench_type
+            )  # in tiles
+            d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
+            d *= self.env_cfg.tile_size  # in meters
+            return d * self.env_cfg.trench_rewards.distance_coefficient
+
+        r = jax.lax.cond(
+            self.env_cfg.apply_trench_rewards,
+            _get_trench_reward,
+            lambda: 0.0,
+        )
+        return r
+    
+    def _get_terminal_completed_tiles_reward(
+        self,
+    ) -> Float:
+        tiles_digged = (self.world.action_map.map == -1).sum()
+        total_tiles = (self.world.target_map.map == -1).sum()
+        return (tiles_digged / total_tiles) * self.env_cfg.rewards.terminal_completed_tiles
+
+    def _get_reward(
+        self, new_state: "State", action_handler: Action
+    ) -> Float:
         action = action_handler.action
 
         reward = 0.0
@@ -1226,9 +1442,20 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
+        # Terminal completed tiles
+        reward += jax.lax.cond(
+            self._is_done(
+                new_state.world.action_map.map,
+                self.world.target_map.map,
+                new_state.agent.agent_state.loaded,
+            )[0],
+            self._get_terminal_completed_tiles_reward,
+            lambda: 0.0,
+        )
+
         # Existence
         reward += self.env_cfg.rewards.existence
-
+        
         return reward
 
     @staticmethod
@@ -1266,14 +1493,17 @@ class State(NamedTuple):
 
     def _is_done(
         self, action_map: Array, target_map: Array, agent_loaded: Array
-    ) -> jnp.bool_:
+    ) -> tuple[jnp.bool_, jnp.bool_]:
         """
         Checks if the task is done or if the env reached its max number of steps.
+        Returns:
+        - global done
+        - task done (true if the task is completed)
         """
         done_task = self._is_done_task(action_map, target_map, agent_loaded)
 
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
-        return jnp.logical_or(done_task, done_steps)
+        return jnp.logical_or(done_task, done_steps), done_task
 
     def _get_action_mask_tracked(self):
         # forward
@@ -1447,5 +1677,10 @@ class State(NamedTuple):
 
         return action_mask
 
-    def _get_infos(self, dummy_action: Action) -> dict[str, Any]:
-        return {"action_mask": self._get_action_mask(dummy_action)}
+    def _get_infos(self, dummy_action: Action, done_task: bool) -> dict[str, Any]:
+        return {
+            "action_mask": self._get_action_mask(dummy_action),
+            "target_tiles": self._build_dig_dump_cone(),
+            "do_preview": self._handle_do().world.dig_map.map,
+            "done_task": done_task,
+        }

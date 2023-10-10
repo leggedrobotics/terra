@@ -1,8 +1,7 @@
 import jax
 import jax.numpy as jnp
 from jax.scipy.signal import convolve2d
-
-IntMap = jnp.int16  # TODO import
+from terra.settings import IntMap
 
 
 def generate_clustered_bitmap(

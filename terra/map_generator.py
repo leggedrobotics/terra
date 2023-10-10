@@ -5,14 +5,13 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
-# from terra.utils import IntMap
-IntMap = jnp.int16  # TODO import
-
+from terra.settings import IntMap
+from terra.settings import IntLowDim
 
 class MapParams(NamedTuple):
     edge_min: IntMap
     edge_max: IntMap
-    depth: int = -1  # TODO to config
+    depth: int = -1
 
 
 class GridMap(NamedTuple):
@@ -125,6 +124,8 @@ class GridMap(NamedTuple):
             key,
             params,
         )
+        map = map.astype(IntLowDim)
+        padding_mask = padding_mask.astype(IntLowDim)
         return map, padding_mask, key
 
 
@@ -240,7 +241,7 @@ def single_tile(
     width, height, padding_mask, key = _sample_width_height(
         key, min_width, min_height, max_width, max_height
     )
-    map = jnp.zeros((max_width, max_height), dtype=IntMap)
+    map = jnp.ones((max_width, max_height), dtype=IntMap)
     key, subkey = jax.random.split(key)
     x = jax.random.randint(subkey, (1,), minval=0, maxval=width)
     key, subkey = jax.random.split(key)
@@ -299,7 +300,7 @@ def multiple_single_tiles(
     width, height, padding_mask, key = _sample_width_height(
         key, min_width, min_height, max_width, max_height
     )
-    n_tiles = 4  # TODO config
+    n_tiles = 4
     map = jnp.zeros((max_width, max_height), dtype=IntMap)
     key, subkey = jax.random.split(key)
     x = jax.random.randint(subkey, (n_tiles,), minval=0, maxval=width)
@@ -320,7 +321,7 @@ def multiple_single_tiles_with_dump_tiles(
     width, height, padding_mask, key = _sample_width_height(
         key, min_width, min_height, max_width, max_height
     )
-    n_tiles = 4  # TODO config
+    n_tiles = 4
     map = jnp.zeros((max_width, max_height), dtype=IntMap)
 
     # Dig
