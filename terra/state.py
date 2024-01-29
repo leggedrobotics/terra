@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, TypedDict
 from typing import NamedTuple
 
 import jax
@@ -24,6 +24,12 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
+
+class Infos(TypedDict):
+    action_mask: Any
+    target_tiles: Any
+    do_preview: Any
+    done_task: bool
 
 class State(NamedTuple):
     """
@@ -1677,7 +1683,8 @@ class State(NamedTuple):
 
         return action_mask
 
-    def _get_infos(self, dummy_action: Action, done_task: bool) -> dict[str, Any]:
+    def _get_infos(self, dummy_action: Action, done_task: bool) -> "Infos":
+
         return {
             "action_mask": self._get_action_mask(dummy_action),
             "target_tiles": self._build_dig_dump_cone(),

@@ -7,12 +7,11 @@ import numpy as np
 import pandas as pd
 
 from terra.actions import TrackedActionType
-from terra.config import EnvConfig
+from terra.config import EnvConfig, TestbenchConfig
 from terra.env import TerraEnvBatch
 
 if __name__ == "__main__":
     policy = "random"
-
     device = jnp.ones(1).device_buffer.device()
     print(f"Device = {device}\n")
 
@@ -36,8 +35,8 @@ if __name__ == "__main__":
         print(f"{episode_length=}")
 
         seeds = np.random.randint(0, 1000000, (batch_size))
-        env_batch = TerraEnvBatch(env_cfg=EnvConfig())
-        states = env_batch.reset(seeds)
+        env_batch = TerraEnvBatch(batch_cfg=TestbenchConfig())
+        states = env_batch.reset(seeds, env_cfgs=EnvConfig())
 
         duration = 0
         for i in range(episode_length):

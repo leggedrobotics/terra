@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from terra.Transition import Transition
 from terra.actions import Action
 from terra.config import BatchConfig
 from terra.config import EnvConfig
@@ -240,7 +241,7 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+    ) -> Transition:
         """
         Step the env given an action
 
@@ -287,8 +288,7 @@ class TerraEnv(NamedTuple):
         infos = new_state._get_infos(action, task_done)
 
         observations = self._update_obs_with_info(observations, infos)
-
-        return new_state, (observations, reward, done, infos)
+        return Transition(new_state, observations, reward, done, infos)
 
     @staticmethod
     def _update_obs_with_info(obs, info):
@@ -375,7 +375,7 @@ class TerraEnvBatch:
         actions: Action,
         env_cfgs: EnvConfig,
         maps_buffer_keys: jax.random.KeyArray,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+    ) -> Transition:
         (
             target_maps,
             padding_masks,
@@ -384,7 +384,7 @@ class TerraEnvBatch:
             dumpability_mask_init,
             maps_buffer_keys,
         ) = self._get_map(maps_buffer_keys, env_cfgs)
-        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
+        transition = jax.vmap(self.terra_env.step)(
             states,
             actions,
             target_maps,
@@ -394,11 +394,7 @@ class TerraEnvBatch:
             dumpability_mask_init,
             env_cfgs,
         )
-        return (
-            states,
-            (obs, rewards, dones, infos),
-            maps_buffer_keys,
-        )
+        return transition, maps_buffer_keys
 
     @property
     def actions_size(self) -> int:
