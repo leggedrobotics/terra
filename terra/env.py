@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from functools import partial
-from typing import NamedTuple
+from typing import NamedTuple, Any
 
 import jax
 import jax.numpy as jnp
@@ -375,7 +375,7 @@ class TerraEnvBatch:
         actions: Action,
         env_cfgs: EnvConfig,
         maps_buffer_keys: jax.random.KeyArray,
-    ) -> Transition:
+    ) -> (Transition, Any):
         (
             target_maps,
             padding_masks,
