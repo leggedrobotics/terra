@@ -53,7 +53,7 @@ class TerraEnv(NamedTuple):
     @partial(jax.jit, static_argnums=(0,))
     def reset(
         self,
-        seed: int,
+        key: jax.random.PRNGKey,
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
@@ -64,7 +64,6 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
-        key = jax.random.PRNGKey(seed)
         state = State.new(
             key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )

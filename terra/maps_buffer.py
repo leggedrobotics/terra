@@ -121,9 +121,8 @@ class MapsBuffer(NamedTuple):
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_map_init(self, seed: int, env_cfg):
-        key = jax.random.PRNGKey(seed)
-        return self.get_map(key, env_cfg)
+    def get_map_init(self, seed: jax.random.PRNGKey, env_cfg):
+        return self.get_map(seed, env_cfg)
 
 
 def map_sanity_check(map: Array) -> None:
