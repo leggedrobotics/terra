@@ -31,8 +31,6 @@ class MapsBuffer(NamedTuple):
     trench_types: Array  # type of trench (number of branches), or -1 if not a trench
     n_maps: int  # number of maps for each map type
 
-    immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
-
     # Set this array with the DOF you want to be considered (e.g. the first element will be considered as dof=0).
     map_types_from_disk: Array = jnp.array(
         [
@@ -65,7 +63,7 @@ class MapsBuffer(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
-    def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:
+    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         # maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
@@ -79,11 +77,12 @@ class MapsBuffer(NamedTuple):
     def _procedurally_generate_map(
         self, key: jax.random.KeyArray, env_cfg, map_type
     ) -> Array:
+        immutable_maps_cfg = ImmutableMapsConfig()
         key, subkey = jax.random.split(key)
-        min_width = self.immutable_maps_cfg.min_width
-        min_height = self.immutable_maps_cfg.min_height
-        max_width = self.immutable_maps_cfg.max_width
-        max_height = self.immutable_maps_cfg.max_height
+        min_width = immutable_maps_cfg.min_width
+        min_height = immutable_maps_cfg.min_height
+        max_width = immutable_maps_cfg.max_width
+        max_height = immutable_maps_cfg.max_height
         element_edge_min = env_cfg.target_map.element_edge_min
         element_edge_max = env_cfg.target_map.element_edge_max
         map, padding_mask, key = GridMap.procedural_map(
@@ -121,8 +120,8 @@ class MapsBuffer(NamedTuple):
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_map_init(self, seed: jax.random.PRNGKey, env_cfg):
-        return self.get_map(seed, env_cfg)
+    def get_map_init(self, key: jax.random.PRNGKey, env_cfg):
+        return self.get_map(key, env_cfg)
 
 
 def map_sanity_check(map: Array) -> None:

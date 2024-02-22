@@ -68,9 +68,7 @@ class TerraEnv(NamedTuple):
             key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
         state = self.wrap_state(state)
-        
         observations = self._state_to_obs_dict(state)
-
         observations["do_preview"] = state._handle_do().world.action_map.map
 
         return state, observations
@@ -283,7 +281,6 @@ class TerraEnv(NamedTuple):
             dumpability_mask_init,
             env_cfg,
         )
-
         infos = new_state._get_infos(action, task_done)
 
         observations = self._update_obs_with_info(observations, infos)
@@ -362,9 +359,11 @@ class TerraEnvBatch:
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
         target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, maps_buffer_keys = self._get_map_init(seeds, env_cfgs)
+
         state, observations = jax.vmap(self.terra_env.reset)(
             seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )
+
         return state, observations, maps_buffer_keys
 
     @partial(jax.jit, static_argnums=(0,))

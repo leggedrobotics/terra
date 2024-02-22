@@ -35,6 +35,8 @@ class TrackedAction(Action):
     action: Array = jnp.full(
         (1,), fill_value=TrackedActionType.DO_NOTHING, dtype=IntLowDim
     )
+    def __hash__(self):
+        return self.get_num_actions()
 
     @classmethod
     def new(cls, action: TrackedActionType) -> "TrackedAction":
@@ -119,10 +121,13 @@ class WheeledActionType(ActionType):
 
 
 class WheeledAction(Action):
-    type: Array = jnp.full((1,), fill_value=1, dtype=IntLowDim)
+    type: int = 1
     action: Array = jnp.full(
         (1,), fill_value=WheeledActionType.DO_NOTHING, dtype=IntLowDim
     )
+
+    def __hash__(self):
+        return self.get_num_actions()
 
     @classmethod
     def new(cls, action: WheeledActionType) -> "WheeledAction":

@@ -281,9 +281,11 @@ class EnvConfig(NamedTuple):
     def new(cls):
         return EnvConfig()
 
+    def __hash__(self):
+        return 3
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction
+    action_type: Action = TrackedAction()
     load_maps_from_disk: bool = True
 
     # Config to get data for batched env initialization
@@ -294,6 +296,9 @@ class BatchConfig(NamedTuple):
     maps_paths = [
         "",
     ]
+
+    def __hash__(self):
+        return 3
 
 
 class TestbenchConfig(BatchConfig):

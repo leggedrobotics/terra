@@ -23,6 +23,7 @@ from terra.utils import increase_angle_circular
 from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
+from functools import partial
 
 
 class Infos(TypedDict):
@@ -341,9 +342,9 @@ class State(NamedTuple):
                 base_orientation
             )
             return self._move_on_orientation(orientation_vector)
-
+        is_loaded = self.agent.agent_state.loaded[0] > 0
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
+            is_loaded, self._do_nothing, _move_forward
         )
 
     def _handle_move_backward(self) -> "State":
@@ -1669,6 +1670,7 @@ class State(NamedTuple):
         )
         return action_mask
 
+    @partial(jax.jit, static_argnums=(0,))
     def _get_action_mask(self, dummy_action: Action):
         """
         Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
