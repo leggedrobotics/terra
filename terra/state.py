@@ -38,7 +38,7 @@ class State(NamedTuple):
     Given perfect information, the observation corresponds to the state.
     """
 
-    key: jax.random.KeyArray
+    key: jax.random.PRNGKey
 
     env_cfg: EnvConfig
 
@@ -50,7 +50,7 @@ class State(NamedTuple):
     @classmethod
     def new(
         cls,
-        key: jax.random.KeyArray,
+        key: jax.random.PRNGKey,
         env_cfg: EnvConfig,
         target_map: Array,
         padding_mask: Array,
