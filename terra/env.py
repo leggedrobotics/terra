@@ -357,7 +357,7 @@ class TerraEnvBatch:
     def _get_map_init(self, seeds: Array, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
 
-    def _get_map(self, maps_buffer_keys: jax.random.KeyArray, env_cfgs: EnvConfig):
+    def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
     
     @partial(jax.jit, static_argnums=(0,))
@@ -374,7 +374,7 @@ class TerraEnvBatch:
         states: State,
         actions: Action,
         env_cfgs: EnvConfig,
-        maps_buffer_keys: jax.random.KeyArray,
+        maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         (
             target_maps,

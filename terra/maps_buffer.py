@@ -65,7 +65,7 @@ class MapsBuffer(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
-    def _get_map_from_disk(self, key: jax.random.KeyArray, env_cfg) -> Array:
+    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         # maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
@@ -77,7 +77,7 @@ class MapsBuffer(NamedTuple):
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
     def _procedurally_generate_map(
-        self, key: jax.random.KeyArray, env_cfg, map_type
+        self, key: jax.random.PRNGKey, env_cfg, map_type
     ) -> Array:
         key, subkey = jax.random.split(key)
         min_width = self.immutable_maps_cfg.min_width
@@ -109,7 +109,7 @@ class MapsBuffer(NamedTuple):
         return map, padding_mask, trench_axes_dummy, trench_type_dummy, dumpability_mask_init_dummy, key
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_map(self, key: jax.random.KeyArray, env_cfg) -> Array:
+    def get_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         map_type = env_cfg.target_map.type
         map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key = jax.lax.cond(
             jnp.any(jnp.isin(jnp.array([map_type]), self.map_types_from_disk)),
