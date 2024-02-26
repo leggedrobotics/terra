@@ -67,6 +67,7 @@ class MapsBuffer(NamedTuple):
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         # maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
+        print(f"{key=}")
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
         map = self.maps[env_cfg.target_map.map_dof, idx]
