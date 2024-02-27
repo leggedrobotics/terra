@@ -292,7 +292,7 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        ""
+        "easy", "medium", "hard"
     ]
 
 
