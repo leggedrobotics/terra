@@ -250,7 +250,7 @@ class EnvConfig(NamedTuple):
     apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
-    max_steps_in_episode: int = 1000
+    max_steps_in_episode: int = 20
 
     @staticmethod
     def parametrized(
@@ -294,7 +294,7 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        ""
+        "all_dumpable/squares_2_onemap"
     ]
 
     def __hash__(self):
