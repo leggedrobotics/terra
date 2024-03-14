@@ -247,7 +247,7 @@ class EnvConfig(NamedTuple):
 
     rewards: Rewards = Rewards.dense()
 
-    apply_trench_rewards: bool = True
+    apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
     max_steps_in_episode: int = 1000
@@ -294,7 +294,7 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        "",
+        ""
     ]
 
     def __hash__(self):

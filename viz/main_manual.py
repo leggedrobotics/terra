@@ -18,7 +18,7 @@ def key_handler(event):
     global states, action_type, obs, n_envs, key_maps_buffer, info, i, action_mask, ACTIVATE_ACTION_MASKING
     i += 1
     print(f"step {i}")
-    
+
     def apply_action_mask(action):
         if ACTIVATE_ACTION_MASKING:
             action_item = action.action.item()
@@ -35,161 +35,63 @@ def key_handler(event):
     if event.key == "escape":
         env.window.close()
 
-    if event.key == "left":
+    elif event.key == "left":
         action = action_type.anticlock()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "right":
+    elif event.key == "right":
         action = action_type.clock()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "up":
+    elif event.key == "up":
         action = action_type.forward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "down":
+    elif event.key == "down":
         action = action_type.backward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "a":
+    elif event.key == "a":
         action = action_type.cabin_anticlock()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "d":
+    elif event.key == "d":
         action = action_type.cabin_clock()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "e":
+    elif event.key == "e":
         action = action_type.extend_arm()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "r":
+    elif event.key == "r":
         action = action_type.retract_arm()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "o":
+    elif event.key == "o":
         action = action_type.clock_forward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "k":
+    elif event.key == "k":
         action = action_type.clock_backward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "i":
+    elif event.key == "i":
         action = action_type.anticlock_forward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == "l":
+    elif event.key == "l":
         action = action_type.anticlock_backward()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
 
-    if event.key == " ":
+    elif event.key == " ":
         action = action_type.do()
-        action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
-            env_cfgs,
-            key_maps_buffer,
-        )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+
+    else:
+        return
+
+    action = apply_action_mask(action)
+    _transition, key_maps_buffer = env.step(
+        states,
+        repeat_action(action),
+        env_cfgs,
+        key_maps_buffer,
+    )
+
+    states = _transition.next_state
+    obs = _transition.obs
+    reward = _transition.reward
+    done = _transition.done
+    info = _transition.infos
+    action_mask = _transition.infos["action_mask"]
+    parse_step(states, reward, done, info)
 
 
 def parse_step(obs, reward, done, info):
@@ -205,7 +107,7 @@ action_type = batch_cfg.action_type
 n_envs_x = 1
 n_envs_y = 1
 n_envs = n_envs_x * n_envs_y
-seeds = jnp.array([24])
+seeds = jnp.array([jax.random.PRNGKey(3)])
 env = TerraEnvBatch(rendering=True, n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
 
 env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
@@ -213,14 +115,14 @@ states, obs, key_maps_buffer = env.reset(seeds, env_cfgs)
 
 tile_size = 16
 
-states, (obs, rewards, dones, info), key_maps_buffer = env.step(
+transition, maps_buffer_keys = env.step(
     states,
     action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
     env_cfgs,
     key_maps_buffer,
 )
-action_mask = info["action_mask"]
+action_mask = transition.infos["action_mask"]
 i = 0
 env.terra_env.render_obs(
-    obs, key_handler=key_handler, block=True, tile_size=tile_size, info=info
+    obs, key_handler=key_handler, block=True, tile_size=tile_size, info=transition.infos
 )

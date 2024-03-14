@@ -10,3 +10,8 @@ class Transition(NamedTuple):
     done: bool
     infos: Infos
 
+    def __str__(self):
+        return f"r{self.reward}"
+
+    def __repr__(self):
+        return str(self)

@@ -332,6 +332,8 @@ def init_maps_buffer(batch_cfg):
     dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk)
     trench_axes_list = jnp.array(trench_axes_list)
     trench_types = jnp.array(trench_types)
+
+
     return MapsBuffer.new(
         maps=maps_from_disk_padded,
         padding_mask=padding_mask,
