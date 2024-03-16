@@ -8,16 +8,18 @@ from terra.env import TerraEnvBatch
 
 
 def redraw():
-    global obs, states, tile_size, batch_cfg, info
+    global timestep, tile_size, batch_cfg
     env.terra_env.render_obs(
-        obs, mode="human", tile_size=tile_size, key_handler=key_handler, info=info
+        timestep.observation, mode="human", tile_size=tile_size, key_handler=key_handler, info=timestep.info
     )
 
 
 def key_handler(event):
-    global states, action_type, obs, n_envs, key_maps_buffer, info, i, action_mask, ACTIVATE_ACTION_MASKING
+    global timestep, action_type, n_envs, rng, i, action_mask, ACTIVATE_ACTION_MASKING
     i += 1
     print(f"step {i}")
+    rng, _rng = jax.random.split(rng)
+    _rng = _rng[None, ...]
     
     def apply_action_mask(action):
         if ACTIVATE_ACTION_MASKING:
@@ -38,164 +40,164 @@ def key_handler(event):
     if event.key == "left":
         action = action_type.anticlock()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "right":
         action = action_type.clock()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "up":
         action = action_type.forward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "down":
         action = action_type.backward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "a":
         action = action_type.cabin_anticlock()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "d":
         action = action_type.cabin_clock()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "e":
         action = action_type.extend_arm()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "r":
         action = action_type.retract_arm()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "o":
         action = action_type.clock_forward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "k":
         action = action_type.clock_backward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "i":
         action = action_type.anticlock_forward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == "l":
         action = action_type.anticlock_backward()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
     if event.key == " ":
         action = action_type.do()
         action = apply_action_mask(action)
-        states, (obs, reward, done, info), key_maps_buffer = env.step(
-            states,
-            repeat_action(action),
+        timestep = env.step(
             env_cfgs,
-            key_maps_buffer,
+            timestep,
+            repeat_action(action),
+            _rng,
         )
-        action_mask = info["action_mask"]
-        parse_step(states, reward, done, info)
+        action_mask = timestep.info["action_mask"]
+        parse_step(timestep)
 
 
-def parse_step(obs, reward, done, info):
+def parse_step(timestep):
     redraw()
-    print("Reward :", reward)
-    print("Done: ", done)
+    print("Reward :", timestep.reward)
+    print("Done: ", timestep.done)
 
 
 ACTIVATE_ACTION_MASKING = False
@@ -205,22 +207,27 @@ action_type = batch_cfg.action_type
 n_envs_x = 1
 n_envs_y = 1
 n_envs = n_envs_x * n_envs_y
-seeds = jnp.array([24])
+seed = 24
+rng = jax.random.PRNGKey(seed)
 env = TerraEnvBatch(rendering=True, n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
 
 env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
-states, obs, key_maps_buffer = env.reset(seeds, env_cfgs)
+rng, _rng = jax.random.split(rng)
+_rng = _rng[None, ...]
+timestep = env.reset(env_cfgs, _rng)
 
 tile_size = 16
 
-states, (obs, rewards, dones, info), key_maps_buffer = env.step(
-    states,
-    action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
+rng, _rng = jax.random.split(rng)
+_rng = _rng[None, ...]
+timestep = env.step(
     env_cfgs,
-    key_maps_buffer,
+    timestep,
+    action_type.new(action_type.do_nothing().action[None].repeat(n_envs, 0)),
+    _rng,
 )
-action_mask = info["action_mask"]
+action_mask = timestep.info["action_mask"]
 i = 0
 env.terra_env.render_obs(
-    obs, key_handler=key_handler, block=True, tile_size=tile_size, info=info
+    timestep.observation, key_handler=key_handler, block=True, tile_size=tile_size, info=timestep.info
 )
