@@ -49,7 +49,7 @@ class GridMap(NamedTuple):
     # @partial(jax.jit, static_argnums=(3, 4))
     @staticmethod
     def procedural_map(
-        key: jax.random.KeyArray,
+        key: jax.random.PRNGKey,
         min_width: IntMap,
         min_height: IntMap,
         max_width: IntMap,
@@ -208,7 +208,7 @@ def _get_generic_rectangular_ramp(
 
 
 def _sample_width_height(
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     min_width: IntMap,
     min_height: IntMap,
     max_width: IntMap,
@@ -235,7 +235,7 @@ def single_tile(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ):
     width, height, padding_mask, key = _sample_width_height(
@@ -255,7 +255,7 @@ def single_tile_same_position(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ):
     width, height, padding_mask, key = _sample_width_height(
@@ -274,7 +274,7 @@ def single_tile_easy_position(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ):
     width, height, padding_mask, key = _sample_width_height(
@@ -294,7 +294,7 @@ def multiple_single_tiles(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ):
     width, height, padding_mask, key = _sample_width_height(
@@ -315,7 +315,7 @@ def multiple_single_tiles_with_dump_tiles(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ):
     width, height, padding_mask, key = _sample_width_height(
@@ -345,7 +345,7 @@ def single_square_trench(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ) -> Array:
     width, height, padding_mask, key = _sample_width_height(
@@ -385,7 +385,7 @@ def two_square_trenches_two_dump_areas(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ) -> Array:
     width, height, padding_mask, key = _sample_width_height(
@@ -458,7 +458,7 @@ def single_square_trench_right_side(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ) -> Array:
     width, height, padding_mask, key = _sample_width_height(
@@ -498,7 +498,7 @@ def single_rectangular_trench(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ) -> Array:
     width, height, padding_mask, key = _sample_width_height(
@@ -538,7 +538,7 @@ def single_square_ramp(
     min_height: IntMap,
     max_width: IntMap,
     max_height: IntMap,
-    key: jax.random.KeyArray,
+    key: jax.random.PRNGKey,
     map_params: MapParams,
 ) -> Array:
     width, height, padding_mask, key = _sample_width_height(

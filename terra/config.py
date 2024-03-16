@@ -152,6 +152,8 @@ class Rewards(NamedTuple):
 
     terminal_completed_tiles: float  # gets linearly scaled by ratio of completed tiles
 
+    normalizer: float  # constant scaling factor for all rewards
+
     @staticmethod
     def dense():
         return Rewards(
@@ -169,6 +171,8 @@ class Rewards(NamedTuple):
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
             terminal=200.0,
+
+            normalizer=200.0,
         )
     
     @staticmethod
@@ -188,6 +192,8 @@ class Rewards(NamedTuple):
             dump_correct=0.0,
             terminal_completed_tiles=200.0,  # gets linearly scaled by ratio of completed tiles
             terminal=0.0,
+
+            normalizer=200.0,
         )
 
     @staticmethod
@@ -207,6 +213,8 @@ class Rewards(NamedTuple):
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
             terminal=200.0,
+
+            normalizer=200.0,
         )
 
     @staticmethod
@@ -226,6 +234,8 @@ class Rewards(NamedTuple):
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
             terminal=1.0,
+
+            normalizer=1.0,
         )
 
 
@@ -247,10 +257,10 @@ class EnvConfig(NamedTuple):
 
     rewards: Rewards = Rewards.dense()
 
-    apply_trench_rewards: bool = True
+    apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
-    max_steps_in_episode: int = 1000
+    max_steps_in_episode: int = 200
 
     @staticmethod
     def parametrized(
@@ -292,10 +302,11 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        "trenches_occ_dmp_met_v2/all",
+        "all_dumpable/squares_5",
+        # "all_dumpable/squares_2_onemap",
     ]
 
 
-class TestbenchConfig(BatchConfig):
-    # Maps folders (the order matters -> Curriculum DOF)
-    maps_paths = ["onetile"]
+# class TestbenchConfig(BatchConfig):
+#     # Maps folders (the order matters -> Curriculum DOF)
+#     maps_paths = ["onetile"]

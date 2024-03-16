@@ -13,12 +13,19 @@ from terra.maps_buffer import init_maps_buffer
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
+from terra.actions import TrackedAction, WheeledAction
 from viz.rendering import RenderingEngine
 from viz.window import Window
 import pygame as pg
 from viz_pygame.game.game import Game
 from viz_pygame.game.settings import TILE_SIZE
 
+class TimeStep(NamedTuple):
+    state: State
+    observation: dict[str, jax.Array]
+    reward: jax.Array = None
+    done: jax.Array = None
+    info: dict = None
 
 class TerraEnv(NamedTuple):
     rendering_engine: Game | RenderingEngine | None = None
@@ -52,7 +59,7 @@ class TerraEnv(NamedTuple):
     @partial(jax.jit, static_argnums=(0,))
     def reset(
         self,
-        seed: int,
+        key: jax.random.PRNGKey,
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
@@ -63,7 +70,6 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
-        key = jax.random.PRNGKey(seed)
         state = State.new(
             key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
@@ -73,7 +79,16 @@ class TerraEnv(NamedTuple):
 
         observations["do_preview"] = state._handle_do().world.action_map.map
 
-        return state, observations
+        # TODO get action type from somewhere
+        dummy_action = TrackedAction.do_nothing()
+
+        return TimeStep(
+            state=state,
+            observation=observations,
+            reward=jnp.zeros(()),
+            done=jnp.zeros((), dtype=bool),
+            info=state._get_infos(dummy_action, False),
+        )
     
     @staticmethod
     def wrap_state(state: State) -> State:
@@ -288,7 +303,14 @@ class TerraEnv(NamedTuple):
 
         observations = self._update_obs_with_info(observations, infos)
 
-        return new_state, (observations, reward, done, infos)
+        # return new_state, (observations, reward, done, infos)
+        return TimeStep(
+            state=new_state,
+            observation=observations,
+            reward=reward,
+            done=done,
+            info=infos,
+        )
 
     @staticmethod
     def _update_obs_with_info(obs, info):
@@ -354,28 +376,30 @@ class TerraEnvBatch:
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
 
-    def _get_map_init(self, seeds: Array, env_cfgs: EnvConfig):
-        return jax.vmap(self.maps_buffer.get_map_init)(seeds, env_cfgs)
+    def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
 
-    def _get_map(self, maps_buffer_keys: jax.random.KeyArray, env_cfgs: EnvConfig):
+    def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
     
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, seeds: Array, env_cfgs: EnvConfig) -> State:
-        target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, maps_buffer_keys = self._get_map_init(seeds, env_cfgs)
-        state, observations = jax.vmap(self.terra_env.reset)(
-            seeds, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
+    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+        # TODO rng key?
+        target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, new_rng_key = self._get_map_init(rng_key, env_cfgs)
+        timestep = jax.vmap(self.terra_env.reset)(
+            rng_key, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )
-        return state, observations, maps_buffer_keys
+        return timestep
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
-        states: State,
-        actions: Action,
         env_cfgs: EnvConfig,
-        maps_buffer_keys: jax.random.KeyArray,
+        prev_timestep: TimeStep,
+        actions: Action,
+        maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+        # TODO rng key?
         (
             target_maps,
             padding_masks,
@@ -384,8 +408,8 @@ class TerraEnvBatch:
             dumpability_mask_init,
             maps_buffer_keys,
         ) = self._get_map(maps_buffer_keys, env_cfgs)
-        states, (obs, rewards, dones, infos) = jax.vmap(self.terra_env.step)(
-            states,
+        timestep = jax.vmap(self.terra_env.step)(
+            prev_timestep.state,
             actions,
             target_maps,
             padding_masks,
@@ -394,11 +418,7 @@ class TerraEnvBatch:
             dumpability_mask_init,
             env_cfgs,
         )
-        return (
-            states,
-            (obs, rewards, dones, infos),
-            maps_buffer_keys,
-        )
+        return timestep
 
     @property
     def actions_size(self) -> int:
