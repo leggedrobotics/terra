@@ -302,7 +302,8 @@ class BatchConfig(NamedTuple):
 
     # Maps folders (the order matters -> Curriculum DOF)
     maps_paths = [
-        "all_dumpable/squares_5",
+        "foundations_20_50"
+        # "all_dumpable/squares_5",
         # "all_dumpable/squares_2_onemap",
     ]
 
