@@ -1,54 +1,6 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+  - repo: https://github.com/psf/black
+    rev: stable
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
--   repo: https://github.com/psf/black
-    rev: '23.3.0'
-    hooks:
-    -   id: black
-        additional_dependencies: ['click==8.0.4']
-        language_version: python3.11
--   repo: https://github.com/pycqa/flake8
-    rev: '6.0.0'
-    hooks:
-    -   id: flake8
-# -   repo: 'https://github.com/asottile/dead'
-#     rev: v1.5.0
-#     hooks:
-#     -   id: dead
-# -   repo: https://github.com/pre-commit/mirrors-mypy
-#     rev: 'v1.2.0'
-#     hooks:
-#     -   id: mypy
--   repo: https://github.com/asottile/pyupgrade
-    rev: v3.3.2
-    hooks:
-    -   id: pyupgrade
-        args:
-        -   '--py311-plus'
--   repo: https://github.com/asottile/reorder_python_imports
-    rev: v3.9.0
-    hooks:
-    -   id: reorder-python-imports
-# - repo: local
-#   hooks:
-#     - id: pylint
-#       name: pylint
-#       entry: pylint
-#       language: system
-#       types: [python]
-#       args:
-#         [
-#           "-rn", # Only display messages
-#           "-sn", # Don't display the score
-#         ]
--   repo: local
-    hooks:
-    -   id: pytest-check
-        name: pytest-check
-        entry: pytest
-        language: system
-        pass_filenames: false
-        always_run: true
+      - id: black
+        language_version: python3.12

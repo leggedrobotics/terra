@@ -1,7 +1,17 @@
-from setuptools import find_packages
-from setuptools import setup
+from setuptools import find_packages, setup
 
-requires = ["jax", "jaxlib", "chex"]
+# Specifying all dependencies, including direct and indirect, for clarity
+requires = [
+    "jax",
+    "jaxlib",
+    "chex",
+    "tqdm",
+    "flax",
+    "matplotlib",
+    "pygame",
+    "wandb",
+    "tensorflow_probability"
+]
 
 setup(
     name="terra",
@@ -10,5 +20,5 @@ setup(
     description="Minimalistic grid map environment built with JAX",
     packages=find_packages(),
     install_requires=requires,
-    python_requires=">=3.11",
+    python_requires=">=3.12",
 )
