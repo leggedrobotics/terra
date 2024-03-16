@@ -260,7 +260,7 @@ class EnvConfig(NamedTuple):
     apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
-    max_steps_in_episode: int = 200
+    max_steps_in_episode: int = 100
 
     @staticmethod
     def parametrized(
