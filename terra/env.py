@@ -179,7 +179,6 @@ class TerraEnv(NamedTuple):
             do_preview = None
 
         self.rendering_engine.run(
-            active_grid=obs["action_m_is_done_width"],
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
@@ -189,7 +188,6 @@ class TerraEnv(NamedTuple):
             cabin_dir=obs["agent_state"][..., [3]],
             generate_gif=generate_gif,
             # agent_width=obs["agent_width"],
-            active_grid=obs["action_m_is_done_width"]
         )
 
     def render_obs(
