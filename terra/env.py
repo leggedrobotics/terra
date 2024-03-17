@@ -179,15 +179,7 @@ class TerraEnv(NamedTuple):
             do_preview = None
 
         self.rendering_engine.run(
-            active_grid=obs["action_map"],
-            target_grid=obs["target_map"],
-            padding_mask=obs["padding_mask"],
-            dumpability_mask=obs["dumpability_mask"],
-            agent_pos=obs["agent_state"][..., [0, 1]],
-            base_dir=obs["agent_state"][..., [2]],
-            cabin_dir=obs["agent_state"][..., [3]],
-            generate_gif=generate_gif,
-            # agent_width=obs["agent_width"],
+            active_grid=obs["action_m_is_done_width"],
             # agent_height=obs["agent_height"],
         )
 
@@ -243,7 +235,7 @@ class TerraEnv(NamedTuple):
             # self.window.show(block)
 
         return imgs_global, imgs_local
-
+    
     @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
@@ -255,29 +247,10 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        """
-        Step the env given an action
-
-        Args:
-            state (State)
-            action (int): the integer corresponding to one of the actions
-
-        Returns:
-            state, (observations, rewards, dones, infos)
-
-            state (State): new state.
-            observations (Dict): same as the state, as we are assuming perfect observability.
-            rewards (jnp.float32): reward for the agent.
-            done (jnp.bool_): done indicator. If episode ends, then done = True.
-            infos (Dict): additional information (currently empty)
-        """
+    ) -> TimeStep:
         new_state = state._step(action)
-
         reward = state._get_reward(new_state, action)
-
         new_state = self.wrap_state(new_state)
-
         observations = self._state_to_obs_dict(new_state)
 
         done, task_done = state._is_done(
@@ -300,10 +273,8 @@ class TerraEnv(NamedTuple):
         )
 
         infos = new_state._get_infos(action, task_done)
-
         observations = self._update_obs_with_info(observations, infos)
 
-        # return new_state, (observations, reward, done, infos)
         return TimeStep(
             state=new_state,
             observation=observations,
@@ -418,6 +389,8 @@ class TerraEnvBatch:
             dumpability_mask_init,
             env_cfgs,
         )
+        # here we shoud be able to add the curriculum 
+
         return timestep
 
     @property

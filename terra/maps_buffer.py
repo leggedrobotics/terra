@@ -73,6 +73,8 @@ class MapsBuffer(NamedTuple):
         padding_mask = self.padding_mask[env_cfg.target_map.map_dof, idx]
         trench_axes = self.trench_axes[env_cfg.target_map.map_dof, idx]
         trench_type = self.trench_types[env_cfg.target_map.map_dof]
+        # make sure is int 32
+        trench_type = trench_type.astype(jnp.int32)
         dumpability_mask_init = self.dumpability_masks_init[env_cfg.target_map.map_dof, idx]
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
@@ -118,7 +120,10 @@ class MapsBuffer(NamedTuple):
             key,
             env_cfg,
         )
+        # Ensure consistent dtypes for all return values
+        trench_type = trench_type.astype(jnp.int32)
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
+
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
@@ -312,6 +317,7 @@ def init_maps_buffer(batch_cfg):
     folder_paths = [
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
     ]
+    print(f"Loading maps from {folder_paths}.")
     folder_paths_dict = map_paths_to_idx(folder_paths)
     maps_from_disk = []
     occupancies_from_disk = []
