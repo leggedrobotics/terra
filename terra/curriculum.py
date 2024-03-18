@@ -14,6 +14,9 @@ class CurriculumManager(NamedTuple):
     decrease_level_threshold: int
 
     def _update_single_cfg(self, timestep):
+        if self.max_level == 0:
+            return timestep
+        
         env_cfg = timestep.env_cfg
         done = jnp.all(timestep.done)
         completed = jnp.all(timestep.info["task_done"])

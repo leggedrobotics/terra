@@ -288,11 +288,11 @@ class CurriculumGlobalConfig(NamedTuple):
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
         },
-        {
-            "maps_path": "foundations_20_50",
-            "max_steps_in_episode": 200,
-            "rewards_type": RewardsType.SPARSE,
-        }
+        # {
+        #     "maps_path": "foundations_20_50",
+        #     "max_steps_in_episode": 200,
+        #     "rewards_type": RewardsType.SPARSE,
+        # }
     ]
 
 class BatchConfig(NamedTuple):
