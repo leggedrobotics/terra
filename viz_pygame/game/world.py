@@ -31,8 +31,12 @@ class World:
                     tile = 2
                 elif dumpability_mask is not None and dumpability_mask[grid_x, grid_y] == 0:
                     tile = 3
+                elif map[grid_x, grid_y] > 0:
+                    tile = 1
+                elif map[grid_x, grid_y] < 0:
+                    tile = -1
                 else:
-                    tile = map[grid_x, grid_y]
+                    tile = 0
                 world_tile = self.grid_to_world(grid_x, grid_y, tile)
                 world[grid_x].append(world_tile)
 
