@@ -11,9 +11,7 @@ from jax import Array
 from tqdm import tqdm
 from typing import Any
 
-from terra.config import ImmutableMapsConfig
-from terra.config import MapType
-from terra.map_generator import GridMap
+from terra.config import ImmutableMapsConfig, BatchConfig
 from terra.settings import IntMap
 from terra.settings import IntLowDim
 
@@ -32,17 +30,6 @@ class MapsBuffer(NamedTuple):
     n_maps: int  # number of maps for each map type
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
-
-    # Set this array with the DOF you want to be considered (e.g. the first element will be considered as dof=0).
-    map_types_from_disk: Array = jnp.array(
-        [
-            MapType.OPENSTREET_2_DIG_DUMP,
-            MapType.OPENSTREET_3_DIG_DIG_DUMP,
-            MapType.TRENCHES,
-            MapType.FOUNDATIONS,
-            MapType.RECTANGLES,
-        ]
-    )
 
     def __hash__(self) -> int:
         return hash((len(self.maps),))
@@ -78,48 +65,9 @@ class MapsBuffer(NamedTuple):
         dumpability_mask_init = self.dumpability_masks_init[env_cfg.target_map.map_dof, idx]
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
-    def _procedurally_generate_map(
-        self, key: jax.random.PRNGKey, env_cfg, map_type
-    ) -> Array:
-        key, subkey = jax.random.split(key)
-        min_width = self.immutable_maps_cfg.min_width
-        min_height = self.immutable_maps_cfg.min_height
-        max_width = self.immutable_maps_cfg.max_width
-        max_height = self.immutable_maps_cfg.max_height
-        element_edge_min = env_cfg.target_map.element_edge_min
-        element_edge_max = env_cfg.target_map.element_edge_max
-        map, padding_mask, key = GridMap.procedural_map(
-            key=subkey,
-            min_width=min_width,
-            min_height=min_height,
-            max_width=max_width,
-            max_height=max_height,
-            element_edge_min=element_edge_min,
-            element_edge_max=element_edge_max,
-            map_type=map_type,
-        )
-        trench_axes_dummy = jnp.full(
-            (
-                3,
-                3,
-            ),
-            -97.0,
-            dtype=jnp.float16,
-        )
-        trench_type_dummy = jnp.full((), -1, dtype=jnp.int32)
-        dumpability_mask_init_dummy = jnp.ones(map.shape, dtype=jnp.bool_)
-        return map, padding_mask, trench_axes_dummy, trench_type_dummy, dumpability_mask_init_dummy, key
-
     @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
-        map_type = env_cfg.target_map.type
-        map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key = jax.lax.cond(
-            jnp.any(jnp.isin(jnp.array([map_type]), self.map_types_from_disk)),
-            self._get_map_from_disk,
-            partial(self._procedurally_generate_map, map_type=map_type),
-            key,
-            env_cfg,
-        )
+        map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key = self._get_map_from_disk(key, env_cfg)
         # Ensure consistent dtypes for all return values
         trench_type = trench_type.astype(jnp.int32)
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
@@ -287,35 +235,12 @@ def _pad_maps(
     )
 
 
-def init_maps_buffer(batch_cfg):
+def init_maps_buffer(batch_cfg: BatchConfig):
     if os.getenv("DATASET_PATH", "") == "":
-        print("DATASET_PATH not defined, skipping maps loading from disk...")
-        return MapsBuffer.new(
-            maps=jnp.zeros(
-                (1, 1, batch_cfg.maps.max_width, batch_cfg.maps.max_height),
-                dtype=IntMap,
-            ),
-            padding_mask=jnp.zeros(
-                (1, 1, batch_cfg.maps.max_width, batch_cfg.maps.max_height),
-                dtype=IntMap,
-            ),
-            dumpability_masks_init=jnp.ones(
-                (1, 1, batch_cfg.maps.max_width, batch_cfg.maps.max_height),
-                dtype=jnp.bool_,
-            ),
-            trench_axes=-97.0
-            * jnp.ones(
-                (
-                    1,
-                    1,
-                    3,
-                    3,
-                )
-            ),
-            trench_types=-1 * jnp.ones((3,), dtype=jnp.int32),
-        )
+        raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
+    maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
     folder_paths = [
-        str(Path(os.getenv("DATASET_PATH", "")) / el) for el in batch_cfg.maps_paths
+        str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths
     ]
     print(f"Loading maps from {folder_paths}.")
     folder_paths_dict = map_paths_to_idx(folder_paths)

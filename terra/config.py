@@ -2,6 +2,7 @@ from enum import IntEnum
 from typing import NamedTuple
 
 import jax
+import jax.numpy as jnp
 
 from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
@@ -10,27 +11,6 @@ from terra.actions import WheeledAction  # noqa: F401
 class ExcavatorDims(NamedTuple):
     WIDTH: float = 6.08  # longer side
     HEIGHT: float = 3.5  # shorter side
-
-
-class MapType(IntEnum):
-    SINGLE_TILE = 0
-    SQUARE_SINGLE_TRENCH = 1
-    RECTANGULAR_SINGLE_TRENCH = 2
-    SQUARE_SINGLE_RAMP = 3
-    SQUARE_SINGLE_TRENCH_RIGHT_SIDE = 4
-    SINGLE_TILE_SAME_POSITION = 5
-    SINGLE_TILE_EASY_POSITION = 6
-    MULTIPLE_SINGLE_TILES = 7
-    MULTIPLE_SINGLE_TILES_WITH_DUMP_TILES = 8
-    TWO_SQUARE_TRENCHES_TWO_DUMP_AREAS = 9
-    ROTATED_RECTANGLE_MAX_WIDTH = 10
-
-    # Loaded from disk
-    OPENSTREET_2_DIG_DUMP = 11
-    OPENSTREET_3_DIG_DIG_DUMP = 12
-    TRENCHES = 13
-    FOUNDATIONS = 14
-    RECTANGLES = 15
 
 
 class RewardsType(IntEnum):
@@ -60,18 +40,12 @@ class MapDims(NamedTuple):
 
 
 class TargetMapConfig(NamedTuple):
-    type: int = MapType.RECTANGLES
-    map_dof: int = 0  # for curriculum
-
-    # Used only for procedural maps with elements bigger than 1 tile
-    element_edge_min: int = 2
-    element_edge_max: int = 6
+    map_dof: int = 0  # map level with respect to the curriculum
 
     @staticmethod
-    def parametrized(map_dof: int, map_type: int) -> "TargetMapConfig":
+    def parametrized(map_dof: int) -> "TargetMapConfig":
         return TargetMapConfig(
             map_dof=map_dof,
-            type=map_type,
         )
 
 
@@ -244,6 +218,17 @@ class TrenchRewards(NamedTuple):
         -0.4
     )  # distance_coefficient * distance, if distance > agent_width / 2
 
+class CurriculumConfig(NamedTuple):
+    level: int = 0
+
+    consecutive_failures: int = 0
+    consecutive_successes: int = 0
+
+    @staticmethod
+    def parametrized(level: int) -> "CurriculumConfig":
+        return CurriculumConfig(
+            level=level,
+        )
 
 class EnvConfig(NamedTuple):
     tile_size: float = MapDims().tile_size
@@ -262,13 +247,14 @@ class EnvConfig(NamedTuple):
 
     max_steps_in_episode: int = 100
 
+    curriculum: CurriculumConfig = CurriculumConfig()
+
     @staticmethod
     def parametrized(
         width_m: int,
         height_m: int,
         max_steps_in_episode: int,
-        map_dof: int,
-        map_type: int,
+        curriculum_level: int,
         rewards_type: int,
         apply_trench_rewards: bool,
     ) -> "EnvConfig":
@@ -282,15 +268,32 @@ class EnvConfig(NamedTuple):
             tile_size=map_dims.tile_size,
             max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
-            target_map=TargetMapConfig.parametrized(map_dof, map_type),
+            target_map=TargetMapConfig.parametrized(curriculum_level),
             rewards=rewards,
             apply_trench_rewards=apply_trench_rewards,
+            curriculum=CurriculumConfig.parametrized(curriculum_level),
         )
 
     @classmethod
     def new(cls):
         return EnvConfig()
 
+class CurriculumGlobalConfig(NamedTuple):
+    increase_level_threshold: int = 3
+    decrease_level_threshold: int = 10
+    
+    levels = [
+        {
+            "maps_path": "foundations_20_50",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.DENSE,
+        },
+        {
+            "maps_path": "foundations_20_50",
+            "max_steps_in_episode": 200,
+            "rewards_type": RewardsType.SPARSE,
+        }
+    ]
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
@@ -300,14 +303,4 @@ class BatchConfig(NamedTuple):
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
     maps: ImmutableMapsConfig = ImmutableMapsConfig()
 
-    # Maps folders (the order matters -> Curriculum DOF)
-    maps_paths = [
-        "foundations_20_50"
-        # "all_dumpable/squares_5",
-        # "all_dumpable/squares_2_onemap",
-    ]
-
-
-# class TestbenchConfig(BatchConfig):
-#     # Maps folders (the order matters -> Curriculum DOF)
-#     maps_paths = ["onetile"]
+    curriculum_global: CurriculumGlobalConfig = CurriculumGlobalConfig()

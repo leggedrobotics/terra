@@ -14,6 +14,7 @@ from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.actions import TrackedAction, WheeledAction
+from terra.curriculum import CurriculumManager
 from viz.rendering import RenderingEngine
 from viz.window import Window
 import pygame as pg
@@ -23,9 +24,10 @@ from viz_pygame.game.settings import TILE_SIZE
 class TimeStep(NamedTuple):
     state: State
     observation: dict[str, jax.Array]
-    reward: jax.Array = None
-    done: jax.Array = None
-    info: dict = None
+    reward: jax.Array
+    done: jax.Array
+    info: dict
+    env_cfg: EnvConfig
 
 class TerraEnv(NamedTuple):
     rendering_engine: Game | RenderingEngine | None = None
@@ -88,6 +90,7 @@ class TerraEnv(NamedTuple):
             reward=jnp.zeros(()),
             done=jnp.zeros((), dtype=bool),
             info=state._get_infos(dummy_action, False),
+            env_cfg=env_cfg,
         )
     
     @staticmethod
@@ -288,6 +291,7 @@ class TerraEnv(NamedTuple):
             reward=reward,
             done=done,
             info=infos,
+            env_cfg=env_cfg,
         )
 
     @staticmethod
@@ -353,6 +357,12 @@ class TerraEnvBatch:
         )
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
+        max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
+        self.curriculum_manager = CurriculumManager(
+            max_level=max_curriculum_level,
+            increase_level_threshold=batch_cfg.curriculum_global.increase_level_threshold,
+            decrease_level_threshold=batch_cfg.curriculum_global.decrease_level_threshold,
+        )
 
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
@@ -362,7 +372,6 @@ class TerraEnvBatch:
     
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
-        # TODO rng key?
         target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, new_rng_key = self._get_map_init(rng_key, env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
@@ -372,12 +381,12 @@ class TerraEnvBatch:
     @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
-        env_cfgs: EnvConfig,
-        prev_timestep: TimeStep,
+        timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        # TODO rng key?
+        # Update env_cfgs based on the curriculum, and get the new maps
+        timestep = self.curriculum_manager.update_cfgs(timestep)
         (
             target_maps,
             padding_masks,
@@ -385,19 +394,18 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             maps_buffer_keys,
-        ) = self._get_map(maps_buffer_keys, env_cfgs)
+        ) = self._get_map(maps_buffer_keys, timestep.env_cfg)
+        # Step the environment
         timestep = jax.vmap(self.terra_env.step)(
-            prev_timestep.state,
+            timestep.state,
             actions,
             target_maps,
             padding_masks,
             trench_axes,
             trench_type,
             dumpability_mask_init,
-            env_cfgs,
+            timestep.env_cfg,
         )
-        # here we shoud be able to add the curriculum 
-
         return timestep
 
     @property
