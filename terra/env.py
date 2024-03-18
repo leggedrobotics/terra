@@ -81,8 +81,7 @@ class TerraEnv(NamedTuple):
 
         observations["do_preview"] = state._handle_do().world.action_map.map
 
-        # TODO get action type from somewhere
-        dummy_action = TrackedAction.do_nothing()
+        dummy_action = BatchConfig().action_type.do_nothing()
 
         return TimeStep(
             state=state,
