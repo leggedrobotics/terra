@@ -1,8 +1,8 @@
 
 import pygame as pg
 import numpy as np
-from game.game import Game
-from game.settings import TILE_SIZE
+from viz_pygame.game.game import Game
+from viz_pygame.game.settings import TILE_SIZE
 
 
 def main():

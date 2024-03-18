@@ -385,6 +385,7 @@ class TerraEnvBatch:
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
         target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, new_rng_key = self._get_map_init(rng_key, env_cfgs)
+        env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )

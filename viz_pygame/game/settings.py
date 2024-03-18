@@ -1,4 +1,4 @@
-TILE_SIZE = 3
+TILE_SIZE = 10
 
 COLORS = {
     0: "#E4DCCF",

@@ -76,6 +76,24 @@ class CurriculumManager(NamedTuple):
         )
         timestep = timestep._replace(env_cfg=env_cfg)
         return timestep
+    
+    def _reset_single_cfg(self, env_cfg):
+        max_steps_in_episode = self.max_steps_in_episode_per_level[0]
+        apply_trench_rewards = self.apply_trench_rewards_per_level[0]
+        
+        rewards_list = [Rewards.dense, Rewards.sparse]
+        reward_type = self.reward_type_per_level[0]
+        rewards = jax.lax.switch(reward_type, rewards_list)
+
+        env_cfg = env_cfg._replace(
+            rewards=rewards,
+            apply_trench_rewards=apply_trench_rewards,
+            max_steps_in_episode=max_steps_in_episode,
+        )
+        return env_cfg
 
     def update_cfgs(self, timesteps):
         return jax.vmap(self._update_single_cfg)(timesteps)
+    
+    def reset_cfgs(self, env_cfgs):
+        return jax.vmap(self._reset_single_cfg)(env_cfgs)
