@@ -16,8 +16,6 @@ class ExcavatorDims(NamedTuple):
 class RewardsType(IntEnum):
     DENSE = 0
     SPARSE = 1
-    TERMINAL_ONLY = 2
-    MIXED = 3
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -81,21 +79,6 @@ class AgentConfig(NamedTuple):
         else round(ExcavatorDims().HEIGHT / MapDims().tile_size) + 1
     )
 
-    @staticmethod
-    def from_map_dims(map_dims: MapDims) -> "AgentConfig":
-        return AgentConfig(
-            height=(
-                round(ExcavatorDims().WIDTH / map_dims.tile_size)
-                if (round(ExcavatorDims().WIDTH / map_dims.tile_size)) % 2 != 0
-                else round(ExcavatorDims().WIDTH / map_dims.tile_size) + 1
-            ),
-            width=(
-                round(ExcavatorDims().HEIGHT / map_dims.tile_size)
-                if (round(ExcavatorDims().HEIGHT / map_dims.tile_size)) % 2 != 0
-                else round(ExcavatorDims().HEIGHT / map_dims.tile_size) + 1
-            ),
-        )
-
 
 class Rewards(NamedTuple):
     existence: float
@@ -144,27 +127,6 @@ class Rewards(NamedTuple):
         )
     
     @staticmethod
-    def mixed():
-        return Rewards(
-            existence=-0.1,
-            collision_move=-0.1,
-            move_while_loaded=0.0,
-            move=-0.05,
-            collision_turn=-0.1,
-            base_turn=-0.1,
-            cabin_turn=-0.02,
-            dig_wrong=-0.3,
-            dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
-            dig_correct=0.0,
-            dump_correct=0.0,
-            terminal_completed_tiles=200.0,  # gets linearly scaled by ratio of completed tiles
-            terminal=0.0,
-
-            normalizer=200.0,
-        )
-
-    @staticmethod
     def sparse():
         return Rewards(
             existence=-0.1,
@@ -185,27 +147,6 @@ class Rewards(NamedTuple):
             normalizer=200.0,
         )
 
-    @staticmethod
-    def terminal_only():
-        return Rewards(
-            existence=-0.01,
-            collision_move=0.0,
-            move_while_loaded=0.0,
-            move=0.0,
-            collision_turn=0.0,
-            base_turn=0.0,
-            cabin_turn=0.0,
-            dig_wrong=0.0,
-            dump_wrong=0.0,
-            dump_no_dump_area=0.0,
-            dig_correct=0.0,
-            dump_correct=0.0,
-            terminal_completed_tiles=0.0,
-            terminal=1.0,
-
-            normalizer=1.0,
-        )
-
 
 class TrenchRewards(NamedTuple):
     distance_coefficient: float = (
@@ -217,13 +158,7 @@ class CurriculumConfig(NamedTuple):
     level: int = 0
     consecutive_failures: int = 0
     consecutive_successes: int = 0
-    max_steps_in_episode: int = 0  # used to dynamically change max episode length
 
-    @staticmethod
-    def parametrized(level: int) -> "CurriculumConfig":
-        return CurriculumConfig(
-            level=level,
-        )
 
 class EnvConfig(NamedTuple):
     tile_size: float = MapDims().tile_size
@@ -242,33 +177,7 @@ class EnvConfig(NamedTuple):
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
-    @staticmethod
-    def parametrized(
-        width_m: int,
-        height_m: int,
-        curriculum_level: int,
-        rewards_type: int,
-        apply_trench_rewards: bool,
-    ) -> "EnvConfig":
-        map_dims = MapDims(width_m, height_m)
-
-        rewards_list = [Rewards.dense, Rewards.sparse, Rewards.terminal_only, Rewards.mixed]
-
-        rewards = jax.lax.switch(rewards_type, rewards_list)
-
-        return EnvConfig(
-            tile_size=map_dims.tile_size,
-            agent=AgentConfig.from_map_dims(map_dims),
-            rewards=rewards,
-            apply_trench_rewards=apply_trench_rewards,
-            curriculum=CurriculumConfig.parametrized(curriculum_level),
-        )
-    
-    @staticmethod
-    def update_max_steps_in_episode(env_cfg: "EnvConfig", max_steps_in_episode: int) -> "EnvConfig":
-        return env_cfg._replace(
-            curriculum=env_cfg.curriculum._replace(max_steps_in_episode=max_steps_in_episode)
-        )
+    max_steps_in_episode: int = 0  # changed by CurriculumManager
 
     @classmethod
     def new(cls):
@@ -283,17 +192,18 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "foundations_20_50",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
         },
-        # {
-        #     "maps_path": "foundations_20_50",
-        #     "max_steps_in_episode": 200,
-        #     "rewards_type": RewardsType.SPARSE,
-        # }
+        {
+            "maps_path": "foundations_20_50",
+            "max_steps_in_episode": 250,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        }
     ]
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
-    load_maps_from_disk: bool = True
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()

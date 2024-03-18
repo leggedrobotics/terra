@@ -3,6 +3,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 from jax import Array
+from terra.config import Rewards
 
 class CurriculumManager(NamedTuple):
     """
@@ -13,6 +14,8 @@ class CurriculumManager(NamedTuple):
     increase_level_threshold: int
     decrease_level_threshold: int
     max_steps_in_episode_per_level: Array
+    apply_trench_rewards_per_level: Array
+    reward_type_per_level: Array
 
     def _update_single_cfg(self, timestep):
         if self.max_level == 0:
@@ -58,13 +61,20 @@ class CurriculumManager(NamedTuple):
         )
 
         max_steps_in_episode = self.max_steps_in_episode_per_level[level]
+        apply_trench_rewards = self.apply_trench_rewards_per_level[level]
+
+        rewards_list = [Rewards.dense, Rewards.sparse]
+        reward_type = self.reward_type_per_level[level]
+        rewards = jax.lax.switch(reward_type, rewards_list)
         
         env_cfg = env_cfg._replace(
+            rewards=rewards,
+            apply_trench_rewards=apply_trench_rewards,
+            max_steps_in_episode=max_steps_in_episode,
             curriculum=env_cfg.curriculum._replace(
                 level=level,
                 consecutive_failures=consecutive_failures,
                 consecutive_successes=consecutive_successes,
-                max_steps_in_episode=max_steps_in_episode,
             )
         )
         timestep = timestep._replace(env_cfg=env_cfg)

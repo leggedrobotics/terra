@@ -361,11 +361,19 @@ class TerraEnvBatch:
         max_steps_in_episode_per_level = jnp.array(
             [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
         )
+        apply_trench_rewards_per_level = jnp.array(
+            [level["apply_trench_rewards"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.bool_
+        )
+        reward_type_per_level = jnp.array(
+            [level["rewards_type"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
+        )
         self.curriculum_manager = CurriculumManager(
             max_level=max_curriculum_level,
             increase_level_threshold=batch_cfg.curriculum_global.increase_level_threshold,
             decrease_level_threshold=batch_cfg.curriculum_global.decrease_level_threshold,
             max_steps_in_episode_per_level=max_steps_in_episode_per_level,
+            apply_trench_rewards_per_level=apply_trench_rewards_per_level,
+            reward_type_per_level=reward_type_per_level,
         )
 
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
