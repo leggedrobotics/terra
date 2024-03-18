@@ -12,6 +12,7 @@ class CurriculumManager(NamedTuple):
     max_level: int
     increase_level_threshold: int
     decrease_level_threshold: int
+    max_steps_in_episode_per_level: Array
 
     def _update_single_cfg(self, timestep):
         if self.max_level == 0:
@@ -55,12 +56,15 @@ class CurriculumManager(NamedTuple):
                 lambda: env_cfg.curriculum.level,
             ),
         )
+
+        max_steps_in_episode = self.max_steps_in_episode_per_level[level]
         
         env_cfg = env_cfg._replace(
             curriculum=env_cfg.curriculum._replace(
                 level=level,
                 consecutive_failures=consecutive_failures,
                 consecutive_successes=consecutive_successes,
+                max_steps_in_episode=max_steps_in_episode,
             )
         )
         timestep = timestep._replace(env_cfg=env_cfg)

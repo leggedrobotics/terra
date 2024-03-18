@@ -11,7 +11,7 @@ from jax import Array
 from tqdm import tqdm
 from typing import Any
 
-from terra.config import ImmutableMapsConfig, BatchConfig
+from terra.config import ImmutableMapsConfig, BatchConfig, EnvConfig
 from terra.settings import IntMap
 from terra.settings import IntLowDim
 
@@ -52,17 +52,17 @@ class MapsBuffer(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
-    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg) -> Array:
-        # maps_a = jax.lax.switch(env_cfg.target_map.map_dof, self.maps)
+    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
+        curriculum_level = env_cfg.curriculum.level
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
-        map = self.maps[env_cfg.target_map.map_dof, idx]
-        padding_mask = self.padding_mask[env_cfg.target_map.map_dof, idx]
-        trench_axes = self.trench_axes[env_cfg.target_map.map_dof, idx]
-        trench_type = self.trench_types[env_cfg.target_map.map_dof]
+        map = self.maps[curriculum_level, idx]
+        padding_mask = self.padding_mask[curriculum_level, idx]
+        trench_axes = self.trench_axes[curriculum_level, idx]
+        trench_type = self.trench_types[curriculum_level]
         # make sure is int 32
         trench_type = trench_type.astype(jnp.int32)
-        dumpability_mask_init = self.dumpability_masks_init[env_cfg.target_map.map_dof, idx]
+        dumpability_mask_init = self.dumpability_masks_init[curriculum_level, idx]
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
 
     @partial(jax.jit, static_argnums=(0,))

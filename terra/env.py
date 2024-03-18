@@ -358,10 +358,14 @@ class TerraEnvBatch:
         self.batch_cfg = batch_cfg
         self.maps_buffer = init_maps_buffer(batch_cfg)
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
+        max_steps_in_episode_per_level = jnp.array(
+            [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
+        )
         self.curriculum_manager = CurriculumManager(
             max_level=max_curriculum_level,
             increase_level_threshold=batch_cfg.curriculum_global.increase_level_threshold,
             decrease_level_threshold=batch_cfg.curriculum_global.decrease_level_threshold,
+            max_steps_in_episode_per_level=max_steps_in_episode_per_level,
         )
 
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):

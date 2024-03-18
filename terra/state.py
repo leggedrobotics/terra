@@ -1499,7 +1499,7 @@ class State(NamedTuple):
         self, action_map: Array, target_map: Array, agent_loaded: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
         done_task = self._is_done_task(action_map, target_map, agent_loaded)
-        done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
+        done_steps = self.env_steps >= self.env_cfg.curriculum.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 
 

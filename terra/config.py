@@ -40,13 +40,7 @@ class MapDims(NamedTuple):
 
 
 class TargetMapConfig(NamedTuple):
-    map_dof: int = 0  # map level with respect to the curriculum
-
-    @staticmethod
-    def parametrized(map_dof: int) -> "TargetMapConfig":
-        return TargetMapConfig(
-            map_dof=map_dof,
-        )
+    pass
 
 
 class ActionMapConfig(NamedTuple):
@@ -219,10 +213,11 @@ class TrenchRewards(NamedTuple):
     )  # distance_coefficient * distance, if distance > agent_width / 2
 
 class CurriculumConfig(NamedTuple):
+    """State of the curriculum. This config should not be changed."""
     level: int = 0
-
     consecutive_failures: int = 0
     consecutive_successes: int = 0
+    max_steps_in_episode: int = 0  # used to dynamically change max episode length
 
     @staticmethod
     def parametrized(level: int) -> "CurriculumConfig":
@@ -245,15 +240,12 @@ class EnvConfig(NamedTuple):
     apply_trench_rewards: bool = False
     trench_rewards: TrenchRewards = TrenchRewards()
 
-    max_steps_in_episode: int = 100
-
     curriculum: CurriculumConfig = CurriculumConfig()
 
     @staticmethod
     def parametrized(
         width_m: int,
         height_m: int,
-        max_steps_in_episode: int,
         curriculum_level: int,
         rewards_type: int,
         apply_trench_rewards: bool,
@@ -266,12 +258,16 @@ class EnvConfig(NamedTuple):
 
         return EnvConfig(
             tile_size=map_dims.tile_size,
-            max_steps_in_episode=max_steps_in_episode,
             agent=AgentConfig.from_map_dims(map_dims),
-            target_map=TargetMapConfig.parametrized(curriculum_level),
             rewards=rewards,
             apply_trench_rewards=apply_trench_rewards,
             curriculum=CurriculumConfig.parametrized(curriculum_level),
+        )
+    
+    @staticmethod
+    def update_max_steps_in_episode(env_cfg: "EnvConfig", max_steps_in_episode: int) -> "EnvConfig":
+        return env_cfg._replace(
+            curriculum=env_cfg.curriculum._replace(max_steps_in_episode=max_steps_in_episode)
         )
 
     @classmethod
