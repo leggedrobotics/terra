@@ -15,11 +15,11 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.actions import TrackedAction, WheeledAction
 from terra.curriculum import CurriculumManager
-from viz.rendering import RenderingEngine
-from viz.window import Window
+from viz_legacy.rendering import RenderingEngine
+from viz_legacy.window import Window
 import pygame as pg
-from viz_pygame.game.game import Game
-from viz_pygame.game.settings import TILE_SIZE
+from viz.game.game import Game
+from viz.game.settings import TILE_SIZE
 
 class TimeStep(NamedTuple):
     state: State
@@ -345,7 +345,7 @@ class TerraEnvBatch:
         n_envs_y_rendering: int = 1,
         display: bool = False,
         progressive_gif: bool = False,
-        rendering_engine: str = "numpy",
+        rendering_engine: str = "pygame",
     ) -> None:
         self.terra_env = TerraEnv.new(
             rendering=rendering,
