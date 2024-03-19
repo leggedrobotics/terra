@@ -1,4 +1,4 @@
-# Terra - Earthwork planning environment in JAX
+# 🌍 Terra - Earthwork planning environment in JAX
 
 ![img](assets/overview.gif)
 
