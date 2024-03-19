@@ -4,7 +4,8 @@ import numpy as np
 from jax import Array
 from terra.settings import IntLowDim
 from terra.settings import Float
-
+import jax.numpy as jnp
+from jax import jit
 
 def increase_angle_circular(angle: IntLowDim, max_angle: IntLowDim) -> IntLowDim:
     """
@@ -28,31 +29,59 @@ def decrease_angle_circular(angle: IntLowDim, max_angle: IntLowDim) -> IntLowDim
     return (angle + max_angle - 1) % max_angle
 
 
-def apply_rot_transl(anchor_state: Array, global_coords: Array) -> Array:
-    """
-    Applies the following transform to every element of global_coords:
-    local_coords = [R|t]^-1 global_coords
-    where R and t are extracted from anchor state.
+# def apply_rot_transl(anchor_state: Array, global_coords: Array) -> Array:
+#     """
+#     Applies the following transform to every element of global_coords:
+#     local_coords = [R|t]^-1 global_coords
+#     where R and t are extracted from anchor state.
 
+#     Args:
+#         - anchor_state: (3, ) Array containing [x, y, theta (rad)]
+#             Note: this is intended as the local frame expressed in the global frame.
+#         - global_coords: (2, N) Array containing [x, y]
+#     Returns:
+#         - local_coords: (2, N) Array containing local [x, y]
+#     """
+#     theta = anchor_state[2]
+#     costheta, sintheta = jnp.cos(theta), jnp.sin(theta)
+#     R_t = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
+
+#     t = anchor_state[:2]
+#     neg_Rt_t = -R_t @ t
+
+#     # Build the inverse transformation matrix
+#     T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0., 0., 1.])]])
+
+#     local_coords = jnp.einsum('ij,jk->ik', T, jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]))
+#     return local_coords[:2]
+
+@jit
+def apply_rot_transl(anchor_state, global_coords):
+    """
+    Applies the rotation and translation transformation using JAX for potential performance improvements.
+    
     Args:
         - anchor_state: (3, ) Array containing [x, y, theta (rad)]
-            Note: this is intended as the local frame expressed in the global frame.
         - global_coords: (2, N) Array containing [x, y]
+    
     Returns:
         - local_coords: (2, N) Array containing local [x, y]
     """
+    # jax.debug.print("anchor_state shape:", anchor_state.shape, "global_coords shape:", global_coords.shape)
     theta = anchor_state[2]
     costheta, sintheta = jnp.cos(theta), jnp.sin(theta)
-    R_t = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
-
+    
+    # Corrected rotation matrix for the inverse transformation
+    R_inv = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
+    
+    # Translation vector
     t = anchor_state[:2]
-    neg_Rt_t = -R_t @ t
-
-    # Build the inverse transformation matrix
-    T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0., 0., 1.])]])
-
-    local_coords = jnp.einsum('ij,jk->ik', T, jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]))
-    return local_coords[:2]
+    
+    # Translate the global coordinates by -t and then apply the rotation
+    translated_coords = global_coords - t[:, None]
+    local_coords = jnp.dot(R_inv, translated_coords)
+    
+    return local_coords
 
 
 def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:
