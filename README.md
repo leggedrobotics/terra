@@ -14,10 +14,11 @@ Terra is a flexible and abstracted grid world environment for training intellige
 - 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from PureJaxRL and xland-minigrid
 
 ## Installation
-You can directly install Terra from PyPI:
+Clone the repo, and if you want to use Terra in your project use 
 ~~~
-pip install terra
+pip install -e .
 ~~~
+You can check out [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning) for an installation workflow example.
 
 ### JAX
 The JAX installation is hardware-dependent and therefore needs to be done separately. Follow [this link](https://jax.readthedocs.io/en/latest/installation.html) to install the right one for you.
@@ -114,3 +115,8 @@ TODO scaling graph
 
 ## Baselines 🎮
 We release a set of baselines and checkpoints in [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
+
+## Citation
+```
+Coming soon...
+```
