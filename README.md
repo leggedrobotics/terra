@@ -31,7 +31,7 @@ The standard workflow is made of the following steps:
 4. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
 
 ### Basic Usage
-```
+``` python
 import jax
 from terra.env import TerraEnvBatch
 from terra.config import EnvConfig
@@ -65,7 +65,7 @@ Running the standard map generation will produce the following folder structure.
 
 ### Training Configurations
 In Terra the settings are expressed as curriculum levels. To set the levels of the training, you can edit the `config.py` file. For example, if you want to start your training with dense rewards on foundations and then shift to shorter episodes with sparse rewards, you can set the curriculum as follows.
-```
+``` python
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 3
     decrease_level_threshold: int = 10
@@ -88,7 +88,7 @@ class CurriculumGlobalConfig(NamedTuple):
 Note that `apply_trench_rewards` should be `True` if you are training on trenches. This enables an additional reward that penalizes the distance of the agent from any trench axis at dig time, pushing the agent to be aligned to them.
 
 To select the embodiment to use, set the following to either `TrackedAction` or `WheeledAction`. Check out `state.py` for the documentation of the embodiment-specific state transitions.
-```
+``` python
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction
 ```
@@ -97,11 +97,11 @@ class BatchConfig(NamedTuple):
 We provide debugging tools to explore Terra maps and play with the different agents.
 
 You can play on a single environment using your keyboard with
-```
+``` python
 python -m viz.main_manual
 ```
 and you can inspect the generated maps with
-```
+``` python
 python -m viz.play
 ```
 note that these scripts assume that the maps are stored in the `data/` folder.
