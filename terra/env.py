@@ -16,6 +16,10 @@ from terra.wrappers import TraversabilityMaskWrapper
 from terra.actions import TrackedAction, WheeledAction
 from terra.curriculum import CurriculumManager
 import pygame as pg
+from terra.viz.game.game import Game
+from terra.viz_legacy.rendering import RenderingEngine
+from terra.viz_legacy.window import Window
+
 
 class TimeStep(NamedTuple):
     state: State
