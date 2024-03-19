@@ -45,7 +45,7 @@ class TerraEnv(NamedTuple):
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
-                display_dims = (2 * n_envs_y * 65 * TILE_SIZE + 8*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 8*TILE_SIZE)
+                display_dims = (n_envs_y * 69 * TILE_SIZE + 4*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 4*TILE_SIZE)
                 if not display:
                     print("TerraEnv: disabling display...")
                     screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)

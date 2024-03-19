@@ -68,5 +68,5 @@ class World:
         return out
     
     def update(self, action_map, target_map, obstacles_mask, dumpability_mask):
-        self.target_map = self.create_map("target", target_map, obstacles_mask, dumpability_mask, None)
+        # self.target_map = self.create_map("target", target_map, obstacles_mask, dumpability_mask, None)
         self.action_map = self.create_map("action", action_map, obstacles_mask, None, target_map)

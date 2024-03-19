@@ -104,28 +104,28 @@ class Game:
             ix = i % (self.n_envs_x + 1)
             iy = i // self.n_envs_y
 
-            total_offset_x = 2 * ix * 65 * TILE_SIZE + 8*TILE_SIZE
-            total_offset_y = iy * 69 * TILE_SIZE + 8*TILE_SIZE
+            total_offset_x = ix * 69 * TILE_SIZE + 4*TILE_SIZE
+            total_offset_y = iy * 69 * TILE_SIZE + 4*TILE_SIZE
 
             # Target map
-            for x in range(world.grid_length_x):
-                for y in range(world.grid_length_y):
+            # for x in range(world.grid_length_x):
+            #     for y in range(world.grid_length_y):
 
-                    sq = world.target_map[x][y]["cart_rect"]
-                    c = world.target_map[x][y]["color"]
-                    rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
-                    pg.draw.rect(self.surface, c, rect, 0)
-                    # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
+            #         sq = world.target_map[x][y]["cart_rect"]
+            #         c = world.target_map[x][y]["color"]
+            #         rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
+            #         pg.draw.rect(self.surface, c, rect, 0)
+            #         # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
 
             # Action map
-            offset = 61 * TILE_SIZE
+            # offset = 61 * TILE_SIZE
             for x in range(world.grid_length_x):
                 for y in range(world.grid_length_y):
 
                     sq = world.action_map[x][y]["cart_rect"]
                     c = world.action_map[x][y]["color"]
-                    rect = pg.Rect(sq[0][0] + offset + total_offset_x, sq[0][1] + total_offset_y, TILE_SIZE, TILE_SIZE)
+                    rect = pg.Rect(sq[0][0] + total_offset_x, sq[0][1] + total_offset_y, TILE_SIZE, TILE_SIZE)
                     pg.draw.rect(self.surface, c, rect, 0)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
@@ -134,7 +134,7 @@ class Game:
             h = agent.agent["body"]["height"]
 
             ca = agent.agent["body"]["color"]
-            agent_x = a[0][0] + offset + total_offset_x
+            agent_x = a[0][0] + total_offset_x
             agent_y = a[0][1] + total_offset_y
             a_rect = pg.Rect(0, 0, w * TILE_SIZE, h * TILE_SIZE)
             agent_surfaces.append(pg.Surface((w*TILE_SIZE, h*TILE_SIZE), pg.SRCALPHA))
