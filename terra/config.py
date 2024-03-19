@@ -1,9 +1,6 @@
 from enum import IntEnum
 from typing import NamedTuple
 
-import jax
-import jax.numpy as jnp
-
 from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
@@ -24,17 +21,17 @@ class ImmutableMapsConfig(NamedTuple):
     Used for padding in case it's needed.
     """
 
-    min_width: int = 60  # number of tiles
-    min_height: int = 60  # number of tiles
+    min_width: int = 64  # number of tiles
+    min_height: int = 64  # number of tiles
 
-    max_width: int = 60  # number of tiles
-    max_height: int = 60  # number of tiles
+    max_width: int = 64  # number of tiles
+    max_height: int = 64  # number of tiles
 
 
 class MapDims(NamedTuple):
     width_m: float = 60.0  # in meters
     height_m: float = 60.0  # in meters
-    tile_size: float = 0.67  # in meters
+    tile_size: float = 0.625  # in meters
 
 
 class TargetMapConfig(NamedTuple):
@@ -186,20 +183,45 @@ class EnvConfig(NamedTuple):
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 3
     decrease_level_threshold: int = 10
+    last_level_type = "random"  # ["random", "none"]
     
     levels = [
         {
-            "maps_path": "foundations_20_50",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "foundations_20_50",
-            "max_steps_in_episode": 250,
+            "maps_path": "terra/trenches/easy",
+            "max_steps_in_episode": 200,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
-        }
+        },
+        {
+            "maps_path": "terra/trenches/medium",
+            "max_steps_in_episode": 200,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "terra/trenches/hard",
+            "max_steps_in_episode": 200,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
     ]
 
 class BatchConfig(NamedTuple):

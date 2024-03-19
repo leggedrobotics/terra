@@ -15,12 +15,12 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.actions import TrackedAction, WheeledAction
 from terra.curriculum import CurriculumManager
-from viz_legacy.rendering import RenderingEngine
-from viz_legacy.window import Window
 import pygame as pg
-from viz.game.game import Game
-from viz.game.settings import TILE_SIZE
-from viz.game.settings import MAP_EDGE
+from terra.viz_legacy.rendering import RenderingEngine
+from terra.viz_legacy.window import Window
+from terra.viz.game.game import Game
+from terra.viz.game.settings import TILE_SIZE
+from terra.viz.game.settings import MAP_EDGE
 
 class TimeStep(NamedTuple):
     state: State
@@ -35,7 +35,7 @@ class TerraEnv(NamedTuple):
     window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "numpy") -> "TerraEnv":
+    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "pygame") -> "TerraEnv":
         re = None
         window = None
         if rendering:
@@ -374,6 +374,7 @@ class TerraEnvBatch:
             max_steps_in_episode_per_level=max_steps_in_episode_per_level,
             apply_trench_rewards_per_level=apply_trench_rewards_per_level,
             reward_type_per_level=reward_type_per_level,
+            last_level_type=batch_cfg.curriculum_global.last_level_type,
         )
 
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
@@ -399,7 +400,7 @@ class TerraEnvBatch:
         maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         # Update env_cfgs based on the curriculum, and get the new maps
-        timestep = self.curriculum_manager.update_cfgs(timestep)
+        timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
         (
             target_maps,
             padding_masks,

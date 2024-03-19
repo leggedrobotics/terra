@@ -172,10 +172,6 @@ def load_maps_from_disk(folder_path: str) -> Array:
     )
 
 
-def map_paths_to_idx(map_paths: list[str]) -> dict[str, int]:
-    return {map_paths[idx]: idx for idx in range(len(map_paths))}
-
-
 def _pad_map_array(m: Array, max_w: int, max_h: int) -> tuple[Array, Array]:
     """
     Pads the map array to dimensions (max_w, max_h) and returns the padded map and padding mask.
@@ -243,13 +239,12 @@ def init_maps_buffer(batch_cfg: BatchConfig):
         str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths
     ]
     print(f"Loading maps from {folder_paths}.")
-    folder_paths_dict = map_paths_to_idx(folder_paths)
     maps_from_disk = []
     occupancies_from_disk = []
     dumpability_masks_init_from_disk = []
     trench_axes_list = []
     trench_types = []
-    for folder_path in folder_paths_dict.keys():
+    for folder_path in folder_paths:
         maps, occupancies, trench_axes, trench_type, dumpability_masks_init = load_maps_from_disk(folder_path)
         maps_from_disk.append(maps)
         occupancies_from_disk.append(occupancies)

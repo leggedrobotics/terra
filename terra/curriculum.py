@@ -16,8 +16,9 @@ class CurriculumManager(NamedTuple):
     max_steps_in_episode_per_level: Array
     apply_trench_rewards_per_level: Array
     reward_type_per_level: Array
+    last_level_type: str
 
-    def _update_single_cfg(self, timestep):
+    def _update_single_cfg(self, timestep, rng):
         env_cfg = timestep.env_cfg
         done = jnp.all(timestep.done)
         completed = jnp.all(timestep.info["task_done"])
@@ -49,7 +50,19 @@ class CurriculumManager(NamedTuple):
 
         level = jax.lax.cond(
             do_increase,
-            lambda: jnp.minimum(env_cfg.curriculum.level + 1, self.max_level),
+            lambda: jax.lax.cond(
+                env_cfg.curriculum.level < self.max_level,
+                lambda: env_cfg.curriculum.level + 1,
+                lambda: jax.lax.cond(
+                    self.last_level_type == "none",
+                    lambda: env_cfg.curriculum.level,
+                    lambda: jax.lax.cond(
+                        self.last_level_type == "random",
+                        lambda: jax.random.randint(rng, (), 0, self.max_level + 1),
+                        lambda: 97,  # Error case
+                    ),
+                ),
+            ),
             lambda: jax.lax.cond(
                 do_decrease,
                 lambda: jnp.maximum(env_cfg.curriculum.level - 1, 0),
@@ -92,8 +105,8 @@ class CurriculumManager(NamedTuple):
         )
         return env_cfg
 
-    def update_cfgs(self, timesteps):
-        return jax.vmap(self._update_single_cfg)(timesteps)
+    def update_cfgs(self, timesteps, rng):
+        return jax.vmap(self._update_single_cfg)(timesteps, rng)
     
     def reset_cfgs(self, env_cfgs):
         return jax.vmap(self._reset_single_cfg)(env_cfgs)
