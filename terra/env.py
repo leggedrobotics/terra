@@ -20,6 +20,7 @@ from viz_legacy.window import Window
 import pygame as pg
 from viz.game.game import Game
 from viz.game.settings import TILE_SIZE
+from viz.game.settings import MAP_EDGE
 
 class TimeStep(NamedTuple):
     state: State
@@ -45,7 +46,7 @@ class TerraEnv(NamedTuple):
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
-                display_dims = (n_envs_y * 69 * TILE_SIZE + 4*TILE_SIZE, n_envs_x * 69 * TILE_SIZE + 4*TILE_SIZE)
+                display_dims = (n_envs_y * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE, n_envs_x * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE)
                 if not display:
                     print("TerraEnv: disabling display...")
                     screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)

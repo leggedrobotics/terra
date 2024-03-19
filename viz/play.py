@@ -11,8 +11,8 @@ from terra.env import TerraEnvBatch
 
 
 def main():
-    n_envs_x = 3
-    n_envs_y = 4
+    n_envs_x = 4
+    n_envs_y = 10
     n_envs = n_envs_x * n_envs_y
     seed = 24
     rng = jax.random.PRNGKey(seed)

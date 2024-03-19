@@ -1,4 +1,6 @@
 TILE_SIZE = 3  # 10 for manual testing, 3 for multi-environment visualization
+MAP_EDGE = 60  # the number of tiles in the map's edge
+AGENT_DIMS = (9, 5)  # (width, height) in pixels
 
 COLORS = {
     0: "#E4DCCF",

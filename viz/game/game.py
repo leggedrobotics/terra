@@ -4,6 +4,8 @@ from PIL import Image
 from .world import World
 from .agent import Agent
 from .settings import TILE_SIZE
+from .settings import MAP_EDGE
+from .settings import AGENT_DIMS
 
 class Game:
 
@@ -21,8 +23,8 @@ class Game:
         self.worlds = []
         self.agents = []
         for _ in range(self.n_envs):
-            self.worlds.append(World(60, 60, self.width, self.height))
-            self.agents.append(Agent(9, 5))
+            self.worlds.append(World(MAP_EDGE, MAP_EDGE, self.width, self.height))
+            self.agents.append(Agent(AGENT_DIMS[0], AGENT_DIMS[1]))
 
         self.frames = []
 
@@ -101,11 +103,13 @@ class Game:
         cabin_positions = []
 
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
-            ix = i % (self.n_envs_x + 1)
+            ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
-            total_offset_x = ix * 69 * TILE_SIZE + 4*TILE_SIZE
-            total_offset_y = iy * 69 * TILE_SIZE + 4*TILE_SIZE
+            print(f"{i=}, {ix=}, {iy=}")
+
+            total_offset_x = ix * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
+            total_offset_y = iy * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
 
             # Target map
             # for x in range(world.grid_length_x):
