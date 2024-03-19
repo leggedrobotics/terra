@@ -8,6 +8,34 @@ from terra.settings import IntLowDim
 
 
 class GridWorld(NamedTuple):
+    """
+    Here we define the encoding of the maps.
+    - target map
+        - 1: must dump here to terminate the episode
+        - 0: free
+        - -1: must dig here 
+    - action map
+        - -1: dug here during the episode
+        - 0: free
+        - greater than 0: dumped here
+    - dig map (same as action map but updated on the dig action & before the dump action is complete)
+    - dumpability mask
+        - 1: can dump
+        - 0: can't dump
+    - padding mask
+        - 0: traversable
+        - 1: non traversable
+    - traversability mask
+        - -1: agent occupancy
+        - 0: traversable
+        - 1: non traversable
+    - local map target positive (contains the sum of all the positive target map tiles in a given workspace)
+    - local map target negative (contains the sum of all the negative target map tiles in a given workspace)
+    - local map action positive (contains the sum of all the positive action map tiles in a given workspace)
+    - local map action negative (contains the sum of all the negative action map tiles in a given workspace)
+    - local obstacles map (contains the sum of all the padding mask tiles in a given workspace)
+    - local dumpability mask (contains the sum of all the dumpability mask tiles in a given workspace)
+    """
     target_map: GridMap
     action_map: GridMap
     padding_mask: GridMap

@@ -1,106 +1,116 @@
-# Terra
-Terra is an open-source platform designed to provide a flexible and abstracted grid world environment for training intelligent agents. Through Terra, researchers and developers can experiment with different reinforcement learning algorithms and techniques, developing new models for controlling complex systems and training agents that can perform tasks that were previously challenging.
+# Terra - Earthwork planning environment in JAX
 
-Terra is designed with a grid world environment that abstracts away the complexity of the real world, allowing for the development of simplified but realistic simulations of earthmoving equipment such as excavator backhoes, trucks, bulldozers, and more. The game engine provides a rich and diverse set of challenges that allow agents to learn how to perform complex tasks such as digging, hauling, grading, and more.
+![img](assets/overview.gif)
+
+Terra is a flexible and abstracted grid world environment for training intelligent agents in the context of earthworks planning. It makes it possible to approach motion and excavation high-level planning as a reinforcement learning problem, providing a multi-GPU JAX-accelerated environment. We show that we can train an agent capable of planning earthworks in trenches and foundations environments in less than 1 minute on 8 Nvidia RTX-4090 GPUs.
+
+## Features
+- 🚜 Agents: Wheeled and tracked excavator embodiments for different types of actions
+- 🏞️ Maps: Up to 3 axes trenches and real-world building foundations as target maps
+- 🔥 Performance: Easily scale to more than 1M steps per second on a single GPU
+- 🚀 Scaling: Out of the box multi-device training using
+- 📖 Curriculum: Customizable out of the box RL curriculum
+- 🔧 Tooling: Visualization, evaluation, and play scripts
+- 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from PureJaxRL and xland-minigrid
 
 ## Installation
-This repo is built on JAX. However, JAX has different versions depending on the hardware you plan to use.
-
-Follow [this link](https://github.com/google/jax#installation) to install the right one for you.
-
-## Run on GPU
-To run JAX on GPU, prepend to the python command the following global variable: `JAX_PLATFORMS="cuda"` or `JAX_PLATFORMS="gpu"` (whichever works). For CPU, `JAX_PLATFORMS="cpu"`.
-
-To check which device you are using, you can:
+You can directly install Terra from PyPI:
 ~~~
-print(f"Device = {jnp.ones(1).device_buffer.device()}\n")
+pip install terra
 ~~~
 
-## Use dataset loaded from disk
-Datasets loaded from disk are the main option Terra offers. To load them, define the following env variables when you launch the script.
-Note that `DATASET_SIZE` needs to be the same for all the map types you define in the config. So for example, if all the datasets you select have 1300 maps each but one has 1000, then you need to set `DATASET_SIZE=1000` to be able to load all of them (this way you will load only 1000/1300 elements of the other datasets).
-~~~
-DATASET_PATH=path_to_dataset DATASET_SIZE=dataset_size
-~~~
+### JAX
+The JAX installation is hardware-dependent and therefore needs to be done separately. Follow [this link](https://jax.readthedocs.io/en/latest/installation.html) to install the right one for you.
 
-## Environment details
-### Maps
-Terra relies on multiple maps per environment instance to support multiple functionalities and usecases.
+## Usage
+The standard workflow is made of the following steps:
+1. Generate the maps with `python -m generate_maps.py` (you can check out a preview of the generated maps in the `data/` folder)
+2. Set up the curriculum in `config.py`
+2. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
+3. Train 🚀
+4. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
 
-In every environment the following maps are defined:
-- target map
-    - 1: must dump here to terminate the episode
-    - 0: free
-    - -1: must dig here 
-- action map
-    - -1: dug here during the episode
-    - 0: free
-    - greater than 0: dumped here
-- dig map (same as action map but updated on the dig action & before the dump action is complete)
-- dumpability mask
-    - 1: can dump
-    - 0: can't dump
-- padding mask
-    - 0: traversable
-    - 1: non traversable
-- traversability mask
-    - -1: agent occupancy
-    - 0: traversable
-    - 1: non traversable
-- local map target positive (contains the sum of all the positive target map tiles in a given workspace)
-- local map target negative (contains the sum of all the negative target map tiles in a given workspace)
-- local map action positive (contains the sum of all the positive action map tiles in a given workspace)
-- local map action negative (contains the sum of all the negative action map tiles in a given workspace)
-- local obstacles map (contains the sum of all the padding mask tiles in a given workspace)
-- local dumpability mask (contains the sum of all the dumpability mask tiles in a given workspace)
+### Basic Usage
+```
+import jax
+from terra.env import TerraEnvBatch
+from terra.config import EnvConfig
 
-### Maps of different size
-Note: the environment supports maps of different sizes run on parallel environments at the same time.
-However, every map is padded to the right and to the bottom to reach the biggest map size defined in the config.
-The agent transition in these parts of the map is automatically blocked by the environment itself.
+key = jax.random.PRNGKey(0)
+key, reset_key, step_key = jax.random.split(key, 3)
 
-## Visualization
-Terra supports two rendering engines: one based on numpy and the other on pygame.
-The former is used for development (manual mode is implemented, so you can control the agent with the keyboard),
-but it is very slow at rendering multiple environments at the same time.
-The latter is used for nice renderings but doesn't support interactiveness yet.
+# create Terra and configs
+env = TerraEnvBatch()
+env_params = EnvConfig()
 
-You can control which one to use at the time of instantiation of the `TerraEnvBatch` class, where you can select
-`numpy` or `pygame` as rendering engine.
+# jitted reset and step functions
+timestep = env.reset(env_params, reset_key)
+timestep = env.step(timestep, action, step_key)
+```
 
-## Run manual mode
-To run in manual mode:
-~~~
-DATASET_PATH="/path/to/dataset/folders" DATASET_SIZE=1000 python -m viz.main_manual
-~~~
-For example:
-~~~
-DATASET_PATH="/home/antonio/img_generator" DATASET_SIZE=1000 python -m viz_pygame.main_manual
-~~~
+### Map generation
+Running the standard map generation will produce the following folder structure. This includes foundations and trenches, and additional curriculum maps that help with the training in case the sparse reward strategy is used.
+```
+- data
+    - generated_squares  <-- maps for curriculum early levels
+    - trenches  <-- trenches with 1 to 3 intersecting axes 
+    - foundations  <-- building foundations from OpenStreetMap
+        - 16x16
+        - 32x32
+        - 64x64
+            - dumpability  <-- encodes where the agent can dump
+            - images  <-- encodes the target dig profile
+            - occupancy  <-- encodes the obstacles
+```
 
-This commands loads DATASET_SIZE maps defined in the `BatchConfig` in `config.py`, from DATASET_PATH (being the folder containing all the maps folders defined in the config).
-Then, one is sampled and you can play with it using the keyboard.
+### Training Configurations
+In Terra the settings are expressed as curriculum levels. To set the levels of the training, you can edit the `config.py` file. For example, if you want to start your training with dense rewards on foundations and then shift to shorter episodes with sparse rewards, you can set the curriculum as follows.
+```
+class CurriculumGlobalConfig(NamedTuple):
+    increase_level_threshold: int = 3
+    decrease_level_threshold: int = 10
+    
+    levels = [
+        {
+            "maps_path": "foundations_20_50",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "foundations_20_50",
+            "max_steps_in_episode": 200,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        }
+    ]
+```
+Note that `apply_trench_rewards` should be `True` if you are training on trenches. This enables an additional reward that penalizes the distance of the agent from any trench axis at dig time, pushing the agent to be aligned to them.
 
-Mind that the maps are padded to the max dimensions defined in `ImmutableMapsConfig` in `config.py` - and you can't have maps bigger than that value.
-Also, in the config you can set `move_tiles` to select how many tiles per move actions are traversed, and `tile_size` to control how big the agent is compared to the map. The reach of the agent arm is automatically adjusted.
+To select the embodiment to use, set the following to either `TrackedAction` or `WheeledAction`. Check out `state.py` for the documentation of the embodiment-specific state transitions.
+```
+class BatchConfig(NamedTuple):
+    action_type: Action = TrackedAction
+```
 
-You can generate maps from the `digbench` repo (for simple rectangles you can use `generate_rectangles.py`).
+## Tools 🔧
+We provide debugging tools to explore Terra maps and play with the different agents.
 
-## Pre-commit
-To setup the development tools, run:
-~~~
-pip install -r requirements_dev.txt
-~~~
+You can play on a single environment using your keyboard with
+```
+python -m viz.main_manual
+```
+and you can inspect the generated maps with
+```
+python -m viz.play
+```
+note that these scripts assume that the maps are stored in the `data/` folder.
 
-Then run:
-~~~
-pre-commit install
-~~~
+## Rules 🔮
+In Terra the agent can move around, dig, and dump terrain. The target map defines all the tiles that can be dug, and the action map stores the progress. Tiles are dug in batches, where a batch is defined by the conical section representing the full reach of the excavator arm for a given base and cabin pose. Therefore, with a `DO` action, the agent digs all the tiles in the target map that are within reach, and subsequently with another `DO` action it distributes the dirt evenly on the dumpable tiles within reach. The maps also have obstacles (tiles where the agent cannot traverse) and a dumpability mask (tiles where the agent needs to deposit all the dirt to complete the task). Check out `map.py` for the documentation of the map layering and logic.
 
-At this point you should be able to run:
-~~~
-pre-commit run --all-files
-~~~
-to check if all files pass the linters and if the unit tests don't fail.
+## Performance 🔥
+TODO scaling graph
 
-From now on, the `pre-commit` tool will run automatically at every commit.
+## Baselines 🎮
+We release a set of baselines and checkpoints in [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).

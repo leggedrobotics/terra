@@ -29,6 +29,28 @@ class State(NamedTuple):
     """
     Stores the current state of the environment.
     Given perfect information, the observation corresponds to the state.
+
+    Different agent embodiments allow for different transitions.
+    - Tracked Agent
+        - Move Forward
+        - Move Backward
+        - Rotate Clockwise
+        - Rotate Anticlockwise
+        - Extend Arm
+        - Retract Arm
+        - Do
+    - Wheeled Agent
+        - Move Forward
+        - Move Backward
+        - Move Clockwise Forward
+        - Move Clockwise Backward
+        - Move Anticlockwise Forward
+        - Move Anticlockwise Backward
+        - Rotate Cabin Clockwise
+        - Rotate Cabin Anticlockwise
+        - Extend Arm
+        - Retract Arm
+        - Do
     """
 
     key: jax.random.PRNGKey
