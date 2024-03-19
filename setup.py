@@ -20,5 +20,5 @@ setup(
     description="Minimalistic grid map environment built with JAX",
     packages=find_packages(),
     install_requires=requires,
-    python_requires=">=3.12",
+    python_requires=">=3.11",
 )
