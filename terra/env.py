@@ -15,11 +15,7 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.actions import TrackedAction, WheeledAction
 from terra.curriculum import CurriculumManager
-from viz_legacy.rendering import RenderingEngine
-from viz_legacy.window import Window
 import pygame as pg
-from viz.game.game import Game
-from viz.game.settings import TILE_SIZE
 
 class TimeStep(NamedTuple):
     state: State
