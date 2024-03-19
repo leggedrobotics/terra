@@ -118,9 +118,9 @@ class Rewards(NamedTuple):
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
-            terminal=200.0,
+            terminal=100.0,
 
-            normalizer=200.0,
+            normalizer=100.0,
         )
     
     @staticmethod
@@ -139,9 +139,9 @@ class Rewards(NamedTuple):
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
-            terminal=200.0,
+            terminal=100.0,
 
-            normalizer=200.0,
+            normalizer=100.0,
         )
 
 
