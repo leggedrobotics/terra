@@ -40,10 +40,7 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
-    env.terra_env.render_obs_pygame(
-        timestep.observation,
-    )
-
+    
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
 

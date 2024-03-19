@@ -1,4 +1,4 @@
-TILE_SIZE = 10  # 10 for manual testing, 3 for multi-environment visualization
+TILE_SIZE = 3  # 10 for manual testing, 3 for multi-environment visualization
 
 COLORS = {
     0: "#E4DCCF",
