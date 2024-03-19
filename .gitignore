@@ -9,4 +9,4 @@ __pycache__/*
 terra/map_utils/__pycache__/
 cache/
 docs/
-viz_pygame/game/__pycache__/*
+viz/game/__pycache__/*

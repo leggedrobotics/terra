@@ -12,7 +12,7 @@ class World:
         self.width = width
         self.height = height
 
-    def create_map(self, map, obstacles_mask, dumpability_mask):
+    def create_map(self, map_type, map, obstacles_mask, dumpability_mask, secondary_map):
         map = np.asarray(map, dtype=np.int32)
         map = map.swapaxes(0, 1)
         if obstacles_mask is not None:
@@ -21,6 +21,9 @@ class World:
         if dumpability_mask is not None:
             dumpability_mask = np.asarray(dumpability_mask, dtype=np.bool_)
             dumpability_mask = dumpability_mask.swapaxes(0, 1)
+        if secondary_map is not None:
+            secondary_map = np.asarray(secondary_map, dtype=np.int32)
+            secondary_map = secondary_map.swapaxes(0, 1)
 
         world = []
 
@@ -36,7 +39,12 @@ class World:
                 elif map[grid_x, grid_y] < 0:
                     tile = -1
                 else:
-                    tile = 0
+                    if map_type == "action" and secondary_map[grid_x, grid_y] == -1:
+                        tile = 4
+                    else:
+                        tile = 0
+
+                
                 world_tile = self.grid_to_world(grid_x, grid_y, tile)
                 world[grid_x].append(world_tile)
 
@@ -60,5 +68,5 @@ class World:
         return out
     
     def update(self, action_map, target_map, obstacles_mask, dumpability_mask):
-        self.target_map = self.create_map(target_map, obstacles_mask, dumpability_mask)
-        self.action_map = self.create_map(action_map, obstacles_mask, None)
+        self.target_map = self.create_map("target", target_map, obstacles_mask, dumpability_mask, None)
+        self.action_map = self.create_map("action", action_map, obstacles_mask, None, target_map)
