@@ -106,8 +106,6 @@ class Game:
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
-            print(f"{i=}, {ix=}, {iy=}")
-
             total_offset_x = ix * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
             total_offset_y = iy * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
 
