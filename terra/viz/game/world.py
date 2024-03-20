@@ -1,24 +1,24 @@
 
 import pygame as pg
-from .settings import TILE_SIZE
 from .settings import COLORS
 import numpy as np
 
 class World:
 
-    def __init__(self, grid_length_x, grid_length_y, width, height):
+    def __init__(self, grid_length_x, grid_length_y, width, height, tile_size):
         self.grid_length_x = grid_length_x
         self.grid_length_y = grid_length_y
         self.width = width
         self.height = height
+        self.tile_size = tile_size
 
     def grid_to_world(self, grid_x, grid_y, bitmap_code):
 
         rect = [
-            (grid_x * TILE_SIZE, grid_y * TILE_SIZE),
-            (grid_x * TILE_SIZE + TILE_SIZE, grid_y * TILE_SIZE),
-            (grid_x * TILE_SIZE + TILE_SIZE, grid_y * TILE_SIZE + TILE_SIZE),
-            (grid_x * TILE_SIZE, grid_y * TILE_SIZE + TILE_SIZE)
+            (grid_x * self.tile_size, grid_y * self.tile_size),
+            (grid_x * self.tile_size + self.tile_size, grid_y * self.tile_size),
+            (grid_x * self.tile_size + self.tile_size, grid_y * self.tile_size + self.tile_size),
+            (grid_x * self.tile_size, grid_y * self.tile_size + self.tile_size)
         ]
 
         out = {

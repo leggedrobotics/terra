@@ -1,9 +1,4 @@
-TILE_SIZE = 3  # 10 for manual testing, 3 for multi-environment visualization
-
-# TODO get these from config
-MAP_EDGE = 64  # the number of tiles in the map's edge
-AGENT_DIMS = (9, 5)  # (width, height) in pixels
-
+MAP_TILES = 192  # 64 * 3, total number of tiles for a nice visualization (scales with MAP_EDGE)
 COLORS = {
     0: "#cfcfcf",  # neutral
     5: "#E4DCCF",  # final dumping area to terminate the episode

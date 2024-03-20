@@ -3,14 +3,27 @@ import sys
 from PIL import Image
 from .world import World
 from .agent import Agent
-from .settings import TILE_SIZE
-from .settings import MAP_EDGE
-from .settings import AGENT_DIMS
+from .settings import MAP_TILES
+from terra.config import ExcavatorDims, ImmutableMapsConfig
 import threading
+
+def get_agent_dims(agent_w_m, agent_h_m, tile_size_m):
+    """TODO repeated function, move to utils and share with env."""
+    agent_height = (
+        round(agent_w_m / tile_size_m)
+        if (round(agent_w_m / tile_size_m)) % 2 != 0
+        else round(agent_w_m / tile_size_m) + 1
+    )
+    agent_width = (
+        round(agent_h_m / tile_size_m)
+        if (round(agent_h_m / tile_size_m)) % 2 != 0
+        else round(agent_h_m / tile_size_m) + 1
+    )
+    return agent_width, agent_height
 
 class Game:
 
-    def __init__(self, screen, surface, clock, n_envs_x=1, n_envs_y=1, display=True, progressive_gif=False):
+    def __init__(self, screen, surface, clock, maps_size_px, n_envs_x=1, n_envs_y=1, display=True, progressive_gif=False):
         self.screen = screen
         self.surface = surface
         self.clock = clock
@@ -23,9 +36,19 @@ class Game:
         self.n_envs = n_envs_x * n_envs_y
         self.worlds = []
         self.agents = []
+        
+        tile_size_m = ImmutableMapsConfig().edge_length_m / maps_size_px
+        self.maps_size_px = maps_size_px
+        tile_size = MAP_TILES // maps_size_px
+        self.tile_size = tile_size
+        excavator_dims = ExcavatorDims()
+        agent_h, agent_w = get_agent_dims(excavator_dims.WIDTH, excavator_dims.HEIGHT, tile_size_m)
+        print(f"Agent size (in rendering): {agent_w}x{agent_h}")
+        print(f"Tile size (in rendering): {tile_size_m}")
+        print(f"Rendering tile size: {tile_size}")
         for _ in range(self.n_envs):
-            self.worlds.append(World(MAP_EDGE, MAP_EDGE, self.width, self.height))
-            self.agents.append(Agent(AGENT_DIMS[0], AGENT_DIMS[1]))
+            self.worlds.append(World(maps_size_px, maps_size_px, self.width, self.height, tile_size))
+            self.agents.append(Agent(agent_w, agent_h, tile_size))
 
         self.frames = []
 
@@ -116,8 +139,8 @@ class Game:
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
-            total_offset_x = ix * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
-            total_offset_y = iy * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE
+            total_offset_x = ix * (self.maps_size_px + 4) * self.tile_size + 4*self.tile_size
+            total_offset_y = iy * (self.maps_size_px + 4) * self.tile_size + 4*self.tile_size
 
             # Target map
             # for x in range(world.grid_length_x):
@@ -137,7 +160,7 @@ class Game:
 
                     sq = world.action_map[x][y]["cart_rect"]
                     c = world.action_map[x][y]["color"]
-                    rect = pg.Rect(sq[0][0] + total_offset_x, sq[0][1] + total_offset_y, TILE_SIZE, TILE_SIZE)
+                    rect = pg.Rect(sq[0][0] + total_offset_x, sq[0][1] + total_offset_y, self.tile_size, self.tile_size)
                     pg.draw.rect(self.surface, c, rect, 0)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
@@ -148,8 +171,8 @@ class Game:
             ca = agent.agent["body"]["color"]
             agent_x = a[0][0] + total_offset_x
             agent_y = a[0][1] + total_offset_y
-            a_rect = pg.Rect(0, 0, w * TILE_SIZE, h * TILE_SIZE)
-            agent_surfaces.append(pg.Surface((w*TILE_SIZE, h*TILE_SIZE), pg.SRCALPHA))
+            a_rect = pg.Rect(0, 0, w * self.tile_size, h * self.tile_size)
+            agent_surfaces.append(pg.Surface((w*self.tile_size, h*self.tile_size), pg.SRCALPHA))
             if self.progressive_gif:
                 agent_surfaces[-1].set_alpha(50)
             

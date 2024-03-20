@@ -19,8 +19,7 @@ import pygame as pg
 from terra.viz_legacy.rendering import RenderingEngine
 from terra.viz_legacy.window import Window
 from terra.viz.game.game import Game
-from terra.viz.game.settings import TILE_SIZE
-from terra.viz.game.settings import MAP_EDGE
+from terra.viz.game.settings import MAP_TILES
 
 class TimeStep(NamedTuple):
     state: State
@@ -35,9 +34,10 @@ class TerraEnv(NamedTuple):
     window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "pygame") -> "TerraEnv":
+    def new(cls, maps_size_px: int, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "pygame") -> "TerraEnv":
         re = None
         window = None
+        tile_size_rendering = MAP_TILES // maps_size_px
         if rendering:
             print(f"Using {rendering_engine} rendering_engine")
             if rendering_engine == "numpy":
@@ -46,7 +46,7 @@ class TerraEnv(NamedTuple):
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
-                display_dims = (n_envs_y * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE, n_envs_x * (MAP_EDGE + 4) * TILE_SIZE + 4*TILE_SIZE)
+                display_dims = (n_envs_y * (maps_size_px + 4) * tile_size_rendering + 4*tile_size_rendering, n_envs_x * (maps_size_px + 4) * tile_size_rendering + 4*tile_size_rendering)
                 if not display:
                     print("TerraEnv: disabling display...")
                     screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)
@@ -54,7 +54,7 @@ class TerraEnv(NamedTuple):
                     screen = pg.display.set_mode(display_dims)
                 surface = pg.Surface(display_dims, pg.SRCALPHA)
                 clock = pg.time.Clock()
-                re = Game(screen, surface, clock, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display, progressive_gif=progressive_gif)
+                re = Game(screen, surface, clock, maps_size_px=maps_size_px, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display, progressive_gif=progressive_gif)
             else:
                 raise(ValueError(f"{rendering_engine=}"))
         return TerraEnv(rendering_engine=re, window=window)
@@ -348,7 +348,9 @@ class TerraEnvBatch:
         rendering_engine: str = "pygame",
         shuffle_maps: bool = False,
     ) -> None:
+        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
         self.terra_env = TerraEnv.new(
+            maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,
             rendering=rendering,
             n_envs_x=n_envs_x_rendering,
             n_envs_y=n_envs_y_rendering,
@@ -356,7 +358,6 @@ class TerraEnvBatch:
             rendering_engine=rendering_engine,
             progressive_gif=progressive_gif,
         )
-        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
             [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32

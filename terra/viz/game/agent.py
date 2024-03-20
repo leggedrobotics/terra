@@ -1,15 +1,15 @@
 import numpy as np
 import math
-from .settings import TILE_SIZE
 from .settings import COLORS
 from .utils import agent_base_to_angle
 from .utils import agent_cabin_to_angle
 from .utils import rotate_triangle
 
 class Agent:
-    def __init__(self, width, height) -> None:
+    def __init__(self, width, height, tile_size) -> None:
         self.width = width
         self.height = height
+        self.tile_size = tile_size
 
     def create_agent(self, px_center, py_center, angle_base, angle_cabin):
         # px = px_center - math.ceil(self.width / 2)
@@ -22,7 +22,7 @@ class Agent:
             px = px_center - self.height // 2
             py = py_center - self.width // 2
             agent_body = [
-                (py * TILE_SIZE, px * TILE_SIZE),
+                (py * self.tile_size, px * self.tile_size),
             ]
             w = self.width
             h = self.height
@@ -30,7 +30,7 @@ class Agent:
             px = px_center - self.width // 2
             py = py_center - self.height // 2
             agent_body = [
-                (py * TILE_SIZE, px * TILE_SIZE),
+                (py * self.tile_size, px * self.tile_size),
             ]
             w = self.height
             h = self.width
@@ -40,9 +40,9 @@ class Agent:
         # Cabin (triangle)
         deg_angle_cabin = agent_cabin_to_angle(angle_cabin)
         points = [(3, 0), (-1.5, -1.5), (-1.5, 1.5)]
-        a_center_x = agent_body[0][0] + w * TILE_SIZE // 2
-        a_center_y = agent_body[0][1] + h * TILE_SIZE // 2
-        agent_cabin = rotate_triangle((a_center_x, a_center_y), points, TILE_SIZE, deg_angle_cabin)
+        a_center_x = agent_body[0][0] + w * self.tile_size // 2
+        a_center_y = agent_body[0][1] + h * self.tile_size // 2
+        agent_cabin = rotate_triangle((a_center_x, a_center_y), points, self.tile_size, deg_angle_cabin)
 
         loaded = False
 
