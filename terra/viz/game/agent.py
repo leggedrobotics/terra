@@ -39,7 +39,8 @@ class Agent:
 
         # Cabin (triangle)
         deg_angle_cabin = agent_cabin_to_angle(angle_cabin)
-        points = [(3, 0), (-1.5, -1.5), (-1.5, 1.5)]
+        scaling = self.tile_size / 3
+        points = [(3/scaling, 0), (-1.5/scaling, -1.5/scaling), (-1.5/scaling, 1.5/scaling)]
         a_center_x = agent_body[0][0] + w * self.tile_size // 2
         a_center_y = agent_body[0][1] + h * self.tile_size // 2
         agent_cabin = rotate_triangle((a_center_x, a_center_y), points, self.tile_size, deg_angle_cabin)
