@@ -20,18 +20,12 @@ class ImmutableMapsConfig(NamedTuple):
     Define the max size of the map.
     Used for padding in case it's needed.
     """
-
-    min_width: int = 64  # number of tiles
-    min_height: int = 64  # number of tiles
-
     max_width: int = 64  # number of tiles
     max_height: int = 64  # number of tiles
 
 
 class MapDims(NamedTuple):
-    width_m: float = 60.0  # in meters
-    height_m: float = 60.0  # in meters
-    tile_size: float = 0.625  # in meters
+    tile_size: float = 0.67  # in meters
 
 
 class TargetMapConfig(NamedTuple):

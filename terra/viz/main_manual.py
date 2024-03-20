@@ -40,6 +40,8 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
+    print(f"{timestep.state.agent.width=}")
+    print(f"{timestep.state.agent.height=}")
     
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
@@ -97,6 +99,7 @@ def main():
                         repeat_action(action),
                         _rng,
                     )
+                    print("Reward: ", timestep.reward.item())
 
             elif event.type == QUIT:
                 playing = False
