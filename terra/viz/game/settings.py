@@ -1,4 +1,6 @@
 TILE_SIZE = 3  # 10 for manual testing, 3 for multi-environment visualization
+
+# TODO get these from config
 MAP_EDGE = 64  # the number of tiles in the map's edge
 AGENT_DIMS = (9, 5)  # (width, height) in pixels
 

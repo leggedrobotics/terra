@@ -17,15 +17,11 @@ class RewardsType(IntEnum):
 
 class ImmutableMapsConfig(NamedTuple):
     """
-    Define the max size of the map.
-    Used for padding in case it's needed.
+    Define the max size of the map in meters.
+    This defines the proportion between the map and the agent.
     """
-    max_width: int = 64  # number of tiles
-    max_height: int = 64  # number of tiles
-
-
-class MapDims(NamedTuple):
-    tile_size: float = 0.67  # in meters
+    edge_length_m: float = 44.0  # map edge length in meters
+    edge_length_px: int = 0  # updated in the code
 
 
 class TargetMapConfig(NamedTuple):
@@ -40,7 +36,7 @@ class ImmutableAgentConfig(NamedTuple):
     """
     The part of the AgentConfig that won't change based on curriculum.
     """
-
+    dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 4
     angles_cabin: int = 8
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
@@ -59,16 +55,8 @@ class AgentConfig(NamedTuple):
 
     dig_depth: int = 1  # how much every dig action digs
 
-    height: int = (
-        round(ExcavatorDims().WIDTH / MapDims().tile_size)
-        if (round(ExcavatorDims().WIDTH / MapDims().tile_size)) % 2 != 0
-        else round(ExcavatorDims().WIDTH / MapDims().tile_size) + 1
-    )
-    width: int = (
-        round(ExcavatorDims().HEIGHT / MapDims().tile_size)
-        if (round(ExcavatorDims().HEIGHT / MapDims().tile_size)) % 2 != 0
-        else round(ExcavatorDims().HEIGHT / MapDims().tile_size) + 1
-    )
+    height: int = 0  # updated in the code
+    width: int = 0  # updated in the code
 
 
 class Rewards(NamedTuple):
@@ -152,7 +140,6 @@ class CurriculumConfig(NamedTuple):
 
 
 class EnvConfig(NamedTuple):
-    tile_size: float = MapDims().tile_size
 
     agent: AgentConfig = AgentConfig()
 
@@ -169,60 +156,67 @@ class EnvConfig(NamedTuple):
     curriculum: CurriculumConfig = CurriculumConfig()
 
     max_steps_in_episode: int = 0  # changed by CurriculumManager
+    tile_size: float = 0  # updated in the code
+    
 
     @classmethod
     def new(cls):
         return EnvConfig()
+    
+class MapsDimsConfig(NamedTuple):
+    maps_edge_length: int = 0  # updated in the code
 
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 3
     decrease_level_threshold: int = 10
     last_level_type = "random"  # ["random", "none"]
     
+    # NOTE: all maps need to have the same size
     levels = [
         {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 300,
+            "maps_path": "terra/foundations_32",
+            "max_steps_in_episode": 150,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
-        {
-            "maps_path": "terra/trenches/easy",
-            "max_steps_in_episode": 200,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/medium",
-            "max_steps_in_episode": 200,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/hard",
-            "max_steps_in_episode": 200,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "terra/trenches/easy",
+        #     "max_steps_in_episode": 200,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations",
+        #     "max_steps_in_episode": 300,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/medium",
+        #     "max_steps_in_episode": 200,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations",
+        #     "max_steps_in_episode": 300,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/hard",
+        #     "max_steps_in_episode": 200,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
     ]
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction
+    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
     maps: ImmutableMapsConfig = ImmutableMapsConfig()
+    maps_dims: MapsDimsConfig = MapsDimsConfig()
 
     curriculum_global: CurriculumGlobalConfig = CurriculumGlobalConfig()

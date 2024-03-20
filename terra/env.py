@@ -356,8 +356,7 @@ class TerraEnvBatch:
             rendering_engine=rendering_engine,
             progressive_gif=progressive_gif,
         )
-        self.batch_cfg = batch_cfg
-        self.maps_buffer = init_maps_buffer(batch_cfg, shuffle_maps)
+        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
             [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
@@ -378,6 +377,40 @@ class TerraEnvBatch:
             last_level_type=batch_cfg.curriculum_global.last_level_type,
         )
 
+    def update_env_cfgs(self, env_cfgs: EnvConfig) -> EnvConfig:
+        tile_size = self.batch_cfg.maps.edge_length_m / self.batch_cfg.maps_dims.maps_edge_length
+        print(f"tile_size: {tile_size}")
+        agent_w = self.batch_cfg.agent.dimensions.WIDTH
+        agent_h = self.batch_cfg.agent.dimensions.HEIGHT
+        agent_height = (
+            round(agent_w / tile_size)
+            if (round(agent_w / tile_size)) % 2 != 0
+            else round(agent_w / tile_size) + 1
+        )
+        agent_width = (
+            round(agent_h / tile_size)
+            if (round(agent_h / tile_size)) % 2 != 0
+            else round(agent_h / tile_size) + 1
+        )
+        print(f"agent_width: {agent_width}, agent_height: {agent_height}")
+
+        # Repeat to match the number of environments
+        n_envs = env_cfgs.agent.dig_depth.shape[0]  # leading dimension of any field in the config is the number of envs
+        tile_size = jnp.repeat(jnp.array([tile_size], dtype=jnp.float32), n_envs)
+        agent_width = jnp.repeat(jnp.array([agent_width], dtype=jnp.int32), n_envs)
+        agent_height = jnp.repeat(jnp.array([agent_height], dtype=jnp.int32), n_envs)
+        edge_length_px = jnp.repeat(jnp.array([self.batch_cfg.maps_dims.maps_edge_length], dtype=jnp.int32), n_envs)
+        env_cfgs = env_cfgs._replace(
+            tile_size=tile_size,
+            agent=env_cfgs.agent._replace(
+                width=agent_width, height=agent_height
+            ),
+            maps=env_cfgs.maps._replace(
+                edge_length_px=edge_length_px
+            ),
+        )
+        return env_cfgs
+
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
 
@@ -388,6 +421,7 @@ class TerraEnvBatch:
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
         target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, new_rng_key = self._get_map_init(rng_key, env_cfgs)
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
+        env_cfgs = self.update_env_cfgs(env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
         )

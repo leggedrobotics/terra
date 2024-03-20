@@ -195,7 +195,8 @@ def _pad_maps(
         maps: list[Array],
         occupancies: list[Array],
         dumpability_masks: list[Array],
-        batch_cfg
+        maps_width,
+        maps_height,
         ):
     """
     Pads multiple maps along with their occupancies and dumpability masks.
@@ -209,8 +210,8 @@ def _pad_maps(
     Returns:
     Tuple[Array, Array, Array]: Padded maps, padding masks, and padded dumpability masks.
     """
-    max_w = batch_cfg.maps.max_width
-    max_h = batch_cfg.maps.max_height
+    max_w = maps_width
+    max_h = maps_height
     padding_mask = []
     maps_padded = []
     dumpability_masks_padded = []
@@ -228,6 +229,25 @@ def _pad_maps(
         np.array(padding_mask, dtype=IntMap),
         np.array(dumpability_masks_padded, dtype=jnp.bool_),
     )
+
+def _check_maps(maps: list[Array]) -> tuple[int, int]:
+    """
+    Checks if the maps have the same dimensions and returns them.
+
+    Args:
+    maps (List[Array]): List of map arrays.
+
+    Returns:
+    Tuple[int, int]: Width and height of the maps.
+    """
+    maps_width = maps[0].shape[1]
+    maps_height = maps[0].shape[2]
+    print(f"Maps width: {maps_width}")
+    print(f"Maps height: {maps_height}")
+    for m in maps:
+        if m.shape[1] != maps_width or m.shape[2] != maps_height:
+            raise ValueError("Maps have different dimensions.")
+    return maps_width, maps_height
 
 
 def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
@@ -250,8 +270,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         dumpability_masks_init_from_disk.append(dumpability_masks_init)
         trench_axes_list.append(trench_axes)
         trench_types.append(trench_type)
+    maps_width, maps_height = _check_maps(maps_from_disk)
     maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk = _pad_maps(
-        maps_from_disk, occupancies_from_disk, dumpability_masks_init_from_disk, batch_cfg
+        maps_from_disk, occupancies_from_disk, dumpability_masks_init_from_disk, maps_width, maps_height
     )
     maps_from_disk_padded = jnp.array(maps_from_disk_padded)
     padding_mask = jnp.array(padding_mask)
@@ -285,10 +306,18 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape((d0, d1, *dumpability_masks_init_from_disk.shape[1:]))
         trench_axes_list = trench_axes_list.reshape((d0, d1, *trench_axes_list.shape[1:]))
         print("Maps shuffled.")
-    return MapsBuffer.new(
+    maps_buffer = MapsBuffer.new(
         maps=maps_from_disk_padded,
         padding_mask=padding_mask,
         trench_axes=trench_axes_list,
         trench_types=trench_types,
         dumpability_masks_init = dumpability_masks_init_from_disk,
     )
+    # Update batch config with the actual map dimensions
+    maps_width = maps_from_disk_padded.shape[2]
+    maps_height = maps_from_disk_padded.shape[3]
+    assert maps_width == maps_height, "Maps are not square."
+    batch_cfg = batch_cfg._replace(
+        maps_dims=batch_cfg.maps_dims._replace(maps_edge_length=maps_width)
+    )
+    return maps_buffer, batch_cfg

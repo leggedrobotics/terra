@@ -905,7 +905,7 @@ class State(NamedTuple):
         """
         current_pos_idx = self._get_current_pos_vector_idx(
             pos_base=self.agent.agent_state.pos_base,
-            map_height=self.env_cfg.maps.max_height,
+            map_height=self.env_cfg.maps.edge_length_px,
         )
         map_global_coords = self._map_to_flattened_global_coords(
             self.world.width, self.world.height, self.env_cfg.tile_size

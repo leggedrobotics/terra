@@ -74,7 +74,7 @@ class LocalMapWrapper:
         """
         current_pos_idx = state._get_current_pos_vector_idx(
             pos_base=state.agent.agent_state.pos_base,
-            map_height=state.env_cfg.maps.max_height,
+            map_height=state.env_cfg.maps.edge_length_px,
         )
         map_global_coords = state._map_to_flattened_global_coords(
             state.world.width, state.world.height, state.env_cfg.tile_size

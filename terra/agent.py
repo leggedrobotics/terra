@@ -98,8 +98,9 @@ def _get_random_init_state(
         ).astype(IntMap)
         key, subkey_x, subkey_y, subkey_angle = jax.random.split(key, 4)
 
-        max_w = jnp.minimum(max_traversable_x, env_cfg.maps.max_width)
-        max_h = jnp.minimum(max_traversable_y, env_cfg.maps.max_height)
+        max_w = jnp.minimum(max_traversable_x, env_cfg.maps.edge_length_px)
+        max_h = jnp.minimum(max_traversable_y, env_cfg.maps.edge_length_px)
+
         x = jax.random.randint(
             subkey_x,
             (1,),
