@@ -108,7 +108,13 @@ python -m terra.viz.play
 note that these scripts assume that the maps are stored in the `data/` folder.
 
 ## Rules 🔮
-In Terra the agent can move around, dig, and dump terrain. The target map defines all the tiles that can be dug, and the action map stores the progress. Tiles are dug in batches, where a batch is defined by the conical section representing the full reach of the excavator arm for a given base and cabin pose. Therefore, with a `DO` action, the agent digs all the tiles in the target map that are within reach, and subsequently with another `DO` action it distributes the dirt evenly on the dumpable tiles within reach. The maps also have obstacles (tiles where the agent cannot traverse) and a dumpability mask (tiles where the agent needs to deposit all the dirt to complete the task). Check out `map.py` for the documentation of the map layering and logic.
+In Terra the agent can move around, dig, and dump terrain. The target map defines all the tiles that can be dug, and the action map stores the progress. Tiles are dug in batches, where a batch is defined by the conical section representing the full reach of the excavator arm for a given base and cabin pose. Therefore, with a `DO` action, the agent digs all the tiles in the target map that are within reach, and subsequently with another `DO` action it distributes the dirt evenly on the dumpable tiles within reach.
+
+### Agent Types
+Two types of excavators are abstracted in Terra: tracked and wheeled. The difference is that the tracked excavator is able to turn the base on the spot whereas the wheeled turns by doing an L-shaped movement (e.g. forward-turn-forward).
+
+### Map Types
+Terra comes with two types of maps: foundations and trenches. Foundations are produced by projecting real building profiles from OpenStreetMap on the grid map. Trenches are procedurally generated and are divided in three categories based on the number of axes the trench has (1 to 3). All the maps have additional layers to encode obstacles, regions where the excavator can't dump terrain (e.g. roads), and regions where the excavator needs to dump all the terrain to terminate the episode (terminal dumping areas). Check out `map.py` for the documentation of the map layering and logic. 
 
 ## Performance 🔥
 TODO scaling graph
