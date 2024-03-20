@@ -6,6 +6,7 @@ from .agent import Agent
 from .settings import TILE_SIZE
 from .settings import MAP_EDGE
 from .settings import AGENT_DIMS
+import threading
 
 class Game:
 
@@ -85,6 +86,11 @@ class Game:
             base_dir,
             cabin_dir,
     ):
+        def update_world_agent(world, agent, active_grid, target_grid, padding_mask, dumpability_mask, agent_pos, base_dir, cabin_dir):
+            world.update(active_grid, target_grid, padding_mask, dumpability_mask)
+            agent.update(agent_pos, base_dir, cabin_dir)
+
+        threads = []
         for i in range(self.n_envs):
             ag = active_grid[i]
             tg = target_grid[i]
@@ -93,8 +99,12 @@ class Game:
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
-            self.worlds[i].update(ag, tg, pm, dm)
-            self.agents[i].update(ap, bd, cd)
+            thread = threading.Thread(target=update_world_agent, args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd))
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
 
     def draw(self):
         self.surface.fill("#F0F0F0")
