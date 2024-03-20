@@ -346,6 +346,7 @@ class TerraEnvBatch:
         display: bool = False,
         progressive_gif: bool = False,
         rendering_engine: str = "pygame",
+        shuffle_maps: bool = False,
     ) -> None:
         self.terra_env = TerraEnv.new(
             rendering=rendering,
@@ -356,7 +357,7 @@ class TerraEnvBatch:
             progressive_gif=progressive_gif,
         )
         self.batch_cfg = batch_cfg
-        self.maps_buffer = init_maps_buffer(batch_cfg)
+        self.maps_buffer = init_maps_buffer(batch_cfg, shuffle_maps)
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
             [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32

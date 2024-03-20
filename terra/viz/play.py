@@ -16,7 +16,8 @@ def main():
     n_envs = n_envs_x * n_envs_y
     seed = 24
     rng = jax.random.PRNGKey(seed)
-    env = TerraEnvBatch(rendering=True, display=True, rendering_engine="pygame", n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
+    shuffle_maps = True
+    env = TerraEnvBatch(rendering=True, display=True, rendering_engine="pygame", n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y, shuffle_maps=shuffle_maps)
 
     print("Starting the environment...")
     start_time = time.time()

@@ -5,13 +5,13 @@
 Terra is a flexible and abstracted grid world environment for training intelligent agents in the context of earthworks planning. It makes it possible to approach motion and excavation high-level planning as a reinforcement learning problem, providing a multi-GPU JAX-accelerated environment. We show that we can train an agent capable of planning earthworks in trenches and foundations environments in less than 1 minute on 8 Nvidia RTX-4090 GPUs.
 
 ## Features
-- 🚜 Agents: Wheeled and tracked excavator embodiments for different types of actions
-- 🏞️ Maps: Up to 3 axes trenches and real-world building foundations as target maps
+- 🚜 Two Agent Types: Wheeled and tracked excavator embodiments for different types of actions
+- 🏞️ Realistic Maps: Up-to-3-axes trenches and building foundations with obstacles and dumping constraints
 - 🔥 Performance: Easily scale to more than 1M steps per second on a single GPU
 - 🚀 Scaling: Out of the box multi-device training using
 - 📖 Curriculum: Customizable out of the box RL curriculum
 - 🔧 Tooling: Visualization, evaluation, and play scripts
-- 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from PureJaxRL and xland-minigrid
+- 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from [purejaxrl](https://github.com/luchris429/purejaxrl) and [xland-minigrid](https://github.com/corl-team/xland-minigrid)
 
 ## Installation
 Clone the repo, and if you want to use Terra in your project use 

@@ -41,7 +41,6 @@ class MapsBuffer(NamedTuple):
     def new(
         cls, maps: Array, padding_mask: Array, trench_axes: Array, trench_types: Array, dumpability_masks_init: Array,
     ) -> "MapsBuffer":
-        jax.debug.print("trench_axes.shape = {x}", x=trench_axes.shape)
         return MapsBuffer(
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
@@ -231,7 +230,7 @@ def _pad_maps(
     )
 
 
-def init_maps_buffer(batch_cfg: BatchConfig):
+def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
     if os.getenv("DATASET_PATH", "") == "":
         raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
     maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
@@ -259,6 +258,33 @@ def init_maps_buffer(batch_cfg: BatchConfig):
     dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk)
     trench_axes_list = jnp.array(trench_axes_list)
     trench_types = jnp.array(trench_types)
+    print(f"Maps shape: {maps_from_disk_padded.shape}.")
+    print(f"Padding mask shape: {padding_mask.shape}.")
+    print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
+    print(f"Trench axes shape: {trench_axes_list.shape}.")
+    print(f"Trench types shape: {trench_types.shape}.")
+    if shuffle_maps:
+        # NOTE: this is only for visualization purposes (allows to visualize in a single gif every level of the curriculum)
+        print("Shuffling maps between curriculum levels...")
+        rng = jax.random.PRNGKey(3333)  # doesn't matter which key, it's used only once
+        d0 = maps_from_disk_padded.shape[0]
+        d1 = maps_from_disk_padded.shape[1]
+        # Reshape
+        maps_from_disk_padded = maps_from_disk_padded.reshape((-1, *maps_from_disk_padded.shape[2:]))
+        padding_mask = padding_mask.reshape((-1, *padding_mask.shape[2:]))
+        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape((-1, *dumpability_masks_init_from_disk.shape[2:]))
+        trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
+        # Shuffle
+        maps_from_disk_padded = jax.random.permutation(rng, maps_from_disk_padded, axis=0)
+        padding_mask = jax.random.permutation(rng, padding_mask, axis=0)
+        dumpability_masks_init_from_disk = jax.random.permutation(rng, dumpability_masks_init_from_disk, axis=0)
+        trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
+        # Reshape back
+        maps_from_disk_padded = maps_from_disk_padded.reshape((d0, d1, *maps_from_disk_padded.shape[1:]))
+        padding_mask = padding_mask.reshape((d0, d1, *padding_mask.shape[1:]))
+        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape((d0, d1, *dumpability_masks_init_from_disk.shape[1:]))
+        trench_axes_list = trench_axes_list.reshape((d0, d1, *trench_axes_list.shape[1:]))
+        print("Maps shuffled.")
     return MapsBuffer.new(
         maps=maps_from_disk_padded,
         padding_mask=padding_mask,
