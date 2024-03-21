@@ -1,10 +1,11 @@
-from digbench import openstreet
-from digbench import utils
+from terra.env_generation import openstreet
+from terra.env_generation import utils
 import os
 import shutil
 # set seed
 from pyproj import Proj, transform
 import random
+import pathlib
 random.seed(42)
 
 
@@ -192,9 +193,9 @@ if __name__ == '__main__':
     # Basel center_bbox small = (47.5645, 47.572, 7.5867, 7.5979)
     # Zurich center_bbox small (benchmark) = (47.378177, 47.364622, 8.526535, 8.544894)
     sizes = [(20, 60)]  #, (40, 80), (80, 160), (160, 320), (320, 640)]
-    package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    n_trenches = 1000
+    package_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    print("Saving openstreet data to ", package_dir)
     for size in sizes:
-        dataset_folder = package_dir + '/data/openstreet/'
+        dataset_folder = os.path.join(package_dir, 'data', 'openstreet')
         download_foundations(dataset_folder, min_size=(size[0], size[0]), max_size=(size[1], size[1]), center_bbox=(47.5376, 47.6126, 7.5401, 7.6842))
         create_foundations(dataset_folder)

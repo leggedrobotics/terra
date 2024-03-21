@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 from scipy.signal import convolve2d
 
-from digbench import terrain_generation
+from terra.env_generation import terrain_generation
 # Colors represented in RGB format
 
 color_dict = {

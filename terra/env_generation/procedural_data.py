@@ -3,10 +3,10 @@ import cv2
 import os
 import json
 from pathlib import Path
-from digbench.utils import color_dict
-from digbench.utils import _get_img_mask
+from terra.env_generation.utils import color_dict
+from terra.env_generation.utils import _get_img_mask
 import math
-from postprocessing import _convert_img_to_terra, _convert_occupancy_to_terra, _convert_dumpability_to_terra
+from terra.env_generation.postprocessing import _convert_img_to_terra, _convert_occupancy_to_terra, _convert_dumpability_to_terra
 import skimage
 
 

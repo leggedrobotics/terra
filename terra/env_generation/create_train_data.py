@@ -1,7 +1,7 @@
 import os
 import yaml
-from digbench.procedural_data import generate_trenches_v2, generate_foundations_v2
-import digbench.postprocessing as postprocessing
+from terra.env_generation.procedural_data import generate_trenches_v2, generate_foundations_v2
+import terra.env_generation.postprocessing as postprocessing
 import os
 import yaml
 
@@ -63,8 +63,6 @@ def create_procedural_trenches(main_folder, config):
             size_nodump_min,
             size_nodump_max
         )
-        print("Trenches created successfully.")
-
 
 def create_foundations(config):
     """
@@ -83,12 +81,12 @@ def create_foundations(config):
         package_dir + '/' + dataset_path,
         package_dir + '/data/train/foundations'
     )
-    print("Foundations created successfully."
+    print("Foundations created successfully.")
 
 
 if __name__ == "__main__":
-    config_path = "config/squares_config.yaml"
-    package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = "config/config.yaml"
+    package_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     with open(package_dir + '/' + config_path, 'r') as file:
         config = yaml.safe_load(file)
     # creeate config['dataset_rel_path'] folder
@@ -100,7 +98,6 @@ if __name__ == "__main__":
     # now transform the pngs into npy arrays 
     # sizes = [(16, 16), (32, 32), (64, 64)]#, (40, 80), (80, 160), (160, 320), (320, 640)]
     sizes = [(size, size) for size in config['sizes']]
-    package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     npy_dataset_folder = package_dir + '/data/train'
     for size in sizes:
         postprocessing.generate_dataset_terra_format(npy_dataset_folder, size)

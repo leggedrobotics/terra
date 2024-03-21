@@ -7,3 +7,7 @@ matplotlib
 pygame
 wandb
 tensorflow_probability
+osmnx
+opencv-python
+pathlib
+scikit-image

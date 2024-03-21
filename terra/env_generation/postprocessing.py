@@ -6,10 +6,10 @@ import math
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-import digbench.utils as utils
 from scipy.signal import convolve2d
-from digbench.utils import _get_img_mask
-from digbench.utils import color_dict
+import terra.env_generation.utils as utils
+from terra.env_generation.utils import _get_img_mask
+from terra.env_generation.utils import color_dict
 from skimage import measure
 import matplotlib.pyplot as plt
 
@@ -19,7 +19,6 @@ def _convert_img_to_terra(img, all_dumpable=False):
     Converts an image from color_dict RGB convention
     to [-1, 0, 1] Terra convention.
     """
-    print("img original shape: ", img.shape)
     img = img.astype(np.int16)
     img = np.where(img == np.array(color_dict["digging"]), -1, img)
     img = np.where(img == np.array(color_dict["dumping"]), 1, img)
@@ -130,9 +129,7 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
 
         occupancy_path = occupancy_folder / filename
         img = cv2.imread(str(file_path))
-        print("img shape: ", img.shape)
         occupancy = cv2.imread(str(occupancy_path))
-        print("occupancy shape: ", occupancy.shape)
 
         if has_dumpability:
             dumpability_path = dumpability_folder / filename
@@ -163,7 +160,6 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
                 dumpability = dumpability_downsampled
                 # plt.imshow(dumpability)
                 # plt.show()
-        print("image downsampled shape: ", img.shape)
 
         # assert img_downsampled.shape[:-1] == occupancy_downsampled.shape
         img_terra = _convert_img_to_terra(img, all_dumpable)
@@ -190,7 +186,6 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
                 img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
                 img_terra_dumpability = _convert_dumpability_to_terra(dumpability)
 
-        print("saving images in destination folder ", destination_folder)
         destination_folder_images = destination_folder / "images"
         destination_folder_occupancy = destination_folder / "occupancy"
         destination_folder_images.mkdir(parents=True, exist_ok=True)
@@ -206,7 +201,6 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
         if has_dumpability:
             img_terra_dumpability = img_terra_dumpability.repeat(expansion_factor, 0).repeat(expansion_factor, 1)
         
-        print("shape of pad terra img: ", img_terra_pad.shape)
         np.save(destination_folder_images / f"img_{i + 1}", img_terra_pad)
         np.save(destination_folder_occupancy / f"img_{i + 1}", img_terra_occupancy)
         if has_dumpability:

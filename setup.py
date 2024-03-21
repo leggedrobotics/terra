@@ -10,7 +10,11 @@ requires = [
     "matplotlib",
     "pygame",
     "wandb",
-    "tensorflow_probability"
+    "tensorflow_probability",
+    "osmnx",
+    "opencv-python",
+    "pathlib",
+    "scikit-image"
 ]
 
 setup(
