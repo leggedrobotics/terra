@@ -8,9 +8,9 @@ Terra is a flexible and abstracted grid world environment for training intellige
 - 🚜 Two Agent Types: Wheeled and tracked excavator embodiments for different types of actions
 - 🏞️ Realistic Maps: Up-to-3-axes trenches and building foundations with obstacles and dumping constraints
 - 🔥 Performance: Easily scale to more than 1M steps per second on a single GPU
-- 🚀 Scaling: Out of the box multi-device training using
-- 📖 Curriculum: Customizable out of the box RL curriculum
-- 🔧 Tooling: Visualization, evaluation, and play scripts
+- 🚀 Scaling: Out of the box multi-device training
+- 📖 Curriculum: Customizable RL curriculum via config interface
+- 🔧 Tooling: Visualization, evaluation, manual play, and maps inspection scripts
 - 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from [purejaxrl](https://github.com/luchris429/purejaxrl) and [xland-minigrid](https://github.com/corl-team/xland-minigrid)
 
 ## Installation
