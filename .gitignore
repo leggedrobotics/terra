@@ -1,0 +1,15 @@
+*/__pycache__/*
+tests/unit/__pycache__/*
+.ipynb_checkpoints/*
+.vscode/*
+.others/*
+.coverage
+__pycache__/*
+*.egg*
+terra/map_utils/__pycache__/
+cache/
+docs/
+terra/viz/game/__pycache__/*
+terra/viz/__pycache__/*
+viz/
+terra/viz_legacy/__pycache__/
