@@ -99,11 +99,11 @@ We provide debugging tools to explore Terra maps and play with the different age
 
 You can play on a single environment using your keyboard with
 ``` python
-python -m terra.viz.main_manual
+DATASET_SIZE=<num_maps_per_type> python -m terra.viz.main_manual
 ```
 and you can inspect the generated maps with
 ``` python
-python -m terra.viz.play
+DATASET_SIZE=<num_maps_per_type> python -m terra.viz.play
 ```
 note that these scripts assume that the maps are stored in the `data/` folder.
 
