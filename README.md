@@ -117,7 +117,11 @@ Two types of excavators are abstracted in Terra: tracked and wheeled. The differ
 Terra comes with two types of maps: foundations and trenches. Foundations are produced by projecting real building profiles from OpenStreetMap on the grid map. Trenches are procedurally generated and are divided in three categories based on the number of axes the trench has (1 to 3). All the maps have additional layers to encode obstacles, regions where the excavator can't dump terrain (e.g. roads), and regions where the excavator needs to dump all the terrain to terminate the episode (terminal dumping areas). Check out `map.py` for the documentation of the map layering and logic. 
 
 ## Performance 🔥
-TODO scaling graph
+We benchmark the environments by measuring the runtime of our PPO algorithm including environment steps and model update on Nvidia RTX-4090 GPUs. For all the experiments we keep constant 32 steps, 32 minibatches, and 1 update epoch.
+
+Scaling on single device             |  Scaling across devices
+:-------------------------:|:-------------------------:
+![](assets/scaling-envs.png)  |  ![](assets/scaling-devices.png)
 
 ## Baselines 🎮
 We release a set of baselines and checkpoints in [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
