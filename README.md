@@ -127,6 +127,12 @@ Scaling on single device             |  Scaling across devices
 We release a set of baselines and checkpoints in [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
 
 ## Citation
+If you use this code in your research or project, please cite the following:
 ```
-Coming soon...
+@misc{terra,
+    title={Terra - Earthwork planning environment in JAX},
+    author={Antonio Arbues, Lorenzo Terenzi},
+    howpublished={\url{https://github.com/leggedrobotics/terra}},
+    year={2024}
+}
 ```
