@@ -172,8 +172,8 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 3
-    decrease_level_threshold: int = 10
+    increase_level_threshold: int = 5
+    decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
@@ -217,23 +217,23 @@ class CurriculumGlobalConfig(NamedTuple):
     # ]
 
     levels = [
-        # {
-        #     "maps_path": "squares/64x64/2",
-        #     "max_steps_in_episode": 300,
-        #     "rewards_type": RewardsType.SPARSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "squares/64x64/3",
-        #     "max_steps_in_episode": 300,
-        #     "rewards_type": RewardsType.SPARSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "squares/64x64/2",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "squares/64x64/3",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
         {
             "maps_path": "trenches/easy_size_small",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.SPARSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         },
         {
             "maps_path": "squares/64x64/5",
@@ -251,7 +251,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "trenches/easy_size_medium",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.SPARSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         },
         {
             "maps_path": "squares/64x64/13",

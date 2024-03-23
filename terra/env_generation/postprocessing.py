@@ -250,7 +250,7 @@ def _convert_all_imgs_to_terra(
                 np.ones_like(img_terra_pad),
             )            
     if copy_metadata:
-        utils.cp(str(metadata_folder), str(destination_folder_metadata))
+        utils.copy_and_increment_filenames(str(metadata_folder), str(destination_folder_metadata))
         # we increase the index by 1 for consistency
 
 

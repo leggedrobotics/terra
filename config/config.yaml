@@ -61,18 +61,26 @@ trenches:
     easy_size_small:
       min_ratio: [0.05, 0.08]
       max_ratio: [0.15, 0.2]
+      add_obstacles: False
+      add_non_dumpable: False
     easy_size_medium:
       min_ratio: [0.08, 0.10]
       max_ratio: [0.2, 0.4]
+      add_obstacles: True
+      add_non_dumpable: True
     easy_size_large:
       min_ratio: [0.11, 0.12]
       max_ratio: [0.3, 0.5]
     medium_size_large:
       min_ratio: [0.11, 0.12]
       max_ratio: [0.3, 0.5]
+      add_obstacles: True
+      add_non_dumpable: True
     hard_size_large:
       min_ratio: [0.11, 0.12]
       max_ratio: [0.3, 0.5]
+      add_obstacles: True
+      add_non_dumpable: True
   img_edge_min: 64
   img_edge_max: 64
   # obstacles 

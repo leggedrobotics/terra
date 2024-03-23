@@ -324,6 +324,8 @@ def generate_trenches_v2(
     n_nodump_max=3,
     size_nodump_min=2,
     size_nodump_max=8,
+    add_obstacles=True,
+    add_non_dumpables=True,
 ):
     min_edges, max_edges = n_edges
     i = 0
@@ -334,23 +336,25 @@ def generate_trenches_v2(
         )
         if img is None:
             continue
-        occ, cumulative_mask = add_obstacles(
-            img,
-            cumulative_mask,
-            n_obs_min,
-            n_obs_max,
-            size_obstacle_min,
-            size_obstacle_max,
-        )
-        dmp, cumulative_mask = add_non_dumpables(
-            img,
-            occ,
-            cumulative_mask,
-            n_nodump_min,
-            n_nodump_max,
-            size_nodump_min,
-            size_nodump_max,
-        )
+        if add_obstacles:
+            occ, cumulative_mask = add_obstacles(
+                img,
+                cumulative_mask,
+                n_obs_min,
+                n_obs_max,
+                size_obstacle_min,
+                size_obstacle_max,
+            )
+        if add_non_dumpables:
+            dmp, cumulative_mask = add_non_dumpables(
+                img,
+                occ,
+                cumulative_mask,
+                n_nodump_min,
+                n_nodump_max,
+                size_nodump_min,
+                size_nodump_max,
+            )
         save_or_display_image(img, occ, dmp, metadata, save_folder, i)
         i += 1
 
