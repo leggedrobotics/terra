@@ -7,6 +7,7 @@ from .settings import MAP_TILES
 from terra.config import ExcavatorDims, ImmutableMapsConfig
 import threading
 
+
 def get_agent_dims(agent_w_m, agent_h_m, tile_size_m):
     """TODO repeated function, move to utils and share with env."""
     agent_height = (
@@ -21,9 +22,19 @@ def get_agent_dims(agent_w_m, agent_h_m, tile_size_m):
     )
     return agent_width, agent_height
 
-class Game:
 
-    def __init__(self, screen, surface, clock, maps_size_px, n_envs_x=1, n_envs_y=1, display=True, progressive_gif=False):
+class Game:
+    def __init__(
+        self,
+        screen,
+        surface,
+        clock,
+        maps_size_px,
+        n_envs_x=1,
+        n_envs_y=1,
+        display=True,
+        progressive_gif=False,
+    ):
         self.screen = screen
         self.surface = surface
         self.clock = clock
@@ -36,37 +47,39 @@ class Game:
         self.n_envs = n_envs_x * n_envs_y
         self.worlds = []
         self.agents = []
-        
+
         tile_size_m = ImmutableMapsConfig().edge_length_m / maps_size_px
         self.maps_size_px = maps_size_px
         tile_size = MAP_TILES // maps_size_px
         self.tile_size = tile_size
         excavator_dims = ExcavatorDims()
-        agent_h, agent_w = get_agent_dims(excavator_dims.WIDTH, excavator_dims.HEIGHT, tile_size_m)
+        agent_h, agent_w = get_agent_dims(
+            excavator_dims.WIDTH, excavator_dims.HEIGHT, tile_size_m
+        )
         print(f"Agent size (in rendering): {agent_w}x{agent_h}")
         print(f"Tile size (in rendering): {tile_size_m}")
         print(f"Rendering tile size: {tile_size}")
         for _ in range(self.n_envs):
-            self.worlds.append(World(maps_size_px, maps_size_px, self.width, self.height, tile_size))
+            self.worlds.append(
+                World(maps_size_px, maps_size_px, self.width, self.height, tile_size)
+            )
             self.agents.append(Agent(agent_w, agent_h, tile_size))
 
         self.frames = []
 
         self.old_agents = []
         self.count = 0
-        
-        
 
     def run(
-            self,
-            active_grid,
-            target_grid,
-            padding_mask,
-            dumpability_mask,
-            agent_pos,
-            base_dir,
-            cabin_dir,
-            generate_gif,
+        self,
+        active_grid,
+        target_grid,
+        padding_mask,
+        dumpability_mask,
+        agent_pos,
+        base_dir,
+        cabin_dir,
+        generate_gif,
     ):
         # self.events()
         self.update(
@@ -83,9 +96,15 @@ class Game:
             frame = pg.surfarray.array3d(pg.display.get_surface())
             self.frames.append(frame.swapaxes(0, 1))
 
-    def create_gif(self, gif_path = '/home/antonio/Downloads/Terra.gif'):
+    def create_gif(self, gif_path="/home/antonio/Downloads/Terra.gif"):
         image_frames = [Image.fromarray(frame) for frame in self.frames]
-        image_frames[0].save(gif_path, save_all=True, append_images=image_frames[1:], loop=0, duration=100)
+        image_frames[0].save(
+            gif_path,
+            save_all=True,
+            append_images=image_frames[1:],
+            loop=0,
+            duration=100,
+        )
         print(f"GIF generated at {gif_path}")
         self.frames = []
 
@@ -100,7 +119,18 @@ class Game:
                     sys.exit()
 
     def update(
-            self,
+        self,
+        active_grid,
+        target_grid,
+        padding_mask,
+        dumpability_mask,
+        agent_pos,
+        base_dir,
+        cabin_dir,
+    ):
+        def update_world_agent(
+            world,
+            agent,
             active_grid,
             target_grid,
             padding_mask,
@@ -108,8 +138,7 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
-    ):
-        def update_world_agent(world, agent, active_grid, target_grid, padding_mask, dumpability_mask, agent_pos, base_dir, cabin_dir):
+        ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
             agent.update(agent_pos, base_dir, cabin_dir)
 
@@ -122,7 +151,10 @@ class Game:
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
-            thread = threading.Thread(target=update_world_agent, args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd))
+            thread = threading.Thread(
+                target=update_world_agent,
+                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd),
+            )
             thread.start()
             threads.append(thread)
 
@@ -139,8 +171,12 @@ class Game:
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
-            total_offset_x = ix * (self.maps_size_px + 4) * self.tile_size + 4*self.tile_size
-            total_offset_y = iy * (self.maps_size_px + 4) * self.tile_size + 4*self.tile_size
+            total_offset_x = (
+                ix * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
+            )
+            total_offset_y = (
+                iy * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
+            )
 
             # Target map
             # for x in range(world.grid_length_x):
@@ -152,15 +188,18 @@ class Game:
             #         pg.draw.rect(self.surface, c, rect, 0)
             #         # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
-
             # Action map
             # offset = 61 * TILE_SIZE
             for x in range(world.grid_length_x):
                 for y in range(world.grid_length_y):
-
                     sq = world.action_map[x][y]["cart_rect"]
                     c = world.action_map[x][y]["color"]
-                    rect = pg.Rect(sq[0][0] + total_offset_x, sq[0][1] + total_offset_y, self.tile_size, self.tile_size)
+                    rect = pg.Rect(
+                        sq[0][0] + total_offset_x,
+                        sq[0][1] + total_offset_y,
+                        self.tile_size,
+                        self.tile_size,
+                    )
                     pg.draw.rect(self.surface, c, rect, 0)
                     # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
@@ -172,10 +211,12 @@ class Game:
             agent_x = a[0][0] + total_offset_x
             agent_y = a[0][1] + total_offset_y
             a_rect = pg.Rect(0, 0, w * self.tile_size, h * self.tile_size)
-            agent_surfaces.append(pg.Surface((w*self.tile_size, h*self.tile_size), pg.SRCALPHA))
+            agent_surfaces.append(
+                pg.Surface((w * self.tile_size, h * self.tile_size), pg.SRCALPHA)
+            )
             if self.progressive_gif:
                 agent_surfaces[-1].set_alpha(50)
-            
+
             agent_positions.append((agent_x, agent_y))
             pg.draw.rect(agent_surfaces[-1], ca, a_rect, 0, 3)
 

@@ -13,13 +13,13 @@ from terra.maps_buffer import init_maps_buffer
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
-from terra.actions import TrackedAction, WheeledAction
 from terra.curriculum import CurriculumManager
 import pygame as pg
 from terra.viz_legacy.rendering import RenderingEngine
 from terra.viz_legacy.window import Window
 from terra.viz.game.game import Game
 from terra.viz.game.settings import MAP_TILES
+
 
 class TimeStep(NamedTuple):
     state: State
@@ -29,12 +29,22 @@ class TimeStep(NamedTuple):
     info: dict
     env_cfg: EnvConfig
 
+
 class TerraEnv(NamedTuple):
     rendering_engine: Game | RenderingEngine | None = None
     window: Window | None = None  # Note: not used if pygame rendering engine is used
 
     @classmethod
-    def new(cls, maps_size_px: int, rendering: bool = False, n_envs_x: int = 1, n_envs_y: int = 1, display: bool = False, progressive_gif: bool = False, rendering_engine: str = "pygame") -> "TerraEnv":
+    def new(
+        cls,
+        maps_size_px: int,
+        rendering: bool = False,
+        n_envs_x: int = 1,
+        n_envs_y: int = 1,
+        display: bool = False,
+        progressive_gif: bool = False,
+        rendering_engine: str = "pygame",
+    ) -> "TerraEnv":
         re = None
         window = None
         tile_size_rendering = MAP_TILES // maps_size_px
@@ -46,17 +56,33 @@ class TerraEnv(NamedTuple):
             elif rendering_engine == "pygame":
                 pg.init()
                 pg.mixer.init()
-                display_dims = (n_envs_y * (maps_size_px + 4) * tile_size_rendering + 4*tile_size_rendering, n_envs_x * (maps_size_px + 4) * tile_size_rendering + 4*tile_size_rendering)
+                display_dims = (
+                    n_envs_y * (maps_size_px + 4) * tile_size_rendering
+                    + 4 * tile_size_rendering,
+                    n_envs_x * (maps_size_px + 4) * tile_size_rendering
+                    + 4 * tile_size_rendering,
+                )
                 if not display:
                     print("TerraEnv: disabling display...")
-                    screen = pg.display.set_mode(display_dims, pg.FULLSCREEN | pg.HIDDEN)
+                    screen = pg.display.set_mode(
+                        display_dims, pg.FULLSCREEN | pg.HIDDEN
+                    )
                 else:
                     screen = pg.display.set_mode(display_dims)
                 surface = pg.Surface(display_dims, pg.SRCALPHA)
                 clock = pg.time.Clock()
-                re = Game(screen, surface, clock, maps_size_px=maps_size_px, n_envs_x=n_envs_x, n_envs_y=n_envs_y, display=display, progressive_gif=progressive_gif)
+                re = Game(
+                    screen,
+                    surface,
+                    clock,
+                    maps_size_px=maps_size_px,
+                    n_envs_x=n_envs_x,
+                    n_envs_y=n_envs_y,
+                    display=display,
+                    progressive_gif=progressive_gif,
+                )
             else:
-                raise(ValueError(f"{rendering_engine=}"))
+                raise (ValueError(f"{rendering_engine=}"))
         return TerraEnv(rendering_engine=re, window=window)
 
     @partial(jax.jit, static_argnums=(0,))
@@ -74,10 +100,16 @@ class TerraEnv(NamedTuple):
         Resets the environment using values from config files, and a seed.
         """
         state = State.new(
-            key, env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+            key,
+            env_cfg,
+            target_map,
+            padding_mask,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
         )
         state = self.wrap_state(state)
-        
+
         observations = self._state_to_obs_dict(state)
 
         observations["do_preview"] = state._handle_do().world.action_map.map
@@ -92,7 +124,7 @@ class TerraEnv(NamedTuple):
             info=state._get_infos(dummy_action, False),
             env_cfg=env_cfg,
         )
-    
+
     @staticmethod
     def wrap_state(state: State) -> State:
         state = TraversabilityMaskWrapper.wrap(state)
@@ -114,7 +146,12 @@ class TerraEnv(NamedTuple):
         Resets the env, assuming that it already exists.
         """
         state = state._reset(
-            env_cfg, target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+            env_cfg,
+            target_map,
+            padding_mask,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
         )
         state = self.wrap_state(state)
         observations = self._state_to_obs_dict(state)
@@ -169,7 +206,7 @@ class TerraEnv(NamedTuple):
         self,
         obs: dict[str, Array],
         info=None,
-        generate_gif : bool = False,
+        generate_gif: bool = False,
     ) -> Array:
         """
         Renders the environment at a given observation.
@@ -245,7 +282,7 @@ class TerraEnv(NamedTuple):
             # self.window.show(block)
 
         return imgs_global, imgs_local
-    
+
     @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
@@ -360,13 +397,22 @@ class TerraEnvBatch:
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
-            [level["max_steps_in_episode"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
+            [
+                level["max_steps_in_episode"]
+                for level in batch_cfg.curriculum_global.levels
+            ],
+            dtype=jnp.int32,
         )
         apply_trench_rewards_per_level = jnp.array(
-            [level["apply_trench_rewards"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.bool_
+            [
+                level["apply_trench_rewards"]
+                for level in batch_cfg.curriculum_global.levels
+            ],
+            dtype=jnp.bool_,
         )
         reward_type_per_level = jnp.array(
-            [level["rewards_type"] for level in batch_cfg.curriculum_global.levels], dtype=jnp.int32
+            [level["rewards_type"] for level in batch_cfg.curriculum_global.levels],
+            dtype=jnp.int32,
         )
         self.curriculum_manager = CurriculumManager(
             max_level=max_curriculum_level,
@@ -379,7 +425,10 @@ class TerraEnvBatch:
         )
 
     def update_env_cfgs(self, env_cfgs: EnvConfig) -> EnvConfig:
-        tile_size = self.batch_cfg.maps.edge_length_m / self.batch_cfg.maps_dims.maps_edge_length
+        tile_size = (
+            self.batch_cfg.maps.edge_length_m
+            / self.batch_cfg.maps_dims.maps_edge_length
+        )
         print(f"tile_size: {tile_size}")
         agent_w = self.batch_cfg.agent.dimensions.WIDTH
         agent_h = self.batch_cfg.agent.dimensions.HEIGHT
@@ -396,19 +445,20 @@ class TerraEnvBatch:
         print(f"agent_width: {agent_width}, agent_height: {agent_height}")
 
         # Repeat to match the number of environments
-        n_envs = env_cfgs.agent.dig_depth.shape[0]  # leading dimension of any field in the config is the number of envs
+        n_envs = env_cfgs.agent.dig_depth.shape[
+            0
+        ]  # leading dimension of any field in the config is the number of envs
         tile_size = jnp.repeat(jnp.array([tile_size], dtype=jnp.float32), n_envs)
         agent_width = jnp.repeat(jnp.array([agent_width], dtype=jnp.int32), n_envs)
         agent_height = jnp.repeat(jnp.array([agent_height], dtype=jnp.int32), n_envs)
-        edge_length_px = jnp.repeat(jnp.array([self.batch_cfg.maps_dims.maps_edge_length], dtype=jnp.int32), n_envs)
+        edge_length_px = jnp.repeat(
+            jnp.array([self.batch_cfg.maps_dims.maps_edge_length], dtype=jnp.int32),
+            n_envs,
+        )
         env_cfgs = env_cfgs._replace(
             tile_size=tile_size,
-            agent=env_cfgs.agent._replace(
-                width=agent_width, height=agent_height
-            ),
-            maps=env_cfgs.maps._replace(
-                edge_length_px=edge_length_px
-            ),
+            agent=env_cfgs.agent._replace(width=agent_width, height=agent_height),
+            maps=env_cfgs.maps._replace(edge_length_px=edge_length_px),
         )
         return env_cfgs
 
@@ -417,14 +467,27 @@ class TerraEnvBatch:
 
     def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
-    
+
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
-        target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, new_rng_key = self._get_map_init(rng_key, env_cfgs)
+        (
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            new_rng_key,
+        ) = self._get_map_init(rng_key, env_cfgs)
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
         env_cfgs = self.update_env_cfgs(env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
-            rng_key, target_maps, padding_masks, trench_axes, trench_type, dumpability_mask_init, env_cfgs
+            rng_key,
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            env_cfgs,
         )
         return timestep
 

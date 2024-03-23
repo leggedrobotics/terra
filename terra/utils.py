@@ -49,9 +49,13 @@ def apply_rot_transl(anchor_state: Array, global_coords: Array) -> Array:
     neg_Rt_t = -R_t @ t
 
     # Build the inverse transformation matrix
-    T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0., 0., 1.])]])
+    T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0.0, 0.0, 1.0])]])
 
-    local_coords = jnp.einsum('ij,jk->ik', T, jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]))
+    local_coords = jnp.einsum(
+        "ij,jk->ik",
+        T,
+        jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]),
+    )
     return local_coords[:2]
 
 
@@ -71,7 +75,7 @@ def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:
             Note: theta belongs to [-pi, pi]
     """
     x, y = local_coords[0], local_coords[1]
-    r = jnp.sqrt(x*x + y*y)
+    r = jnp.sqrt(x * x + y * y)
     theta = jnp.arctan2(-x, y)
     return jnp.vstack([r, theta])
 
@@ -144,12 +148,13 @@ def get_min_distance_point_to_lines(p, lines, trench_type):
     )
     return d_min[0]
 
+
 def get_agent_corners(
     pos_base: Array,
     base_orientation: IntLowDim,
     agent_width: IntLowDim,
     agent_height: IntLowDim,
-    ):
+):
     """
     Gets the coordinates of the 4 corners of the agent.
     """
@@ -173,6 +178,7 @@ def get_agent_corners(
         ]
     )
     return agent_corners
+
 
 def get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
     """

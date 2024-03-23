@@ -284,7 +284,14 @@ class RenderingEngine:
         return imgs
 
     def _render_grids(
-        self, tile_size, height_grid, padding_mask, dumpability_mask, target_tiles=None, do_preview=None, map_type="",
+        self,
+        tile_size,
+        height_grid,
+        padding_mask,
+        dumpability_mask,
+        target_tiles=None,
+        do_preview=None,
+        map_type="",
     ):
         x_dim = height_grid.shape[-2]
         y_dim = height_grid.shape[-1]
@@ -326,11 +333,7 @@ class RenderingEngine:
         g = np.zeros_like(r)
         b = np.zeros_like(r)
         pm_rgb = np.concatenate((r, g, b), axis=-1)
-        img = np.where(
-            pm == 255,
-            pm_rgb,
-            img
-        )
+        img = np.where(pm == 255, pm_rgb, img)
 
         # Render dumpability mask (non-dumpable tiles)
         # if map_type == "target_map":
@@ -344,14 +347,16 @@ class RenderingEngine:
             b,
         )
         b = np.where(
-            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) < 0),
+            (dm[..., 0] == 255)
+            & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) < 0),
             97,
             b,
         )
 
         g = np.zeros_like(b)
         g = np.where(
-            (dm[..., 0] == 255) & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) > 0),
+            (dm[..., 0] == 255)
+            & (height_grid.repeat(tile_size, -1).repeat(tile_size, -2) > 0),
             173,
             g,
         )
@@ -360,19 +365,13 @@ class RenderingEngine:
         g = g[..., None]
         b = b[..., None]
         dm_rgb = np.concatenate((r, g, b), axis=-1)
-        img = np.where(
-            dm == 255,
-            dm_rgb,
-            img
-        )
+        img = np.where(dm == 255, dm_rgb, img)
 
         if do_preview is not None and target_tiles is not None:
             do_preview = np.array([[[255, 255, 255]]]) * (
                 (
                     (
-                        do_preview.repeat(tile_size, axis=-2).repeat(
-                            tile_size, axis=-1
-                        )
+                        do_preview.repeat(tile_size, axis=-2).repeat(tile_size, axis=-1)
                         + 3
                     )
                     / 7
@@ -414,7 +413,13 @@ class RenderingEngine:
         # s1 = time.time()
 
         imgs = self._render_grids(
-            tile_size, height_grid, padding_mask, dumpability_mask, target_tiles, do_preview, map_type="active_map",
+            tile_size,
+            height_grid,
+            padding_mask,
+            dumpability_mask,
+            target_tiles,
+            do_preview,
+            map_type="active_map",
         )
 
         # s2 = time.time()
@@ -459,8 +464,16 @@ class RenderingEngine:
 
         return imgs
 
-    def render_target_grids(self, tile_size, target_grid, padding_mask, dumpability_mask):
-        return self._render_grids(tile_size, target_grid, padding_mask, dumpability_mask, map_type="target_map")
+    def render_target_grids(
+        self, tile_size, target_grid, padding_mask, dumpability_mask
+    ):
+        return self._render_grids(
+            tile_size,
+            target_grid,
+            padding_mask,
+            dumpability_mask,
+            map_type="target_map",
+        )
 
     def render_global(
         self,
@@ -512,7 +525,10 @@ class RenderingEngine:
         )
 
         imgs_target_grid = self.render_target_grids(
-            tile_size, target_grid, padding_mask, dumpability_mask,
+            tile_size,
+            target_grid,
+            padding_mask,
+            dumpability_mask,
         )
 
         imgs = [

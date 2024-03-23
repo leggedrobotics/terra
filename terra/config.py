@@ -5,6 +5,7 @@ from terra.actions import Action
 from terra.actions import TrackedAction  # noqa: F401
 from terra.actions import WheeledAction  # noqa: F401
 
+
 class ExcavatorDims(NamedTuple):
     WIDTH: float = 6.08  # longer side
     HEIGHT: float = 3.5  # shorter side
@@ -20,6 +21,7 @@ class ImmutableMapsConfig(NamedTuple):
     Define the max size of the map in meters.
     This defines the proportion between the map and the agent.
     """
+
     edge_length_m: float = 44.0  # map edge length in meters
     edge_length_px: int = 0  # updated in the code
 
@@ -36,6 +38,7 @@ class ImmutableAgentConfig(NamedTuple):
     """
     The part of the AgentConfig that won't change based on curriculum.
     """
+
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 4
     angles_cabin: int = 8
@@ -75,7 +78,9 @@ class Rewards(NamedTuple):
     dump_wrong: float  # given if loaded stayed the same
     dump_no_dump_area: float  # given if dumps in an area that is not the dump area
 
-    dig_correct: float  # dig where the target map is negative, and not more than required
+    dig_correct: (
+        float  # dig where the target map is negative, and not more than required
+    )
     dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
@@ -101,10 +106,9 @@ class Rewards(NamedTuple):
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
             terminal=100.0,
-
             normalizer=100.0,
         )
-    
+
     @staticmethod
     def sparse():
         return Rewards(
@@ -122,7 +126,6 @@ class Rewards(NamedTuple):
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
             terminal=100.0,
-
             normalizer=100.0,
         )
 
@@ -132,15 +135,16 @@ class TrenchRewards(NamedTuple):
         -0.4
     )  # distance_coefficient * distance, if distance > agent_width / 2
 
+
 class CurriculumConfig(NamedTuple):
     """State of the curriculum. This config should not be changed."""
+
     level: int = 0
     consecutive_failures: int = 0
     consecutive_successes: int = 0
 
 
 class EnvConfig(NamedTuple):
-
     agent: AgentConfig = AgentConfig()
 
     target_map: TargetMapConfig = TargetMapConfig()
@@ -157,59 +161,142 @@ class EnvConfig(NamedTuple):
 
     max_steps_in_episode: int = 0  # changed by CurriculumManager
     tile_size: float = 0  # updated in the code
-    
 
     @classmethod
     def new(cls):
         return EnvConfig()
-    
+
+
 class MapsDimsConfig(NamedTuple):
     maps_edge_length: int = 0  # updated in the code
+
 
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 3
     decrease_level_threshold: int = 10
     last_level_type = "random"  # ["random", "none"]
-    
+
     # NOTE: all maps need to have the same size
+    # levels = [
+    #     {
+    #         "maps_path": "terra/foundations",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    #     {
+    #         "maps_path": "terra/trenches/easy",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "terra/foundations",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    #     {
+    #         "maps_path": "terra/trenches/medium",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "terra/foundations",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    #     {
+    #         "maps_path": "terra/trenches/hard",
+    #         "max_steps_in_episode": 300,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    # ]
+
     levels = [
+        # {
+        #     "maps_path": "squares/64x64/2",
+        #     "max_steps_in_episode": 300,
+        #     "rewards_type": RewardsType.SPARSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "squares/64x64/3",
+        #     "max_steps_in_episode": 300,
+        #     "rewards_type": RewardsType.SPARSE,
+        #     "apply_trench_rewards": False,
+        # },
         {
-            "maps_path": "terra/foundations",
+            "maps_path": "trenches/easy_size_small",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "terra/trenches/easy",
+            "maps_path": "squares/64x64/5",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "squares/64x64/8",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "trenches/easy_size_medium",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "squares/64x64/13",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "foundations",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "trenches/easy_size_large",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations",
+            "maps_path": "foundations",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "terra/trenches/medium",
+            "maps_path": "trenches/medium_size_large",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations",
+            "maps_path": "foundations",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "terra/trenches/hard",
+            "maps_path": "trenches/hard_size_large",
             "max_steps_in_episode": 300,
-            "rewards_type": RewardsType.DENSE,
+            "rewards_type": RewardsType.SPARSE,
             "apply_trench_rewards": True,
         },
     ]
+
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]

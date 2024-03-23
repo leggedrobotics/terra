@@ -5,6 +5,7 @@ from jax import Array
 
 from terra.settings import IntMap
 
+
 class MapParams(NamedTuple):
     edge_min: IntMap
     edge_max: IntMap

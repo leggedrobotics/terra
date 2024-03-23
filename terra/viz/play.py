@@ -17,7 +17,14 @@ def main():
     seed = 24
     rng = jax.random.PRNGKey(seed)
     shuffle_maps = True
-    env = TerraEnvBatch(rendering=True, display=True, rendering_engine="pygame", n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y, shuffle_maps=shuffle_maps)
+    env = TerraEnvBatch(
+        rendering=True,
+        display=True,
+        rendering_engine="pygame",
+        n_envs_x_rendering=n_envs_x,
+        n_envs_y_rendering=n_envs_y,
+        shuffle_maps=shuffle_maps,
+    )
 
     print("Starting the environment...")
     start_time = time.time()
@@ -38,10 +45,11 @@ def main():
 
             elif event.type == QUIT:
                 playing = False
-        
+
         env.terra_env.render_obs_pygame(
             timestep.observation,
         )
+
 
 if __name__ == "__main__":
     main()

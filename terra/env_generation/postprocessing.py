@@ -101,17 +101,24 @@ def _generate_dumping_constraints(img):
         1,
         expanded_img,
     )
-    img = np.where(
-        img == -1,
-        img,
-        expanded_img
-    )
+    img = np.where(img == -1, img, expanded_img)
     return img.astype(np.int8)
 
 
-
-def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, dumpability_folder, destination_folder, size, expansion_factor=1, all_dumpable=False, copy_metadata=True,
-                               downsample=True, has_dumpability=True, center_padding=False):
+def _convert_all_imgs_to_terra(
+    img_folder,
+    metadata_folder,
+    occupancy_folder,
+    dumpability_folder,
+    destination_folder,
+    size,
+    expansion_factor=1,
+    all_dumpable=False,
+    copy_metadata=True,
+    downsample=True,
+    has_dumpability=True,
+    center_padding=False,
+):
     max_size = size[1]
     print("max size: ", max_size)
     # try:
@@ -119,7 +126,6 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
     filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
 
     for i, fn in tqdm(enumerate(os.listdir(img_folder))):
-
         if i >= 1000:
             break
 
@@ -138,7 +144,9 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
             # plt.show()
 
         if downsample:
-            with open(metadata_folder / f"{filename.split('.png')[0]}.json") as json_file:
+            with open(
+                metadata_folder / f"{filename.split('.png')[0]}.json"
+            ) as json_file:
                 metadata = json.load(json_file)
 
             # Calculate downsample factors based on max_size
@@ -155,7 +163,10 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
             occupancy = occupancy_downsampled
             if has_dumpability:
                 dumpability_downsampled = skimage.measure.block_reduce(
-                    dumpability, (downsample_factor_h, downsample_factor_w, 1), np.min, cval=0
+                    dumpability,
+                    (downsample_factor_h, downsample_factor_w, 1),
+                    np.min,
+                    cval=0,
                 )
                 dumpability = dumpability_downsampled
                 # plt.imshow(dumpability)
@@ -165,21 +176,39 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
         img_terra = _convert_img_to_terra(img, all_dumpable)
         # Pad to max size
         if center_padding:
-            xdim = max_size-img_terra.shape[0]
-            ydim = max_size-img_terra.shape[1]
+            xdim = max_size - img_terra.shape[0]
+            ydim = max_size - img_terra.shape[1]
             # Note: applying full dumping tiles for the centered version
             img_terra_pad = np.ones((max_size, max_size), dtype=img_terra.dtype)
-            print("xdim:", xdim, "max_size:", max_size, "ydim:", ydim, "img_terra shape:", img_terra.shape)
-            img_terra_pad[xdim//2:max_size-(xdim-xdim//2), ydim//2:max_size-(ydim-ydim//2)] = img_terra
+            print(
+                "xdim:",
+                xdim,
+                "max_size:",
+                max_size,
+                "ydim:",
+                ydim,
+                "img_terra shape:",
+                img_terra.shape,
+            )
+            img_terra_pad[
+                xdim // 2 : max_size - (xdim - xdim // 2),
+                ydim // 2 : max_size - (ydim - ydim // 2),
+            ] = img_terra
             # Note: applying no occupancy for the centered version (mismatch with Terra env)
             img_terra_occupancy = np.zeros((max_size, max_size), dtype=np.bool_)
-            img_terra_occupancy[xdim//2:max_size-(xdim-xdim//2), ydim//2:max_size-(ydim-ydim//2)] = _convert_occupancy_to_terra(occupancy)
+            img_terra_occupancy[
+                xdim // 2 : max_size - (xdim - xdim // 2),
+                ydim // 2 : max_size - (ydim - ydim // 2),
+            ] = _convert_occupancy_to_terra(occupancy)
             if has_dumpability:
                 img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
-                img_terra_dumpability[xdim//2:max_size-(xdim-xdim//2), ydim//2:max_size-(ydim-ydim//2)] = _convert_dumpability_to_terra(dumpability)
+                img_terra_dumpability[
+                    xdim // 2 : max_size - (xdim - xdim // 2),
+                    ydim // 2 : max_size - (ydim - ydim // 2),
+                ] = _convert_dumpability_to_terra(dumpability)
         else:
             img_terra_pad = np.zeros((max_size, max_size), dtype=img_terra.dtype)
-            img_terra_pad[:img_terra.shape[0], :img_terra.shape[1]] = img_terra
+            img_terra_pad[: img_terra.shape[0], : img_terra.shape[1]] = img_terra
             img_terra_occupancy = np.ones((max_size, max_size), dtype=np.bool_)
             img_terra_occupancy = _convert_occupancy_to_terra(occupancy)
             if has_dumpability:
@@ -196,36 +225,53 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
             destination_folder_metadata = destination_folder / "metadata"
             destination_folder_metadata.mkdir(parents=True, exist_ok=True)
 
-        img_terra_pad = img_terra_pad.repeat(expansion_factor, axis=0).repeat(expansion_factor, axis=1)
-        img_terra_occupancy = img_terra_occupancy.repeat(expansion_factor, axis=0).repeat(expansion_factor, axis=1)
+        img_terra_pad = img_terra_pad.repeat(expansion_factor, axis=0).repeat(
+            expansion_factor, axis=1
+        )
+        img_terra_occupancy = img_terra_occupancy.repeat(
+            expansion_factor, axis=0
+        ).repeat(expansion_factor, axis=1)
         if has_dumpability:
-            img_terra_dumpability = img_terra_dumpability.repeat(expansion_factor, 0).repeat(expansion_factor, 1)
-        
+            img_terra_dumpability = img_terra_dumpability.repeat(
+                expansion_factor, 0
+            ).repeat(expansion_factor, 1)
+
         np.save(destination_folder_images / f"img_{i + 1}", img_terra_pad)
         np.save(destination_folder_occupancy / f"img_{i + 1}", img_terra_occupancy)
         if has_dumpability:
-            np.save(destination_folder_dumpability / f"img_{i + 1}", img_terra_dumpability)
+            np.save(
+                destination_folder_dumpability / f"img_{i + 1}", img_terra_dumpability
+            )
         else:
-            np.save(destination_folder_dumpability / f"img_{i + 1}", np.ones_like(img_terra_pad))
-
+            np.save(
+                destination_folder_dumpability / f"img_{i + 1}",
+                np.ones_like(img_terra_pad),
+            )
 
     if copy_metadata:
         utils.copy_metadata(str(metadata_folder), str(destination_folder_metadata))
         destination_folder_metadata = destination_folder / "metadata"
         destination_folder_metadata.mkdir(parents=True, exist_ok=True)
 
-        img_terra_pad = img_terra_pad.repeat(expansion_factor, 0).repeat(expansion_factor, 1)
-        img_terra_occupancy = img_terra_occupancy.repeat(expansion_factor, 0).repeat(expansion_factor, 1)
+        img_terra_pad = img_terra_pad.repeat(expansion_factor, 0).repeat(
+            expansion_factor, 1
+        )
+        img_terra_occupancy = img_terra_occupancy.repeat(expansion_factor, 0).repeat(
+            expansion_factor, 1
+        )
         if has_dumpability:
-            img_terra_dumpability = img_terra_dumpability.repeat(expansion_factor, 0).repeat(expansion_factor, 1)
-            
+            img_terra_dumpability = img_terra_dumpability.repeat(
+                expansion_factor, 0
+            ).repeat(expansion_factor, 1)
+
         np.save(destination_folder_images / f"img_{i}", img_terra_pad)
         np.save(destination_folder_occupancy / f"img_{i}", img_terra_occupancy)
         if has_dumpability:
             np.save(destination_folder_dumpability / f"img_{i}", img_terra_dumpability)
         else:
-            np.save(destination_folder_dumpability / f"img_{i}", np.ones_like(img_terra_pad))
-
+            np.save(
+                destination_folder_dumpability / f"img_{i}", np.ones_like(img_terra_pad)
+            )
 
     if copy_metadata:
         utils.copy_metadata(str(metadata_folder), str(destination_folder_metadata))
@@ -234,35 +280,61 @@ def _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, du
 def generate_foundations_terra(dataset_folder, size, all_dumpable):
     print("Converting foundations...")
     foundation_name = "foundations"
-    img_folder = Path(dataset_folder) / "foundations"  / "images"
+    img_folder = Path(dataset_folder) / "foundations" / "images"
     print("Image folder: ", img_folder)
-    metadata_folder = Path(dataset_folder) / "foundations"  / "metadata"
-    occupancy_folder = Path(dataset_folder) / "foundations"  / "occupancy"
-    dumpability_folder = Path(dataset_folder) / "foundations"  / "dumpability"
-    destination_folder = Path(dataset_folder) / "terra" / foundation_name
+    metadata_folder = Path(dataset_folder) / "foundations" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "foundations" / "occupancy"
+    dumpability_folder = Path(dataset_folder) / "foundations" / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / foundation_name
     destination_folder.mkdir(parents=True, exist_ok=True)
-    _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, dumpability_folder, destination_folder, size, all_dumpable=all_dumpable, copy_metadata=True, downsample=False, has_dumpability=True, center_padding=False)
- 
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        all_dumpable=all_dumpable,
+        copy_metadata=True,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+    )
+
 
 def generate_trenches_terra(dataset_folder, size, expansion_factor, all_dumpable):
     print("Converting trenches...")
-    trenches_name = f"trenches"
-    for level in ["easy", "medium", "hard"]:
-        print(f"    {level}...")
-        img_folder = Path(dataset_folder) / trenches_name / level / "images"
-        metadata_folder = Path(dataset_folder) / trenches_name / level / "metadata"
-        occupancy_folder = Path(dataset_folder) / trenches_name / level / "occupancy"
-        dumpability_folder = Path(dataset_folder) / trenches_name / level / "dumpability"
-        destination_folder = Path(dataset_folder) / "terra" / trenches_name / level
+    trenches_name = "trenches"
+    trenches_path = Path(dataset_folder) / trenches_name
+    levels = [d.name for d in trenches_path.iterdir() if d.is_dir()]
+    for level in levels:
+        img_folder = trenches_path / level / "images"
+        metadata_folder = trenches_path / level / "metadata"
+        occupancy_folder = trenches_path / level / "occupancy"
+        dumpability_folder = trenches_path / level / "dumpability"
+        destination_folder = Path(dataset_folder) / "train" / trenches_name / level
         destination_folder.mkdir(parents=True, exist_ok=True)
-        _convert_all_imgs_to_terra(img_folder, metadata_folder, occupancy_folder, dumpability_folder, destination_folder, size, expansion_factor=expansion_factor, all_dumpable=all_dumpable)
+        _convert_all_imgs_to_terra(
+            img_folder,
+            metadata_folder,
+            occupancy_folder,
+            dumpability_folder,
+            destination_folder,
+            size,
+            expansion_factor=expansion_factor,
+            all_dumpable=all_dumpable,
+        )
 
 
 def generate_dataset_terra_format(dataset_folder, size):
+    print("dataset folder: ", dataset_folder)
     generate_foundations_terra(dataset_folder, size, all_dumpable=False)
     print("Foundations processed successfully.")
-    generate_trenches_terra(dataset_folder, size, expansion_factor=1, all_dumpable=False)
+    generate_trenches_terra(
+        dataset_folder, size, expansion_factor=1, all_dumpable=False
+    )
     print("Trenches processed successfully.")
+
 
 # if __name__ == "__main__":
 #     sizes = [(16, 16), (32, 32), (64, 64)]#, (40, 80), (80, 160), (160, 320), (320, 640)]

@@ -73,7 +73,9 @@ class State(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
     ) -> "State":
-        world = GridWorld.new(target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init)
+        world = GridWorld.new(
+            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+        )
 
         agent, key = Agent.new(
             key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
@@ -939,12 +941,14 @@ class State(NamedTuple):
         """
         digged_mask_action_map = self.world.dig_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
-    
+
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """Applies dumpability mask to the dump mask"""
         return dump_mask * self.world.dumpability_mask.map.reshape(-1)
-    
-    def _exclude_traversability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+
+    def _exclude_traversability_mask_tiles_from_dump_mask(
+        self, dump_mask: Array
+    ) -> Array:
         """Applies traversability mask to the dump mask"""
         return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
 
@@ -1011,7 +1015,6 @@ class State(NamedTuple):
             fillvalue=0,
         )
         return new_dumpability_mask * (action_mask_contoured == 0)
-
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
@@ -1101,7 +1104,7 @@ class State(NamedTuple):
                     ),
                     dumpability_mask=self.world.dumpability_mask._replace(
                         map=jnp.bool_(new_dumpability_mask),
-                    )
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -1119,22 +1122,25 @@ class State(NamedTuple):
             self._handle_dig,
         )
         return state
-    
+
     @staticmethod
-    def _check_agent_moved_on_move_action(old_state: "State", new_state: "State") -> bool:
+    def _check_agent_moved_on_move_action(
+        old_state: "State", new_state: "State"
+    ) -> bool:
         """True if agent moved"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.pos_base,
-            new_state.agent.agent_state.pos_base
-            )
-    
+            old_state.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base
+        )
+
     @staticmethod
-    def _check_agent_turn_on_turn_action(old_state: "State", new_state: "State") -> bool:
+    def _check_agent_turn_on_turn_action(
+        old_state: "State", new_state: "State"
+    ) -> bool:
         """True if agent turned"""
         return ~jnp.allclose(
-                old_state.agent.agent_state.angle_base,
-                new_state.agent.agent_state.angle_base,
-            )
+            old_state.agent.agent_state.angle_base,
+            new_state.agent.agent_state.angle_base,
+        )
 
     def _handle_rewards_move(
         self, new_state: "State", action: TrackedActionType
@@ -1201,7 +1207,7 @@ class State(NamedTuple):
         ).sum()
 
         return action_map_progress
-    
+
     @staticmethod
     def _get_action_map_spread_out_rate(
         action_map_old: Array, action_map_new: Array, target_map: Array, loaded: int
@@ -1429,17 +1435,17 @@ class State(NamedTuple):
             lambda: 0.0,
         )
         return r
-    
+
     def _get_terminal_completed_tiles_reward(
         self,
     ) -> Float:
         tiles_digged = (self.world.action_map.map == -1).sum()
         total_tiles = (self.world.target_map.map == -1).sum()
-        return (tiles_digged / total_tiles) * self.env_cfg.rewards.terminal_completed_tiles
+        return (
+            tiles_digged / total_tiles
+        ) * self.env_cfg.rewards.terminal_completed_tiles
 
-    def _get_reward(
-        self, new_state: "State", action_handler: Action
-    ) -> Float:
+    def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
         action = action_handler.action
 
         reward = 0.0
@@ -1480,7 +1486,7 @@ class State(NamedTuple):
 
         # Constant scaling factor
         reward /= self.env_cfg.rewards.normalizer
-        
+
         return reward
 
     @staticmethod
@@ -1516,14 +1522,12 @@ class State(NamedTuple):
         done_task = done_dump & done_dig & done_unload
         return done_task
 
-
     def _is_done(
         self, action_map: Array, target_map: Array, agent_loaded: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
         done_task = self._is_done_task(action_map, target_map, agent_loaded)
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
-
 
     def _get_action_mask_tracked(self):
         # forward
@@ -1706,4 +1710,3 @@ class State(NamedTuple):
             "task_done": task_done,
         }
         return infos
-

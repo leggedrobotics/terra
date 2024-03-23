@@ -39,7 +39,12 @@ class MapsBuffer(NamedTuple):
 
     @classmethod
     def new(
-        cls, maps: Array, padding_mask: Array, trench_axes: Array, trench_types: Array, dumpability_masks_init: Array,
+        cls,
+        maps: Array,
+        padding_mask: Array,
+        trench_axes: Array,
+        trench_types: Array,
+        dumpability_masks_init: Array,
     ) -> "MapsBuffer":
         return MapsBuffer(
             maps=maps.astype(IntLowDim),
@@ -66,11 +71,17 @@ class MapsBuffer(NamedTuple):
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
-        map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key = self._get_map_from_disk(key, env_cfg)
+        (
+            map,
+            padding_mask,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            key,
+        ) = self._get_map_from_disk(key, env_cfg)
         # Ensure consistent dtypes for all return values
         trench_type = trench_type.astype(jnp.int32)
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, key
-
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
@@ -81,17 +92,20 @@ def map_sanity_check(map: Array) -> None:
     valid = np.all((map == 0) | (map == 1) | (map == -1))
     if not valid:
         raise RuntimeError("Loaded target map is not valid.")
-    
+
+
 def occupancy_sanity_check(map: Array) -> None:
     valid = np.all((map == 0) | (map == 1))
     if not valid:
         raise RuntimeError("Loaded occupancy is not valid.")
-    
+
+
 def dumpability_sanity_check(map: Array) -> None:
     valid = np.all((map == 0) | (map == 1))
     if not valid:
         raise RuntimeError("Loaded dumpability mask is not valid.")
-    
+
+
 def metadata_sanity_check(metadata: dict[str, Any]) -> None:
     valid = True
     k = metadata.keys()
@@ -103,6 +117,7 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
     valid &= isinstance(metadata["C"], float)
     if not valid:
         raise RuntimeError("Loaded metadata is not valid.")
+
 
 def load_maps_from_disk(folder_path: str) -> Array:
     # Set the max number of branches the trench has
@@ -192,12 +207,12 @@ def _pad_map_array(m: Array, max_w: int, max_h: int) -> tuple[Array, Array]:
 
 
 def _pad_maps(
-        maps: list[Array],
-        occupancies: list[Array],
-        dumpability_masks: list[Array],
-        maps_width,
-        maps_height,
-        ):
+    maps: list[Array],
+    occupancies: list[Array],
+    dumpability_masks: list[Array],
+    maps_width,
+    maps_height,
+):
     """
     Pads multiple maps along with their occupancies and dumpability masks.
 
@@ -206,7 +221,7 @@ def _pad_maps(
     occupancies (List[Array]): List of occupancy arrays.
     dumpability_masks (List[Array]): List of dumpability mask arrays.
     batch_cfg: Configuration object containing map dimensions.
-    
+
     Returns:
     Tuple[Array, Array, Array]: Padded maps, padding masks, and padded dumpability masks.
     """
@@ -218,7 +233,14 @@ def _pad_maps(
     for m, o, d in zip(maps, occupancies, dumpability_masks):
         z, z_mask = _pad_map_array(m, max_w, max_h)
         z_mask[:, : o.shape[1], : o.shape[2]] = o  # use occupancies from dataset
-        d_padded = np.zeros((d.shape[0], max_w, max_h,), dtype=np.bool_)
+        d_padded = np.zeros(
+            (
+                d.shape[0],
+                max_w,
+                max_h,
+            ),
+            dtype=np.bool_,
+        )
         d_padded[:, : d.shape[1], : d.shape[2]] = d
         maps_padded.append(z)
         padding_mask.append(z_mask)
@@ -229,6 +251,7 @@ def _pad_maps(
         np.array(padding_mask, dtype=IntMap),
         np.array(dumpability_masks_padded, dtype=jnp.bool_),
     )
+
 
 def _check_maps(maps: list[Array]) -> tuple[int, int]:
     """
@@ -254,9 +277,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
     if os.getenv("DATASET_PATH", "") == "":
         raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
     maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
-    folder_paths = [
-        str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths
-    ]
+    folder_paths = [str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths]
     print(f"Loading maps from {folder_paths}.")
     maps_from_disk = []
     occupancies_from_disk = []
@@ -264,7 +285,13 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
     trench_axes_list = []
     trench_types = []
     for folder_path in folder_paths:
-        maps, occupancies, trench_axes, trench_type, dumpability_masks_init = load_maps_from_disk(folder_path)
+        (
+            maps,
+            occupancies,
+            trench_axes,
+            trench_type,
+            dumpability_masks_init,
+        ) = load_maps_from_disk(folder_path)
         maps_from_disk.append(maps)
         occupancies_from_disk.append(occupancies)
         dumpability_masks_init_from_disk.append(dumpability_masks_init)
@@ -272,7 +299,11 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         trench_types.append(trench_type)
     maps_width, maps_height = _check_maps(maps_from_disk)
     maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk = _pad_maps(
-        maps_from_disk, occupancies_from_disk, dumpability_masks_init_from_disk, maps_width, maps_height
+        maps_from_disk,
+        occupancies_from_disk,
+        dumpability_masks_init_from_disk,
+        maps_width,
+        maps_height,
     )
     maps_from_disk_padded = jnp.array(maps_from_disk_padded)
     padding_mask = jnp.array(padding_mask)
@@ -291,27 +322,41 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         d0 = maps_from_disk_padded.shape[0]
         d1 = maps_from_disk_padded.shape[1]
         # Reshape
-        maps_from_disk_padded = maps_from_disk_padded.reshape((-1, *maps_from_disk_padded.shape[2:]))
+        maps_from_disk_padded = maps_from_disk_padded.reshape(
+            (-1, *maps_from_disk_padded.shape[2:])
+        )
         padding_mask = padding_mask.reshape((-1, *padding_mask.shape[2:]))
-        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape((-1, *dumpability_masks_init_from_disk.shape[2:]))
+        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape(
+            (-1, *dumpability_masks_init_from_disk.shape[2:])
+        )
         trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
         # Shuffle
-        maps_from_disk_padded = jax.random.permutation(rng, maps_from_disk_padded, axis=0)
+        maps_from_disk_padded = jax.random.permutation(
+            rng, maps_from_disk_padded, axis=0
+        )
         padding_mask = jax.random.permutation(rng, padding_mask, axis=0)
-        dumpability_masks_init_from_disk = jax.random.permutation(rng, dumpability_masks_init_from_disk, axis=0)
+        dumpability_masks_init_from_disk = jax.random.permutation(
+            rng, dumpability_masks_init_from_disk, axis=0
+        )
         trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
         # Reshape back
-        maps_from_disk_padded = maps_from_disk_padded.reshape((d0, d1, *maps_from_disk_padded.shape[1:]))
+        maps_from_disk_padded = maps_from_disk_padded.reshape(
+            (d0, d1, *maps_from_disk_padded.shape[1:])
+        )
         padding_mask = padding_mask.reshape((d0, d1, *padding_mask.shape[1:]))
-        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape((d0, d1, *dumpability_masks_init_from_disk.shape[1:]))
-        trench_axes_list = trench_axes_list.reshape((d0, d1, *trench_axes_list.shape[1:]))
+        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape(
+            (d0, d1, *dumpability_masks_init_from_disk.shape[1:])
+        )
+        trench_axes_list = trench_axes_list.reshape(
+            (d0, d1, *trench_axes_list.shape[1:])
+        )
         print("Maps shuffled.")
     maps_buffer = MapsBuffer.new(
         maps=maps_from_disk_padded,
         padding_mask=padding_mask,
         trench_axes=trench_axes_list,
         trench_types=trench_types,
-        dumpability_masks_init = dumpability_masks_init_from_disk,
+        dumpability_masks_init=dumpability_masks_init_from_disk,
     )
     # Update batch config with the actual map dimensions
     maps_width = maps_from_disk_padded.shape[2]

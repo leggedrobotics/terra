@@ -5,11 +5,13 @@ import jax.numpy as jnp
 from jax import Array
 from terra.config import Rewards
 
+
 class CurriculumManager(NamedTuple):
     """
     This class defines the logic to change the environment configuration given the performance of the agent.
     This class is not stateful, the state of the curriculum is fully contained in the EnvConfig object.
     """
+
     max_level: int
     increase_level_threshold: int
     decrease_level_threshold: int
@@ -42,7 +44,10 @@ class CurriculumManager(NamedTuple):
         consecutive_failures, consecutive_successes = jax.lax.cond(
             done,
             handle_update,
-            lambda: (env_cfg.curriculum.consecutive_failures, env_cfg.curriculum.consecutive_successes),
+            lambda: (
+                env_cfg.curriculum.consecutive_failures,
+                env_cfg.curriculum.consecutive_successes,
+            ),
         )
 
         do_increase = consecutive_successes >= self.increase_level_threshold
@@ -76,7 +81,7 @@ class CurriculumManager(NamedTuple):
         rewards_list = [Rewards.dense, Rewards.sparse]
         reward_type = self.reward_type_per_level[level]
         rewards = jax.lax.switch(reward_type, rewards_list)
-        
+
         env_cfg = env_cfg._replace(
             rewards=rewards,
             apply_trench_rewards=apply_trench_rewards,
@@ -85,15 +90,15 @@ class CurriculumManager(NamedTuple):
                 level=level,
                 consecutive_failures=consecutive_failures,
                 consecutive_successes=consecutive_successes,
-            )
+            ),
         )
         timestep = timestep._replace(env_cfg=env_cfg)
         return timestep
-    
+
     def _reset_single_cfg(self, env_cfg):
         max_steps_in_episode = self.max_steps_in_episode_per_level[0]
         apply_trench_rewards = self.apply_trench_rewards_per_level[0]
-        
+
         rewards_list = [Rewards.dense, Rewards.sparse]
         reward_type = self.reward_type_per_level[0]
         rewards = jax.lax.switch(reward_type, rewards_list)
@@ -107,6 +112,6 @@ class CurriculumManager(NamedTuple):
 
     def update_cfgs(self, timesteps, rng):
         return jax.vmap(self._update_single_cfg)(timesteps, rng)
-    
+
     def reset_cfgs(self, env_cfgs):
         return jax.vmap(self._reset_single_cfg)(env_cfgs)

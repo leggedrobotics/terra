@@ -1,4 +1,6 @@
-MAP_TILES = 192  # 64 * 3, total number of tiles for a nice visualization (scales with MAP_EDGE)
+MAP_TILES = (
+    192  # 64 * 3, total number of tiles for a nice visualization (scales with MAP_EDGE)
+)
 COLORS = {
     0: "#cfcfcf",  # neutral
     5: "#E4DCCF",  # final dumping area to terminate the episode
@@ -11,5 +13,5 @@ COLORS = {
     "agent_cabin": {
         "loaded": (234, 84, 85),
         "not_loaded": (234, 84, 85),
-    }
+    },
 }

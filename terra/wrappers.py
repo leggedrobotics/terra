@@ -178,7 +178,7 @@ class LocalMapWrapper:
                 )
             )
         )
-    
+
     @staticmethod
     def wrap_obstacles_mask(state: State) -> State:
         obstacles_mask = state.world.padding_mask.map
@@ -190,7 +190,7 @@ class LocalMapWrapper:
                 )
             )
         )
-    
+
     @staticmethod
     def wrap(state: State) -> State:
         state = LocalMapWrapper.wrap_target_map(state)

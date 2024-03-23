@@ -30,6 +30,8 @@ import cv2
 import numpy as np
 
 BORDER_COLOR = (220, 220, 220)
+
+
 def get_triangle(image, min_edge, max_edge, min_area, min_angle=1):
     h, w = image.shape[:2]
     while True:
@@ -46,7 +48,9 @@ def get_triangle(image, min_edge, max_edge, min_area, min_angle=1):
                     for i in range(len(vertices)):
                         v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
                         v2 = np.array([x, y]) - np.array(vertices[i])
-                        cosine_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                        cosine_angle = np.dot(v1, v2) / (
+                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        )
                         cosine_angle = np.clip(cosine_angle, -1, 1)
                         angle = np.arccos(cosine_angle) * 180 / np.pi
                         if angle < min_angle:
@@ -83,7 +87,9 @@ def get_trapezoid(image, min_edge, max_edge, min_area, min_angle=30):
                     for i in range(len(vertices)):
                         v1 = np.array(vertices[i - 1]) - np.array(vertices[i])
                         v2 = np.array([x, y]) - np.array(vertices[i])
-                        cosine_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                        cosine_angle = np.dot(v1, v2) / (
+                            np.linalg.norm(v1) * np.linalg.norm(v2)
+                        )
                         # cosine_angle = np.clip(cosine_angle, -1, 1)
                         angle = np.arccos(cosine_angle) * 180 / np.pi
                         if angle < min_angle or angle > 0.9 * 180 or angle is np.nan:
@@ -209,11 +215,11 @@ def draw_regular_polygon(image, num_sides: List[int], radius: int):
         [
             [
                 center[0] + radius * np.cos(2 * np.pi * i / num_sides),
-                center[1] + radius * np.sin(2 * np.pi * i / num_sides)
+                center[1] + radius * np.sin(2 * np.pi * i / num_sides),
             ]
             for i in range(num_sides)
         ],
-        dtype=np.int32
+        dtype=np.int32,
     )
     return vertices
 
@@ -262,21 +268,36 @@ def draw_O(image, min_edge, max_edge):
     # Ensure the size of the C shape
     while True:
         pt1 = (random.randint(0, w - max_edge), random.randint(0, h - max_edge))
-        pt2 = (pt1[0] + random.randint(min_edge, max_edge), pt1[1] + random.randint(min_edge, max_edge))
+        pt2 = (
+            pt1[0] + random.randint(min_edge, max_edge),
+            pt1[1] + random.randint(min_edge, max_edge),
+        )
         inner_width = random.randint(min_edge, pt2[0] - pt1[0] - 1)
         inner_height = random.randint(min_edge, pt2[1] - pt1[1] - 1)
         inner_pt1 = (
-            random.randint(pt1[0] + 1, pt2[0] - inner_width), random.randint(pt1[1] + 1, pt2[1] - inner_height))
+            random.randint(pt1[0] + 1, pt2[0] - inner_width),
+            random.randint(pt1[1] + 1, pt2[1] - inner_height),
+        )
         inner_pt2 = (inner_pt1[0] + inner_width, inner_pt1[1] + inner_height)
-        if pt1[0] < inner_pt1[0] < pt2[0] and pt1[1] < inner_pt1[1] < pt2[1] and pt1[0] < inner_pt2[0] < pt2[0] and pt1[
-            1] < inner_pt2[1] < pt2[1]:
+        if (
+            pt1[0] < inner_pt1[0] < pt2[0]
+            and pt1[1] < inner_pt1[1] < pt2[1]
+            and pt1[0] < inner_pt2[0] < pt2[0]
+            and pt1[1] < inner_pt2[1] < pt2[1]
+        ):
             break
     # cv2.rectangle(image, pt1, pt2, (0, 0, 0), -1)
     # cv2.rectangle(image, inner_pt1, inner_pt2, (255, 255, 255), -1)
     return image
 
 
-def draw_shape(image, vertices, color=(0, 0, 0), countour_color=(100, 100, 100), countour_thickness=10):
+def draw_shape(
+    image,
+    vertices,
+    color=(0, 0, 0),
+    countour_color=(100, 100, 100),
+    countour_thickness=10,
+):
     cv2.fillPoly(image, [vertices], color=color)
     # drow countour in grey
     cv2.polylines(image, [vertices], True, countour_color, countour_thickness)
@@ -295,7 +316,9 @@ def scale_shape(vertices, scale_factor=1.0):
     max_values = np.max(vertices, axis=0)
 
     # Check if any of the scaled vertices fall outside the bounds
-    outside_indices = np.any((scaled_vertices < min_values) | (scaled_vertices > max_values), axis=1)
+    outside_indices = np.any(
+        (scaled_vertices < min_values) | (scaled_vertices > max_values), axis=1
+    )
 
     if np.any(outside_indices):
         # If any vertices are outside the bounds, shrink the shape until it fits
@@ -304,8 +327,9 @@ def scale_shape(vertices, scale_factor=1.0):
             shrink_factor -= 0.01
             scaled_vertices = (vertices - centroid) * shrink_factor + centroid
             scaled_vertices = np.round(scaled_vertices).astype(int)
-            outside_indices = np.any((scaled_vertices < min_values) | (scaled_vertices >
-                                                                       max_values), axis=1)
+            outside_indices = np.any(
+                (scaled_vertices < min_values) | (scaled_vertices > max_values), axis=1
+            )
 
     return scaled_vertices
 
@@ -342,7 +366,7 @@ def find_intersection_vertices(rect1, rect2):
     # Find the intersection polygon
     intersection = polygon1.intersection(polygon2)
     # if intersection is a LineString, return None
-    if intersection.geom_type == 'LineString' or intersection.geom_type == 'Point':
+    if intersection.geom_type == "LineString" or intersection.geom_type == "Point":
         return []
     # Get the vertices of the intersection polygon
     vertices = list(intersection.exterior.coords)
@@ -364,7 +388,7 @@ def get_excluded_shape(rect1, rect2):
     # Get the resulting shape by excluding the intersection from rect1
     excluded_shape = polygon1.difference(intersection)
     # if type MultiPolygon, return None
-    if excluded_shape.geom_type == 'MultiPolygon':
+    if excluded_shape.geom_type == "MultiPolygon":
         return []
     vertices = list(excluded_shape.exterior.coords)
     return vertices
@@ -395,44 +419,78 @@ def increase_image_size(image, factor=1.0, color=(255, 255, 255)):
     new_h, new_w = int(h * factor), int(w * factor)
     new_image = np.zeros((new_h, new_w, 3), dtype=np.uint8)
     new_image[:, :] = color
-    new_image[int((new_h - h) / 2):int((new_h - h) / 2) + h, int((new_w - w) / 2):int((new_w - w) / 2) + w] = image
+    new_image[
+        int((new_h - h) / 2) : int((new_h - h) / 2) + h,
+        int((new_w - w) / 2) : int((new_w - w) / 2) + w,
+    ] = image
     return new_image
 
 
 # Main function to generate the map
 def generate_map(map_dict):
     # Create a blank image
-    dimensions = map_dict.get('dimensions', (600, 400))
+    dimensions = map_dict.get("dimensions", (600, 400))
     image = np.ones((dimensions[1], dimensions[0], 3), dtype=np.uint8) * 255
     shapes_list = []  # List of all shapes drawn so far
     # Draw the shapes
-    for shape, count in map_dict.get('shapes', {}).items():
+    for shape, count in map_dict.get("shapes", {}).items():
         for _ in range(count):
             while True:
-                if shape == 'triangle':
-                    vertices = get_triangle(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                            map_dict.get('min_area', 1000))
-                elif shape == 'trapezoid':
-                    vertices = get_trapezoid(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                             map_dict.get('min_area', 1000))
-                elif shape == 'rectangle':
-                    vertices = get_rectangle(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                             map_dict.get('min_area', 1000))
-                elif shape == 'pentagon':
-                    vertices = get_pentagon(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                            map_dict.get('min_area', 1000))
-                elif shape == 'hexagon':
-                    vertices = get_hexagon(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                           map_dict.get('min_area', 1000))
-                elif shape == 'regular_polygon':
-                    vertices = draw_regular_polygon(image, map_dict.get('regular_num_sides', 5),
-                                                    map_dict.get('radius', 100))
-                elif shape == 'L':
-                    vertices = draw_L(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                      map_dict.get('min_area', 1000))
-                elif shape == 'Z':
-                    vertices = draw_Z(image, map_dict.get('min_edge', 50), map_dict.get('max_edge', 100),
-                                      map_dict.get('min_area', 1000))
+                if shape == "triangle":
+                    vertices = get_triangle(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "trapezoid":
+                    vertices = get_trapezoid(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "rectangle":
+                    vertices = get_rectangle(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "pentagon":
+                    vertices = get_pentagon(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "hexagon":
+                    vertices = get_hexagon(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "regular_polygon":
+                    vertices = draw_regular_polygon(
+                        image,
+                        map_dict.get("regular_num_sides", 5),
+                        map_dict.get("radius", 100),
+                    )
+                elif shape == "L":
+                    vertices = draw_L(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
+                elif shape == "Z":
+                    vertices = draw_Z(
+                        image,
+                        map_dict.get("min_edge", 50),
+                        map_dict.get("max_edge", 100),
+                        map_dict.get("min_area", 1000),
+                    )
                 else:
                     continue
                 if vertices is None:
@@ -446,15 +504,18 @@ def generate_map(map_dict):
                 if any(is_overlap(new_shape, shape) for shape in shapes_list):
                     continue  # This shape overlaps, try again
                 # If we reached this point, the shape doesn't overlap, so we can draw it
-                print('Drawing shape {}'.format(shape))
+                print("Drawing shape {}".format(shape))
                 shapes_list.append(new_shape)
-                vertices_shrinked = scale_shape(vertices, map_dict.get('scale_factor', 1.0))
+                vertices_shrinked = scale_shape(
+                    vertices, map_dict.get("scale_factor", 1.0)
+                )
                 # image = draw_shape(image, vertices, color=(128, 128, 128))
                 image = draw_shape(image, vertices_shrinked)
                 break  # Break the while loop and move to the next shape
     # increase image size
     image = increase_image_size(image, factor=1.1, color=(100, 100, 100))
     return image
+
 
 def invert_map(image: np.ndarray):
     """
@@ -477,6 +538,7 @@ def invert_map(image: np.ndarray):
 
     return flipped_image
 
+
 def make_obstacles_traversable(image: np.ndarray):
     """
     Turns all obstacles into traversable areas
@@ -489,6 +551,7 @@ def make_obstacles_traversable(image: np.ndarray):
     flipped_image[black_pixels] = [128, 128, 128]
 
     return flipped_image
+
 
 def generate_occupancy(image: np.ndarray):
     """
@@ -508,29 +571,29 @@ def generate_occupancy(image: np.ndarray):
     return occupancy_grid
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     map_dict = {
-        'shapes': {
-            'triangle': 1,
-            'trapezoid': 1,
-            'rectangle': 1,
-            'pentagon': 0,
-            'hexagon': 0,
-            'L': 3,
-            'Z': 3,
-            'regular_polygon': 3,
+        "shapes": {
+            "triangle": 1,
+            "trapezoid": 1,
+            "rectangle": 1,
+            "pentagon": 0,
+            "hexagon": 0,
+            "L": 3,
+            "Z": 3,
+            "regular_polygon": 3,
         },
-        'dimensions': (1000, 800),
-        'max_edge': 200,
-        'min_edge': 50,
-        'radius': 100,
-        'regular_num_sides': [3, 4, 5],
-        'scale_factor': 0.7,
-        'area_threshold': 1000,
+        "dimensions": (1000, 800),
+        "max_edge": 200,
+        "min_edge": 50,
+        "radius": 100,
+        "regular_num_sides": [3, 4, 5],
+        "scale_factor": 0.7,
+        "area_threshold": 1000,
     }
     image = generate_map(map_dict)
     inverted_image = invert_map(image)
     print("image.shape", image.shape)
-    cv2.imshow('Map', image)
+    cv2.imshow("Map", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

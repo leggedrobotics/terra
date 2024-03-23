@@ -13,7 +13,7 @@ class GridWorld(NamedTuple):
     - target map
         - 1: must dump here to terminate the episode
         - 0: free
-        - -1: must dig here 
+        - -1: must dig here
     - action map
         - -1: dug here during the episode
         - 0: free
@@ -36,6 +36,7 @@ class GridWorld(NamedTuple):
     - local obstacles map (contains the sum of all the padding mask tiles in a given workspace)
     - local dumpability mask (contains the sum of all the dumpability mask tiles in a given workspace)
     """
+
     target_map: GridMap
     action_map: GridMap
     padding_mask: GridMap

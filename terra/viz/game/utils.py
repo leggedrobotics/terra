@@ -1,13 +1,14 @@
 import pygame as pg
 
-def rotate_triangle(center, points, scale, angle):
 
+def rotate_triangle(center, points, scale, angle):
     vCenter = pg.math.Vector2(center)
 
     rotated_point = [pg.math.Vector2(p).rotate(angle) for p in points]
 
-    triangle_points = [(vCenter + p*scale) for p in rotated_point]
+    triangle_points = [(vCenter + p * scale) for p in rotated_point]
     return triangle_points
+
 
 def agent_base_to_angle(agent_base):
     if agent_base == 0:
@@ -19,6 +20,7 @@ def agent_base_to_angle(agent_base):
     elif agent_base == 3:
         angle = 90
     return angle
+
 
 def agent_cabin_to_angle(agent_cabin):
     if agent_cabin == 0:

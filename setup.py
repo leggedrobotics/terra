@@ -14,7 +14,7 @@ requires = [
     "osmnx",
     "opencv-python",
     "pathlib",
-    "scikit-image"
+    "scikit-image",
 ]
 
 setup(

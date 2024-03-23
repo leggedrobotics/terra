@@ -7,7 +7,10 @@ from pyproj import Proj, transform
 import os
 from shapely.geometry import Polygon, Point
 
-def get_building_shapes_from_OSM(north, south, east, west, option=1, save_folder="data/"):
+
+def get_building_shapes_from_OSM(
+    north, south, east, west, option=1, save_folder="data/"
+):
     """
     Extracts building shapes from OpenStreetMap given a bounding box of coordinates.
 
@@ -30,14 +33,14 @@ def get_building_shapes_from_OSM(north, south, east, west, option=1, save_folder
     # Fetch buildings from OSM\
     bbox = (north, south, east, west)
     try:
-        buildings = ox.features.features_from_bbox(*bbox, tags={'building': True})
+        buildings = ox.features.features_from_bbox(*bbox, tags={"building": True})
     except Exception as e:
         return
     print("got buildings")
 
     # Define coordinate reference systems
-    wgs84 = Proj('EPSG:4326')  # WGS84 (lat-long) coordinate system
-    utm = Proj('EPSG:32633')  # UTM zone 33N (covers central Europe)
+    wgs84 = Proj("EPSG:4326")  # WGS84 (lat-long) coordinate system
+    utm = Proj("EPSG:32633")  # UTM zone 33N (covers central Europe)
 
     # Check option
     if option == 1:
@@ -45,7 +48,7 @@ def get_building_shapes_from_OSM(north, south, east, west, option=1, save_folder
     elif option == 2:
         extract_single_buildings(buildings, wgs84, utm, folder_path=save_folder)
     else:
-        print('Invalid option selected. Choose either 1 or 2.')
+        print("Invalid option selected. Choose either 1 or 2.")
 
 
 def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
@@ -55,13 +58,23 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
     print("width crop in meters", east_utm - west_utm)
     print("height crop in meters", north_utm - south_utm)
     # Create a Polygon that represents the bounding box
-    bbox_polygon = Polygon([(west_utm, south_utm), (east_utm, south_utm),
-                            (east_utm, north_utm), (west_utm, north_utm)])
+    bbox_polygon = Polygon(
+        [
+            (west_utm, south_utm),
+            (east_utm, south_utm),
+            (east_utm, north_utm),
+            (west_utm, north_utm),
+        ]
+    )
 
     # Count how many buildings have their centroid within the bounding box
     try:
-        buildings_in_bbox = sum(bbox_polygon.contains(Point(transform(wgs84, utm, *building.centroid.coords[0])))
-                                for building in buildings.geometry)
+        buildings_in_bbox = sum(
+            bbox_polygon.contains(
+                Point(transform(wgs84, utm, *building.centroid.coords[0]))
+            )
+            for building in buildings.geometry
+        )
     except Exception as e:
         buildings_in_bbox = 0
 
@@ -72,10 +85,16 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
 
     try:
         # Convert total bounds to UTM
-        total_bounds_utm = [transform(wgs84, utm, buildings.total_bounds[i], buildings.total_bounds[i + 1]) for i in
-                            range(0, 4, 2)]
-        aspect_ratio = ((total_bounds_utm[1][0] - total_bounds_utm[0][0]) /
-                        (total_bounds_utm[1][1] - total_bounds_utm[0][1])) ** (-1)
+        total_bounds_utm = [
+            transform(
+                wgs84, utm, buildings.total_bounds[i], buildings.total_bounds[i + 1]
+            )
+            for i in range(0, 4, 2)
+        ]
+        aspect_ratio = (
+            (total_bounds_utm[1][0] - total_bounds_utm[0][0])
+            / (total_bounds_utm[1][1] - total_bounds_utm[0][1])
+        ) ** (-1)
         dpi = 50
         max_pixels = 600
         max_inches = int(max_pixels / dpi)
@@ -91,13 +110,19 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
 
         # Plot and save the binary map
         fig, ax = plt.subplots(figsize=figsize, dpi=20)
-        ax.axis('off')
+        ax.axis("off")
         print("Plotting binary map...")
-        ox.plot_footprints(buildings, ax=ax, color='black', bgcolor='white', show=False)
+        ox.plot_footprints(buildings, ax=ax, color="black", bgcolor="white", show=False)
         print("Done")
         # save path include the coordinates of the bounding box
         save_path = f"{save_folder}/output_{north}_{south}_{east}_{west}"
-        plt.savefig(save_path + ".png", dpi=300, bbox_inches='tight', pad_inches=0, transparent=True)
+        plt.savefig(
+            save_path + ".png",
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0,
+            transparent=True,
+        )
         print("Saved binary map in {}".format(save_path))
         plt.close()
     except ValueError:
@@ -113,7 +138,9 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
     num_buildings = num_labels - 1
     if num_buildings < 2:
         print("Less than 2 distinct buildings found in the image")
-        os.remove(f"{save_path}.png")  # Delete the image if it has less than 2 buildings
+        os.remove(
+            f"{save_path}.png"
+        )  # Delete the image if it has less than 2 buildings
         return
 
     # Open the image file with PIL and get its size in pixels
@@ -134,18 +161,10 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
 
     # Save metadata file with real dimensions in meters
     metadata = {
-        'coordinates': {
-            'north': north,
-            'south': south,
-            'east': east,
-            'west': west
-        },
-        'real_dimensions': {
-            'height': new_width,
-            'width': new_height
-        }
+        "coordinates": {"north": north, "south": south, "east": east, "west": west},
+        "real_dimensions": {"height": new_width, "width": new_height},
     }
-    with open(f"{save_path}.json", 'w') as file:
+    with open(f"{save_path}.json", "w") as file:
         json.dump(metadata, file)
 
 
@@ -157,8 +176,14 @@ def extract_single_buildings(buildings, wgs84, utm, folder_path=None):
         if building.area < 1e-9:
             continue
 
-        bounds_utm = [transform(wgs84, utm, building.bounds[i], building.bounds[i + 1]) for i in range(0, 4, 2)]
-        aspect_ratio = ((bounds_utm[1][0] - bounds_utm[0][0]) / (bounds_utm[1][1] - bounds_utm[0][1])) ** (-1)
+        bounds_utm = [
+            transform(wgs84, utm, building.bounds[i], building.bounds[i + 1])
+            for i in range(0, 4, 2)
+        ]
+        aspect_ratio = (
+            (bounds_utm[1][0] - bounds_utm[0][0])
+            / (bounds_utm[1][1] - bounds_utm[0][1])
+        ) ** (-1)
         dpi = 50
         max_pixels = 600
         max_inches = int(max_pixels / dpi)
@@ -173,19 +198,25 @@ def extract_single_buildings(buildings, wgs84, utm, folder_path=None):
             figsize = (figsize[0], 1)
 
         fig, ax = plt.subplots(figsize=figsize)
-        ax.axis('off')
+        ax.axis("off")
         ax.set_xlim(bounds_utm[0][0], bounds_utm[1][0])
         ax.set_ylim(bounds_utm[0][1], bounds_utm[1][1])
         ax.invert_yaxis()
-        ax.set_aspect('equal', adjustable='box')
-        ox.plot_footprints(buildings.iloc[i: i + 1], ax=ax, color='black', bgcolor='white', show=False)
+        ax.set_aspect("equal", adjustable="box")
+        ox.plot_footprints(
+            buildings.iloc[i : i + 1], ax=ax, color="black", bgcolor="white", show=False
+        )
         # plt.tight_layout()
         # new_size = fig.get_size_inches()
         # create image folder if it does not exist
         os.makedirs(f"{folder_path}/images", exist_ok=True)
         # apply padding
-        plt.savefig(f"{folder_path}/images/building_{i}.png", dpi=dpi, pad_inches=1., bbox_inches='tight'
-                    )
+        plt.savefig(
+            f"{folder_path}/images/building_{i}.png",
+            dpi=dpi,
+            pad_inches=1.0,
+            bbox_inches="tight",
+        )
         plt.close()
         # Open the image file with PIL and get its size in pixels
         with Image.open(f"{folder_path}/images/building_{i}.png") as img:
@@ -194,25 +225,30 @@ def extract_single_buildings(buildings, wgs84, utm, folder_path=None):
         # Convert the size from pixels to inches
         new_size = (width_px / dpi, height_px / dpi)
 
-        print("old size {} and new size {} for building {}".format(figsize, new_size, i))
+        print(
+            "old size {} and new size {} for building {}".format(figsize, new_size, i)
+        )
 
         width = bounds_utm[1][0] - bounds_utm[0][0]
         height = bounds_utm[1][1] - bounds_utm[0][1]
         new_height = new_size[0] / figsize[0] * height
         new_width = new_size[1] / figsize[1] * width
-        print("old width {} and new width {} for building {}".format(width, new_width, i))
-        print("old height {} and new height {} for building {}".format(height, new_height, i))
+        print(
+            "old width {} and new width {} for building {}".format(width, new_width, i)
+        )
+        print(
+            "old height {} and new height {} for building {}".format(
+                height, new_height, i
+            )
+        )
 
         metadata = {
-            'building_index': i,
-            'real_dimensions': {
-                'width': new_height,
-                'height': new_width
-            }
+            "building_index": i,
+            "real_dimensions": {"width": new_height, "height": new_width},
         }
         # make metadata folder if it does not exist
         os.makedirs(f"{folder_path}/metadata", exist_ok=True)
-        with open(f"{folder_path}/metadata/building_{i}.json", 'w') as file:
+        with open(f"{folder_path}/metadata/building_{i}.json", "w") as file:
             json.dump(metadata, file)
 
 
@@ -281,7 +317,9 @@ from typing import Tuple
 import os
 
 
-def collect_random_crops(outer_bbox_wgs84: Tuple, crop_size_utm: Tuple[float, float], save_folder: str):
+def collect_random_crops(
+    outer_bbox_wgs84: Tuple, crop_size_utm: Tuple[float, float], save_folder: str
+):
     """
     Creates a random crop in wgs84 coordinates and using the outer_bbox_wgs84 as a boundary and the crops_size_utm in meters
     as the size of the crop.
@@ -294,8 +332,8 @@ def collect_random_crops(outer_bbox_wgs84: Tuple, crop_size_utm: Tuple[float, fl
     north, south, east, west = outer_bbox_wgs84
     width_crop, height_crop = crop_size_utm
 
-    utm = Proj('EPSG:32633')  # UTM zone 33N (covers central Europe)
-    wgs84 = Proj('EPSG:4326')  # WGS84 (covers the entire globe)
+    utm = Proj("EPSG:32633")  # UTM zone 33N (covers central Europe)
+    wgs84 = Proj("EPSG:4326")  # WGS84 (covers the entire globe)
 
     west_utm, south_utm = transform(wgs84, utm, west, south)
     east_utm, north_utm = transform(wgs84, utm, east, north)
@@ -329,7 +367,7 @@ if __name__ == "__main__":
     # to get the bbox use https://colab.research.google.com/github/opengeos/segment-geospatial/blob/main/docs/examples/satellite.ipynb#scrollTo=kvB16LLk0qPY
     center_bbox = (47.378177, 47.364622, 8.526535, 8.544894)
     zurich_bbox = (47.3458, 47.409, 8.5065, 8.5814)
-    folder_path = 'data/openstreet/crops'
+    folder_path = "data/openstreet/crops"
     # get_building_shapes_from_OSM(*zurich_bbox, option=1, folder_path=folder_path, save_folder=folder_path + "/" +
     #                                                                                         "random_crops")
     num_crop = 100

@@ -6,6 +6,7 @@ from pathlib import Path
 from scipy.signal import convolve2d
 
 from terra.env_generation import terrain_generation
+
 # Colors represented in RGB format
 
 color_dict = {
@@ -18,7 +19,11 @@ color_dict = {
 
 
 def _get_img_mask(img, color_triplet):
-    return (img[..., 0] == color_triplet[0]) * (img[..., 1] == color_triplet[1]) * (img[..., 2] == color_triplet[2])
+    return (
+        (img[..., 0] == color_triplet[0])
+        * (img[..., 1] == color_triplet[1])
+        * (img[..., 2] == color_triplet[2])
+    )
 
 
 def shrink_obstacles(image: np.ndarray, shrink_factor: int = 1):
@@ -33,7 +38,9 @@ def shrink_obstacles(image: np.ndarray, shrink_factor: int = 1):
     image_copy = (image_copy).astype(np.uint8)
 
     # Find contours in the image
-    contours, _ = cv2.findContours(image_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        image_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
 
     # Shrink the contours by the specified factor
     for contour in contours:
@@ -54,7 +61,9 @@ def shrink_obstacles_erosion(image: np.ndarray, shrink_factor: int = 1):
     inverted_image = 1 - image
 
     # Define the structuring element (you can modify the size depending on your needs)
-    struct_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * shrink_factor + 1, 2 * shrink_factor + 1))
+    struct_element = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * shrink_factor + 1, 2 * shrink_factor + 1)
+    )
 
     # Perform erosion
     eroded_image = cv2.erode(inverted_image.astype(np.uint8), struct_element)
@@ -74,7 +83,9 @@ def shrink_obstacles_erosion(image: np.ndarray, shrink_factor: int = 1):
 import cv2
 
 
-def pad_images(image_folder, pad_size_factor, color, save_folder, obstacles_traversable=False):
+def pad_images(
+    image_folder, pad_size_factor, color, save_folder, obstacles_traversable=False
+):
     """
     This function takes a folder of images and pads them by the specified factor (as fraction of the total dimension)
     The padding takes place on all sides of the image and has the specified color
@@ -94,12 +105,26 @@ def pad_images(image_folder, pad_size_factor, color, save_folder, obstacles_trav
         # Calculate the padding size
         pad_size = int(pad_size_factor * max(height, width))
         # Pad the image
-        padded_image = cv2.copyMakeBorder(image, pad_size, pad_size, pad_size, pad_size,
-                                          cv2.BORDER_CONSTANT, value=color)
+        padded_image = cv2.copyMakeBorder(
+            image,
+            pad_size,
+            pad_size,
+            pad_size,
+            pad_size,
+            cv2.BORDER_CONSTANT,
+            value=color,
+        )
         # add a another 2% grey border
         pad_size = int(0.02 * max(height, width))
-        padded_image = cv2.copyMakeBorder(padded_image, pad_size, pad_size, pad_size, pad_size,
-                                          cv2.BORDER_CONSTANT, value=(color))
+        padded_image = cv2.copyMakeBorder(
+            padded_image,
+            pad_size,
+            pad_size,
+            pad_size,
+            pad_size,
+            cv2.BORDER_CONSTANT,
+            value=(color),
+        )
         # Save the image
         cv2.imwrite(os.path.join(save_folder, image_name), padded_image)
 
@@ -125,8 +150,14 @@ def make_obstacles_traversable(image_folder, save_folder):
         cv2.imwrite(os.path.join(save_folder, image_name), image)
 
 
-def pad_images_and_update_metadata(image_folder, metadata_folder, pad_dims: float, color,
-                                   save_folder, occupancy_folder: str = None):
+def pad_images_and_update_metadata(
+    image_folder,
+    metadata_folder,
+    pad_dims: float,
+    color,
+    save_folder,
+    occupancy_folder: str = None,
+):
     """
     This function takes a folder of images and pads them by the specified factor (as fraction of the total dimension)
     The padding takes place on all sides of the image and has the specified color.
@@ -150,7 +181,9 @@ def pad_images_and_update_metadata(image_folder, metadata_folder, pad_dims: floa
     for image_name in image_list:
         image = cv2.imread(os.path.join(image_folder, image_name))
         # load the json file of the metadata
-        with open(os.path.join(metadata_folder, image_name[:-4] + ".json")) as json_file:
+        with open(
+            os.path.join(metadata_folder, image_name[:-4] + ".json")
+        ) as json_file:
             metadata = json.load(json_file)
         width = metadata["real_dimensions"]["width"]
         height = metadata["real_dimensions"]["height"]
@@ -158,32 +191,50 @@ def pad_images_and_update_metadata(image_folder, metadata_folder, pad_dims: floa
         # make a new metadata file with the new dimensions
         metadata["real_dimensions"]["width"] = width + 2 * pad_dims
         metadata["real_dimensions"]["height"] = height + 2 * pad_dims
-        with open(os.path.join(save_folder, image_name[:-4] + ".json"), 'w') as outfile:
+        with open(os.path.join(save_folder, image_name[:-4] + ".json"), "w") as outfile:
             json.dump(metadata, outfile)
 
         # use cv2 copyMakeBorder to pad the image
         resolution = image.shape[0] / height
         pad_size_pixels = int(pad_dims * resolution)
 
-        padded_image = cv2.copyMakeBorder(image, pad_size_pixels, pad_size_pixels, pad_size_pixels, pad_size_pixels,
-                                          cv2.BORDER_CONSTANT, value=color)
+        padded_image = cv2.copyMakeBorder(
+            image,
+            pad_size_pixels,
+            pad_size_pixels,
+            pad_size_pixels,
+            pad_size_pixels,
+            cv2.BORDER_CONSTANT,
+            value=color,
+        )
 
         # save image
         cv2.imwrite(os.path.join(save_folder, image_name), padded_image)
 
         if occupancy_folder:
             occupancy_image = cv2.imread(os.path.join(occupancy_folder, image_name))
-            padded_occupancy_image = cv2.copyMakeBorder(occupancy_image, pad_size_pixels, pad_size_pixels,
-                                                        pad_size_pixels, pad_size_pixels,
-                                                        cv2.BORDER_CONSTANT, value=color)
+            padded_occupancy_image = cv2.copyMakeBorder(
+                occupancy_image,
+                pad_size_pixels,
+                pad_size_pixels,
+                pad_size_pixels,
+                pad_size_pixels,
+                cv2.BORDER_CONSTANT,
+                value=color,
+            )
             cv2.imwrite(os.path.join(save_folder, image_name), padded_occupancy_image)
 
 
 import json
 
 
-def preprocess_dataset_fixed_resolution(image_folder, image_metadata_folder, image_resized_folder, min_resolution,
-                                        flip=False):
+def preprocess_dataset_fixed_resolution(
+    image_folder,
+    image_metadata_folder,
+    image_resized_folder,
+    min_resolution,
+    flip=False,
+):
     """
     This function preprocesses the dataset by resizing the images to a minimum resolution and potentially flipping the
     color. If it flips the color of the shape from black to white, it adds a grey background.
@@ -200,7 +251,10 @@ def preprocess_dataset_fixed_resolution(image_folder, image_metadata_folder, ima
     for filename in os.listdir(image_folder):
         if not filename.endswith(".png"):
             # copy the file
-            shutil.copy(os.path.join(image_folder, filename), os.path.join(image_resized_folder, filename))
+            shutil.copy(
+                os.path.join(image_folder, filename),
+                os.path.join(image_resized_folder, filename),
+            )
         image_path = os.path.join(image_folder, filename)
         # Read the image using OpenCV
         image = cv2.imread(image_path)
@@ -208,7 +262,9 @@ def preprocess_dataset_fixed_resolution(image_folder, image_metadata_folder, ima
         if image is None:
             print(f"Unable to read or process image '{filename}'. Skipping...")
             continue
-        image_metadata_path = os.path.join(image_metadata_folder, filename[:-4] + ".json")
+        image_metadata_path = os.path.join(
+            image_metadata_folder, filename[:-4] + ".json"
+        )
 
         # Read metadata
         with open(image_metadata_path, "r") as f:
@@ -236,7 +292,9 @@ def preprocess_dataset_fixed_resolution(image_folder, image_metadata_folder, ima
             new_width = int(width * scale_factor)
 
             # Resize the image using OpenCV's resize function
-            resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
+            resized_image = cv2.resize(
+                image, (new_width, new_height), interpolation=cv2.INTER_NEAREST
+            )
 
         # Apply flip if enabled
         if flip:
@@ -251,7 +309,9 @@ def preprocess_dataset_fixed_resolution(image_folder, image_metadata_folder, ima
         print(f"Image '{filename}' resized successfully.")
 
 
-def preprocess_dataset(image_folder, metadata_folder, image_resized_folder, max_resolution, flip=False):
+def preprocess_dataset(
+    image_folder, metadata_folder, image_resized_folder, max_resolution, flip=False
+):
     """
     This function preprocesses the dataset by resizing the images to a maximum resolution and potentially flipping the
     color. If it flips the color of the shape from black to white, it adds a grey background.
@@ -292,7 +352,9 @@ def preprocess_dataset(image_folder, metadata_folder, image_resized_folder, max_
             new_height = max_resolution
 
         # Resize the image using OpenCV's resize function
-        resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
+        resized_image = cv2.resize(
+            image, (new_width, new_height), interpolation=cv2.INTER_NEAREST
+        )
 
         # Apply flip if enabled
         if flip:
@@ -365,16 +427,26 @@ def invert_dataset_apply_dump_foundations(image_folder, image_inverted_folder):
 
         # Fix image such that it only has color_dict colors
         inverted_image = np.where(
-            (~(_get_img_mask(inverted_image, color_dict["digging"]) | _get_img_mask(inverted_image, color_dict["dumping"]) | _get_img_mask(inverted_image, color_dict["neutral"])))[..., None].repeat(3, -1),
-            np.array(color_dict["digging"])[None, None].repeat(inverted_image.shape[0], 0).repeat(inverted_image.shape[1], 1),
-            inverted_image
+            (
+                ~(
+                    _get_img_mask(inverted_image, color_dict["digging"])
+                    | _get_img_mask(inverted_image, color_dict["dumping"])
+                    | _get_img_mask(inverted_image, color_dict["neutral"])
+                )
+            )[..., None].repeat(3, -1),
+            np.array(color_dict["digging"])[None, None]
+            .repeat(inverted_image.shape[0], 0)
+            .repeat(inverted_image.shape[1], 1),
+            inverted_image,
         ).astype(inverted_image.dtype)
 
         # Fully dumpable
         img = np.where(
-            _get_img_mask(inverted_image, color_dict["neutral"])[..., None].repeat(3, -1),
+            _get_img_mask(inverted_image, color_dict["neutral"])[..., None].repeat(
+                3, -1
+            ),
             color_dict["dumping"],
-            inverted_image
+            inverted_image,
         )
 
         # Get the outer profile of the image
@@ -432,8 +504,8 @@ def invert_dataset_apply_dump_foundations(image_folder, image_inverted_folder):
         #             (_get_img_mask(contoured_img, color_dict["dumping"]) * side_constraints_hard[i % 4])[..., None].repeat(3, -1),
         #             np.array(color_dict["neutral"])[None, None].repeat(w, 0).repeat(h, 1),
         #             contoured_img,
-        #         ).astype(np.uint8)            
-            
+        #         ).astype(np.uint8)
+
         # Save the inverted image to the inverted folder
         p = Path(f"{image_inverted_folder}/images")
         p.mkdir(parents=True, exist_ok=True)
@@ -453,16 +525,22 @@ def generate_empty_occupancy(image_folder: str, save_folder: str):
         os.makedirs(save_folder)
     for filename in os.listdir(image_folder):
         # only png
-        if not filename.endswith('.png'):
+        if not filename.endswith(".png"):
             continue
-        image = cv2.imread(image_folder + '/' + filename, cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(image_folder + "/" + filename, cv2.IMREAD_GRAYSCALE)
         image = image / 255
         empty_image = 255 * np.ones(image.shape)
-        cv2.imwrite(save_folder + '/' + filename, empty_image)
+        cv2.imwrite(save_folder + "/" + filename, empty_image)
 
 
-
-def size_filter(image_folder, save_folder, metadata_folder, min_size=(20, 20), max_size=(1920, 1080), copy_metadata=False):
+def size_filter(
+    image_folder,
+    save_folder,
+    metadata_folder,
+    min_size=(20, 20),
+    max_size=(1920, 1080),
+    copy_metadata=False,
+):
     """
     Goes through all the images, checks the real size in the metadata, and saves the image only if it's size is within
     min_size and max_size. The sizes correspond to the size of the whole image (same as reported in the metadata).
@@ -474,18 +552,25 @@ def size_filter(image_folder, save_folder, metadata_folder, min_size=(20, 20), m
     # get the metadata
     for filename in os.listdir(image_folder):
         if filename.endswith(".png"):
-            image = cv2.imread(image_folder + '/' + filename, cv2.IMREAD_GRAYSCALE)
-            metadata_path = metadata_folder + '/' + filename[:-4] + '.json'
+            image = cv2.imread(image_folder + "/" + filename, cv2.IMREAD_GRAYSCALE)
+            metadata_path = metadata_folder + "/" + filename[:-4] + ".json"
             with open(metadata_path) as json_file:
                 metadata = json.load(json_file)
             # get the real size
-            real_dimensions = (metadata["real_dimensions"]["width"], metadata["real_dimensions"]["height"])
-            if min_size[0] <= real_dimensions[0] <= max_size[0] and min_size[1] <= real_dimensions[1] <= max_size[1]:
-                cv2.imwrite(save_folder + '/' + filename, image)
+            real_dimensions = (
+                metadata["real_dimensions"]["width"],
+                metadata["real_dimensions"]["height"],
+            )
+            if (
+                min_size[0] <= real_dimensions[0] <= max_size[0]
+                and min_size[1] <= real_dimensions[1] <= max_size[1]
+            ):
+                cv2.imwrite(save_folder + "/" + filename, image)
                 if copy_metadata:
-                    with open(os.path.join(save_folder + '/' + filename[:-4] + '.json'), 'w') as outfile:
+                    with open(
+                        os.path.join(save_folder + "/" + filename[:-4] + ".json"), "w"
+                    ) as outfile:
                         json.dump(metadata, outfile)
-
 
 
 def fill_holes(image: np.array):
@@ -528,16 +613,15 @@ def fill_dataset(image_folder, save_folder, copy_metadata=True):
         os.makedirs(save_folder)
 
     for filename in os.listdir(image_folder):
-
         if copy_metadata:
             # if json just copy
-            if filename[-4:] == 'json':
-                shutil.copy(image_folder + '/' + filename, save_folder + '/' + filename)
+            if filename[-4:] == "json":
+                shutil.copy(image_folder + "/" + filename, save_folder + "/" + filename)
                 continue
-        if filename[-3:] == 'png':
-            image = cv2.imread(image_folder + '/' + filename, cv2.IMREAD_GRAYSCALE)
+        if filename[-3:] == "png":
+            image = cv2.imread(image_folder + "/" + filename, cv2.IMREAD_GRAYSCALE)
             filled_image = fill_holes(image)
-            cv2.imwrite(save_folder + '/' + filename, filled_image)
+            cv2.imwrite(save_folder + "/" + filename, filled_image)
         else:
             continue
 
@@ -551,10 +635,11 @@ def copy_metadata(folder, target_folder):
         os.makedirs(target_folder)
 
     for filename in os.listdir(folder):
-        if filename[-4:] == 'json':
-            shutil.copy(folder + '/' + filename, target_folder + '/' + filename)
+        if filename[-4:] == "json":
+            shutil.copy(folder + "/" + filename, target_folder + "/" + filename)
         else:
             continue
+
 
 def copy_metadata_individual(path_input, path_output, target_folder):
     # if the folder does not exist, create it

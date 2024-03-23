@@ -32,7 +32,13 @@ def main():
     n_envs = n_envs_x * n_envs_y
     seed = 24
     rng = jax.random.PRNGKey(seed)
-    env = TerraEnvBatch(rendering=True, display=True, rendering_engine="pygame", n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
+    env = TerraEnvBatch(
+        rendering=True,
+        display=True,
+        rendering_engine="pygame",
+        n_envs_x_rendering=n_envs_x,
+        n_envs_y_rendering=n_envs_y,
+    )
 
     print("Starting the environment...")
     start_time = time.time()
@@ -42,22 +48,18 @@ def main():
     timestep = env.reset(env_cfgs, _rng)
     print(f"{timestep.state.agent.width=}")
     print(f"{timestep.state.agent.height=}")
-    
+
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
 
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
-    
+
     # Trigger the JIT compilation
-    timestep = env.step(
-        timestep,
-        repeat_action(action_type.do_nothing()),
-        _rng
-    )
+    timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
     end_time = time.time()
     print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
-    
+
     playing = True
     while playing:
         for event in pg.event.get():
@@ -103,10 +105,11 @@ def main():
 
             elif event.type == QUIT:
                 playing = False
-        
+
         env.terra_env.render_obs_pygame(
             timestep.observation,
         )
+
 
 if __name__ == "__main__":
     main()

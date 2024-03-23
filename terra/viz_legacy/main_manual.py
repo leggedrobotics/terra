@@ -10,7 +10,11 @@ from terra.env import TerraEnvBatch
 def redraw():
     global timestep, tile_size, batch_cfg
     env.terra_env.render_obs(
-        timestep.observation, mode="human", tile_size=tile_size, key_handler=key_handler, info=timestep.info
+        timestep.observation,
+        mode="human",
+        tile_size=tile_size,
+        key_handler=key_handler,
+        info=timestep.info,
     )
 
 
@@ -20,7 +24,7 @@ def key_handler(event):
     print(f"step {i}")
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None, ...]
-    
+
     def apply_action_mask(action):
         if ACTIVATE_ACTION_MASKING:
             action_item = action.action.item()
@@ -209,7 +213,9 @@ n_envs_y = 1
 n_envs = n_envs_x * n_envs_y
 seed = 24
 rng = jax.random.PRNGKey(seed)
-env = TerraEnvBatch(rendering=True, n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y)
+env = TerraEnvBatch(
+    rendering=True, n_envs_x_rendering=n_envs_x, n_envs_y_rendering=n_envs_y
+)
 
 env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
 rng, _rng = jax.random.split(rng)
@@ -229,5 +235,9 @@ timestep = env.step(
 action_mask = timestep.info["action_mask"]
 i = 0
 env.terra_env.render_obs(
-    timestep.observation, key_handler=key_handler, block=True, tile_size=tile_size, info=timestep.info
+    timestep.observation,
+    key_handler=key_handler,
+    block=True,
+    tile_size=tile_size,
+    info=timestep.info,
 )
