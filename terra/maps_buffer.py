@@ -305,6 +305,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         maps_width,
         maps_height,
     )
+    unique_shapes = set([trench_axes.shape for trench_axes in trench_axes_list])
+    print(f"Unique shapes of trench_axes_list: {unique_shapes}")
+
     maps_from_disk_padded = jnp.array(maps_from_disk_padded)
     padding_mask = jnp.array(padding_mask)
     dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk)

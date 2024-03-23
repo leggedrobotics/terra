@@ -1,5 +1,5 @@
 resolution: 1 # Resolution of the images in meters per pixel
-n_imgs: 986 # it has to be the same else we can't stack images together 
+n_imgs: 1000 # it has to be the same else we can't stack images together 
 sizes: [64]
 
 squares:

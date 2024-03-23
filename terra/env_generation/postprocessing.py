@@ -1,17 +1,19 @@
-import os
-import cv2
-import skimage
 import json
 import math
-import numpy as np
+import os
 from pathlib import Path
-from tqdm import tqdm
-from scipy.signal import convolve2d
-import terra.env_generation.utils as utils
-from terra.env_generation.utils import _get_img_mask
-from terra.env_generation.utils import color_dict
-from skimage import measure
+
+import cv2
 import matplotlib.pyplot as plt
+import numpy as np
+import skimage
+from scipy.signal import convolve2d
+from skimage import measure
+from tqdm import tqdm
+import time
+
+import terra.env_generation.utils as utils
+from terra.env_generation.utils import _get_img_mask, color_dict
 
 
 def _convert_img_to_terra(img, all_dumpable=False):
@@ -246,35 +248,10 @@ def _convert_all_imgs_to_terra(
             np.save(
                 destination_folder_dumpability / f"img_{i + 1}",
                 np.ones_like(img_terra_pad),
-            )
-
+            )            
     if copy_metadata:
-        utils.copy_metadata(str(metadata_folder), str(destination_folder_metadata))
-        destination_folder_metadata = destination_folder / "metadata"
-        destination_folder_metadata.mkdir(parents=True, exist_ok=True)
-
-        img_terra_pad = img_terra_pad.repeat(expansion_factor, 0).repeat(
-            expansion_factor, 1
-        )
-        img_terra_occupancy = img_terra_occupancy.repeat(expansion_factor, 0).repeat(
-            expansion_factor, 1
-        )
-        if has_dumpability:
-            img_terra_dumpability = img_terra_dumpability.repeat(
-                expansion_factor, 0
-            ).repeat(expansion_factor, 1)
-
-        np.save(destination_folder_images / f"img_{i}", img_terra_pad)
-        np.save(destination_folder_occupancy / f"img_{i}", img_terra_occupancy)
-        if has_dumpability:
-            np.save(destination_folder_dumpability / f"img_{i}", img_terra_dumpability)
-        else:
-            np.save(
-                destination_folder_dumpability / f"img_{i}", np.ones_like(img_terra_pad)
-            )
-
-    if copy_metadata:
-        utils.copy_metadata(str(metadata_folder), str(destination_folder_metadata))
+        utils.cp(str(metadata_folder), str(destination_folder_metadata))
+        # we increase the index by 1 for consistency
 
 
 def generate_foundations_terra(dataset_folder, size, all_dumpable):

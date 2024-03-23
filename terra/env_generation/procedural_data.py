@@ -1,17 +1,18 @@
-import numpy as np
-import cv2
-import os
 import json
-from pathlib import Path
-from terra.env_generation.utils import color_dict
-from terra.env_generation.utils import _get_img_mask
 import math
+import os
+from pathlib import Path
+
+import cv2
+import numpy as np
+import skimage
+
 from terra.env_generation.postprocessing import (
+    _convert_dumpability_to_terra,
     _convert_img_to_terra,
     _convert_occupancy_to_terra,
-    _convert_dumpability_to_terra,
 )
-import skimage
+from terra.env_generation.utils import _get_img_mask, color_dict
 
 
 def distance_point_to_line(x, y, A, B, C):
@@ -474,9 +475,9 @@ def generate_foundations_v2(
             img_terra_pad = np.zeros((max_size, max_size), dtype=img_terra.dtype)
             img_terra_pad[: img_terra.shape[0], : img_terra.shape[1]] = img_terra
             img_terra_occupancy = np.ones((max_size, max_size), dtype=np.bool_)
-            img_terra_occupancy[
-                : occupancy.shape[0], : occupancy.shape[1]
-            ] = _convert_occupancy_to_terra(occupancy)
+            img_terra_occupancy[: occupancy.shape[0], : occupancy.shape[1]] = (
+                _convert_occupancy_to_terra(occupancy)
+            )
             if has_dumpability:
                 img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
                 img_terra_dumpability[

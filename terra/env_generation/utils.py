@@ -4,6 +4,7 @@ import shutil
 import numpy as np
 from pathlib import Path
 from scipy.signal import convolve2d
+import re
 
 from terra.env_generation import terrain_generation
 
@@ -647,3 +648,45 @@ def copy_metadata_individual(path_input, path_output, target_folder):
         os.makedirs(target_folder)
 
     shutil.copy(path_input, path_output)
+
+
+
+def copy_and_increment_filenames(source_folder, destination_folder):
+    """
+    Copies JSON files from the source folder to the destination folder.
+    Files named like 'trench_{i}.json' are renamed to 'trench_{i+1}.json' during the copy.
+    The copy operation starts from the highest numbered file to prevent overwriting.
+    
+    :param source_folder: Path to the source folder
+    :param destination_folder: Path to the destination folder
+    """
+    # Ensure the destination folder exists
+    os.makedirs(destination_folder, exist_ok=True)
+
+    # Compile a regex pattern to match 'trench_{i}.json' and capture 'i'
+    pattern = re.compile(r"trench_(\d+)\.json")
+
+    # Create a list to store (filename, number) tuples
+    files_with_numbers = []
+
+    # Identify all matching files and their numbers
+    for filename in os.listdir(source_folder):
+        match = pattern.match(filename)
+        if match:
+            number = int(match.group(1))
+            files_with_numbers.append((filename, number))
+    
+    # Sort the list based on numbers in descending order
+    files_with_numbers.sort(key=lambda x: x[1], reverse=True)
+
+    # Process files in descending order
+    for filename, number in files_with_numbers:
+        new_filename = f"trench_{number + 1}.json"
+        source_path = os.path.join(source_folder, filename)
+        destination_path = os.path.join(destination_folder, new_filename)
+
+        # Check if the destination file already exists to avoid overwriting
+        if not os.path.exists(destination_path):
+            shutil.copy2(source_path, destination_path)
+        else:
+            print(f"File {new_filename} already exists in the destination folder. Skipping.")
