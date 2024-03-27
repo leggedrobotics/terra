@@ -4,6 +4,11 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from terra.config import Rewards
+from jax.experimental.host_callback import id_tap
+
+
+def print_arrays(arr, what):
+    print(f"{what}: {arr}")
 
 
 class CurriculumManager(NamedTuple):
@@ -21,10 +26,25 @@ class CurriculumManager(NamedTuple):
     last_level_type: str
 
     def _update_single_cfg(self, timestep, rng):
+        """
+        Update the environment configuration based on the timestep. This function is vammaped therefore the timestep.arrays have dimensions (batch_size, ...) (1 step per env).
+        """
         env_cfg = timestep.env_cfg
-        done = jnp.all(timestep.done)
-        completed = jnp.all(timestep.info["task_done"])
+        done = timestep.done
+        completed = timestep.info["task_done"]
+        # done = id_tap(lambda arr, _: print_arrays(arr, "done all"), done)
+        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed"), completed)
 
+        # done_sum = jnp.sum(done)
+        # completed_sum = jnp.sum(completed)
+        
+        # done = id_tap(lambda arr, _: print_arrays(arr, "done sum"), done_sum)
+        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed sum"), completed_sum)
+
+        # # print the shape of the arrays
+        # done = id_tap(lambda arr, _: print_arrays(arr.shape, "done shape"), done)
+        # completed = id_tap(lambda arr, _: print_arrays(arr.shape, "completed shape"), completed)
+        
         failure = done & ~completed
         success = done & completed
 
@@ -53,28 +73,40 @@ class CurriculumManager(NamedTuple):
         do_increase = consecutive_successes >= self.increase_level_threshold
         do_decrease = consecutive_failures >= self.decrease_level_threshold
 
-        level = jax.lax.cond(
+        level, consecutive_failures, consecutive_successes = jax.lax.cond(
             do_increase,
-            lambda: jax.lax.cond(
-                env_cfg.curriculum.level < self.max_level,
-                lambda: env_cfg.curriculum.level + 1,
-                lambda: jax.lax.cond(
-                    self.last_level_type == "none",
-                    lambda: env_cfg.curriculum.level,
+            lambda: (
+                jax.lax.cond(
+                    env_cfg.curriculum.level < self.max_level,
+                    lambda: env_cfg.curriculum.level + 1,
                     lambda: jax.lax.cond(
-                        self.last_level_type == "random",
-                        lambda: jax.random.randint(rng, (), 0, self.max_level + 1),
-                        lambda: 97,  # Error case
+                        self.last_level_type == "none",
+                        lambda: env_cfg.curriculum.level,
+                        lambda: jax.lax.cond(
+                            self.last_level_type == "random",
+                            lambda: jax.random.randint(rng, (), 0, self.max_level + 1),
+                            lambda: 97,  # Error case
+                        ),
                     ),
                 ),
+                0,  # Reset consecutive_failures
+                0,  # Reset consecutive_successes
             ),
             lambda: jax.lax.cond(
                 do_decrease,
-                lambda: jnp.maximum(env_cfg.curriculum.level - 1, 0),
-                lambda: env_cfg.curriculum.level,
+                lambda: (
+                    jnp.maximum(env_cfg.curriculum.level - 1, 0),
+                    0,  # Reset consecutive_failures
+                    0,  # Reset consecutive_successes
+                ),
+                lambda: (
+                    env_cfg.curriculum.level,
+                    consecutive_failures,  # Keep the current count
+                    consecutive_successes,  # Keep the current count
+                ),
             ),
         )
-
+        
         max_steps_in_episode = self.max_steps_in_episode_per_level[level]
         apply_trench_rewards = self.apply_trench_rewards_per_level[level]
 
