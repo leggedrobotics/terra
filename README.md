@@ -25,7 +25,7 @@ The JAX installation is hardware-dependent and therefore needs to be done separa
 
 ## Usage
 The standard workflow is made of the following steps:
-1. Generate the maps with `python -m generate_maps.py` (you can check out a preview of the generated maps in the `data/` folder)
+1. Generate the maps by following this [README](https://github.com/leggedrobotics/terra/blob/main/terra/env_generation/README.md) (you can check out a preview of the generated maps in the `data/` folder)
 2. Set up the curriculum in `config.py`
 2. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
 3. Train 🚀
