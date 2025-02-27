@@ -160,7 +160,7 @@ def calculate_line_eq(pt1, pt2):
     return A, B, C
 
 
-def add_obstacles(
+def add_obstacles_to_image(
     img, cumulative_mask, n_obs_min, n_obs_max, size_obstacle_min, size_obstacle_max
 ):
     """
@@ -204,7 +204,7 @@ def add_obstacles(
     return occ, cumulative_mask
 
 
-def add_non_dumpables(
+def add_non_dumpables_to_image(
     img,
     occ,
     cumulative_mask,
@@ -337,7 +337,7 @@ def generate_trenches_v2(
         if img is None:
             continue
         if add_obstacles:
-            occ, cumulative_mask = add_obstacles(
+            occ, cumulative_mask = add_obstacles_to_image(
                 img,
                 cumulative_mask,
                 n_obs_min,
@@ -346,7 +346,7 @@ def generate_trenches_v2(
                 size_obstacle_max,
             )
         if add_non_dumpables:
-            dmp, cumulative_mask = add_non_dumpables(
+            dmp, cumulative_mask = add_non_dumpables_to_image(
                 img,
                 occ,
                 cumulative_mask,
@@ -516,7 +516,7 @@ def generate_foundations_v2(
         cumulative_mask = np.zeros_like(img_terra_pad, dtype=np.bool_)
         # where the img_terra_pad is [255, 255, 255] set to True across the three channels
         cumulative_mask[img_terra_pad == 255] = True
-        occ, cumulative_mask = add_obstacles(
+        occ, cumulative_mask = add_obstacles_to_image(
             img_terra_pad,
             cumulative_mask,
             n_obs_min,
@@ -525,7 +525,7 @@ def generate_foundations_v2(
             size_obstacle_max,
         )
 
-        dmp, cumulative_mask = add_non_dumpables(
+        dmp, cumulative_mask = add_non_dumpables_to_image(
             img_terra_pad,
             occ,
             cumulative_mask,
