@@ -2,7 +2,6 @@ import numpy as np
 import os
 from pathlib import Path
 import yaml
-from procedural_data import add_obstacles, add_non_dumpables
 
 
 def load_config(config_path):
