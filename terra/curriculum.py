@@ -143,7 +143,12 @@ class CurriculumManager(NamedTuple):
         return env_cfg
 
     def update_cfgs(self, timesteps, rng):
-        return jax.vmap(self._update_single_cfg)(timesteps, rng)
+        batch_size = timesteps.done.shape[0]
+        if rng.ndim == 1:
+            rngs = jax.random.split(rng, batch_size)
+        else:
+            rngs = rng
+        return jax.vmap(self._update_single_cfg)(timesteps, rngs)
 
     def reset_cfgs(self, env_cfgs):
         return jax.vmap(self._reset_single_cfg)(env_cfgs)
