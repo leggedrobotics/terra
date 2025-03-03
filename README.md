@@ -31,6 +31,85 @@ The standard workflow is made of the following steps:
 3. Train 🚀
 4. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
 
+# Environment Setup Instructions
+
+This repository includes configuration files to help you set up the required environment for this project.
+
+## Using Conda Environment (Recommended)
+
+The `environment.yml` file contains all the necessary dependencies to reproduce the project environment named "terra" with Python 3.12.2.
+
+### Creating the Environment
+
+To create a new conda environment from the provided `environment.yml` file, run:
+
+```bash
+conda env create -f environment.yml
+```
+
+This command will create a new environment named "terra" with all the specified dependencies.
+
+### Activating the Environment
+
+After creating the environment, activate it with:
+
+```bash
+conda activate terra
+```
+
+### Verifying the Environment
+
+To verify that the environment was set up correctly, you can:
+
+1. Check that you're in the correct environment:
+   ```bash
+   conda info
+   ```
+   The active environment should be displayed as "terra".
+
+2. List all installed packages:
+   ```bash
+   conda list
+   ```
+
+3. Check Python version:
+   ```bash
+   python --version
+   ```
+   This should output "Python 3.12.2"
+
+## Environment Files: requirements.txt vs environment.yml
+
+### environment.yml
+
+The `environment.yml` file is used by conda to create environments and has several advantages:
+- Specifies the Python version
+- Can include conda and pip dependencies in one file
+- Can include dependencies from multiple channels
+- Resolves dependencies more effectively than pip alone
+- Handles non-Python dependencies (e.g., C libraries)
+
+### requirements.txt
+
+The `requirements.txt` file is a standard pip requirements file that specifies Python packages to be installed with pip. This file:
+- Lists Python dependencies only
+- Can be used with `pip install -r requirements.txt`
+- Doesn't specify Python version
+- Doesn't handle non-Python dependencies
+
+For this project, the `environment.yml` file is the recommended way to set up your environment as it ensures all dependencies (including the correct Python version) are properly installed.
+
+## Updating the Environment
+
+If you need to update the environment after changes to the `environment.yml` file:
+
+```bash
+conda env update -f environment.yml --prune
+```
+
+The `--prune` option removes dependencies that are no longer specified in the updated file.
+
+
 ### Basic Usage
 ``` python
 import jax

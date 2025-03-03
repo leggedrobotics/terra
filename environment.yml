@@ -1,0 +1,28 @@
+# Terra environment configuration file
+# This file defines all dependencies required for the Terra project
+# General dependencies are managed via conda, while packages like JAX and specific
+# libraries that benefit from pip installation are in the pip section
+name: terra
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12.2
+  - pip>=23.0
+  - numpy>=1.26.0
+  - matplotlib>=3.8.0
+  - scipy>=1.12.0
+  - pandas>=2.2.0
+  - flax>=0.8.0
+  - chex>=0.1.7
+  - tqdm>=4.66.0
+  - scikit-image>=0.22.0
+  - pip:
+    - jax>=0.4.20
+    - jaxlib>=0.4.20
+    - tensorflow-probability>=0.22.0
+    - wandb>=0.16.0
+    - pygame>=2.5.0
+    - osmnx>=1.6.0
+    - opencv-python>=4.8.0
+    - pathlib>=1.0.1
