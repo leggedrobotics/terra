@@ -6,8 +6,7 @@ import cv2
 import matplotlib.pyplot as plt
 import osmnx as ox
 from PIL import Image
-from pyproj import Proj
-from pyproj import transform
+from pyproj import CRS, Transformer
 from shapely.geometry import Point
 from shapely.geometry import Polygon
 
@@ -40,22 +39,25 @@ def get_building_shapes_from_OSM(
     print("got buildings")
 
     # Define coordinate reference systems
-    wgs84 = Proj("EPSG:4326")  # WGS84 (lat-long) coordinate system
-    utm = Proj("EPSG:32633")  # UTM zone 33N (covers central Europe)
+    wgs84 = CRS("EPSG:4326")  # WGS84 (lat-long) coordinate system
+    utm = CRS("EPSG:32633")  # UTM zone 33N (covers central Europe)
+    
+    # Create transformer
+    transformer = Transformer.from_crs(wgs84, utm, always_xy=True)
 
     # Check option
     if option == 1:
-        extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder)
+        extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder, transformer)
     elif option == 2:
-        extract_single_buildings(buildings, wgs84, utm, folder_path=folder_path)
+        extract_single_buildings(buildings, wgs84, utm, folder_path=folder_path, transformer=transformer)
     else:
         print("Invalid option selected. Choose either 1 or 2.")
 
 
-def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
+def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder, transformer):
     # Convert the bounding box to UTM
-    west_utm, south_utm = transform(wgs84, utm, west, south)
-    east_utm, north_utm = transform(wgs84, utm, east, north)
+    west_utm, south_utm = transformer.transform(west, south)
+    east_utm, north_utm = transformer.transform(east, north)
 
     # Create a Polygon that represents the bounding box
     bbox_polygon = Polygon(
@@ -70,7 +72,7 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
     # Count how many buildings have their centroid within the bounding box
     buildings_in_bbox = sum(
         bbox_polygon.contains(
-            Point(transform(wgs84, utm, *building.centroid.coords[0]))
+            Point(transformer.transform(*building.centroid.coords[0]))
         )
         for building in buildings.geometry
     )
@@ -83,8 +85,8 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
     try:
         # Convert total bounds to UTM
         total_bounds_utm = [
-            transform(
-                wgs84, utm, buildings.total_bounds[i], buildings.total_bounds[i + 1]
+            transformer.transform(
+                buildings.total_bounds[i], buildings.total_bounds[i + 1]
             )
             for i in range(0, 4, 2)
         ]
@@ -162,7 +164,7 @@ def extract_crop(buildings, wgs84, utm, north, south, east, west, save_folder):
         json.dump(metadata, file)
 
 
-def extract_single_buildings(buildings, wgs84, utm, folder_path=None):
+def extract_single_buildings(buildings, wgs84, utm, folder_path=None, transformer=None):
     if folder_path is None:
         raise ValueError("No folder path provided")
 
@@ -171,7 +173,7 @@ def extract_single_buildings(buildings, wgs84, utm, folder_path=None):
             continue
 
         bounds_utm = [
-            transform(wgs84, utm, building.bounds[i], building.bounds[i + 1])
+            transformer.transform(building.bounds[i], building.bounds[i + 1])
             for i in range(0, 4, 2)
         ]
         aspect_ratio = (

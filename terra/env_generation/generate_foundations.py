@@ -4,7 +4,7 @@ import os
 import shutil
 
 # set seed
-from pyproj import Proj, transform
+from pyproj import CRS, Transformer
 import random
 import pathlib
 
@@ -22,10 +22,14 @@ def download_city_crops(
 ):
     print("max size = ", max_size)
     north, south, east, west = center_bbox
-    utm = Proj("EPSG:32633")  # UTM zone 33N (covers central Europe)
-    wgs84 = Proj("EPSG:4326")  # WGS84 (covers the entire globe)
-    west_utm, south_utm = transform(wgs84, utm, west, south)
-    east_utm, north_utm = transform(wgs84, utm, east, north)
+    utm = CRS("EPSG:32633")  # UTM zone 33N (covers central Europe)
+    wgs84 = CRS("EPSG:4326")  # WGS84 (covers the entire globe)
+    
+    # Create transformer
+    transformer = Transformer.from_crs(wgs84, utm, always_xy=True)
+    
+    west_utm, south_utm = transformer.transform(west, south)
+    east_utm, north_utm = transformer.transform(east, north)
     width = east_utm - west_utm  # m
     height = south_utm - north_utm  # m
     print("width = ", width)
@@ -116,14 +120,17 @@ def download_foundations(
     max_size=(100, 100),
     padding=3,
     resolution=0.05,
+    max_buildings=None,
 ):
     dataset_folder = main_folder + "/foundations_raw"
     # if it does not exist
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
+        os.makedirs(dataset_folder + "/images", exist_ok=True)
+        os.makedirs(dataset_folder + "/metadata", exist_ok=True)
         try:
             openstreet.get_building_shapes_from_OSM(
-                *center_bbox, option=2, save_folder=dataset_folder
+                *center_bbox, option=2, save_folder=dataset_folder, max_buildings=max_buildings
             )
         except Exception as e:
             print(e)
@@ -248,7 +255,6 @@ if __name__ == "__main__":
     package_dir = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    print("Saving openstreet data to ", package_dir)
     for size in sizes:
         dataset_folder = os.path.join(package_dir, "data", "openstreet")
         download_foundations(
@@ -256,5 +262,6 @@ if __name__ == "__main__":
             min_size=(size[0], size[0]),
             max_size=(size[1], size[1]),
             center_bbox=(47.5376, 47.6126, 7.5401, 7.6842),
+            max_buildings=100
         )
         create_foundations(dataset_folder)

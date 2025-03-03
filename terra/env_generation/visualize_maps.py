@@ -55,6 +55,6 @@ if __name__ == "__main__":
     digbench_path = Path(__file__).resolve().parents[1]
     # visualize_maps_recursive(digbench_path / 'data/generated_squares')
     visualize_maps_recursive(
-        "/home/lorenzo/git/terra_jax/terra/data/generated_squares/64x64/squares_final_13",
+        "/home/lorenzo/git/terra_jax/terra/data/terra/train/foundations",
         map_categories=["occupancy"],
     )
