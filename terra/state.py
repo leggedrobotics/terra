@@ -87,7 +87,7 @@ class State(NamedTuple):
         )
 
         # Compute the xy delta for a forward move along that angle.
-        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False)
+        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False) + jnp.pi/2 # TODO: check if this angle should be added
         xy_delta = env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
 
         return State(
@@ -309,29 +309,28 @@ class State(NamedTuple):
         return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        move_tiles = self.env_cfg.agent.move_tiles
-        new_pos_base = self.agent.agent_state.pos_base
-
-        # Propagate action
-        possible_deltas_xy = jnp.array(
-            [[0, move_tiles], [-move_tiles, 0], [0, -move_tiles], [move_tiles, 0]],
-            dtype=IntLowDim,
-        )
-        delta_xy = orientation_vector @ possible_deltas_xy
-
-        new_pos_base = (new_pos_base + delta_xy)[0]
-
+        # Use the precomputed xy_delta to select the correct move delta.
+        delta_xy = orientation_vector @ self.xy_delta  # shape (2,)
+        
+        # Compute candidate new position and immediately round it to discrete grid points.
+        candidate_pos = self.agent.agent_state.pos_base + delta_xy
+        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
+        
+        # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
-            new_pos_base,
-            base_orientation=self.agent.agent_state.angle_base,
+            candidate_pos,
+            base_angle_deg=self.agent.agent_state.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
+        
+        # Check if the new position is valid.
         valid_move = self._is_valid_move(agent_corners_xy)
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-
-        old_new_pos_base = jnp.array([self.agent.agent_state.pos_base, new_pos_base])
-        new_pos_base = valid_move_mask @ old_new_pos_base
+        
+        # Choose between the old position and the new candidate position.
+        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        new_pos_base = valid_move_mask @ old_new_pos
 
         return self._replace(
             agent=self.agent._replace(
