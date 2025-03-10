@@ -193,7 +193,7 @@ class State(NamedTuple):
         agent_height: IntLowDim,
     ) -> Array:
         """
-        Gets the coordinates of the 4 corners of the agent using only JAX.
+        Gets the coordinates of the 4 corners of the agent.
         The function uses a biased rounding strategy to avoid rectangle shrinkage.
         """
         # Determine half dimensions using floor/ceil to properly handle odd dimensions.
