@@ -62,6 +62,8 @@ class State(NamedTuple):
 
     env_steps: int
 
+    xy_delta: jnp.array
+
     @classmethod
     def new(
         cls,
@@ -84,12 +86,17 @@ class State(NamedTuple):
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
+        # Compute the xy delta for a forward move along that angle.
+        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False)
+        xy_delta = env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
+
         return State(
             key=key,
             env_cfg=env_cfg,
             world=world,
             agent=agent,
             env_steps=0,
+            xy_delta=xy_delta,
         )
 
     def _reset(
