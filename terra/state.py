@@ -225,20 +225,6 @@ class State(NamedTuple):
         return biased_corners
 
     @staticmethod
-    def _get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
-        """
-        Args:
-            - agent_corners: (4, 2) Array with agent corners [x, y] column order
-        Returns:
-            - x: (2, ) Array of min and max x values as [min, max]
-            - y: (2, ) Array of min and max y values as [min, max]
-        """
-
-        x = jnp.array([jnp.min(agent_corners[:, 0]), jnp.max(agent_corners[:, 0])])
-        y = jnp.array([jnp.min(agent_corners[:, 1]), jnp.max(agent_corners[:, 1])])
-        return x, y
-
-    @staticmethod
     def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
         """
         Args:
