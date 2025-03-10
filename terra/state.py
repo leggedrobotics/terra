@@ -236,68 +236,60 @@ class State(NamedTuple):
         """
         return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
 
-    def _is_valid_move(self, agent_corners_xy: Array) -> Array:
+    @staticmethod
+    def _compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Array:
         """
-        Returns true if the move action proposed is valid, false otherwise.
+        Compute a mask (map_width x map_height) indicating the cells covered
+        by the polygon defined by its corners.
+        """
+        # Create a grid of points.
+        xs = jnp.arange(map_width)
+        ys = jnp.arange(map_height)
+        X, Y = jnp.meshgrid(xs, ys, indexing='xy')
+        pts = jnp.stack([X, Y], axis=-1).reshape((-1, 2))  # (N,2)
 
-        Args:
-            - base_position: (2, ) Array with [x, y] proposed base position
-            - base_orientation: (1, ) Array with int-based orientation encoding of the agent (e.g. 3)
-            - agent_width: width of the agent
-            - agent_height: height of the agent
-                Note: the width and height parameters can be exploited to mask out also the tiles occupied
-                    during a rotation (e.g. width = height = max(width, height))
-        Returns:
-            - bool, true if proposed action is valid
+        # Shift corners so that each edge is computed with the next vertex.
+        # (4,2) corner array.
+        edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
+        # For each edge, compute a vector from its starting vertex to all points.
+        diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
+        # Broadcast the edge for each point.
+        edges_exp = edges[:, None, :]  # (4, 1, 2)
+        # 2D cross product: for vectors (a, b) and (c, d), it is a*d - b*c.
+        cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
+        # For a convex polygon all cross products should be >=0 or <=0.
+        inside = jnp.logical_or(jnp.all(cross >= 0, axis=0), jnp.all(cross <= 0, axis=0))
+        mask = inside.reshape((map_width, map_height))
+        return mask
+
+    def _is_valid_move(self, agent_corners: Array) -> Array:
+        """
+        Checks if the move is valid by computing the agent occupancy mask (using a
+        polygon mask) and ensuring all affected grid cells are traversable.
         """
         map_width = self.world.width
         map_height = self.world.height
 
-        # Map size constraints
-        valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
-        valid_matrix_up = agent_corners_xy < jnp.array([map_width, map_height])
-
-        valid_move_map_size = jnp.all(
-            jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0)
+        # Verify that the corners are within map bounds.
+        valid_bounds = jnp.all(
+            jnp.logical_and(
+                agent_corners >= jnp.array([0, 0]),
+                agent_corners < jnp.array([map_width, map_height])
+            )
         )
 
-        # Traversability constraints
+        # Determine the occupancy mask for a grid of size map_width x map_height.
+        polygon_mask = self._compute_polygon_mask(agent_corners, map_width, map_height)
+        
+        # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
         )
-        x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
-
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(
-                map_height, axis=1
-            ),
-            0,
-            traversability_mask,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_width) > x_minmax_agent[1])[:, None].repeat(
-                map_height, axis=1
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_height) < y_minmax_agent[0])[None].repeat(
-                map_width, axis=0
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_height) > y_minmax_agent[1])[None].repeat(
-                map_width, axis=0
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        valid_move_traversability = jnp.all(traversability_mask_reduced == 0)
-        valid_move = jnp.logical_and(valid_move_map_size, valid_move_traversability)
-        return valid_move
+        
+        # For a valid move, all cells covered by the agent must be traversable (== 0).
+        # Mask out the cells where the agent is located.
+        valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
+        return jnp.logical_and(valid_bounds, valid_traversability)
 
     @staticmethod
     def _valid_move_to_valid_mask(valid_move: jnp.bool_) -> Array:
