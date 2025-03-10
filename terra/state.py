@@ -87,7 +87,7 @@ class State(NamedTuple):
         )
 
         # Compute the xy delta for a forward move along that angle.
-        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False) + jnp.pi/2 # TODO: check if this angle should be added
+        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
         xy_delta = env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
 
         return State(
@@ -185,10 +185,10 @@ class State(NamedTuple):
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
-    @staticmethod
     def _get_agent_corners(
+        self,
         pos_base: Array,
-        base_angle_deg: float,
+        base_orientation: IntLowDim,
         agent_width: IntLowDim,
         agent_height: IntLowDim,
     ) -> Array:
@@ -211,7 +211,7 @@ class State(NamedTuple):
         ])
 
         # Convert degrees to radians using JAX.
-        angle_rad = base_angle_deg * jnp.pi / 180.0
+        angle_rad = (base_orientation.astype(jnp.float32) / jnp.array(self.env_cfg.agent.angles_base, dtype=jnp.float32)) * (2 * jnp.pi)
         cos_a = jnp.cos(angle_rad)
         sin_a = jnp.sin(angle_rad)
         # Build the rotation matrix.
