@@ -181,33 +181,48 @@ class State(NamedTuple):
     @staticmethod
     def _get_agent_corners(
         pos_base: Array,
-        base_orientation: IntLowDim,
+        base_angle_deg: float,
         agent_width: IntLowDim,
         agent_height: IntLowDim,
-    ):
+    ) -> Array:
         """
-        Gets the coordinates of the 4 corners of the agent.
+        Gets the coordinates of the 4 corners of the agent using only JAX.
+        The function uses a biased rounding strategy to avoid rectangle shrinkage.
         """
-        orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
-        agent_xy_matrix = jnp.array(
-            [[agent_width, agent_height], [agent_height, agent_width]], dtype=IntLowDim
-        )
-        agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
+        # Determine half dimensions using floor/ceil to properly handle odd dimensions.
+        half_width_left = jnp.floor(agent_width / 2.0)
+        half_width_right = jnp.ceil(agent_width / 2.0)
+        half_height_bottom = jnp.floor(agent_height / 2.0)
+        half_height_top = jnp.ceil(agent_height / 2.0)
 
-        x_base = pos_base[0]
-        y_base = pos_base[1]
-        x_half_dim = jnp.floor(agent_xy_dimensions[0, 0] / 2)
-        y_half_dim = jnp.floor(agent_xy_dimensions[0, 1] / 2)
+        # Define corners in local coordinates relative to the center.
+        local_corners = jnp.array([
+            [-half_width_left, -half_height_bottom],
+            [ half_width_right, -half_height_bottom],
+            [ half_width_right,  half_height_top],
+            [-half_width_left,  half_height_top]
+        ])
 
-        agent_corners = jnp.array(
-            [
-                [x_base + x_half_dim, y_base + y_half_dim],
-                [x_base - x_half_dim, y_base + y_half_dim],
-                [x_base + x_half_dim, y_base - y_half_dim],
-                [x_base - x_half_dim, y_base - y_half_dim],
-            ]
-        )
-        return agent_corners
+        # Convert degrees to radians using JAX.
+        angle_rad = base_angle_deg * jnp.pi / 180.0
+        cos_a = jnp.cos(angle_rad)
+        sin_a = jnp.sin(angle_rad)
+        # Build the rotation matrix.
+        R = jnp.array([[cos_a, -sin_a],
+                    [sin_a,  cos_a]])
+
+        # Rotate local corners and translate by the center position.
+        global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=float)
+
+        # Bias the rounding: use floor if below the center, ceil otherwise.
+        center_arr = jnp.array(pos_base, dtype=float)
+        biased_corners = jnp.where(
+            global_corners_float < center_arr,
+            jnp.floor(global_corners_float),
+            jnp.ceil(global_corners_float)
+        ).astype(int)
+
+        return biased_corners
 
     @staticmethod
     def _get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
