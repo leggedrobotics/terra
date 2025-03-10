@@ -16,6 +16,7 @@ from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
+from terra.utils import compute_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
 from terra.utils import get_min_distance_point_to_lines
@@ -243,32 +244,6 @@ class State(NamedTuple):
         """
         return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
 
-    @staticmethod
-    def _compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Array:
-        """
-        Compute a mask (map_width x map_height) indicating the cells covered
-        by the polygon defined by its corners.
-        """
-        # Create a grid of points.
-        xs = jnp.arange(map_width)
-        ys = jnp.arange(map_height)
-        X, Y = jnp.meshgrid(xs, ys, indexing='xy')
-        pts = jnp.stack([X, Y], axis=-1).reshape((-1, 2))  # (N,2)
-
-        # Shift corners so that each edge is computed with the next vertex.
-        # (4,2) corner array.
-        edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
-        # For each edge, compute a vector from its starting vertex to all points.
-        diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
-        # Broadcast the edge for each point.
-        edges_exp = edges[:, None, :]  # (4, 1, 2)
-        # 2D cross product: for vectors (a, b) and (c, d), it is a*d - b*c.
-        cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
-        # For a convex polygon all cross products should be >=0 or <=0.
-        inside = jnp.logical_or(jnp.all(cross >= 0, axis=0), jnp.all(cross <= 0, axis=0))
-        mask = inside.reshape((map_width, map_height))
-        return mask
-
     def _is_valid_move(self, agent_corners: Array) -> Array:
         """
         Checks if the move is valid by computing the agent occupancy mask (using a
@@ -286,7 +261,7 @@ class State(NamedTuple):
         )
 
         # Determine the occupancy mask for a grid of size map_width x map_height.
-        polygon_mask = self._compute_polygon_mask(agent_corners, map_width, map_height)
+        polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(

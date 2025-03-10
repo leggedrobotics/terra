@@ -7,8 +7,8 @@ from jax import Array
 from terra.config import EnvConfig
 from terra.settings import IntLowDim
 from terra.settings import IntMap
+from terra.utils import compute_polygon_mask
 from terra.utils import get_agent_corners
-from terra.utils import get_agent_corners_xy
 
 
 class AgentState(NamedTuple):
@@ -141,38 +141,12 @@ def _get_random_init_state(
             agent_corners_xy = get_agent_corners(
                 pos_base, angle_base, agent_width, agent_height
             )
-            x_minmax_agent, y_minmax_agent = get_agent_corners_xy(agent_corners_xy)
+            polygon_mask = compute_polygon_mask(
+                agent_corners_xy, map_width, map_height
+            )
 
-            padding_mask_reduced = jnp.where(
-                (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(
-                    map_height, axis=1
-                ),
-                0,
-                padding_mask,
-            )
-            padding_mask_reduced = jnp.where(
-                (jnp.arange(map_width) > x_minmax_agent[1])[:, None].repeat(
-                    map_height, axis=1
-                ),
-                0,
-                padding_mask_reduced,
-            )
-            padding_mask_reduced = jnp.where(
-                (jnp.arange(map_height) < y_minmax_agent[0])[None].repeat(
-                    map_width, axis=0
-                ),
-                0,
-                padding_mask_reduced,
-            )
-            padding_mask_reduced = jnp.where(
-                (jnp.arange(map_height) > y_minmax_agent[1])[None].repeat(
-                    map_width, axis=0
-                ),
-                0,
-                padding_mask_reduced,
-            )
-            valid_move = jnp.all(padding_mask_reduced == 0)
-            return ~valid_move
+            obstacle_inside = jnp.any(jnp.logical_and(polygon_mask, padding_mask == 1))
+            return obstacle_inside
 
         keep_searching = jax.lax.cond(
             jnp.any(pos_base < 0) | jnp.any(angle_base < 0),
