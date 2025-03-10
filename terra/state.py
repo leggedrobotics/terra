@@ -160,31 +160,22 @@ class State(NamedTuple):
     def _do_nothing(self):
         return self
 
-    @staticmethod
-    def _base_orientation_to_one_hot_forward(base_orientation: IntLowDim):
+    def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+        return jax.nn.one_hot(base_orientation, self.env_cfg.agent.angles_base, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
-        Converts the base orientation (int 0 to N) to a one-hot encoded vector.
-        Use for the backwards action.
+        Converts the base orientation (int 0 to N) to a one-hot encoded vector
+        for the backwards direction.
         """
-        fwd_to_bkwd_transformation = jnp.array(
-            [
-                [0, 0, 1, 0],
-                [0, 0, 0, 1],
-                [1, 0, 0, 0],
-                [0, 1, 0, 0],
-            ],
-            dtype=IntLowDim,
-        )
-        orientation_one_hot = self._base_orientation_to_one_hot_forward(
-            base_orientation
-        )
+        num_angles = self.env_cfg.agent.angles_base
+        # Create a permutation matrix by shifting the identity by num_angles//2 positions.
+        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
+        orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
     @staticmethod
