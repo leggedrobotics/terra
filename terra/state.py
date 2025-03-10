@@ -63,8 +63,6 @@ class State(NamedTuple):
 
     env_steps: int
 
-    xy_delta: jnp.array
-
     @classmethod
     def new(
         cls,
@@ -87,17 +85,12 @@ class State(NamedTuple):
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
-        # Compute the xy delta for a forward move along that angle.
-        angles = jnp.linspace(0, 2 * jnp.pi, env_cfg.agent.angles_base, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
-        xy_delta = env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
-
         return State(
             key=key,
             env_cfg=env_cfg,
             world=world,
             agent=agent,
             env_steps=0,
-            xy_delta=xy_delta,
         )
 
     def _reset(
@@ -173,7 +166,8 @@ class State(NamedTuple):
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        return jax.nn.one_hot(base_orientation, self.env_cfg.agent.angles_base, dtype=IntLowDim)
+        # TODO: Do not hardcode - find a way around JIT compilation to provide this as constant
+        return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
@@ -218,6 +212,7 @@ class State(NamedTuple):
         # Build the rotation matrix.
         R = jnp.array([[cos_a, -sin_a],
                     [sin_a,  cos_a]])
+        R = R.squeeze()
 
         # Rotate local corners and translate by the center position.
         global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=float)
@@ -228,7 +223,7 @@ class State(NamedTuple):
             global_corners_float < center_arr,
             jnp.floor(global_corners_float),
             jnp.ceil(global_corners_float)
-        ).astype(int)
+        ).astype(IntLowDim)
 
         return biased_corners
 
@@ -284,8 +279,10 @@ class State(NamedTuple):
         return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        # Use the precomputed xy_delta to select the correct move delta.
-        delta_xy = orientation_vector @ self.xy_delta  # shape (2,)
+        # Compute the xy delta for a forward move along that angle.
+        angles = jnp.linspace(0, 2 * jnp.pi, self.env_cfg.agent.angles_base, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
+        xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
+        delta_xy = orientation_vector @ xy_delta  # shape (2,)
         
         # Compute candidate new position and immediately round it to discrete grid points.
         candidate_pos = self.agent.agent_state.pos_base + delta_xy

@@ -139,7 +139,7 @@ def _get_random_init_state(
             The padding mask is the map encoding obstacles (1 for obstacle and 0 for no obstacle).
             """
             agent_corners_xy = get_agent_corners(
-                pos_base, angle_base, agent_width, agent_height
+                pos_base, angle_base, agent_width, agent_height, env_cfg.agent.angles_base
             )
             polygon_mask = compute_polygon_mask(
                 agent_corners_xy, map_width, map_height

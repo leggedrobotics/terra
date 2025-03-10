@@ -181,17 +181,18 @@ def get_agent_corners(
     # Build the rotation matrix.
     R = jnp.array([[cos_a, -sin_a],
                 [sin_a,  cos_a]])
+    R = R.squeeze()
 
     # Rotate local corners and translate by the center position.
-    global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=float)
+    global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=IntLowDim)
 
     # Bias the rounding: use floor if below the center, ceil otherwise.
-    center_arr = jnp.array(pos_base, dtype=float)
+    center_arr = jnp.array(pos_base, dtype=IntLowDim)
     biased_corners = jnp.where(
         global_corners_float < center_arr,
         jnp.floor(global_corners_float),
         jnp.ceil(global_corners_float)
-    ).astype(int)
+    ).astype(IntLowDim)
 
     return biased_corners
 
