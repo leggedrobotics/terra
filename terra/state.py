@@ -282,7 +282,8 @@ class State(NamedTuple):
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
         # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        angles = jnp.linspace(0, 2 * jnp.pi, 8, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
+        angles = jnp.linspace(0, 2 * jnp.pi, 8, endpoint=False)
+        angles = (2 * jnp.pi) - angles
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
         
