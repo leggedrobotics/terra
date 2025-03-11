@@ -166,7 +166,7 @@ class State(NamedTuple):
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        # TODO: Do not hardcode - find a way around JIT compilation to provide this as constant
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
         return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
@@ -174,9 +174,9 @@ class State(NamedTuple):
         Converts the base orientation (int 0 to N) to a one-hot encoded vector
         for the backwards direction.
         """
-        num_angles = self.env_cfg.agent.angles_base
-        # Create a permutation matrix by shifting the identity by num_angles//2 positions.
-        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
+        # Create a permutation matrix by shifting the identity
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
+        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(4, dtype=IntLowDim), shift=4 // 2, axis=0)
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
@@ -280,18 +280,20 @@ class State(NamedTuple):
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
-        angles = jnp.linspace(0, 2 * jnp.pi, self.env_cfg.agent.angles_base, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
+        angles = jnp.linspace(0, 2 * jnp.pi, 4, endpoint=False) + jnp.pi / 2 # TODO: check if this angle should be added
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
-        delta_xy = orientation_vector @ xy_delta  # shape (2,)
+        delta_xy = orientation_vector @ xy_delta
         
         # Compute candidate new position and immediately round it to discrete grid points.
         candidate_pos = self.agent.agent_state.pos_base + delta_xy
         candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
+        candidate_pos = jnp.squeeze(candidate_pos, axis=0)
         
         # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
             candidate_pos,
-            base_angle_deg=self.agent.agent_state.angle_base,
+            base_orientation=self.agent.agent_state.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
@@ -352,7 +354,7 @@ class State(NamedTuple):
         # Compute the agent's polygon for the candidate new angle.
         candidate_corners = self._get_agent_corners(
             self.agent.agent_state.pos_base,
-            base_angle_deg=new_angle_base,
+            base_orientation=new_angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
