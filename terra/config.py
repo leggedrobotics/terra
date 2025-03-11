@@ -40,7 +40,7 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 4
+    angles_base: int = 8
     angles_cabin: int = 8
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
 
