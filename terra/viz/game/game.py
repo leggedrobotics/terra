@@ -4,8 +4,9 @@ from PIL import Image
 from .world import World
 from .agent import Agent
 from .settings import MAP_TILES
-from terra.config import ExcavatorDims, ImmutableMapsConfig
+from terra.config import ExcavatorDims, ImmutableMapsConfig, ImmutableAgentConfig
 import threading
+import math
 
 
 def get_agent_dims(agent_w_m, agent_h_m, tile_size_m):
@@ -56,14 +57,18 @@ class Game:
         agent_h, agent_w = get_agent_dims(
             excavator_dims.WIDTH, excavator_dims.HEIGHT, tile_size_m
         )
+        angles_base = ImmutableAgentConfig().angles_base
+        angles_cabin = ImmutableAgentConfig().angles_cabin
         print(f"Agent size (in rendering): {agent_w}x{agent_h}")
         print(f"Tile size (in rendering): {tile_size_m}")
         print(f"Rendering tile size: {tile_size}")
+        print(f"Number of possible base rotations: {angles_base}")
+        print(f"Number of possible cabin rotations: {angles_cabin}")
         for _ in range(self.n_envs):
             self.worlds.append(
                 World(maps_size_px, maps_size_px, self.width, self.height, tile_size)
             )
-            self.agents.append(Agent(agent_w, agent_h, tile_size))
+            self.agents.append(Agent(agent_w, agent_h, tile_size, angles_base, angles_cabin))
 
         self.frames = []
 
@@ -165,7 +170,6 @@ class Game:
         self.surface.fill("#F0F0F0")
         agent_surfaces = []
         agent_positions = []
-        cabin_positions = []
 
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
             ix = i % self.n_envs_y
@@ -178,18 +182,7 @@ class Game:
                 iy * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
             )
 
-            # Target map
-            # for x in range(world.grid_length_x):
-            #     for y in range(world.grid_length_y):
-
-            #         sq = world.target_map[x][y]["cart_rect"]
-            #         c = world.target_map[x][y]["color"]
-            #         rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
-            #         pg.draw.rect(self.surface, c, rect, 0)
-            #         # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
-
-            # Action map
-            # offset = 61 * TILE_SIZE
+            # Draw terrain
             for x in range(world.grid_length_x):
                 for y in range(world.grid_length_y):
                     sq = world.action_map[x][y]["cart_rect"]
@@ -201,29 +194,44 @@ class Game:
                         self.tile_size,
                     )
                     pg.draw.rect(self.surface, c, rect, 0)
-                    # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
 
-            a = agent.agent["body"]["vertices"]
-            w = agent.agent["body"]["width"]
-            h = agent.agent["body"]["height"]
-
+            # Get vertices for the agent body
+            body_vertices = agent.agent["body"]["vertices"]
             ca = agent.agent["body"]["color"]
-            agent_x = a[0][0] + total_offset_x
-            agent_y = a[0][1] + total_offset_y
-            a_rect = pg.Rect(0, 0, w * self.tile_size, h * self.tile_size)
+            
+            # Calculate the bounding box
+            min_x = min(v[0] for v in body_vertices)
+            min_y = min(v[1] for v in body_vertices)
+            max_x = max(v[0] for v in body_vertices)
+            max_y = max(v[1] for v in body_vertices)
+            
+            # Calculate surface size with a small padding
+            surface_width = math.ceil(max_x - min_x) + 2
+            surface_height = math.ceil(max_y - min_y) + 2
+            
+            # Create surface for the agent
             agent_surfaces.append(
-                pg.Surface((w * self.tile_size, h * self.tile_size), pg.SRCALPHA)
+                pg.Surface((surface_width, surface_height), pg.SRCALPHA)
             )
             if self.progressive_gif:
                 agent_surfaces[-1].set_alpha(50)
-
+            
+            # Calculate surface position
+            agent_x = min_x + total_offset_x
+            agent_y = min_y + total_offset_y
             agent_positions.append((agent_x, agent_y))
-            pg.draw.rect(agent_surfaces[-1], ca, a_rect, 0, 3)
-
+            
+            # Adjust vertices for the agent's surface
+            offset_vertices = [(v[0] - min_x, v[1] - min_y) for v in body_vertices]
+            
+            # Draw agent body as polygon
+            pg.draw.polygon(agent_surfaces[-1], ca, offset_vertices)
+            
+            # Get cabin vertices and adjust for agent surface
             cabin = agent.agent["cabin"]["vertices"]
-            cabin = [(el[0] - a[0][0], el[1] - a[0][1]) for el in cabin]
+            cabin_offset = [(v[0] - min_x, v[1] - min_y) for v in cabin]
             cabin_color = agent.agent["cabin"]["color"]
-            pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
+            pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin_offset)
 
         self.screen.blit(self.surface, (0, 0))
 
