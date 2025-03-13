@@ -226,8 +226,8 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
+            target_tiles=target_tiles,
             generate_gif=generate_gif,
-            # agent_width=obs["agent_width"],
         )
 
     def render_obs(
