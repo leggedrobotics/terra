@@ -80,6 +80,7 @@ class Game:
         base_dir,
         cabin_dir,
         generate_gif,
+        target_tiles=None,
     ):
         # self.events()
         self.update(
@@ -90,6 +91,7 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            target_tiles,
         )
         self.draw()
         if generate_gif:
@@ -127,6 +129,7 @@ class Game:
         agent_pos,
         base_dir,
         cabin_dir,
+        target_tiles=None,
     ):
         def update_world_agent(
             world,
@@ -138,9 +141,12 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
             agent.update(agent_pos, base_dir, cabin_dir)
+            if target_tiles is not None:
+                world.target_tiles = target_tiles
 
         threads = []
         for i in range(self.n_envs):
@@ -151,9 +157,10 @@ class Game:
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
+            tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd),
+                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd, tt),
             )
             thread.start()
             threads.append(thread)
@@ -165,7 +172,6 @@ class Game:
         self.surface.fill("#F0F0F0")
         agent_surfaces = []
         agent_positions = []
-        cabin_positions = []
 
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
             ix = i % self.n_envs_y
@@ -178,18 +184,7 @@ class Game:
                 iy * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
             )
 
-            # Target map
-            # for x in range(world.grid_length_x):
-            #     for y in range(world.grid_length_y):
-
-            #         sq = world.target_map[x][y]["cart_rect"]
-            #         c = world.target_map[x][y]["color"]
-            #         rect = pg.Rect(sq[0][0]+ total_offset_x, sq[0][1]+ total_offset_y, TILE_SIZE, TILE_SIZE)
-            #         pg.draw.rect(self.surface, c, rect, 0)
-            #         # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
-
             # Action map
-            # offset = 61 * TILE_SIZE
             for x in range(world.grid_length_x):
                 for y in range(world.grid_length_y):
                     sq = world.action_map[x][y]["cart_rect"]
@@ -201,12 +196,18 @@ class Game:
                         self.tile_size,
                     )
                     pg.draw.rect(self.surface, c, rect, 0)
-                    # pg.draw.rect(self.screen, (255, 255, 255), rect, 1)
+
+                    # Highlight target tiles (where the digger will dig / dump)
+                    if hasattr(world, 'target_tiles') and world.target_tiles is not None:
+                        flat_idx = y * world.grid_length_x + x
+                        if flat_idx < len(world.target_tiles) and world.target_tiles[flat_idx]:
+                            pg.draw.rect(self.surface, "#FF3300", rect, 2)
 
             a = agent.agent["body"]["vertices"]
             w = agent.agent["body"]["width"]
             h = agent.agent["body"]["height"]
 
+            # Get vertices for the agent body
             ca = agent.agent["body"]["color"]
             agent_x = a[0][0] + total_offset_x
             agent_y = a[0][1] + total_offset_y

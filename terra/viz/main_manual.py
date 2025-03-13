@@ -108,6 +108,7 @@ def main():
 
         env.terra_env.render_obs_pygame(
             timestep.observation,
+            timestep.info,
         )
 
 
