@@ -197,6 +197,37 @@ Two types of excavators are abstracted in Terra: tracked and wheeled. The differ
 ### Map Types
 Terra comes with two types of maps: foundations and trenches. Foundations are produced by projecting real building profiles from OpenStreetMap on the grid map. Trenches are procedurally generated and are divided in three categories based on the number of axes the trench has (1 to 3). All the maps have additional layers to encode obstacles, regions where the excavator can't dump terrain (e.g. roads), and regions where the excavator needs to dump all the terrain to terminate the episode (terminal dumping areas). Check out `map.py` for the documentation of the map layering and logic. 
 
+## Observation Space 🔍
+The agent in Terra perceives the environment through a rich observation space that provides comprehensive information about the state of the world and the agent itself. The observation is a dictionary with the following components:
+
+- **agent_states**: A 6-dimensional vector containing:
+  - Position of the base (x, y coordinates)
+  - Base rotation angle
+  - Cabin rotation angle
+  - Arm extension
+  - Whether the agent is loaded with dirt (0 or 1)
+
+- **Local Maps**: The agent has access to local maps representing different aspects of the environment from the agent's perspective:
+  - **local_map_action_neg/pos**: Current state of the terrain (negative/positive height) within the agent's reach
+  - **local_map_target_neg/pos**: Target digging profile (negative/positive height) within reach
+  - **local_map_dumpability**: Areas where the agent can dump soil within reach
+  - **local_map_obstacles**: Obstacles within the agent's reach
+
+- **Global Maps**: Full maps of the environment:
+  - **action_map**: Current state of the terrain across the entire map
+  - **target_map**: Target digging profile across the entire map
+  - **traversability_mask**: Areas where the agent can navigate
+  - **do_preview**: Preview of the dig/dump action result if executed
+  - **dig_map**: Areas that have been dug
+  - **dumpability_mask**: Areas where the agent can dump soil
+  - **padding_mask**: Areas with obstacles
+
+- **Agent Dimensions**:
+  - **agent_width**: Width of the agent
+  - **agent_height**: Height of the agent
+
+This rich observation space allows the agent to understand both its immediate surroundings and the global state of the environment, enabling effective planning for navigation, digging, and dumping operations.
+
 ## Performance 🔥
 We benchmark the environments by measuring the runtime of our PPO algorithm including environment steps and model update on Nvidia RTX-4090 GPUs. For all the experiments we keep constant 32 steps, 32 minibatches, and 1 update epoch.
 

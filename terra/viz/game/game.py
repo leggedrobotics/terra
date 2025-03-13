@@ -85,6 +85,7 @@ class Game:
         base_dir,
         cabin_dir,
         generate_gif,
+        target_tiles=None,
     ):
         # self.events()
         self.update(
@@ -95,6 +96,7 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            target_tiles,
         )
         self.draw()
         if generate_gif:
@@ -132,6 +134,7 @@ class Game:
         agent_pos,
         base_dir,
         cabin_dir,
+        target_tiles=None,
     ):
         def update_world_agent(
             world,
@@ -143,9 +146,12 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
             agent.update(agent_pos, base_dir, cabin_dir)
+            if target_tiles is not None:
+                world.target_tiles = target_tiles
 
         threads = []
         for i in range(self.n_envs):
@@ -156,9 +162,10 @@ class Game:
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
+            tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd),
+                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd, tt),
             )
             thread.start()
             threads.append(thread)
@@ -195,7 +202,12 @@ class Game:
                     )
                     pg.draw.rect(self.surface, c, rect, 0)
 
-            # Get vertices for the agent body
+                    # Highlight target tiles (where the digger will dig / dump)
+                    if hasattr(world, 'target_tiles') and world.target_tiles is not None:
+                        flat_idx = y * world.grid_length_x + x
+                        if flat_idx < len(world.target_tiles) and world.target_tiles[flat_idx]:
+                            pg.draw.rect(self.surface, "#FF3300", rect, 2)
+
             body_vertices = agent.agent["body"]["vertices"]
             ca = agent.agent["body"]["color"]
             
