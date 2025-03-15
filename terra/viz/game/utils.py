@@ -10,33 +10,37 @@ def rotate_triangle(center, points, scale, angle):
     return triangle_points
 
 
-def agent_base_to_angle(agent_base):
-    if agent_base == 0:
-        angle = 0
-    elif agent_base == 1:
-        angle = 270
-    elif agent_base == 2:
-        angle = 180
-    elif agent_base == 3:
-        angle = 90
-    return angle
+def validate_angle_divisions(angle_count):
+    if 360 % angle_count != 0:
+        raise ValueError(f"Angle count must divide 360 evenly, got {angle_count}")
+    if angle_count % 4 != 0:
+        raise ValueError(f"Angle count must be a multiple of 4, got {angle_count}")
 
 
-def agent_cabin_to_angle(agent_cabin):
-    if agent_cabin == 0:
-        angle = 0
-    elif agent_cabin == 1:
-        angle = 315
-    elif agent_cabin == 2:
-        angle = 270
-    elif agent_cabin == 3:
-        angle = 225
-    elif agent_cabin == 4:
-        angle = 180
-    elif agent_cabin == 5:
-        angle = 135
-    elif agent_cabin == 6:
-        angle = 90
-    elif agent_cabin == 7:
-        angle = 45
-    return angle
+def agent_base_to_angle(agent_base, base_angles=8):
+    """
+    Args:
+        agent_base: The index of the base direction
+        base_angles: Total number of possible base directions (default: 8)
+    
+    Returns:
+        The angle in degrees
+    """
+
+    validate_angle_divisions(base_angles)
+    angle_increment = 360 / base_angles
+    return (360 - (agent_base * angle_increment)) % 360
+
+
+def agent_cabin_to_angle(agent_cabin, cabin_angles=8):
+    """
+    Args:
+        agent_cabin: The index of the cabin direction
+        cabin_angles: Total number of possible cabin directions (default: 8)
+    
+    Returns:
+        The angle in degrees
+    """
+    validate_angle_divisions(cabin_angles)
+    angle_increment = 360 / cabin_angles
+    return (360 - (agent_cabin * angle_increment)) % 360
