@@ -43,7 +43,7 @@ class Agent:
             rotated_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
             rotated_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
             # Translate to actual position
-            agent_body.append((center_x + rotated_x, center_y + rotated_y))
+            agent_body.append((center_y + rotated_x, center_x + rotated_y))
         
         # Use the actual dimensions for the agent
         w = self.width
@@ -61,7 +61,7 @@ class Agent:
             (-1.5 / scaling, 1.5 / scaling),
         ]
         agent_cabin = rotate_triangle(
-            (center_x, center_y), points, self.tile_size, global_cabin_angle
+            (center_y, center_x), points, self.tile_size, global_cabin_angle
         )
 
         loaded = False
