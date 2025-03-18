@@ -1,3 +1,8 @@
+# IMPORTANT: The correct version of laxlib is NOT installed by default since
+# it is not available in the conda-forge channel. You must install it manually
+# within the environment. Use the following command:
+# pip install -U "jax[cuda12]"
+
 name: terra
 channels:
   - defaults
@@ -64,7 +69,6 @@ dependencies:
     - imageio==2.34.0
     - importlib-resources==6.3.1
     - jax==0.4.26
-    - jaxlib==0.4.26+cuda12.cudnn89
     - keras==3.0.5
     - kiwisolver==1.4.5
     - lazy-loader==0.3
@@ -107,7 +111,7 @@ dependencies:
     - pip==24.0
     - platformdirs==4.2.0
     - pre-commit==3.6.2
-    - protobuf==3.20.1
+    - protobuf==3.20.3
     - psutil==5.9.8
     - pycodestyle==2.11.1
     - pyflakes==3.2.0
@@ -147,4 +151,3 @@ dependencies:
     - werkzeug==3.0.1
     - wrapt==1.16.0
     - zipp==3.18.1
-prefix: /home/lorenzo/anaconda3/envs/terra
