@@ -107,15 +107,13 @@ class WheeledActionType(ActionType):
     DO_NOTHING = -1
     FORWARD = 0
     BACKWARD = 1
-    CLOCK_FORWARD = 2
-    CLOCK_BACKWARD = 3
-    ANTICLOCK_FORWARD = 4
-    ANTICLOCK_BACKWARD = 5
-    CABIN_CLOCK = 6
-    CABIN_ANTICLOCK = 7
-    EXTEND_ARM = 8
-    RETRACT_ARM = 9
-    DO = 10
+    WHEELS_LEFT = 2
+    WHEELS_RIGHT = 3
+    CABIN_CLOCK = 4
+    CABIN_ANTICLOCK = 5
+    EXTEND_ARM = 6
+    RETRACT_ARM = 7
+    DO = 8
 
 
 class WheeledAction(Action):
@@ -143,25 +141,13 @@ class WheeledAction(Action):
         return cls.new(jnp.full((1,), WheeledActionType.BACKWARD, dtype=IntLowDim))
 
     @classmethod
-    def clock_forward(cls):
-        return cls.new(jnp.full((1,), WheeledActionType.CLOCK_FORWARD, dtype=IntLowDim))
+    def wheels_left(cls):
+        return cls.new(jnp.full((1,), WheeledActionType.WHEELS_LEFT, dtype=IntLowDim))
 
     @classmethod
-    def clock_backward(cls):
+    def wheels_right(cls):
         return cls.new(
-            jnp.full((1,), WheeledActionType.CLOCK_BACKWARD, dtype=IntLowDim)
-        )
-
-    @classmethod
-    def anticlock_forward(cls):
-        return cls.new(
-            jnp.full((1,), WheeledActionType.ANTICLOCK_FORWARD, dtype=IntLowDim)
-        )
-
-    @classmethod
-    def anticlock_backward(cls):
-        return cls.new(
-            jnp.full((1,), WheeledActionType.ANTICLOCK_BACKWARD, dtype=IntLowDim)
+            jnp.full((1,), WheeledActionType.WHEELS_RIGHT, dtype=IntLowDim)
         )
 
     @classmethod
