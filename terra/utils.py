@@ -211,6 +211,6 @@ def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Arr
     diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
     edges_exp = edges[:, None, :]  # (4, 1, 2)
     cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
-    inside = jnp.logical_or(jnp.all(cross >= 0, axis=0), jnp.all(cross <= 0, axis=0))
+    inside = jnp.logical_or(jnp.all(cross > 0, axis=0), jnp.all(cross < 0, axis=0))
     mask = inside.reshape((map_height, map_width))
     return mask
