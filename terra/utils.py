@@ -203,21 +203,14 @@ def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Arr
     by the polygon defined by its corners.
     """
     # Create a grid of points.
-    xs = jnp.arange(map_width)
-    ys = jnp.arange(map_height)
+    xs = jnp.arange(map_height)
+    ys = jnp.arange(map_width)
     X, Y = jnp.meshgrid(xs, ys, indexing='xy')
-    pts = jnp.stack([X, Y], axis=-1).reshape((-1, 2))  # (N,2)
-
-    # Shift corners so that each edge is computed with the next vertex.
-    # (4,2) corner array.
+    pts = jnp.stack([Y, X], axis=-1).reshape((-1, 2))  # (N,2) as [y,x]
     edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
-    # For each edge, compute a vector from its starting vertex to all points.
     diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
-    # Broadcast the edge for each point.
     edges_exp = edges[:, None, :]  # (4, 1, 2)
-    # 2D cross product: for vectors (a, b) and (c, d), it is a*d - b*c.
     cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
-    # For a convex polygon all cross products should be >=0 or <=0.
     inside = jnp.logical_or(jnp.all(cross >= 0, axis=0), jnp.all(cross <= 0, axis=0))
-    mask = inside.reshape((map_width, map_height))
+    mask = inside.reshape((map_height, map_width))
     return mask
