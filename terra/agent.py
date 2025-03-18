@@ -25,6 +25,7 @@ class AgentState(NamedTuple):
     pos_base: IntMap
     angle_base: IntLowDim
     angle_cabin: IntLowDim
+    wheel_angle: IntLowDim
     arm_extension: IntLowDim
     loaded: IntLowDim
 
@@ -66,6 +67,7 @@ class Agent(NamedTuple):
             pos_base=pos_base,
             angle_base=angle_base,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             arm_extension=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
         )
