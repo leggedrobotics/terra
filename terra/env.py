@@ -348,6 +348,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.angle_cabin,
                 state.agent.agent_state.arm_extension,
                 state.agent.agent_state.loaded,
+                state.agent.agent_state.wheel_angle,
             ]
         )
         return {
@@ -543,7 +544,7 @@ class TerraEnvBatch:
             - value: the tuple representing the shape of the input feature
         """
         return {
-            "agent_states": (6,),
+            "agent_states": (7,),
             "local_map_action_neg": (
                 self.batch_cfg.agent.angles_cabin,
                 self.batch_cfg.agent.max_arm_extension + 1,
