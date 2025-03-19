@@ -75,6 +75,7 @@ class Rewards(NamedTuple):
     base_turn: float
 
     cabin_turn: float
+    wheel_turn: float
 
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
@@ -101,6 +102,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.02,
+            wheel_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
@@ -121,6 +123,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.02,
+            wheel_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,

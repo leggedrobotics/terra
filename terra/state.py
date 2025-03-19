@@ -1112,10 +1112,29 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.base_turn
         return reward
 
+    def _handle_rewards_wheel_turn(
+        self, new_state: "State", action: WheeledActionType
+    ) -> Float:
+        reward = 0.0
+
+        # Check if wheels actually turned
+        wheel_turned = ~jnp.allclose(
+            self.agent.agent_state.wheel_angle,
+            new_state.agent.agent_state.wheel_angle
+        )
+
+        # Apply rewards if wheels turned
+        reward += jax.lax.cond(
+            wheel_turned,
+            lambda: self.env_cfg.rewards.wheel_turn,
+            lambda: 0.0
+        )
+
+        return reward
+
     def _handle_rewards_cabin_turn(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Cabin turn
         return self.env_cfg.rewards.cabin_turn
 
     @staticmethod
@@ -1316,12 +1335,9 @@ class State(NamedTuple):
         )
 
         reward += jax.lax.cond(
-            (action == WheeledActionType.CLOCK_FORWARD)
-            | (action == WheeledActionType.ANTICLOCK_FORWARD)
-            | (action == WheeledActionType.CLOCK_BACKWARD)
-            | (action == WheeledActionType.ANTICLOCK_BACKWARD),
-            lambda new_state, action: self._handle_rewards_base_turn(new_state, action)
-            + self._handle_rewards_move(new_state, action),
+            (action == WheeledActionType.WHEELS_LEFT)
+            | (action == WheeledActionType.WHEELS_RIGHT),
+            self._handle_rewards_wheel_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
