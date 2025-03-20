@@ -139,7 +139,7 @@ dependencies:
     - tensorflow-probability==0.24.0
     - tensorstore==0.1.56
     - termcolor==2.4.0
-    - terra==0.0.1
+    - -e git+https://github.com/leggedrobotics/terra.git#egg=terra
     - tifffile==2024.2.12
     - toolz==0.12.1
     - tqdm==4.66.2
