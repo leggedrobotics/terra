@@ -1541,8 +1541,6 @@ class State(NamedTuple):
                 bool_extend_arm,
                 bool_retract_arm,
                 bool_do,
-                0,  # dummy
-                0,  # dummy
             ],
             dtype=jnp.bool_,
         )
