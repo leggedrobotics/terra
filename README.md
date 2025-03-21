@@ -69,7 +69,9 @@ and [JAX](https://docs.jax.dev/en/latest/installation.html).
 
 At the moment you should use jaxlib and jax version <= 0.4.26 as `jax.tree_map` is deprecated in newer versions
 
+```bash
 pip install -U "jax[cuda12]==0.4.26" jaxlib==0.4.26+cuda12.cudnn89 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
 
 With GPU (NVIDIA, CUDA 12):
 
