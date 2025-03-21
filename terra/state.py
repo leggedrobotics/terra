@@ -133,8 +133,8 @@ class State(NamedTuple):
             self._handle_retract_arm,
             self._handle_do,
             # Wheeled
-            self._handle_move_forward,
-            self._handle_move_backward,
+            self._handle_move_forward_wheeled,
+            self._handle_move_backward_wheeled,
             self._handle_turn_wheels_left,
             self._handle_turn_wheels_right,
             self._handle_cabin_clock,
@@ -313,23 +313,20 @@ class State(NamedTuple):
         )
 
     def _move_on_orientation_with_steering(self, orientation_vector: Array) -> "State":
-        """
-        Moves the wheeled vehicle along an arc determined by current wheel angle.
-        Similar to _move_on_orientation but accounts for wheel steering.
-        """
-        # Get wheel angle in radians for trajectory calculation
-        wheel_angle = self.agent.agent_state.wheel_angle[0]
+        return jax.lax.cond(
+            self.agent.agent_state.wheel_angle[0] == 0,
+            lambda: self._move_on_orientation(orientation_vector),
+            lambda: self._execute_curved_movement(orientation_vector),
+        )
 
-        # If wheels are straight, use normal movement
-        if wheel_angle == 0:
-            return self._move_on_orientation(orientation_vector)
-
+    def _execute_curved_movement(self, orientation_vector: Array) -> "State":
         angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
         xy_delta = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         direction_vector = orientation_vector @ xy_delta
         is_forward = direction_vector[0] > 0
 
         # For backward movement, reverse the wheel angle effect
+        wheel_angle = self.agent.agent_state.wheel_angle[0]
         effective_wheel_angle = jnp.where(is_forward, wheel_angle, -wheel_angle)
         wheel_angle_rad = jnp.deg2rad(effective_wheel_angle * self.env_cfg.agent.max_wheel_angle)
 
