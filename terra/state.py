@@ -322,7 +322,7 @@ class State(NamedTuple):
     def _execute_curved_movement(self, orientation_vector: Array) -> "State":
         angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
         xy_delta = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
-        direction_vector = orientation_vector @ xy_delta
+        direction_vector = jnp.squeeze(orientation_vector @ xy_delta)
         is_forward = direction_vector[0] > 0
 
         # For backward movement, reverse the wheel angle effect
@@ -336,10 +336,10 @@ class State(NamedTuple):
         # Calculate center of rotation (perpendicular to current orientation)
         # Positive wheel angle means turn left, so center is to the left
         base_angle_rad = self._get_base_angle_rad()
-        center_offset = jnp.array([
+        center_offset = np.squeeze(jnp.array([
             -jnp.sin(base_angle_rad) * turn_radius * jnp.sign(effective_wheel_angle),
             jnp.cos(base_angle_rad) * turn_radius * jnp.sign(effective_wheel_angle)
-        ])
+        ]))
         center_of_rotation = self.agent.agent_state.pos_base + center_offset
 
         # Compute how far we move along the arc and new orientation
