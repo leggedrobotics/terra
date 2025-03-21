@@ -53,6 +53,8 @@ class AgentConfig(NamedTuple):
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
     max_arm_extension: int = ImmutableAgentConfig().max_arm_extension
+    max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
+    wheel_step: float = ImmutableAgentConfig().wheel_step
 
     move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
@@ -304,7 +306,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
+    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
