@@ -57,9 +57,15 @@ After creating the environment, activate it with:
 conda activate terra
 ```
 
-### Installing JAX
+### Installing Terra and JAX
 
-After activating the environment it is necessary to install [JAX](https://docs.jax.dev/en/latest/installation.html).
+After activating the environment it is necessary to install Terra
+
+```bash
+pip install -e .
+```
+
+and [JAX](https://docs.jax.dev/en/latest/installation.html).
 
 With GPU (NVIDIA, CUDA 12):
 
