@@ -382,8 +382,6 @@ class State(NamedTuple):
         old_new_angle = jnp.array([self.agent.agent_state.angle_base, new_angle_base])
         new_angle_base = valid_move_mask @ old_new_angle
 
-        jax.debug.breakpoint()
-
         return self._replace(
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(
