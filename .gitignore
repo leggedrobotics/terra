@@ -11,8 +11,10 @@ cache/
 docs/
 terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*
-viz/
 terra/viz_legacy/__pycache__/
 terra/env_generation/__pycache__/
 terra/digbench/
 data/
+OPENAI_API_KEY.txt
+experiments/AutonomousExcavatorGame_actions_rewards.csv
+all_responses.txt

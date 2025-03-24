@@ -508,6 +508,8 @@ class TerraEnvBatch:
             dumpability_mask_init,
             maps_buffer_keys,
         ) = self._get_map(maps_buffer_keys, timestep.env_cfg)
+        #print(f"Actions: {actions}, type: {type(actions)}")
+
         # Step the environment
         timestep = jax.vmap(self.terra_env.step)(
             timestep.state,
@@ -526,7 +528,7 @@ class TerraEnvBatch:
         """
         Number of actions played at every env step.
         """
-        return ()
+        return self.num_actions
 
     @property
     def num_actions(self) -> int:
