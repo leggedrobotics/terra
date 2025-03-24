@@ -330,7 +330,7 @@ class State(NamedTuple):
         wheel_angle_rad = jnp.deg2rad(effective_wheel_angle * self.env_cfg.agent.wheel_step)
 
         # Use width as wheelbase for turning radius calculation
-        turn_radius = self.env_cfg.agent.width / (jnp.tan(jnp.abs(wheel_angle_rad)) + 1e-6)
+        turn_radius = self.env_cfg.agent.width / (jnp.tan(wheel_angle_rad) + 1e-6)
 
         # Calculate center of rotation (perpendicular to current orientation)
         # Positive wheel angle means turn left, so center is to the left
@@ -381,6 +381,8 @@ class State(NamedTuple):
         # Choose between old and new angles
         old_new_angle = jnp.array([self.agent.agent_state.angle_base, new_angle_base])
         new_angle_base = valid_move_mask @ old_new_angle
+
+        jax.debug.breakpoint()
 
         return self._replace(
             agent=self.agent._replace(
