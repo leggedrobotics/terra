@@ -132,33 +132,12 @@ class Agent():
         #print("Model Key:", self.model_key)
         #print("Messages being sent to LLM:", json.dumps(self.messages, indent=2))  # Pretty print for clarity        # Check which model to use and prompt the model 
         if self.model_key=='gpt4' or self.model_key=='gpt4o':
-            #print("using openai")
-            # response = self.client.chat.completions.create(
-            #     model="gpt-4o-mini",
-            #     messages=[
-            #         {
-            #             "role": "user",
-            #             "content": [
-            #             {"type": "text", "text": "What's in this image?"},
-            #             {
-            #                 "type": "image_url",
-            #                 "image_url": {
-            #                     "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
-            #             },
-            #         },
-            #     ],
-            # }
-            # ],
-            # )
-
-            # print(response.choices[0].message.content)
 
             self.response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=self.messages,
             )
-            #print(self.response.choices[0].message.content)
-            #print("\nResponse from LLM:", self.response)  # Debugging
+
         elif self.model_key == 'claude':
             if self.system_message is not None:
                 self.response = self.client.messages.create(
