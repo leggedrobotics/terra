@@ -312,45 +312,43 @@ class State(NamedTuple):
             )
         )
 
-    def _move_on_orientation_with_steering(self, orientation_vector: Array) -> "State":
+    def _move_on_orientation_with_steering(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
         return jax.lax.cond(
             self.agent.agent_state.wheel_angle[0] == 0,
             lambda: self._move_on_orientation(orientation_vector),
-            lambda: self._execute_curved_movement(orientation_vector),
+            lambda: self._execute_curved_movement(orientation_vector, is_forward),
         )
 
-    def _execute_curved_movement(self, orientation_vector: Array) -> "State":
+    def _execute_curved_movement(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
         angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
-        xy_delta = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
-        direction_vector = jnp.squeeze(orientation_vector @ xy_delta)
-        is_forward = direction_vector[0] > 0
+        angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
+        orientation_angle = orientation_vector @ angles
 
         # For backward movement, reverse the wheel angle effect
         wheel_angle = self.agent.agent_state.wheel_angle[0]
         effective_wheel_angle = jnp.where(is_forward, wheel_angle, -wheel_angle)
-        wheel_angle_rad = jnp.deg2rad(effective_wheel_angle * self.env_cfg.agent.max_wheel_angle)
+        wheel_angle_rad = jnp.deg2rad(effective_wheel_angle * self.env_cfg.agent.wheel_step)
 
         # Use width as wheelbase for turning radius calculation
         turn_radius = self.env_cfg.agent.width / (jnp.tan(jnp.abs(wheel_angle_rad)) + 1e-6)
 
         # Calculate center of rotation (perpendicular to current orientation)
         # Positive wheel angle means turn left, so center is to the left
-        base_angle_rad = self._get_base_angle_rad()
         center_offset = np.squeeze(jnp.array([
-            -jnp.sin(base_angle_rad) * turn_radius * jnp.sign(effective_wheel_angle),
-            jnp.cos(base_angle_rad) * turn_radius * jnp.sign(effective_wheel_angle)
+            -jnp.sin(orientation_angle) * turn_radius,
+            jnp.cos(orientation_angle) * turn_radius
         ]))
         center_of_rotation = self.agent.agent_state.pos_base + center_offset
 
         # Compute how far we move along the arc and new orientation
         angle_change = self.env_cfg.agent.move_tiles / turn_radius
-        angle_change = jnp.where(is_forward, angle_change, -angle_change) * jnp.sign(effective_wheel_angle)
-        new_base_angle_rad = base_angle_rad + angle_change
+        angle_change = jnp.where(is_forward, angle_change, -angle_change)
+        new_base_angle_rad = orientation_angle + angle_change
 
         # Rotate the digger around the center of rotation
         rotation_matrix = jnp.array([
-            [jnp.cos(jnp.abs(angle_change)), -jnp.sin(jnp.abs(angle_change)) * jnp.sign(angle_change)],
-            [jnp.sin(jnp.abs(angle_change)) * jnp.sign(angle_change), jnp.cos(jnp.abs(angle_change))]
+            [jnp.cos(angle_change), -jnp.sin(angle_change)],
+            [jnp.sin(angle_change), jnp.cos(angle_change)]
         ])
         relative_pos = self.agent.agent_state.pos_base - center_of_rotation
         new_relative_pos = rotation_matrix @ relative_pos
@@ -432,7 +430,7 @@ class State(NamedTuple):
         def _move_forward_wheeled():
             base_orientation = self.agent.agent_state.angle_base
             orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
-            return self._move_on_orientation_with_steering(orientation_vector)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(True))
 
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward_wheeled
@@ -445,7 +443,7 @@ class State(NamedTuple):
         def _move_backward_wheeled():
             base_orientation = self.agent.agent_state.angle_base
             orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
-            return self._move_on_orientation_with_steering(orientation_vector)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
 
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward_wheeled
