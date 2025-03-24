@@ -79,6 +79,7 @@ class Game:
         agent_pos,
         base_dir,
         cabin_dir,
+        loaded,
         generate_gif,
         target_tiles=None,
     ):
@@ -91,6 +92,7 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            loaded,
             target_tiles,
         )
         self.draw()
@@ -129,6 +131,7 @@ class Game:
         agent_pos,
         base_dir,
         cabin_dir,
+        loaded,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -141,10 +144,11 @@ class Game:
             agent_pos,
             base_dir,
             cabin_dir,
+            loaded,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
-            agent.update(agent_pos, base_dir, cabin_dir)
+            agent.update(agent_pos, base_dir, cabin_dir, loaded)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -157,10 +161,11 @@ class Game:
             ap = agent_pos[i]
             bd = base_dir[i]
             cd = cabin_dir[i]
+            ld = loaded[i]
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd, tt),
+                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
             )
             thread.start()
             threads.append(thread)
