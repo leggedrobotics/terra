@@ -166,6 +166,11 @@ class Agent():
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
             })
 
+        # elif self.model_key == 'gemini':
+        #     self.response = self.client.generate_content(self.messages)
+        #     #self.response = self.client.generate_content("How are you doing today?")
+        #     #print(self.response)
+
         else:
             print('Incorrect Model name given please give correct model name')
 
@@ -452,6 +457,99 @@ class Agent():
                                 },
                             },
                         ],
+                    }
+                )
+        elif self.model_key == 'claude':
+            if frame is not None and user_msg is not None:
+                image_data = self.encode_image(frame)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": user_msg
+                            }
+                        ]
+                    }
+                )
+            elif frame is not None:
+                image_data = self.encode_image(frame)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data
+                                }
+                            }
+                        ]
+                    }
+                )
+            elif user_msg is not None:
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": user_msg
+                            }
+                        ]
+                    }
+                )
+
+        if self.model_key == 'gemini':
+            if frame is not None and user_msg is not None:
+                image_data = self.encode_image(frame)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "mime_type": "image/jpeg",
+                                "data": image_data
+                            },
+                            {
+                                "text": user_msg
+                            }
+                        ]
+                    }
+                )
+            elif frame is not None and user_msg is None:
+                image_data = self.encode_image(frame)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "mime_type": "image/jpeg",
+                                "data": image_data
+                            }
+                        ]
+                    }
+                )
+            elif frame is None and user_msg is not None:
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "text": user_msg
+                            }
+                        ]
                     }
                 )
             else:

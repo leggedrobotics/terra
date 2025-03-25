@@ -47,7 +47,7 @@ def main():
     print(f"Current working directory: {os.getcwd()}")
 
     # Load the JSON configuration file
-    with open("envs2.json", "r") as file:
+    with open("envs5.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -81,9 +81,10 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
-
-    agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
-    #agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
+    
+    print(system_message)
+    #agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
+    agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):
@@ -112,14 +113,17 @@ def main():
         for event in pg.event.get():
             if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
                 playing = False
-
+        
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
-
-        agent.add_user_message(frame=game_state_image, user_msg="What action should be taken?")
+        #print('okay 2')
+        usr_msg0 = "What action should be taken?"
+        usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
+        
+        agent.add_user_message(frame=game_state_image, user_msg=usr_msg1)
         action_output, reasoning = agent.generate_response("./")
         
-        agent.add_assistant_message()
+        #agent.add_assistant_message()
 
         print(f"Action output: {action_output}, Reasoning: {reasoning}")
 
@@ -145,8 +149,8 @@ def main():
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         
-        if steps_taken % 10 == 0:
-            agent.delete_messages()
+        #if steps_taken % 10 == 0:
+        #    agent.delete_messages()
 
         # Update progress
         steps_taken += 1
