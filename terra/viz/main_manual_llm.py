@@ -12,20 +12,6 @@ import csv
 
 
 from pygame.locals import (
-    K_UP,
-    K_DOWN,
-    K_LEFT,
-    K_RIGHT,
-    K_a,
-    K_d,
-    K_e,
-    K_r,
-    K_i,
-    K_o,
-    K_k,
-    K_l,
-    K_SPACE,
-    KEYDOWN,
     K_q,
     QUIT,
 )
@@ -36,10 +22,26 @@ from terra.env import TerraEnvBatch
 def capture_screen(surface):
     """Captures the current screen and converts it to an image format."""
     img_array = pg.surfarray.array3d(surface)
-    img_array = np.rot90(img_array, k=3)  # Rotate if needed
+    #img_array = np.rot90(img_array, k=3)  # Rotate if needed
+    img_array = np.transpose(img_array, (1, 0, 2))  # Correct rotation
+
     img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     return img_array
 
+def save_video(frames, output_path, fps=1):
+    """Saves a list of frames as a video."""
+    if len(frames) == 0:
+        print("No frames to save.")
+        return
+    
+    height, width, _ = frames[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    
+    for frame in frames:
+        out.write(frame)
+    out.release()
+    print(f"Video saved to {output_path}")
 
 def main():
     print(f"Current working directory: {os.getcwd()}")
@@ -86,7 +88,7 @@ def main():
     # Capture the first frame
     screen = pg.display.get_surface()
     game_state_image = capture_screen(screen)
-
+    frames = [game_state_image]
 
 
     agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
@@ -135,17 +137,18 @@ def main():
     cumulative_rewards = []
     action_list = []
     steps_taken = 0
-    num_timesteps = 100
+    num_timesteps = 10
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
 
-    #while playing and steps_taken < num_timesteps:
-    while playing:
+    while playing and steps_taken < num_timesteps:
+    #while playing:
         for event in pg.event.get():
             if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
                 playing = False
 
         game_state_image = capture_screen(screen)
+        frames.append(game_state_image)
 
         agent.add_user_message(frame=game_state_image, user_msg="What action should be taken?")
         action_output, reasoning = agent.generate_response("./")
@@ -195,6 +198,8 @@ def main():
 
     print(f"Results saved to {output_file}")
 
+    video_path = os.path.join(output_dir, f"{environment_name}_gameplay.mp4")
+    save_video(frames, video_path)
 
 if __name__ == "__main__":
     main()
