@@ -43,9 +43,7 @@ def save_video(frames, output_path, fps=1):
     out.release()
     print(f"Video saved to {output_path}")
 
-def run_experiment(model_name, model, num_timesteps):
-    print(f"Current working directory: {os.getcwd()}")
-
+def run_experiment(model_name, model_key, num_timesteps):
     # Load the JSON configuration file
     with open("envs5.json", "r") as file:
         game_instructions = json.load(file)
@@ -82,9 +80,8 @@ def run_experiment(model_name, model, num_timesteps):
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
     
-    #agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
-    #agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
-    agent = Agent(model_name=model_name, model=model, system_message=system_message, env=env)
+    # Initialize the agent
+    agent = Agent(model_name=model_name, model=model_key, system_message=system_message, env=env)
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):

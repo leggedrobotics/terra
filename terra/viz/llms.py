@@ -11,7 +11,7 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple
 
 # Set up logging
-logger = logging.getLogger("atari-gpt.llms")
+logger = logging.getLogger("AutonomousExcavator.llms")
 
 class Agent(): 
     def __init__(self, model_name=None, model=None, system_message=None, env=None): 
@@ -133,7 +133,6 @@ class Agent():
         #print("Model Key:", self.model_key)
         #print("Messages being sent to LLM:", json.dumps(self.messages, indent=2))  # Pretty print for clarity        # Check which model to use and prompt the model 
         if self.model_key=='gpt4' or self.model_key=='gpt4o':
-
             self.response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=self.messages,
