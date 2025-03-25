@@ -15,3 +15,15 @@
 2025-03-25 15:03:32,593 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
 2025-03-25 15:03:32,595 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
 2025-03-25 15:03:33,145 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-03-25 16:46:36,694 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-03-25 16:46:36,694 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-1.5-flash-latest
+2025-03-25 16:46:36,696 - autonomous-excavator.analysis - INFO - Model gemini-1.5-flash-latest: Final reward = -0.010500000440515578, Max reward = -0.001500000013038516
+2025-03-25 16:46:36,696 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
+2025-03-25 16:46:36,698 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
+2025-03-25 16:46:37,287 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-03-25 16:54:07,513 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-03-25 16:54:07,513 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4
+2025-03-25 16:54:07,515 - autonomous-excavator.analysis - INFO - Model gpt-4: Final reward = -0.020899999886751175, Max reward = -0.0012000000569969416
+2025-03-25 16:54:07,515 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-1.5-flash-latest
+2025-03-25 16:54:07,516 - autonomous-excavator.analysis - INFO - Model gemini-1.5-flash-latest: Final reward = -0.010500000440515578, Max reward = -0.001500000013038516
+2025-03-25 16:54:08,046 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis

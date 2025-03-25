@@ -43,7 +43,7 @@ def save_video(frames, output_path, fps=1):
     out.release()
     print(f"Video saved to {output_path}")
 
-def main():
+def run_experiment(model_name, model, num_timesteps):
     print(f"Current working directory: {os.getcwd()}")
 
     # Load the JSON configuration file
@@ -82,9 +82,9 @@ def main():
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
     
-    print(system_message)
     #agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
-    agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
+    #agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
+    agent = Agent(model_name=model_name, model=model, system_message=system_message, env=env)
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):
@@ -103,7 +103,7 @@ def main():
     cumulative_rewards = []
     action_list = []
     steps_taken = 0
-    num_timesteps = 100
+    num_timesteps = num_timesteps
     frames = []
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
@@ -116,7 +116,7 @@ def main():
         
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
-        #print('okay 2')
+
         usr_msg0 = "What action should be taken?"
         usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
         
@@ -162,9 +162,9 @@ def main():
 
     print(f"Rollout complete. Total reward: {rewards}")
 
-    output_dir = "./experiments/"
+    output_dir = os.path.join("experiments", f"AutonomousExcavatorGame_{model_name}")   
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f"{environment_name}_actions_rewards.csv")
+    output_file = os.path.join(output_dir, f"actions_rewards.csv")
     with open(output_file, "w") as f:
         writer = csv.writer(f)
         writer.writerow(["actions", "cumulative_rewards"])
@@ -173,8 +173,6 @@ def main():
 
     print(f"Results saved to {output_file}")
 
-    video_path = os.path.join(output_dir, f"{environment_name}_gameplay.mp4")
+    video_path = os.path.join(output_dir, f"gameplay.mp4")
     save_video(frames, video_path)
 
-if __name__ == "__main__":
-    main()

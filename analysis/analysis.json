@@ -1,6 +1,10 @@
 {
-  "model1": {
-    "final_reward": -0.22660000633914024,
+  "gpt-4": {
+    "final_reward": -0.020899999886751175,
+    "max_reward": -0.0012000000569969416
+  },
+  "gemini-1.5-flash-latest": {
+    "final_reward": -0.010500000440515578,
     "max_reward": -0.001500000013038516
   }
 }
