@@ -1,0 +1,17 @@
+2025-03-25 14:41:47,230 - autonomous-excavator.analysis - ERROR - No experiment directories found in ./experiments
+2025-03-25 14:44:50,543 - autonomous-excavator.analysis - INFO - Found 1 experiment directories
+2025-03-25 14:44:50,543 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
+2025-03-25 14:44:50,550 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
+2025-03-25 14:44:52,183 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-03-25 14:50:29,592 - autonomous-excavator.analysis - INFO - Found 1 experiment directories
+2025-03-25 14:50:29,592 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
+2025-03-25 14:50:29,596 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
+2025-03-25 14:50:30,194 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-03-25 14:51:06,026 - autonomous-excavator.analysis - INFO - Found 1 experiment directories
+2025-03-25 14:51:06,026 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
+2025-03-25 14:51:06,027 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
+2025-03-25 14:51:06,545 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-03-25 15:03:32,593 - autonomous-excavator.analysis - INFO - Found 1 experiment directories
+2025-03-25 15:03:32,593 - autonomous-excavator.analysis - INFO - Analyzing results for model model1
+2025-03-25 15:03:32,595 - autonomous-excavator.analysis - INFO - Model model1: Final reward = -0.22660000633914024, Max reward = -0.001500000013038516
+2025-03-25 15:03:33,145 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis

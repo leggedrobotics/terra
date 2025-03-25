@@ -118,6 +118,8 @@ def main():
 
         agent.add_user_message(frame=game_state_image, user_msg="What action should be taken?")
         action_output, reasoning = agent.generate_response("./")
+        
+        agent.add_assistant_message()
 
         print(f"Action output: {action_output}, Reasoning: {reasoning}")
 
@@ -142,6 +144,9 @@ def main():
 
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
+        
+        if steps_taken % 10 == 0:
+            agent.delete_messages()
 
         # Update progress
         steps_taken += 1
