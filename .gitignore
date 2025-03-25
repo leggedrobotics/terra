@@ -16,5 +16,6 @@ terra/env_generation/__pycache__/
 terra/digbench/
 data/
 OPENAI_API_KEY.txt
+GOOGLE_API_KEY_FREE.txt
 experiments/
 all_responses.txt

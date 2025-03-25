@@ -56,6 +56,7 @@ class Agent():
         try:
             api_key = self._get_api_key("OPENAI_API_KEY.txt")
             self.client = OpenAI(api_key=api_key) 
+            #print(self.client.models.list())
 
             if self.system_message is not None: 
                 system_prompt = {"role": "system", "content": [self.system_message]} 
@@ -76,7 +77,7 @@ class Agent():
     def _init_gemini_client(self):
         """Initialize the Google Gemini client with API key."""
         try:
-            api_key = self._get_api_key("GOOGLE_API_KEY.txt")
+            api_key = self._get_api_key("GOOGLE_API_KEY_FREE.txt")
             genai.configure(api_key=api_key)
             generation_config = genai.GenerationConfig(temperature=1)
             
@@ -136,6 +137,7 @@ class Agent():
             self.response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=self.messages,
+                #temperature=0.8,
             )
 
         elif self.model_key == 'claude':
@@ -194,7 +196,7 @@ class Agent():
             self.client = anthropic.Anthropic(api_key=api_key)
         
         elif self.model_key == 'gemini':
-            file = open("GOOGLE_API_KEY.txt", "r")
+            file = open("GOOGLE_API_KEY_FREE.txt", "r")
             api_key = file.read()
             genai.configure(api_key=api_key)
             generation_config = genai.GenerationConfig(temperature=1)

@@ -47,7 +47,7 @@ def main():
     print(f"Current working directory: {os.getcwd()}")
 
     # Load the JSON configuration file
-    with open("envs.json", "r") as file:
+    with open("envs2.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -82,53 +82,18 @@ def main():
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
 
-    # Render the first frame after resetting the environment
-    env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
-
-    # Capture the first frame
-    screen = pg.display.get_surface()
-    game_state_image = capture_screen(screen)
-    frames = [game_state_image]
-
-
     agent = Agent(model_name="gpt-4", model="gpt4", system_message=system_message, env=env)
-
-
-    end_time = time.time()
-    print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
-
-    agent.add_user_message(frame=game_state_image, user_msg="What action should be taken?")
-
-    # Generate the first action
-    action_output, reasoning = agent.generate_response("./")
-    print(f"Action output: {action_output}, Reasoning: {reasoning}")
-
-
-
-    if action_output is None:
-        print("Using default action: DO_NOTHING (-1)")
-        action_output = -1
-
-    # Create the action object
-    action = action_type.new(action_output)
-
-    # Add a batch dimension to the action
-    action = jax.tree_map(lambda x: jnp.expand_dims(x, axis=0), action)
+    #agent = Agent(model_name="gemini-1.5-flash-latest", model="gemini", system_message=system_message, env=env)
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
+    
+    # Trigger the JIT compilation
+    timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
+    end_time = time.time()
+    print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
 
-    # Repeat the action for all environments
-    batched_action = repeat_action(action)
-
-    # Perform the action in the environment
-    rng, _rng = jax.random.split(rng)
-    _rng = _rng[None]
-    timestep = env.step(timestep, batched_action, _rng)
-
-    # Log the first action
-    print(f"First action taken: {action_output}")
     env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
     playing = True
@@ -137,7 +102,8 @@ def main():
     cumulative_rewards = []
     action_list = []
     steps_taken = 0
-    num_timesteps = 10
+    num_timesteps = 100
+    frames = []
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
 
