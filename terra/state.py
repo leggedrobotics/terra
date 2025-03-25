@@ -165,7 +165,7 @@ class State(NamedTuple):
         Use for the forward action.
         """
         # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        return jax.nn.one_hot(base_orientation, 12, dtype=IntLowDim)
+        return jax.nn.one_hot(base_orientation, 24, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
@@ -174,7 +174,7 @@ class State(NamedTuple):
         """
         # Create a permutation matrix by shifting the identity
         # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        num_angles = 12
+        num_angles = 24
         fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
@@ -280,7 +280,7 @@ class State(NamedTuple):
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
         # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
+        angles = jnp.linspace(0, 2 * jnp.pi, 24, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
@@ -320,7 +320,7 @@ class State(NamedTuple):
         )
 
     def _execute_curved_movement(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
-        angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
+        angles = jnp.linspace(0, 2 * jnp.pi, 24, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         orientation_angle = orientation_vector @ angles
 
@@ -359,7 +359,7 @@ class State(NamedTuple):
 
         # Calculate new orientation angle in our discrete system
         new_angle_base = jnp.round(
-            (new_base_angle_rad / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
+            ((new_base_angle_rad - 0.5 * jnp.pi) / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
         ).astype(IntLowDim)
         new_angle_base = new_angle_base % self.env_cfg.agent.angles_base
 
