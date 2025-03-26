@@ -56,8 +56,15 @@ dependencies:
       - geopandas==0.14.3
       - gitdb==4.0.11
       - gitpython==3.1.42
+      - google-ai-generativelanguage==0.6.2
+      - google-api-core==2.19.0
+      - google-api-python-client==2.127.0
+      - google-auth==2.29.0
+      - google-generativeai==0.5.2
       - google-pasta==0.2.0
+      - googleapis-common-protos==1.63.0
       - grpcio==1.62.1
+      - grpcio-status==1.62.3
       - gviz-api==1.10.0
       - h5py==3.10.0
       - httplib2==0.22.0
