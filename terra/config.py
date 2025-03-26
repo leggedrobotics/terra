@@ -129,13 +129,6 @@ class Rewards(NamedTuple):
             normalizer=100.0,
         )
 
-
-class TrenchRewards(NamedTuple):
-    distance_coefficient: float = (
-        -0.4
-    )  # distance_coefficient * distance, if distance > agent_width / 2
-
-
 class CurriculumConfig(NamedTuple):
     """State of the curriculum. This config should not be changed."""
 
@@ -155,7 +148,7 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    trench_rewards: TrenchRewards = TrenchRewards()
+    distance_coefficient: float = -0.4  # distance_coefficient * distance, if distance > agent_width / 2
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
