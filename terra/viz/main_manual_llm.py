@@ -45,7 +45,7 @@ def save_video(frames, output_path, fps=1):
 
 def run_experiment(model_name, model_key, num_timesteps):
     # Load the JSON configuration file
-    with open("envs2.json", "r") as file:
+    with open("envs6.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game

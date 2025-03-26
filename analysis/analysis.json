@@ -1,10 +1,18 @@
 {
-  "gpt-4": {
-    "final_reward": -0.020899999886751175,
+  "gemini-2.0-flash": {
+    "final_reward": -0.1448000066448003,
     "max_reward": -0.0012000000569969416
   },
   "gemini-1.5-flash-latest": {
-    "final_reward": -0.010500000440515578,
+    "final_reward": -0.25600001122802496,
     "max_reward": -0.001500000013038516
+  },
+  "gpt-4o": {
+    "final_reward": -0.023499999660998583,
+    "max_reward": -0.001500000013038516
+  },
+  "gemini-2.5-pro-exp-03-25": {
+    "final_reward": -0.2373999977717176,
+    "max_reward": -0.0012000000569969416
   }
 }
