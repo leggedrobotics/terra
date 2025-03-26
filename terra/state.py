@@ -1270,7 +1270,7 @@ class State(NamedTuple):
             )  # in tiles
             d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
             d *= self.env_cfg.tile_size  # in meters
-            return d * self.env_cfg.trench_rewards.distance_coefficient
+            return d * self.env_cfg.distance_coefficient
 
         r = jax.lax.cond(
             self.env_cfg.apply_trench_rewards,

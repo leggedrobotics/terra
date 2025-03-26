@@ -11,7 +11,7 @@ COLORS = {
     -1: "#26bd6c",  # action map dug
     "agent_body": (0, 43, 91),
     "agent_cabin": {
-        "loaded": (234, 84, 85),
+        "loaded": (165, 115, 75),
         "not_loaded": (234, 84, 85),
     },
 }
