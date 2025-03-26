@@ -12,9 +12,7 @@ class Agent:
         self.height = height
         self.tile_size = tile_size
 
-    def create_agent(self, px_center, py_center, angle_base, angle_cabin):
-        # px = px_center - math.ceil(self.width / 2)
-        # py = py_center - math.ceil(self.height / 2)
+    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded):
         px = px_center - self.width // 2
         py = py_center - self.height // 2
 
@@ -51,8 +49,6 @@ class Agent:
             (a_center_x, a_center_y), points, self.tile_size, deg_angle_cabin
         )
 
-        loaded = False
-
         out = {
             "body": {
                 "vertices": agent_body,
@@ -69,13 +65,15 @@ class Agent:
         }
         return out
 
-    def update(self, agent_pos, base_dir, cabin_dir):
+    def update(self, agent_pos, base_dir, cabin_dir, loaded):
         agent_pos = np.asarray(agent_pos, dtype=np.int32)
         base_dir = np.asarray(base_dir, dtype=np.int32)
         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
+        loaded = np.asarray(loaded, dtype=np.bool)
         self.agent = self.create_agent(
             agent_pos[0].item(),
             agent_pos[1].item(),
             base_dir.item(),
             cabin_dir.item(),
+            loaded.item(),
         )
