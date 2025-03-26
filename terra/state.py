@@ -326,9 +326,7 @@ class State(NamedTuple):
 
         # For backward movement, reverse the wheel angle effect
         wheel_angle = self.agent.agent_state.wheel_angle[0]
-        effective_wheel_angle = jnp.where(is_forward, wheel_angle, -wheel_angle)
-        wheel_angle_rad = jnp.deg2rad(effective_wheel_angle * self.env_cfg.agent.wheel_step)
-
+        wheel_angle_rad = jnp.deg2rad(wheel_angle * self.env_cfg.agent.wheel_step)
         # Use width as wheelbase for turning radius calculation
         turn_radius = self.env_cfg.agent.width / (jnp.tan(wheel_angle_rad) + 1e-6)
 
@@ -442,7 +440,7 @@ class State(NamedTuple):
         """
         def _move_backward_wheeled():
             base_orientation = self.agent.agent_state.angle_base
-            orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
+            orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
 
         return jax.lax.cond(
