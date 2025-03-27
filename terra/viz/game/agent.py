@@ -11,6 +11,8 @@ class Agent:
         self.width = width
         self.height = height
         self.tile_size = tile_size
+        self.orientation = (1, 0)  # Default direction: facing right
+
 
     def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded):
         px = px_center - self.width // 2
@@ -49,6 +51,21 @@ class Agent:
             (a_center_x, a_center_y), points, self.tile_size, deg_angle_cabin
         )
 
+        # Compute the front marker position based on the base's direction
+        front_marker_offset = {
+            0: (w * self.tile_size, h * self.tile_size // 2),  # Right
+            1: (w * self.tile_size // 2, 0),  # Up
+            2: (0, h * self.tile_size // 2),  # Left
+            3: (w * self.tile_size // 2, h * self.tile_size),  # Down
+        }
+
+        px_front, py_front = front_marker_offset[angle_base]
+
+        # Add the front marker
+        front_marker = [
+            (agent_body[0][0] + px_front, agent_body[0][1] + py_front)
+        ]
+
         out = {
             "body": {
                 "vertices": agent_body,
@@ -62,7 +79,13 @@ class Agent:
                 if loaded
                 else COLORS["agent_cabin"]["not_loaded"],
             },
+            "front_marker": {  
+                "vertices": front_marker,
+                "color": (255, 255, 0),  
+            },
+            "angle_base": angle_base,
         }
+
         return out
 
     def update(self, agent_pos, base_dir, cabin_dir, loaded):

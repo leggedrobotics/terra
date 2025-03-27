@@ -231,6 +231,27 @@ class Game:
             cabin_color = agent.agent["cabin"]["color"]
             pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
 
+            DRAW_FRONT_MARKER = True
+            
+            if DRAW_FRONT_MARKER:
+                front_pos = agent.agent["front_marker"]["vertices"][0]
+                front_x = front_pos[0] + total_offset_x
+                front_y = front_pos[1] + total_offset_y
+
+                # Determine the offset based on base orientation
+                offset = 20  # Adjust this value for better visibility
+                if agent.agent["angle_base"] == 0:  
+                    front_x += offset
+                elif agent.agent["angle_base"] == 1:  
+                    front_y -= offset
+                elif agent.agent["angle_base"] == 2:  
+                    front_x -= offset
+                elif agent.agent["angle_base"] == 3:
+                    front_y += offset
+
+                # Draw a small yellow dot at the front of the agent
+                pg.draw.circle(self.surface, (255, 255, 0), (front_x, front_y), 8)  # Radius = 8 pixels
+
         self.screen.blit(self.surface, (0, 0))
 
         if self.progressive_gif:
