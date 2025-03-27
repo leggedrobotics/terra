@@ -45,17 +45,19 @@ def local_map_to_image(local_map):
         An image (numpy array) representing the local map.
     """
     # Example: Visualize the traversability mask
-    local_map_dumpability = np.array(local_map["local_map_dumpability"])
+    local_map_obstacles = np.array(local_map["local_map_obstacles"])
 
-    local_map_dumpability = np.squeeze(local_map_dumpability)
+    local_map_obstacles = np.squeeze(local_map_obstacles)
 
 
     # Normalize the values for visualization
-    normalized_map = (local_map_dumpability - local_map_dumpability.min()) / (local_map_dumpability.max() - local_map_dumpability.min())
+    #normalized_map = (local_map_obstacles - local_map_obstacles.min()) / (local_map_obstacles.max() - local_map_obstacles.min())
 
     # Create a heatmap using matplotlib
     plt.figure(figsize=(5, 5))
-    plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
+    #plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
+    plt.imshow(local_map_obstacles, cmap="viridis", interpolation="nearest")
+
     plt.axis("off")
 
     # Save the plot to a buffer
