@@ -316,13 +316,14 @@ class State(NamedTuple):
         return jax.lax.cond(
             self.agent.agent_state.wheel_angle[0] == 0,
             lambda: self._move_on_orientation(orientation_vector),
-            lambda: self._execute_curved_movement(orientation_vector, is_forward),
+            lambda: self._execute_curved_movement(angle_idx_to_rad(self.agent.agent_state.angle_base,
+                                                                   self.env_cfg.agent.angles_base),
+                                                                   is_forward),
         )
 
-    def _execute_curved_movement(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
-        angles = jnp.linspace(0, 2 * jnp.pi, 24, endpoint=False)
-        angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
-        orientation_angle = orientation_vector @ angles
+    def _execute_curved_movement(self, orientation_angle: float, is_forward: jnp.bool_) -> "State":
+        # Shift to different orientation coordinates
+        orientation_angle = orientation_angle + (jnp.pi / 2)
 
         # For backward movement, reverse the wheel angle effect
         wheel_angle = self.agent.agent_state.wheel_angle[0]
@@ -357,7 +358,7 @@ class State(NamedTuple):
 
         # Calculate new orientation angle in our discrete system
         new_angle_base = jnp.round(
-            ((new_base_angle_rad - 0.5 * jnp.pi) / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
+            ((new_base_angle_rad - (jnp.pi / 2)) / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
         ).astype(IntLowDim)
         new_angle_base = new_angle_base % self.env_cfg.agent.angles_base
 
@@ -440,7 +441,7 @@ class State(NamedTuple):
         """
         def _move_backward_wheeled():
             base_orientation = self.agent.agent_state.angle_base
-            orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
+            orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
 
         return jax.lax.cond(
