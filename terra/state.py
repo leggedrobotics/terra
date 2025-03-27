@@ -697,7 +697,7 @@ class State(NamedTuple):
         ) * dig_portion_radius * tile_size + min_distance_from_agent
         r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
 
-        theta_max = np.pi / self.env_cfg.agent.angles_cabin
+        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(

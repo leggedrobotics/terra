@@ -41,7 +41,7 @@ class ImmutableAgentConfig(NamedTuple):
 
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 24
-    angles_cabin: int = 24
+    angles_cabin: int = 12
     max_wheel_angle: int = 3
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
     wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
