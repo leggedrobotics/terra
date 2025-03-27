@@ -11,7 +11,6 @@ cache/
 docs/
 terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*
-terra/viz_legacy/__pycache__/
 terra/env_generation/__pycache__/
 terra/digbench/
 data/
