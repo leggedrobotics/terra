@@ -2,9 +2,6 @@ import time
 import jax
 import jax.numpy as jnp
 import pygame as pg
-import cv2
-import numpy as np
-from .llms import Agent
 import json
 import os
 from tqdm import tqdm
@@ -15,35 +12,25 @@ from pygame.locals import (
     K_q,
     QUIT,
 )
+
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
-
-def capture_screen(surface):
-    """Captures the current screen and converts it to an image format."""
-    img_array = pg.surfarray.array3d(surface)
-    #img_array = np.rot90(img_array, k=3)  # Rotate if needed
-    img_array = np.transpose(img_array, (1, 0, 2))  # Correct rotation
-
-    img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    return img_array
-
-def save_video(frames, output_path, fps=1):
-    """Saves a list of frames as a video."""
-    if len(frames) == 0:
-        print("No frames to save.")
-        return
-    
-    height, width, _ = frames[0].shape
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
-    for frame in frames:
-        out.write(frame)
-    out.release()
-    print(f"Video saved to {output_path}")
+from terra.viz.llms import Agent
+from terra.viz.llms_utils import generate_local_map, local_map_to_image, capture_screen, save_video
 
 def run_experiment(model_name, model_key, num_timesteps):
+    """
+    Run an LLM-based simulation experiment.
+
+    Args:
+        model_name: The name of the LLM model to use.
+        model_key: The name of the LLM model key to use.
+        num_timesteps: The number of timesteps to run
+
+    Returns:
+        None
+    """
     # Load the JSON configuration file
     with open("envs8.json", "r") as file:
         game_instructions = json.load(file)
@@ -56,7 +43,6 @@ def run_experiment(model_name, model_key, num_timesteps):
         environment_name,
         "You are a game playing assistant. Provide the best action for the current game state."
     )
-
 
     batch_cfg = BatchConfig()
     action_type = batch_cfg.action_type
@@ -102,6 +88,8 @@ def run_experiment(model_name, model_key, num_timesteps):
     num_timesteps = num_timesteps
     frames = []
 
+    USE_LOCAL_MAP = True
+
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
 
     while playing and steps_taken < num_timesteps:
@@ -116,12 +104,19 @@ def run_experiment(model_name, model_key, num_timesteps):
         usr_msg0 = "What action should be taken?"
         usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
         
-        agent.add_user_message(frame=game_state_image, user_msg=usr_msg1)
+        if USE_LOCAL_MAP:
+            local_map = generate_local_map(timestep)
+            local_map_image = local_map_to_image(local_map)
+
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg1, local_map=local_map_image)
+        else:
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg1, local_map=None)
+
         action_output, reasoning = agent.generate_response("./")
         
-        #agent.add_assistant_message()
-
         print(f"Action output: {action_output}, Reasoning: {reasoning}")
+        
+        agent.add_assistant_message()
 
         # Create the action object
         action = action_type.new(action_output)
@@ -145,8 +140,8 @@ def run_experiment(model_name, model_key, num_timesteps):
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         
-        #if steps_taken % 10 == 0:
-        #    agent.delete_messages()
+        if steps_taken % 10 == 0:
+            agent.delete_messages()
 
         # Update progress
         steps_taken += 1

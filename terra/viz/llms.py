@@ -126,7 +126,7 @@ class Agent():
     def encode_image(self, cv_image):
         _, buffer = cv2.imencode(".jpg", cv_image)
         return base64.b64encode(buffer).decode("utf-8")
-    
+        
     def query_LLM(self):
         #print("\nSending request to LLM. Model:", self.model_name)
         #print("Model Key:", self.model_key)
@@ -405,10 +405,33 @@ class Agent():
 
         return action_output, response_text
 
-    def add_user_message(self, frame=None, user_msg=None):
-    
+    def add_user_message(self, frame=None, user_msg=None, local_map=None):
+        
         if self.model_key == 'gpt4' or self.model_key == 'gpt4o':
-            if user_msg is not None and frame is not None:
+            if user_msg is not None and frame is not None and local_map is not None:
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": user_msg},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{self.encode_image(frame)}",
+                                    "detail": "low",
+                                },
+                            },
+                                                      {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{self.encode_image(local_map)}",
+                                    "detail": "low",
+                                },
+                            },
+                        ],
+                    }
+                )
+            elif user_msg is not None and frame is not None and local_map is None:
                 self.messages.append(
                     {
                         "role": "user",

@@ -231,7 +231,7 @@ class Game:
             cabin_color = agent.agent["cabin"]["color"]
             pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
 
-            DRAW_FRONT_MARKER = True
+            DRAW_FRONT_MARKER = False
             
             if DRAW_FRONT_MARKER:
                 front_pos = agent.agent["front_marker"]["vertices"][0]
@@ -252,7 +252,7 @@ class Game:
                 # Draw a small yellow dot at the front of the agent
                 pg.draw.circle(self.surface, (255, 255, 0), (front_x, front_y), 8)  # Radius = 8 pixels
 
-            OVERLAY_PIXEL_COORDS = True
+            OVERLAY_PIXEL_COORDS = False
 
             if OVERLAY_PIXEL_COORDS:
                 skip_step = 5  # Process every 5th pixel (adjust as needed)
