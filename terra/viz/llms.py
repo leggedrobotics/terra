@@ -56,7 +56,6 @@ class Agent():
         try:
             api_key = self._get_api_key("OPENAI_API_KEY.txt")
             self.client = OpenAI(api_key=api_key) 
-            #print(self.client.models.list())
 
             if self.system_message is not None: 
                 system_prompt = {"role": "system", "content": [self.system_message]} 
@@ -164,11 +163,6 @@ class Agent():
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
             })
-
-        # elif self.model_key == 'gemini':
-        #     self.response = self.client.generate_content(self.messages)
-        #     #self.response = self.client.generate_content("How are you doing today?")
-        #     #print(self.response)
 
         else:
             print('Incorrect Model name given please give correct model name')
@@ -321,7 +315,6 @@ class Agent():
         """
         max_retries = 3
         retry_count = 0
-        #print(f"actions_size: {self.env.actions_size}, type: {type(self.env.actions_size)}")
         
         while retry_count < max_retries:
             # Check if the response is a dictionary
@@ -403,19 +396,16 @@ class Agent():
 
     def generate_response(self, path) -> str:   
         response = self.get_response()
-        #print('\n\nresponse 1: ', response)
         # Check if it is just reasoning or actual action output
         self.path = path
 
         response_text = self.clean_response(response, path)
-        #print('\n\nresponse: ', response_text)
 
         action_output = self.check_action(response_text)
 
         return action_output, response_text
 
     def add_user_message(self, frame=None, user_msg=None):
-        #print(self.model_key, frame, user_msg)
     
         if self.model_key == 'gpt4' or self.model_key == 'gpt4o':
             if user_msg is not None and frame is not None:
