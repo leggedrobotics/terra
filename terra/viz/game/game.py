@@ -252,6 +252,44 @@ class Game:
                 # Draw a small yellow dot at the front of the agent
                 pg.draw.circle(self.surface, (255, 255, 0), (front_x, front_y), 8)  # Radius = 8 pixels
 
+            OVERLAY_PIXEL_COORDS = True
+
+            if OVERLAY_PIXEL_COORDS:
+                skip_step = 5  # Process every 5th pixel (adjust as needed)
+                font = pg.font.Font(None, 15)  # Default font, size 15
+
+                for grid_x in range(0, world.grid_length_x, skip_step):  # Step through grid_x with skip_step
+                    for grid_y in range(0, world.grid_length_y, skip_step):  # Step through grid_y with skip_step
+                         # Determine the terrain type
+                        if world.target_map[grid_x, grid_y] == -1:  # Area to dig
+                            color = (200, 0, 200)  # bright Purple
+                            terrain_value = "D"  # Label for "dig"
+                        elif world.obstacles_mask is not None and world.obstacles_mask[grid_x, grid_y]:  # Obstacle
+                            color = (255, 0, 0)  # bright Red
+                            terrain_value = "O"  # Label for "obstacle"
+                        elif world.dumpability_mask is not None and not world.dumpability_mask[grid_x, grid_y]:  # Street (non-dumpable)
+                            color = (255, 255, 0)  # Yellow
+                            terrain_value = "S"  # Label for "street"
+                        else:  # Free area
+                            color = (0, 0, 255)  # bright Blue
+                            terrain_value = ""  # Label for "free"
+
+                        # Convert grid coordinates to world coordinates
+                        world_tile = world.grid_to_world(grid_x, grid_y, 0)  # 0 is a placeholder for neutral terrain
+                        cart_rect = world_tile["cart_rect"]
+
+                        coord_x, coord_y = cart_rect[0]  # Top-left corner of the tile
+
+                        # Calculate the center of the pixel (tile)
+                        center_x = coord_x + world.tile_size / 2
+                        center_y = coord_y + world.tile_size / 2
+
+                        # Render the terrain value as text directly over the pixel
+                        text_surface = font.render(terrain_value, True, color)
+                        text_rect = text_surface.get_rect()  # Get the rectangle of the text
+                        text_rect.center = (center_x + total_offset_x, center_y + total_offset_y)  # Set the center of the text to the center of the tile
+                        self.surface.blit(text_surface, text_rect)
+
         self.screen.blit(self.surface, (0, 0))
 
         if self.progressive_gif:
