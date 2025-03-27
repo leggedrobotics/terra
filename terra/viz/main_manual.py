@@ -35,7 +35,6 @@ def main():
     env = TerraEnvBatch(
         rendering=True,
         display=True,
-        rendering_engine="pygame",
         n_envs_x_rendering=n_envs_x,
         n_envs_y_rendering=n_envs_y,
     )
