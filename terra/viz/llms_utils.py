@@ -3,6 +3,8 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import jax
+import jax.numpy as jnp
 import pygame as pg
 
 def generate_local_map(timestep):
@@ -95,3 +97,63 @@ def save_video(frames, output_path, fps=1):
         out.write(frame)
     out.release()
     print(f"Video saved to {output_path}")
+
+def extract_bucket_status(state):
+    """
+    Extract the bucket status from the state.
+
+    Args:
+        state: The current State object.
+
+    Returns:
+        str: The bucket status ('loaded' or 'empty').
+    """
+    # Access the bucket status from the agent's state
+    bucket_status = state.agent.agent_state.loaded
+
+    # Map the status to a human-readable string
+    return "loaded" if bucket_status else "empty"
+
+def base_orientation_to_direction(angle_base):
+    """
+    Convert the base orientation value (0-3) to a cardinal direction.
+
+    Args:
+        angle_base (int or JAX array): The base orientation value.
+
+    Returns:
+        str: The corresponding cardinal direction ('up', 'right', 'down', 'left').
+    """
+    # Convert JAX array to a Python scalar if necessary
+    if isinstance(angle_base, jax.Array):
+        angle_base = angle_base.item()
+
+    # Map orientation to cardinal direction
+    direction_map = {
+        0: "right",
+        1: "up",
+        2: "left",
+        3: "down"
+    }
+    return direction_map.get(angle_base, "unknown")  # Default to 'unknown' if invalid
+
+def extract_base_orientation(state):
+    """
+    Extract the excavator's base orientation from the state and convert it to a cardinal direction.
+
+    Args:
+        state: The current State object.
+
+    Returns:
+        A dictionary containing the base angle and its corresponding cardinal direction.
+    """
+    # Extract the base angle
+    angle_base = state.agent.agent_state.angle_base
+
+    # Convert the base angle to a cardinal direction
+    direction = base_orientation_to_direction(angle_base)
+
+    return {
+        "angle_base": angle_base,
+        "direction": direction,
+    }    

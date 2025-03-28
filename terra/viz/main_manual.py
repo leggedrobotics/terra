@@ -22,7 +22,7 @@ from pygame.locals import (
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
-
+from terra.viz.llms_utils import extract_base_orientation, extract_bucket_status
 
 def main():
     batch_cfg = BatchConfig()
@@ -45,8 +45,8 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
-    print(f"{timestep.state.agent.width=}")
-    print(f"{timestep.state.agent.height=}")
+    #print(f"{timestep.state.agent.width=}")
+    #print(f"{timestep.state.agent.height=}")
 
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
@@ -62,6 +62,13 @@ def main():
     playing = True
     while playing:
         for event in pg.event.get():
+            state = timestep.state
+            base_orientation = extract_base_orientation(state)
+            bucket_status = extract_bucket_status(state)  # Extract bucket status
+
+            print(base_orientation)
+            print(bucket_status)
+
             if event.type == KEYDOWN:
                 action = None
                 if event.key == K_UP:
@@ -93,6 +100,7 @@ def main():
 
                 if action is not None:
                     print("Action: ", action)
+
                     rng, _rng = jax.random.split(rng)
                     _rng = _rng[None]
                     timestep = env.step(
