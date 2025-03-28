@@ -19,6 +19,50 @@ from terra.env import TerraEnvBatch
 from terra.viz.llms import Agent
 from terra.viz.llms_utils import generate_local_map, local_map_to_image, capture_screen, save_video
 
+def base_orientation_to_direction(angle_base):
+    """
+    Convert the base orientation value (0-3) to a cardinal direction.
+
+    Args:
+        angle_base (int or JAX array): The base orientation value.
+
+    Returns:
+        str: The corresponding cardinal direction ('up', 'right', 'down', 'left').
+    """
+    # Convert JAX array to a Python scalar if necessary
+    if isinstance(angle_base, jax.Array):
+        angle_base = angle_base.item()
+
+    # Map orientation to cardinal direction
+    direction_map = {
+        0: "right",
+        1: "up",
+        2: "left",
+        3: "down"
+    }
+    return direction_map.get(angle_base, "unknown")  # Default to 'unknown' if invalid
+
+def extract_base_orientation(state):
+    """
+    Extract the excavator's base orientation from the state and convert it to a cardinal direction.
+
+    Args:
+        state: The current State object.
+
+    Returns:
+        A dictionary containing the base angle and its corresponding cardinal direction.
+    """
+    # Extract the base angle
+    angle_base = state.agent.agent_state.angle_base
+
+    # Convert the base angle to a cardinal direction
+    direction = base_orientation_to_direction(angle_base)
+
+    return {
+        "angle_base": angle_base,
+        "direction": direction,
+    }
+
 def run_experiment(model_name, model_key, num_timesteps):
     """
     Run an LLM-based simulation experiment.
@@ -88,9 +132,12 @@ def run_experiment(model_name, model_key, num_timesteps):
     num_timesteps = num_timesteps
     frames = []
 
-    USE_LOCAL_MAP = True
+    USE_LOCAL_MAP = False
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
+    # state = timestep.state
+    # base_orientation = extract_base_orientation(state)
+    # print(base_orientation)
 
     while playing and steps_taken < num_timesteps:
     #while playing:
@@ -101,16 +148,26 @@ def run_experiment(model_name, model_key, num_timesteps):
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
 
+        state = timestep.state
+        base_orientation = extract_base_orientation(state)
+        print(base_orientation)
+
         usr_msg0 = "What action should be taken?"
         usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
+        usr_msg2 = (
+            f"Analyze this game frame and the provided local map to select the optimal action. "
+            f"The base of the excavator is currently facing {base_orientation['direction']}. "
+            f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+            f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+        )
         
         if USE_LOCAL_MAP:
             local_map = generate_local_map(timestep)
             local_map_image = local_map_to_image(local_map)
 
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg1, local_map=local_map_image)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg2, local_map=local_map_image)
         else:
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg1, local_map=None)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg2, local_map=None)
 
         action_output, reasoning = agent.generate_response("./")
         
@@ -139,8 +196,8 @@ def run_experiment(model_name, model_key, num_timesteps):
 
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
-        
-        if steps_taken % 10 == 0:
+
+        if steps_taken % 20 == 0:
             agent.delete_messages()
 
         # Update progress

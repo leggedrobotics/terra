@@ -240,17 +240,17 @@ class Game:
 
                 # Determine the offset based on base orientation
                 offset = 20  # Adjust this value for better visibility
-                if agent.agent["angle_base"] == 0:  
+                if agent.agent["angle_base"] == 0:  # Right
                     front_x += offset
-                elif agent.agent["angle_base"] == 1:  
+                elif agent.agent["angle_base"] == 1:  # Up
                     front_y -= offset
-                elif agent.agent["angle_base"] == 2:  
+                elif agent.agent["angle_base"] == 2:  # Left
                     front_x -= offset
-                elif agent.agent["angle_base"] == 3:
+                elif agent.agent["angle_base"] == 3: # Down
                     front_y += offset
 
                 # Draw a small yellow dot at the front of the agent
-                pg.draw.circle(self.surface, (255, 255, 0), (front_x, front_y), 8)  # Radius = 8 pixels
+                pg.draw.circle(self.surface, (255, 255, 0), (front_x, front_y), 4)  # Radius = 8 pixels
 
             OVERLAY_PIXEL_COORDS = False
 
