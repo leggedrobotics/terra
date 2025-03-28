@@ -17,7 +17,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms import Agent
-from terra.viz.llms_utils import generate_local_map, local_map_to_image, capture_screen, save_video, extract_bucket_status, extract_base_orientation
+from terra.viz.llms_utils import generate_local_map, local_map_to_image, capture_screen, save_video, extract_bucket_status, extract_base_orientation, summarize_local_map
 
 def run_experiment(model_name, model_key, num_timesteps):
     """
@@ -132,6 +132,18 @@ def run_experiment(model_name, model_key, num_timesteps):
         if USE_LOCAL_MAP:
             local_map = generate_local_map(timestep)
             local_map_image = local_map_to_image(local_map)
+
+            local_map_summary = summarize_local_map(local_map)
+            print(local_map_summary)
+
+            usr_msg3 = (
+                f"Analyze this game frame and the provided local map to select the optimal action. "
+                f"The base of the excavator is currently facing {base_orientation['direction']}. "
+                f"The bucket is currently {bucket_status}. "
+                f"{local_map_summary} "
+                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+            )
 
             agent.add_user_message(frame=game_state_image, user_msg=usr_msg3, local_map=local_map_image)
         else:

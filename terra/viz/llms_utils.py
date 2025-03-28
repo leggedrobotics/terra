@@ -158,3 +158,25 @@ def extract_base_orientation(state):
         "angle_base": angle_base,
         "direction": direction,
     }    
+
+def summarize_local_map(local_map):
+    """
+    Generate a textual summary of the local map.
+
+    Args:
+        local_map: A dictionary representing the local map.
+
+    Returns:
+        str: A textual summary of the local map.
+    """
+    num_obstacles = np.sum(np.array(local_map["local_map_obstacles"]) > 0)
+    num_dumpable = np.sum(np.array(local_map["local_map_dumpability"]) > 0)
+    num_target_pos = np.sum(np.array(local_map["local_map_target_pos"]) > 0)
+    num_target_neg = np.sum(np.array(local_map["local_map_target_neg"]) > 0)
+
+    return (
+        f"The local map contains {num_obstacles} obstacles, "
+        f"{num_dumpable} dumpable areas, "
+        f"{num_target_pos} positive target areas, and "
+        f"{num_target_neg} negative target areas."
+    )
