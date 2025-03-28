@@ -88,7 +88,7 @@ def run_experiment(model_name, model_key, num_timesteps):
     num_timesteps = num_timesteps
     frames = []
 
-    USE_LOCAL_MAP = False
+    USE_LOCAL_MAP = True
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
     # state = timestep.state

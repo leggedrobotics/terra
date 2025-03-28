@@ -47,24 +47,25 @@ def local_map_to_image(local_map):
         An image (numpy array) representing the local map.
     """
     # Example: Visualize the traversability mask
-    local_map_obstacles = np.array(local_map["local_map_obstacles"])
+    local_map_target_pos = np.array(local_map["local_map_target_pos"])
 
-    local_map_obstacles = np.squeeze(local_map_obstacles)
+    local_map_target_pos = np.squeeze(local_map_target_pos)
 
 
     # Normalize the values for visualization
-    #normalized_map = (local_map_obstacles - local_map_obstacles.min()) / (local_map_obstacles.max() - local_map_obstacles.min())
+    normalized_map = (local_map_target_pos - local_map_target_pos.min()) / (local_map_target_pos.max() - local_map_target_pos.min() + 1e-6)
 
     # Create a heatmap using matplotlib
     plt.figure(figsize=(5, 5))
-    #plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
-    plt.imshow(local_map_obstacles, cmap="viridis", interpolation="nearest")
+    plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
+    #plt.imshow(local_map_target_pos, cmap="viridis", interpolation="nearest")
 
     plt.axis("off")
 
     # Save the plot to a buffer
     buf = io.BytesIO()
     plt.savefig(buf, format="jpg", bbox_inches="tight", pad_inches=0)
+    plt.savefig("local_map.jpg", format="jpg", bbox_inches="tight", pad_inches=0)
     buf.seek(0)
 
     # Convert the buffer to a PIL image and then to a numpy array
