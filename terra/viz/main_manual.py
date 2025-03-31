@@ -119,6 +119,9 @@ def main():
 
             print("\nHighlighted Grid (Path marked with 9):")
             print(highlighted_grid)
+            
+            game = env.terra_env.rendering_engine
+            game.path = path
         else:
             print("No path found.")
     else:

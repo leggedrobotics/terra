@@ -40,6 +40,7 @@ class Game:
         self.clock = clock
         self.display = display
         self.progressive_gif = progressive_gif
+        self.path = None
         self.width, self.height = self.screen.get_size()
 
         self.n_envs_x = n_envs_x
@@ -230,6 +231,17 @@ class Game:
             cabin = [(el[0] - a[0][0], el[1] - a[0][1]) for el in cabin]
             cabin_color = agent.agent["cabin"]["color"]
             pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
+
+
+            if self.path:
+                line_points = []
+                for x, y in self.path:
+                    world_coords = world.grid_to_world(y , x , 0)  # Convert grid to world coordinates
+                    line_points.append((world_coords["cart_rect"][0][0]+ total_offset_x, world_coords["cart_rect"][0][1] + total_offset_y))  # Add the top-left corner of the tile
+
+                if len(line_points) > 1:
+                    pg.draw.lines(self.surface, (255, 0, 0), False, line_points, 2)  # Draw the path as a red line
+
 
             DRAW_FRONT_MARKER = False
             
