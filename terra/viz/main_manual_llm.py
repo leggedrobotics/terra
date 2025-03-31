@@ -157,8 +157,8 @@ def run_experiment(model_name, model_key, num_timesteps):
 
             print(f"Current direction: {base_orientation['direction']}")
             print(f"Bucket status: {bucket_status}")
-            print(f"Current position: {current_position_str}")
-            print(f"Target position: {target_position_str}")
+            print(f"Current position: {current_position_str} (y,x)")
+            print(f"Target position: {target_position_str} (y,x)")
             
             usr_msg4 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
