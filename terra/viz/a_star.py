@@ -5,7 +5,7 @@ def a_star(grid, start, target):
     A* algorithm to find the shortest path in a grid.
 
     Args:
-        grid: 2D numpy array representing the map (0 = free, 1 = obstacle).
+        grid: 2D numpy array representing the map (1 = free, 0 = obstacle).
         start: Tuple (x, y) representing the start position.
         target: Tuple (x, y) representing the target position.
 
@@ -40,7 +40,7 @@ def a_star(grid, start, target):
             for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
         ]
         for neighbor in neighbors:
-            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and grid[neighbor] == 0:
+            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and grid[neighbor] == 1:  # Check for traversable area
                 tentative_g_score = g_score[current] + 1
                 if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
                     came_from[neighbor] = current
