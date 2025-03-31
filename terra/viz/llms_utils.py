@@ -180,3 +180,39 @@ def summarize_local_map(local_map):
         f"{num_target_pos} positive target areas, and "
         f"{num_target_neg} negative target areas."
     )
+
+def extract_positions(state):
+    """
+    Extract the current base position and target position from the game state.
+
+    Args:
+        state: The current game state object.
+
+    Returns:
+        A tuple containing:
+        - current_position: A dictionary with the current base position (x, y).
+        - target_position: A dictionary with the target position (x, y), or None if not available.
+        
+    """
+
+    #print(state.agent.agent_state.pos_base[0])
+    # Extract th11e current base position
+    current_position = {
+        "x": state.agent.agent_state.pos_base[0][0],
+        "y": state.agent.agent_state.pos_base[0][1]
+    }
+
+    # Extract the target position from the target_map if available
+    #print(state.world.target_map.map)
+    target_position = None
+
+    for x in range(state.world.target_map.map.shape[1]):  # Iterate over rows
+        for y in range(state.world.target_map.map.shape[2]):  # Iterate over columns
+            if state.world.target_map.map[0, x, y] == -1:  # Access the value at (0, x, y)
+                target_position = {
+                    "x": x,
+                    "y": y
+                }
+                break  # Exit the loop once the target is found
+
+    return current_position, target_position

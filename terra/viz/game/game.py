@@ -255,8 +255,8 @@ class Game:
             OVERLAY_PIXEL_COORDS = False
 
             if OVERLAY_PIXEL_COORDS:
-                skip_step = 5  # Process every 5th pixel (adjust as needed)
-                font = pg.font.Font(None, 15)  # Default font, size 15
+                skip_step = 20  # Process every 5th pixel (adjust as needed)
+                font = pg.font.Font(None, 18)  # Default font, size 15
 
                 for grid_x in range(0, world.grid_length_x, skip_step):  # Step through grid_x with skip_step
                     for grid_y in range(0, world.grid_length_y, skip_step):  # Step through grid_y with skip_step
@@ -285,7 +285,8 @@ class Game:
                         center_y = coord_y + world.tile_size / 2
 
                         # Render the terrain value as text directly over the pixel
-                        text_surface = font.render(terrain_value, True, color)
+                        #text_surface = font.render(terrain_value, True, color)
+                        text_surface = font.render(f"({center_x}, {center_y})", True, color)
                         text_rect = text_surface.get_rect()  # Get the rectangle of the text
                         text_rect.center = (center_x + total_offset_x, center_y + total_offset_y)  # Set the center of the text to the center of the tile
                         self.surface.blit(text_surface, text_rect)

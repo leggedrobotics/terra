@@ -6,6 +6,7 @@ import json
 import os
 from tqdm import tqdm
 import csv
+import numpy as np
 
 
 from pygame.locals import (
@@ -17,7 +18,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms import Agent
-from terra.viz.llms_utils import generate_local_map, local_map_to_image, capture_screen, save_video, extract_bucket_status, extract_base_orientation, summarize_local_map
+from terra.viz.llms_utils import *
 
 def run_experiment(model_name, model_key, num_timesteps):
     """
@@ -32,7 +33,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         None
     """
     # Load the JSON configuration file
-    with open("envs8.json", "r") as file:
+    with open("envs9.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -108,8 +109,6 @@ def run_experiment(model_name, model_key, num_timesteps):
         base_orientation = extract_base_orientation(state)
         bucket_status = extract_bucket_status(state)  # Extract bucket status
 
-        print(base_orientation)
-        print(bucket_status)
 
         usr_msg0 = "What action should be taken?"
         usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
@@ -134,20 +133,46 @@ def run_experiment(model_name, model_key, num_timesteps):
             local_map_image = local_map_to_image(local_map)
 
             local_map_summary = summarize_local_map(local_map)
-            print(local_map_summary)
+            #print(local_map_summary)
 
-            usr_msg3 = (
+            # usr_msg3 = (
+            #     f"Analyze this game frame and the provided local map to select the optimal action. "
+            #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
+            #     f"The bucket is currently {bucket_status}. "
+            #     f"{local_map_summary} "
+            #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+            #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+            # )
+
+
+            current_position, target_position = extract_positions(state)
+
+            current_position_str = f"({current_position['x']}, {current_position['y']})"
+
+
+            if target_position:
+                target_position_str = f"at coordinates ({target_position['x']}, {target_position['y']})"
+            else:
+                target_position_str = "not currently visible in the global map"
+
+            print(f"Current direction: {base_orientation['direction']}")
+            print(f"Bucket status: {bucket_status}")
+            print(f"Current position: {current_position_str}")
+            print(f"Target position: {target_position_str}")
+            
+            usr_msg4 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
                 f"The bucket is currently {bucket_status}. "
-                f"{local_map_summary} "
+                f"The excavator is currently located at {current_position_str} (y,x). "
+                f"The nearest target digging position is {target_position_str} (y,x). "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
 
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg3, local_map=local_map_image)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg4, local_map=local_map_image)
         else:
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg3, local_map=None)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg4, local_map=None)
 
         action_output, reasoning = agent.generate_response("./")
         
