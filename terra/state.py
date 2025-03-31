@@ -615,7 +615,7 @@ class State(NamedTuple):
         ) * dig_portion_radius * tile_size + min_distance_from_agent
         r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
 
-        theta_max = np.pi / self.env_cfg.agent.angles_cabin
+        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
@@ -1358,10 +1358,9 @@ class State(NamedTuple):
 
         relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
         target_map_negative = jnp.clip(target_map, a_max=0)
+
         done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
-
         done_unload = agent_loaded[0] == 0
-
         done_task = done_dump & done_dig & done_unload
         return done_task
 
