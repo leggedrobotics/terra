@@ -70,7 +70,7 @@ class CurriculumManager(NamedTuple):
             ),
         )
 
-        do_increase = consecutive_successes >= self.increase_level_threshold
+        do_increase = consecutive_successes >= self.increase_level_threshold 
         do_decrease = consecutive_failures >= self.decrease_level_threshold
 
         level, consecutive_failures, consecutive_successes = jax.lax.cond(

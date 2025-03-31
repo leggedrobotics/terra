@@ -27,25 +27,43 @@ class TraversabilityMaskWrapper:
 
         # encode agent pos and size in the map
         agent_corners = state._get_agent_corners(
-            state.agent.agent_state.pos_base,
-            state.agent.agent_state.angle_base,
+            state.agent.agent_state_1.pos_base,
+            state.agent.agent_state_1.angle_base,
             state.env_cfg.agent.width,
             state.env_cfg.agent.height,
         )
-        x, y = state._get_agent_corners_xy(agent_corners)
+        x1, y1 = state._get_agent_corners_xy(agent_corners)
+
+        agent_corners = state._get_agent_corners(
+            state.agent.agent_state_2.pos_base,
+            state.agent.agent_state_2.angle_base,
+            state.env_cfg.agent.width,
+            state.env_cfg.agent.height,
+        )
+        x2, y2 = state._get_agent_corners_xy(agent_corners)
 
         map_width = state.world.width
         map_height = state.world.height
         traversability_mask = jnp.where(
             jnp.logical_or(
                 jnp.logical_or(
-                    (jnp.arange(map_width) > x[1])[:, None].repeat(map_height, axis=1),
-                    (jnp.arange(map_width) < x[0])[:, None].repeat(map_height, axis=1),
-                ),
-                jnp.logical_or(
-                    (jnp.arange(map_height) > y[1])[None].repeat(map_width, axis=0),
-                    (jnp.arange(map_height) < y[0])[None].repeat(map_width, axis=0),
-                ),
+                    jnp.logical_or(
+                        (jnp.arange(map_width) > x1[1])[:, None].repeat(map_height, axis=1),
+                        (jnp.arange(map_width) < x1[0])[:, None].repeat(map_height, axis=1),
+                    ),
+                    jnp.logical_or(
+                        (jnp.arange(map_width) > x2[1])[:, None].repeat(map_height, axis=1),
+                        (jnp.arange(map_width) < x2[0])[:, None].repeat(map_height, axis=1),
+                    ),),
+                jnp.logical_or(    
+                    jnp.logical_or(
+                        (jnp.arange(map_height) > y1[1])[None].repeat(map_width, axis=0),
+                        (jnp.arange(map_height) < y1[0])[None].repeat(map_width, axis=0),
+                    ),
+                    jnp.logical_or(
+                        (jnp.arange(map_height) > y2[1])[None].repeat(map_width, axis=0),
+                        (jnp.arange(map_height) < y2[0])[None].repeat(map_width, axis=0),
+                    ),)
             ),
             traversability_mask,
             -1,
@@ -73,7 +91,7 @@ class LocalMapWrapper:
         the cumulative sum of tiles to dig in the area spanned by the cyilindrical tile.
         """
         current_pos_idx = state._get_current_pos_vector_idx(
-            pos_base=state.agent.agent_state.pos_base,
+            pos_base=state.agent.agent_state_1.pos_base,
             map_height=state.env_cfg.maps.edge_length_px,
         )
         map_global_coords = state._map_to_flattened_global_coords(
@@ -83,8 +101,8 @@ class LocalMapWrapper:
             map_global_coords, current_pos_idx
         )
         current_arm_angle = get_arm_angle_int(
-            state.agent.agent_state.angle_base,
-            state.agent.agent_state.angle_cabin,
+            state.agent.agent_state_1.angle_base,
+            state.agent.agent_state_1.angle_cabin,
             state.env_cfg.agent.angles_base,
             state.env_cfg.agent.angles_cabin,
         )

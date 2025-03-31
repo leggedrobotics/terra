@@ -34,7 +34,8 @@ class Agent(NamedTuple):
     Defines the state and type of the agent.
     """
 
-    agent_state: AgentState
+    agent_state_1: AgentState
+    agent_state_2: AgentState
 
     width: int
     height: int
@@ -47,24 +48,33 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
     ) -> tuple["Agent", jax.random.PRNGKey]:
-        pos_base, angle_base, key = jax.lax.cond(
+        pos_base_1, angle_base_1, pos_base_2, angle_base_2, key = jax.lax.cond(
             env_cfg.agent.random_init_state,
-            lambda k: _get_random_init_state(
-                k,
-                env_cfg,
-                max_traversable_x,
-                max_traversable_y,
-                padding_mask,
-                env_cfg.agent.width,
-                env_cfg.agent.height,
-            ),
-            lambda k: _get_top_left_init_state(k, env_cfg),
+            # lambda k: _get_random_init_state(
+            #     k,
+            #     env_cfg,
+            #     max_traversable_x,
+            #     max_traversable_y,
+            #     padding_mask,
+            #     env_cfg.agent.width,
+            #     env_cfg.agent.height,
+            # )
+            lambda k: _get_top_left_two_init_state(k, env_cfg),
+            lambda k: _get_top_left_two_init_state(k, env_cfg),
             key,
         )
 
-        agent_state = AgentState(
-            pos_base=pos_base,
-            angle_base=angle_base,
+        agent_state_1 = AgentState(
+            pos_base=pos_base_1,
+            angle_base=angle_base_1,
+            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+            arm_extension=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded=jnp.full((1,), 0, dtype=IntLowDim),
+        )
+
+        agent_state_2 = AgentState(
+            pos_base=pos_base_2,
+            angle_base=angle_base_2,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             arm_extension=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
@@ -73,18 +83,44 @@ class Agent(NamedTuple):
         width = env_cfg.agent.width
         height = env_cfg.agent.height
 
-        return Agent(agent_state=agent_state, width=width, height=height), key
+        return Agent(agent_state_1=agent_state_1, agent_state_2=agent_state_2, width=width, height=height), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     max_center_coord = jnp.ceil(
         jnp.max(
-            jnp.array([env_cfg.agent.width // 2 - 1, env_cfg.agent.height // 2 - 1])
+            jnp.array([env_cfg.agent.width // 2 + 1, env_cfg.agent.height // 2 + 1])
         )
     ).astype(IntMap)
+    #print("max ->",max_center_coord)
     pos_base = IntMap(jnp.array([max_center_coord, max_center_coord]))
-    theta = jnp.full((1,), fill_value=0, dtype=IntMap)
+    theta = jnp.full((1,), fill_value=1, dtype=IntMap)
+    #jax.debug.print("pos_base: {}", pos_base)
     return pos_base, theta, key
+
+
+def _get_top_left_two_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
+    max_center_coord1 = jnp.ceil(
+        jnp.max(
+            jnp.array([env_cfg.agent.width // 2 + 1, env_cfg.agent.height // 2 + 1])
+        )
+    ).astype(IntMap)
+
+    max_center_coord2 = jnp.ceil(
+        jnp.max(
+            jnp.array([env_cfg.agent.width // 2 + 1, env_cfg.agent.height // 2 + 10])
+        )
+    ).astype(IntMap)
+
+
+    #print("max ->",max_center_coord)
+    pos_base_1 = IntMap(jnp.array([max_center_coord1, max_center_coord1]))
+    theta_1 = jnp.full((1,), fill_value=1, dtype=IntMap)
+    pos_base_2 = IntMap(jnp.array([max_center_coord2, max_center_coord2]))
+    theta_2 = jnp.full((1,), fill_value=1, dtype=IntMap)
+    
+    #jax.debug.print("pos_base: {}", pos_base)
+    return pos_base_1, theta_1, pos_base_2, theta_2, key
 
 
 def _get_random_init_state(

@@ -194,7 +194,7 @@ class TerraEnv(NamedTuple):
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
-            new_state.agent.agent_state.loaded,
+            new_state.agent.agent_state_1.loaded,
         )
 
         new_state, observations = jax.lax.cond(
@@ -232,17 +232,17 @@ class TerraEnv(NamedTuple):
         """
         Transforms a State object to an observation dictionary.
         """
-        agent_state = jnp.hstack(
+        agent_state_1 = jnp.hstack(
             [
-                state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
-                state.agent.agent_state.angle_base,
-                state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.arm_extension,
-                state.agent.agent_state.loaded,
+                state.agent.agent_state_1.pos_base,  # pos_base is encoded in traversability_mask
+                state.agent.agent_state_1.angle_base,
+                state.agent.agent_state_1.angle_cabin,
+                state.agent.agent_state_1.arm_extension,
+                state.agent.agent_state_1.loaded,
             ]
         )
         return {
-            "agent_state": agent_state,
+            "agent_state": agent_state_1,
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,

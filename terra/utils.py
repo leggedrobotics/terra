@@ -156,7 +156,7 @@ def get_agent_corners(
     agent_height: IntLowDim,
 ):
     """
-    Gets the coordinates of the 4 corners of the agent.
+    Gets the coordinates of the 4 corners of the agent. 
     """
     orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
     agent_xy_matrix = jnp.array(
