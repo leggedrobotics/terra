@@ -23,7 +23,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms_utils import *
-from terra.viz.a_star import a_star
+from terra.viz.a_star import a_star, compute_path
 
 def main():
     batch_cfg = BatchConfig()
@@ -73,66 +73,34 @@ def main():
 
     print(f"Current Position: {start}")
     print(f"Target Position: {target}")
+    
+    path, combined_grid = compute_path(state, start, target)
 
-    # Run the A* algorithm if the target exists
-    if target:
-        grid = state.world.target_map.map[0]  # Extract the 2D grid
-        grid = grid.at[start[0], start[1]].set(7)
-        grid = grid.at[target[0], target[1]].set(8)
-        print("\nOriginal Grid:")
-        print(grid)
+    if path:
+        print(f"\nComputed Path: {path}")
 
-        # Adjust the grid for A* logic:
-        # - Convert `-1` (target) to `1` (traversable) for pathfinding
-        # - Keep `0` as non-traversable
-        # - Keep `1` as free (traversable)
-        adjusted_grid = grid.copy()
-        adjusted_grid = adjusted_grid.at[adjusted_grid == -1].set(1)  # Treat target as traversable
-        adjusted_grid = adjusted_grid.at[adjusted_grid == 7].set(1)  
-        adjusted_grid = adjusted_grid.at[adjusted_grid == 8].set(1)
+        # Highlight the path in the grid
+        highlighted_grid = combined_grid.copy()
+        for x, y in path:
+            highlighted_grid = highlighted_grid.at[x, y].set(9)  # Mark the path with 9
 
-        # neighbors = [
-        #     (start[0] + dx, start[1] + dy)
-        #     for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]
-        # ]
-        # print(f"Neighbors of {start}:")
-        # for neighbor in neighbors:
-        #     x, y = neighbor
-        #     if 0 <= x < grid.shape[0] and 0 <= y < grid.shape[1]:
-        #         print(f"Neighbor {neighbor}: {grid[x, y]}")
+        print("\nHighlighted Grid (Path marked with 9):")
+        print(highlighted_grid)
 
-        print("\n Adjusted Grid:")
-        print(adjusted_grid)
-        path = a_star(adjusted_grid, start, target)
-
-        if path:
-            print(f"\n Computed Path: {path}")
-
-            # Highlight the path in the grid
-            highlighted_grid = grid.copy()
-            for x, y in path:
-                #print(f"Path: {x}, {y}")
-                #print(f"Type of grid: {type(grid)}")
-                #print(f"Type of highlighted_grid: {type(highlighted_grid)}")
-                highlighted_grid = highlighted_grid.at[x, y].set(9)  # Mark the path with 9
-                #print(highlighted_grid)
-
-            print("\nHighlighted Grid (Path marked with 9):")
-            print(highlighted_grid)
-            
-            game = env.terra_env.rendering_engine
-            game.path = path
-        else:
-            print("No path found.")
+        # Pass the path to the Game instance for visualization
+        game = env.terra_env.rendering_engine
+        game.path = path
     else:
-        print("Target position not available.")
+        print("No path found.")
+  
 
+    
     playing = True
     while playing:
         for event in pg.event.get():
-            state = timestep.state
-            base_orientation = extract_base_orientation(state)
-            bucket_status = extract_bucket_status(state)  # Extract bucket status
+            #state = timestep.state
+            #base_orientation = extract_base_orientation(state)
+            #bucket_status = extract_bucket_status(state)  # Extract bucket status
 
             #print(base_orientation)
             #print(bucket_status)        
