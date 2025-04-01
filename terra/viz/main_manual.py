@@ -23,7 +23,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms_utils import *
-from terra.viz.a_star import a_star, compute_path
+from terra.viz.a_star import compute_path
 
 def main():
     batch_cfg = BatchConfig()
@@ -46,11 +46,6 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
-    #print(f"{timestep.state.agent.width=}")
-    #print(f"{timestep.state.agent.height=}")
-
-    #rng, _rng = jax.random.split(rng)
-    #_rng = _rng[None]
 
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
@@ -60,67 +55,15 @@ def main():
     end_time = time.time()
     print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
     
-    # state = timestep.state
-    # current_position, target_position = extract_positions(state)
-
-    # # Extract current and target positions
-    # state = timestep.state
-    # current_position, target_position = extract_positions(state)
-
-    # # Convert positions to tuples
-    # start = (int(current_position["x"]), int(current_position["y"]))
-    # target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
-
-    # print(f"Current Position: {start}")
-    # print(f"Target Position: {target}")
-    
-    # path, combined_grid = compute_path(state, start, target)
-
-    # if path:
-    #     print(f"\nComputed Path: {path}")
-
-    #     # Highlight the path in the grid
-    #     highlighted_grid = combined_grid.copy()
-    #     for x, y in path:
-    #         highlighted_grid = highlighted_grid.at[x, y].set(9)  # Mark the path with 9
-
-    #     print("\nHighlighted Grid (Path marked with 9):")
-    #     print(highlighted_grid)
-
-    #     # Pass the path to the Game instance for visualization
-    #     game = env.terra_env.rendering_engine
-    #     game.path = path
-    # else:
-    #     print("No path found.")
-    
     current_map = timestep.state.world.target_map.map[0]  # Extract the target map
     previous_map = current_map.copy()  # Initialize the previous map
 
-    state = timestep.state
-    current_position, target_position = extract_positions(state)
+    start, target = extract_positions(timestep.state)
 
-    # # Convert positions to tuples
-    start = (int(current_position["x"]), int(current_position["y"]))
-    target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
-
-    print(f"Current Position: {start}")
-    print(f"Target Position: {target}")
-
-
-    # Recompute the path
-    path, combined_grid = compute_path(state, start, target)
+    # Compute the path
+    path, _ = compute_path(timestep.state, start, target)
 
     if path:
-        print(f"\nComputed Path: {path}")
-
-        # Highlight the path in the grid
-        highlighted_grid = combined_grid.copy()
-        for x, y in path:
-            highlighted_grid = highlighted_grid.at[x, y].set(9)  # Mark the path with 9
-
-        print("\nHighlighted Grid (Path marked with 9):")
-        print(highlighted_grid)
-
         # Pass the path to the Game instance for visualization
         game = env.terra_env.rendering_engine
         game.path = path
@@ -131,13 +74,6 @@ def main():
     playing = True
     while playing:
         for event in pg.event.get():
-            #state = timestep.state
-            #base_orientation = extract_base_orientation(state)
-            #bucket_status = extract_bucket_status(state)  # Extract bucket status
-
-            #print(base_orientation)
-            #print(bucket_status)        
-
             if event.type == KEYDOWN:
                 action = None
                 if event.key == K_UP:
@@ -187,35 +123,18 @@ def main():
                         print("Map has changed. Recomputing path...")
                         previous_map = current_map.copy()  # Update the previous map
 
-                        state = timestep.state
-                        current_position, target_position = extract_positions(state)
-
-                        # # Convert positions to tuples
-                        start = (int(current_position["x"]), int(current_position["y"]))
-                        target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
-
-                        print(f"Current Position: {start}")
-                        print(f"Target Position: {target}")
+                        start, target = extract_positions(timestep.state)
 
                         # Recompute the path
-                        path, combined_grid = compute_path(state, start, target)
+                        path, _ = compute_path(timestep.state, start, target)
 
                         if path:
-                            print(f"\nComputed Path: {path}")
-
-                            # Highlight the path in the grid
-                            highlighted_grid = combined_grid.copy()
-                            for x, y in path:
-                                highlighted_grid = highlighted_grid.at[x, y].set(9)  # Mark the path with 9
-
-                            print("\nHighlighted Grid (Path marked with 9):")
-                            print(highlighted_grid)
-
                             # Pass the path to the Game instance for visualization
                             game = env.terra_env.rendering_engine
                             game.path = path
                         else:
                             print("No path found.")
+
             elif event.type == QUIT:
                 playing = False
 

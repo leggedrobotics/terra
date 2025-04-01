@@ -232,8 +232,9 @@ class Game:
             cabin_color = agent.agent["cabin"]["color"]
             pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
 
+            DRAW_PATH = True
 
-            if self.path:
+            if DRAW_PATH and self.path is not None:
                 line_points = []
                 for x, y in self.path:
                     world_coords = world.grid_to_world(y , x , 0)  # Convert grid to world coordinates

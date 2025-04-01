@@ -214,5 +214,9 @@ def extract_positions(state):
                     "y": y
                 }
                 break  # Exit the loop once the target is found
+    
+    # # Convert positions to tuples
+    start = (int(current_position["x"]), int(current_position["y"]))
+    target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
 
-    return current_position, target_position
+    return start, target

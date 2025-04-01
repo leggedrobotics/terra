@@ -75,14 +75,10 @@ def compute_path(state, start, target):
         - path: List of tuples representing the computed path, or None if no path is found.
         - highlighted_grid: The grid with the path highlighted (marked with 9).
     """
-    target_map = state.world.target_map.map[0]  # Extract the target map
-    target_map = target_map.at[start[0], start[1]].set(7)  # Mark the start position
-    target_map = target_map.at[target[0], target[1]].set(8)  # Mark the target position
-    traversability_mask = state.world.traversability_mask.map[0]  # Extract the traversability mask
-    print("\nTarget Map:")
-    print(target_map)
-    print("\nTraversability Mask:")
-    print(traversability_mask)
+    target_map = state.world.target_map.map[0]                      # Extract the target map
+    #target_map = target_map.at[start[0], start[1]].set(7)           # Mark the start position
+    #target_map = target_map.at[target[0], target[1]].set(8)         # Mark the target position
+    traversability_mask = state.world.traversability_mask.map[0]    # Extract the traversability mask
 
     # Combine the maps
     combined_grid = target_map.copy()
@@ -96,11 +92,8 @@ def compute_path(state, start, target):
     combined_grid = combined_grid.at[traversability_mask == 1].set(1)  # Non-traversable
   
     # Mark the start and target positions
-    combined_grid = combined_grid.at[start[0], start[1]].set(0)  # Mark the start position
-    combined_grid = combined_grid.at[target[0], target[1]].set(0)  # Mark the target position
-
-    print("\nCombined Grid:")
-    print(combined_grid)
+    #combined_grid = combined_grid.at[start[0], start[1]].set(0)    # Mark the start position back to 0
+    #combined_grid = combined_grid.at[target[0], target[1]].set(0)  # Mark the target position back to 0
 
     # Run the A* algorithm
     path = a_star(combined_grid, start, target)
