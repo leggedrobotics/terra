@@ -1,6 +1,32 @@
 import heapq
+import numpy as np
 
-def a_star(grid, start, target):
+def inflate_obstacles(grid, buffer_size):
+    """
+    Inflates obstacles in the grid by marking cells within a buffer zone as non-traversable.
+
+    Args:
+        grid (np.ndarray): The original grid.
+        buffer_size (int): The number of cells around each obstacle to mark as non-traversable.
+
+    Returns:
+        np.ndarray: The inflated grid.
+    """
+    inflated_grid = grid.copy()
+    rows, cols = grid.shape
+
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r, c] != 0:  # If the cell is an obstacle
+                for dr in range(-buffer_size, buffer_size + 1):
+                    for dc in range(-buffer_size, buffer_size + 1):
+                        nr, nc = r + dr, c + dc
+                        if 0 <= nr < rows and 0 <= nc < cols:
+                            inflated_grid = inflated_grid.at[nr, nc].set(1)  # Mark as non-traversable
+
+    return inflated_grid
+
+def a_star(grid, start, target, buffer_size=1):
     """
     A* algorithm to find the shortest path in a grid.
 
@@ -12,6 +38,9 @@ def a_star(grid, start, target):
     Returns:
         List of tuples representing the path from start to target, or None if no path exists.
     """
+    # Inflate obstacles
+    grid = inflate_obstacles(grid, buffer_size)
+
     def heuristic(a, b):
         # Manhattan distance heuristic
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
@@ -96,7 +125,7 @@ def compute_path(state, start, target):
     #combined_grid = combined_grid.at[target[0], target[1]].set(0)  # Mark the target position back to 0
 
     # Run the A* algorithm
-    path = a_star(combined_grid, start, target)
+    path = a_star(combined_grid, start, target, buffer_size=4)
     
     return path, combined_grid
 
