@@ -129,3 +129,37 @@ def compute_path(state, start, target):
     
     return path, combined_grid
 
+def simplify_path(path):
+    """
+    Simplify a path by reducing it to straight lines and minimizing turns.
+
+    Args:
+        path (list of tuples): The original path as a list of (x, y) positions.
+
+    Returns:
+        list of tuples: The simplified path.
+    """
+    if not path:
+        return []
+
+    # Initialize the simplified path with the first point
+    simplified_path = [path[0]]
+
+    # Iterate through the path and keep only points where the direction changes
+    for i in range(1, len(path) - 1):
+        prev_point = path[i - 1]
+        curr_point = path[i]
+        next_point = path[i + 1]
+
+        # Calculate the direction vectors
+        dir1 = (curr_point[0] - prev_point[0], curr_point[1] - prev_point[1])
+        dir2 = (next_point[0] - curr_point[0], next_point[1] - curr_point[1])
+
+        # If the direction changes, add the current point to the simplified path
+        if dir1 != dir2:
+            simplified_path.append(curr_point)
+
+    # Add the last point to the simplified path
+    simplified_path.append(path[-1])
+
+    return simplified_path

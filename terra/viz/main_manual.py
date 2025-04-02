@@ -23,7 +23,8 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms_utils import *
-from terra.viz.a_star import compute_path
+from terra.viz.a_star import compute_path, simplify_path
+
 
 def main():
     batch_cfg = BatchConfig()
@@ -63,13 +64,18 @@ def main():
     # Compute the path
     path, _ = compute_path(timestep.state, start, target)
     print("Path: ", path)
+    simplified_path = simplify_path(path)
+    print("Simplified Path: ", simplified_path)
+
 
     initial_orientation = extract_base_orientation(timestep.state)
     initial_direction = initial_orientation["direction"]
     print("Initial Direction: ", initial_direction)
     
     actions = path_to_actions(path, initial_direction, 1)
-    print(actions)
+    actions_simple = path_to_actions(simplified_path, initial_direction, 1)
+    print("Action list", actions)
+    print("Simple Action list", actions_simple)
 
 
     if path:
@@ -138,13 +144,17 @@ def main():
                         path, _ = compute_path(timestep.state, start, target)
 
                         print("Path: ", path)
+                        simplified_path = simplify_path(path)
+                        print("Simplified Path: ", simplified_path)
 
                         initial_orientation = extract_base_orientation(timestep.state)
                         initial_direction = initial_orientation["direction"]
                         print("Initial Direction: ", initial_direction)
     
-                        actions = path_to_actions(path, initial_direction, step_size=1)
-                        print(actions)
+                        actions = path_to_actions(path, initial_direction, 1)
+                        actions_simple = path_to_actions(simplified_path, initial_direction, 1)
+                        print("Action list", actions)
+                        print("Simple Action list", actions_simple)
 
                         if path:
                             # Pass the path to the Game instance for visualization
@@ -165,3 +175,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

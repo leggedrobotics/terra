@@ -227,7 +227,7 @@ def path_to_actions(path, initial_orientation, step_size=1):
 
     Args:
         path (list of tuples): The path as a list of (x, y) positions.
-        initial_orientation (str): The initial base orientation ('up', 'down', 'left', 'right', etc.).
+        initial_orientation (str): The initial base orientation ('up', 'down', 'left', 'right').
         step_size (int): The number of pixels the base moves forward in one step.
 
     Returns:
@@ -252,6 +252,11 @@ def path_to_actions(path, initial_orientation, step_size=1):
     # Helper function to determine the direction between two points
     def get_direction(from_pos, to_pos):
         delta = (to_pos[0] - from_pos[0], to_pos[1] - from_pos[1])
+        # Normalize the delta to match one of the predefined directions
+        if delta[0] != 0:
+            delta = (delta[0] // abs(delta[0]), 0)
+        elif delta[1] != 0:
+            delta = (0, delta[1] // abs(delta[1]))
         for direction, d in direction_deltas.items():
             if delta == d:
                 return direction
@@ -261,13 +266,15 @@ def path_to_actions(path, initial_orientation, step_size=1):
     actions = []
     current_orientation = initial_orientation
 
-    # Iterate through the path
+    # Iterate through the simplified path
     for i in range(len(path) - 1):
         current_pos = path[i]
         next_pos = path[i + 1]
 
         # Determine the required direction to move
         required_direction = get_direction(current_pos, next_pos)
+        if required_direction is None:
+            raise ValueError(f"Invalid direction between {current_pos} and {next_pos}")
 
         # Determine the turns needed to face the required direction
         while current_orientation != required_direction:
@@ -275,18 +282,14 @@ def path_to_actions(path, initial_orientation, step_size=1):
             required_idx = directions.index(required_direction)
 
             # Determine if we need to turn right (CLOCK) or left (ANTICLOCK)
-            if (required_idx - current_idx) % 8 <= 4:  # Clockwise
+            if (required_idx - current_idx) % 4 == 1:  # Clockwise
                 actions.append(CLOCK)
                 current_orientation = directions[(current_idx + 1) % 4]
             else:  # Counter-clockwise
                 actions.append(ANTICLOCK)
                 current_orientation = directions[(current_idx - 1) % 4]
 
-        # Calculate the distance to move forward
-        distance = max(abs(next_pos[0] - current_pos[0]), abs(next_pos[1] - current_pos[1]))
-        steps = distance // step_size
-
-        # Add the required number of forward actions
-        actions.extend([FORWARD] * steps)
+        # Add a single forward action for the entire straight-line segment
+        actions.append(FORWARD)
 
     return actions
