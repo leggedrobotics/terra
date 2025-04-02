@@ -100,10 +100,10 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
-            # agent_pos_2,
-            # base_dir_2,
-            # cabin_dir_2,
-            # loaded_2,
+            agent_pos_2,
+            base_dir_2,
+            cabin_dir_2,
+            loaded_2,
             target_tiles,
         )
         self.draw()
@@ -143,10 +143,10 @@ class Game:
         base_dir_1,
         cabin_dir_1,
         loaded_1,
-        # agent_pos_2,
-        # base_dir_2,
-        # cabin_dir_2,
-        # loaded_2,
+        agent_pos_2,
+        base_dir_2,
+        cabin_dir_2,
+        loaded_2,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -160,10 +160,10 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
-            # agent_pos_2,
-            # base_dir_2,
-            # cabin_dir_2,
-            # loaded_2,
+            agent_pos_2,
+            base_dir_2,
+            cabin_dir_2,
+            loaded_2,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
@@ -177,14 +177,18 @@ class Game:
             tg = target_grid[i]
             pm = padding_mask[i]
             dm = dumpability_mask[i]
-            ap = agent_pos_1[i]
-            bd = base_dir_1[i]
-            cd = cabin_dir_1[i]
-            ld = loaded_1[i]
+            ap1 = agent_pos_1[i]
+            bd1 = base_dir_1[i]
+            cd1 = cabin_dir_1[i]
+            ld1 = loaded_1[i]
+            ap2 = agent_pos_2[i]
+            bd2 = base_dir_2[i]
+            cd2 = cabin_dir_2[i]
+            ld2 = loaded_2[i]
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents_1[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
+                args=(self.worlds[i], self.agents_1[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, tt),
             )
             thread.start()
             threads.append(thread)
