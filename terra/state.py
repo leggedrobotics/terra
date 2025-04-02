@@ -723,8 +723,6 @@ class State(NamedTuple):
 
         # Fixed middle-point arm extension (halfway between 0 and 1)
         fixed_extension = 0.5
-
-        # Calculate the middle range between what would be arm_extension=0 and arm_extension=1
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
         r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
         theta_max = np.pi / self.env_cfg.agent.angles_cabin
