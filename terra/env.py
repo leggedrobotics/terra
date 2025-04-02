@@ -433,30 +433,12 @@ class TerraEnvBatch:
         """
         return {
             "agent_states": (6,),
-            "local_map_action_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_action_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_dumpability": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_obstacles": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
+            "local_map_action_neg": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_action_pos": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_target_neg": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_target_pos": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_dumpability": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_obstacles": (self.batch_cfg.agent.angles_cabin,),
             "action_map": (
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,
