@@ -125,7 +125,7 @@ def compute_path(state, start, target):
     #combined_grid = combined_grid.at[target[0], target[1]].set(0)  # Mark the target position back to 0
 
     # Run the A* algorithm
-    path = a_star(combined_grid, start, target, buffer_size=4)
+    path = a_star(combined_grid, start, target, buffer_size=2)
     
     return path, combined_grid
 

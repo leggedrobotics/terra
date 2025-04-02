@@ -145,27 +145,27 @@ def run_experiment(model_name, model_key, num_timesteps):
             # )
 
 
-            current_position, target_position = extract_positions(state)
+            current, target = extract_positions(state)
 
-            current_position_str = f"({current_position['x']}, {current_position['y']})"
+            # current_position_str = f"({current_position['x']}, {current_position['y']})"
 
 
-            if target_position:
-                target_position_str = f"at coordinates ({target_position['x']}, {target_position['y']})"
-            else:
-                target_position_str = "not currently visible in the global map"
+            # if target_position:
+            #     target_position_str = f"at coordinates ({target_position['x']}, {target_position['y']})"
+            # else:
+            #     target_position_str = "not currently visible in the global map"
 
             print(f"Current direction: {base_orientation['direction']}")
             print(f"Bucket status: {bucket_status}")
-            print(f"Current position: {current_position_str} (y,x)")
-            print(f"Target position: {target_position_str} (y,x)")
+            print(f"Current position: {current} (y,x)")
+            print(f"Target position: {target} (y,x)")
             
             usr_msg4 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
                 f"The bucket is currently {bucket_status}. "
-                f"The excavator is currently located at {current_position_str} (y,x). "
-                f"The nearest target digging position is {target_position_str} (y,x). "
+                f"The excavator is currently located at {current} (y,x). "
+                f"The nearest target digging position is {target} (y,x). "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )

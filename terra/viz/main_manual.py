@@ -62,6 +62,15 @@ def main():
 
     # Compute the path
     path, _ = compute_path(timestep.state, start, target)
+    print("Path: ", path)
+
+    initial_orientation = extract_base_orientation(timestep.state)
+    initial_direction = initial_orientation["direction"]
+    print("Initial Direction: ", initial_direction)
+    
+    actions = path_to_actions(path, initial_direction, 1)
+    print(actions)
+
 
     if path:
         # Pass the path to the Game instance for visualization
@@ -127,6 +136,15 @@ def main():
 
                         # Recompute the path
                         path, _ = compute_path(timestep.state, start, target)
+
+                        print("Path: ", path)
+
+                        initial_orientation = extract_base_orientation(timestep.state)
+                        initial_direction = initial_orientation["direction"]
+                        print("Initial Direction: ", initial_direction)
+    
+                        actions = path_to_actions(path, initial_direction, step_size=1)
+                        print(actions)
 
                         if path:
                             # Pass the path to the Game instance for visualization
