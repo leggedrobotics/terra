@@ -184,4 +184,4 @@ class WheeledAction(Action):
 
     @staticmethod
     def get_num_actions():
-        return 11
+        return 9
