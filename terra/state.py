@@ -128,8 +128,6 @@ class State(NamedTuple):
             self._handle_anticlock,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
             # Wheeled
             self._handle_move_forward,
@@ -140,11 +138,9 @@ class State(NamedTuple):
             self._handle_move_anticlock_backward,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
         ]
-        cumulative_len = jnp.array([0, 9], dtype=IntLowDim)
+        cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
         )
@@ -648,46 +644,6 @@ class State(NamedTuple):
             valid_chain,
             lambda: s2,
             lambda: self,
-        )
-
-    def _handle_extend_arm(self) -> "State":
-        new_arm_extension = jnp.min(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension + 1,
-                    jnp.full(
-                        (1,),
-                        fill_value=self.env_cfg.agent.max_arm_extension,
-                        dtype=IntLowDim,
-                    ),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
-        )
-
-    def _handle_retract_arm(self) -> "State":
-        new_arm_extension = jnp.max(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension - 1,
-                    jnp.full((1,), fill_value=0, dtype=IntLowDim),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
         )
 
     @staticmethod
