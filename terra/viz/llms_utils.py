@@ -204,22 +204,18 @@ def extract_positions(state):
 
     # Extract the target position from the target_map if available
     #print(state.world.target_map.map)
-    target_position = None
+    target_positions = []
 
     for x in range(state.world.target_map.map.shape[1]):  # Iterate over rows
         for y in range(state.world.target_map.map.shape[2]):  # Iterate over columns
             if state.world.target_map.map[0, x, y] == -1:  # Access the value at (0, x, y)
-                target_position = {
-                    "x": x,
-                    "y": y
-                }
-                break  # Exit the loop once the target is found
+                target_positions.append((x, y))
     
     # # Convert positions to tuples
     start = (int(current_position["x"]), int(current_position["y"]))
-    target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
+    #target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
 
-    return start, target
+    return start, target_positions
 
 def path_to_actions(path, initial_orientation, step_size=1):
     """

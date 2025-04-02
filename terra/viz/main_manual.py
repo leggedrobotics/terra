@@ -24,7 +24,23 @@ from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms_utils import *
 from terra.viz.a_star import compute_path, simplify_path
+def find_nearest_target(start, target_positions):
+    """
+    Find the nearest target position to the starting point.
 
+    Args:
+        start (tuple): The starting position as (x, y).
+        target_positions (list of tuples): A list of target positions as (x, y).
+
+    Returns:
+        tuple: The nearest target position as (x, y), or None if the list is empty.
+    """
+    if not target_positions:
+        return None
+
+    # Calculate the Euclidean distance to each target and find the nearest one
+    nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
+    return nearest_target
 
 def main():
     batch_cfg = BatchConfig()
@@ -59,7 +75,8 @@ def main():
     current_map = timestep.state.world.target_map.map[0]  # Extract the target map
     previous_map = current_map.copy()  # Initialize the previous map
 
-    start, target = extract_positions(timestep.state)
+    start, target_positions = extract_positions(timestep.state)
+    target = find_nearest_target(start, target_positions)
 
     # Compute the path
     path, _ = compute_path(timestep.state, start, target)
@@ -138,7 +155,8 @@ def main():
                         print("Map has changed. Recomputing path...")
                         previous_map = current_map.copy()  # Update the previous map
 
-                        start, target = extract_positions(timestep.state)
+                        start, target_positions = extract_positions(timestep.state)
+                        target = find_nearest_target(start, target_positions)
 
                         # Recompute the path
                         path, _ = compute_path(timestep.state, start, target)
