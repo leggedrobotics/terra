@@ -237,7 +237,6 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.arm_extension,
                 state.agent.agent_state.loaded,
             ]
         )
@@ -432,7 +431,7 @@ class TerraEnvBatch:
             - value: the tuple representing the shape of the input feature
         """
         return {
-            "agent_states": (6,),
+            "agent_states": (5,),
             "local_map_action_neg": (self.batch_cfg.agent.angles_cabin,),
             "local_map_action_pos": (self.batch_cfg.agent.angles_cabin,),
             "local_map_target_neg": (self.batch_cfg.agent.angles_cabin,),
