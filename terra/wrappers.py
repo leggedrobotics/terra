@@ -111,14 +111,8 @@ class LocalMapWrapper:
         local_cartesian_masks = jax.vmap(lambda map: state._get_dig_dump_mask_cyl(map))(
             possible_maps_cyl_coords
         )
-
-        # Go from mask to masked height map to local cylindrical cumsum(s)
         local_cyl_height_map = jax.vmap(
-            jax.vmap(
-                lambda x: (
-                    (map_to_wrap) * x.reshape(state.world.width, state.world.height)
-                ).sum()
-            )
+            lambda x: map_to_wrap * x.reshape(state.world.height, state.world.width)
         )(local_cartesian_masks)
 
         # Roll it to bring it back in agent view
