@@ -100,10 +100,10 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
-            agent_pos_2,
-            base_dir_2,
-            cabin_dir_2,
-            loaded_2,
+            # agent_pos_2,
+            # base_dir_2,
+            # cabin_dir_2,
+            # loaded_2,
             target_tiles,
         )
         self.draw()
@@ -143,10 +143,10 @@ class Game:
         base_dir_1,
         cabin_dir_1,
         loaded_1,
-        agent_pos_2,
-        base_dir_2,
-        cabin_dir_2,
-        loaded_2,
+        # agent_pos_2,
+        # base_dir_2,
+        # cabin_dir_2,
+        # loaded_2,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -160,15 +160,14 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
-            agent_pos_2,
-            base_dir_2,
-            cabin_dir_2,
-            loaded_2,
+            # agent_pos_2,
+            # base_dir_2,
+            # cabin_dir_2,
+            # loaded_2,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
             agent.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
-            agent.update(agent_pos_2, base_dir_1, cabin_dir_1, loaded_1)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -185,7 +184,7 @@ class Game:
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents_1[i],self.agents_2[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
+                args=(self.worlds[i], self.agents_1[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
             )
             thread.start()
             threads.append(thread)
@@ -198,7 +197,7 @@ class Game:
         agent_surfaces = []
         agent_positions = []
 
-        for i, (world, agent) in enumerate(zip(self.worlds, self.agents_1,self.agents_2)):
+        for i, (world, agent) in enumerate(zip(self.worlds, self.agents_1)):
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
