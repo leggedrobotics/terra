@@ -36,8 +36,6 @@ class State(NamedTuple):
         - Move Backward
         - Rotate Clockwise
         - Rotate Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     - Wheeled Agent
         - Move Forward
@@ -48,8 +46,6 @@ class State(NamedTuple):
         - Move Anticlockwise Backward
         - Rotate Cabin Clockwise
         - Rotate Cabin Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     """
 
