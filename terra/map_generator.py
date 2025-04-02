@@ -2,7 +2,8 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 from jax import Array
-
+import jax
+import numpy as np
 from terra.settings import IntMap
 
 
@@ -33,6 +34,13 @@ class GridMap(NamedTuple):
     @property
     def height(self) -> int:
         return self.map.shape[1]
+    
+    @property
+    def print_map(self):
+        #jax.debug.print(np.array(self.map))
+        jax.numpy.set_printoptions(threshold=100)
+        jax.debug.print("Array: {!r}", self.map[5][5])
+        
 
     @staticmethod
     def new(map: Array) -> "GridMap":

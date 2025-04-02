@@ -83,7 +83,7 @@ class State(NamedTuple):
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
-
+        
         return State(
             key=key,
             env_cfg=env_cfg,
@@ -154,7 +154,11 @@ class State(NamedTuple):
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )
+        
+        jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
+        jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
 
+        state.world.padding_mask.print_map
         return state._replace(env_steps=state.env_steps + 1)
 
     def _do_nothing(self):

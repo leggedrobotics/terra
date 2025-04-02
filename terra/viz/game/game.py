@@ -46,7 +46,8 @@ class Game:
         self.n_envs_y = n_envs_y
         self.n_envs = n_envs_x * n_envs_y
         self.worlds = []
-        self.agents = []
+        self.agents_1 = []
+        self.agents_2 = []
 
         tile_size_m = ImmutableMapsConfig().edge_length_m / maps_size_px
         self.maps_size_px = maps_size_px
@@ -63,11 +64,13 @@ class Game:
             self.worlds.append(
                 World(maps_size_px, maps_size_px, self.width, self.height, tile_size)
             )
-            self.agents.append(Agent(agent_w, agent_h, tile_size))
+            self.agents_1.append(Agent(agent_w, agent_h, tile_size))
+            self.agents_2.append(Agent(agent_w, agent_h, tile_size))
 
         self.frames = []
 
-        self.old_agents = []
+        self.old_agents_1 = []
+        self.old_agents_2 = []
         self.count = 0
 
     def run(
@@ -76,10 +79,14 @@ class Game:
         target_grid,
         padding_mask,
         dumpability_mask,
-        agent_pos,
-        base_dir,
-        cabin_dir,
-        loaded,
+        agent_pos_1,
+        base_dir_1,
+        cabin_dir_1,
+        loaded_1,
+        agent_pos_2,
+        base_dir_2,
+        cabin_dir_2,
+        loaded_2,
         generate_gif,
         target_tiles=None,
     ):
@@ -89,10 +96,14 @@ class Game:
             target_grid,
             padding_mask,
             dumpability_mask,
-            agent_pos,
-            base_dir,
-            cabin_dir,
-            loaded,
+            agent_pos_1,
+            base_dir_1,
+            cabin_dir_1,
+            loaded_1,
+            agent_pos_2,
+            base_dir_2,
+            cabin_dir_2,
+            loaded_2,
             target_tiles,
         )
         self.draw()
@@ -100,7 +111,7 @@ class Game:
             frame = pg.surfarray.array3d(pg.display.get_surface())
             self.frames.append(frame.swapaxes(0, 1))
 
-    def create_gif(self, gif_path="/home/antonio/Downloads/Terra.gif"):
+    def create_gif(self, gif_path="/Terra.gif"):
         image_frames = [Image.fromarray(frame) for frame in self.frames]
         image_frames[0].save(
             gif_path,
@@ -128,10 +139,14 @@ class Game:
         target_grid,
         padding_mask,
         dumpability_mask,
-        agent_pos,
-        base_dir,
-        cabin_dir,
-        loaded,
+        agent_pos_1,
+        base_dir_1,
+        cabin_dir_1,
+        loaded_1,
+        agent_pos_2,
+        base_dir_2,
+        cabin_dir_2,
+        loaded_2,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -141,14 +156,19 @@ class Game:
             target_grid,
             padding_mask,
             dumpability_mask,
-            agent_pos,
-            base_dir,
-            cabin_dir,
-            loaded,
+            agent_pos_1,
+            base_dir_1,
+            cabin_dir_1,
+            loaded_1,
+            agent_pos_2,
+            base_dir_2,
+            cabin_dir_2,
+            loaded_2,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
-            agent.update(agent_pos, base_dir, cabin_dir, loaded)
+            agent.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
+            agent.update(agent_pos_2, base_dir_1, cabin_dir_1, loaded_1)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -158,14 +178,14 @@ class Game:
             tg = target_grid[i]
             pm = padding_mask[i]
             dm = dumpability_mask[i]
-            ap = agent_pos[i]
-            bd = base_dir[i]
-            cd = cabin_dir[i]
-            ld = loaded[i]
+            ap = agent_pos_1[i]
+            bd = base_dir_1[i]
+            cd = cabin_dir_1[i]
+            ld = loaded_1[i]
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
+                args=(self.worlds[i], self.agents_1[i],self.agents_2[i], ag, tg, pm, dm, ap, bd, cd, ld, tt),
             )
             thread.start()
             threads.append(thread)
@@ -178,7 +198,7 @@ class Game:
         agent_surfaces = []
         agent_positions = []
 
-        for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
+        for i, (world, agent) in enumerate(zip(self.worlds, self.agents_1,self.agents_2)):
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
@@ -235,8 +255,8 @@ class Game:
 
         if self.progressive_gif:
             if self.count % 5 == 0:
-                self.old_agents.append((agent_surfaces, agent_positions))
-            for s in self.old_agents:
+                self.old_agents_1.append((agent_surfaces, agent_positions))
+            for s in self.old_agents_1:
                 for agent_surface, agent_position in zip(s[0], s[1]):
                     self.screen.blit(agent_surface, agent_position)
             self.count += 1
