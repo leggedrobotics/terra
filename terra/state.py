@@ -1566,15 +1566,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1589,8 +1580,6 @@ class State(NamedTuple):
                 bool_anticlock,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
                 0,  # dummy
                 0,  # dummy
@@ -1652,15 +1641,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1677,8 +1657,6 @@ class State(NamedTuple):
                 bool_move_anticlock_backward,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
             ],
             dtype=jnp.bool_,
