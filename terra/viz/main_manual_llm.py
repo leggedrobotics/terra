@@ -145,7 +145,8 @@ def run_experiment(model_name, model_key, num_timesteps):
             # )
 
 
-            current, target = extract_positions(state)
+            start, target_positions = extract_positions(timestep.state)
+            target = find_nearest_target(start, target_positions)
 
             # current_position_str = f"({current_position['x']}, {current_position['y']})"
 
@@ -157,14 +158,14 @@ def run_experiment(model_name, model_key, num_timesteps):
 
             print(f"Current direction: {base_orientation['direction']}")
             print(f"Bucket status: {bucket_status}")
-            print(f"Current position: {current} (y,x)")
+            print(f"Current position: {start} (y,x)")
             print(f"Target position: {target} (y,x)")
             
             usr_msg4 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
                 f"The bucket is currently {bucket_status}. "
-                f"The excavator is currently located at {current} (y,x). "
+                f"The excavator is currently located at {start} (y,x). "
                 f"The nearest target digging position is {target} (y,x). "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"

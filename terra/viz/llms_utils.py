@@ -289,3 +289,21 @@ def path_to_actions(path, initial_orientation, step_size=1):
         actions.append(FORWARD)
 
     return actions
+
+def find_nearest_target(start, target_positions):
+    """
+    Find the nearest target position to the starting point.
+
+    Args:
+        start (tuple): The starting position as (x, y).
+        target_positions (list of tuples): A list of target positions as (x, y).
+
+    Returns:
+        tuple: The nearest target position as (x, y), or None if the list is empty.
+    """
+    if not target_positions:
+        return None
+
+    # Calculate the Euclidean distance to each target and find the nearest one
+    nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
+    return nearest_target

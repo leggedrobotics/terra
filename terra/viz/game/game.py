@@ -41,6 +41,7 @@ class Game:
         self.display = display
         self.progressive_gif = progressive_gif
         self.path = None
+        self.path2 = None
         self.width, self.height = self.screen.get_size()
 
         self.n_envs_x = n_envs_x
@@ -243,6 +244,13 @@ class Game:
                 if len(line_points) > 1:
                     pg.draw.lines(self.surface, (255, 0, 0), False, line_points, 2)  # Draw the path as a red line
 
+                line_points2 = []
+                for x, y in self.path2:
+                    world_coords = world.grid_to_world(y , x , 0)  # Convert grid to world coordinates
+                    line_points2.append((world_coords["cart_rect"][0][0]+ total_offset_x, world_coords["cart_rect"][0][1] + total_offset_y))  # Add the top-left corner of the tile
+
+                if len(line_points) > 1:
+                    pg.draw.lines(self.surface, (255, 255, 0), False, line_points2, 2)  # Draw the path as a  line
 
             DRAW_FRONT_MARKER = False
             

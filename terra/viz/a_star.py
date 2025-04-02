@@ -1,5 +1,6 @@
 import heapq
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 def inflate_obstacles(grid, buffer_size):
     """
@@ -25,6 +26,76 @@ def inflate_obstacles(grid, buffer_size):
                             inflated_grid = inflated_grid.at[nr, nc].set(1)  # Mark as non-traversable
 
     return inflated_grid
+
+def a_star_penality(grid, start, target, buffer_size=1):
+    """
+    A* algorithm to find the shortest path in a grid with obstacle avoidance.
+
+    Args:
+        grid: 2D numpy array representing the map (0 = free, 1 = obstacle).
+        start: Tuple (x, y) representing the start position.
+        target: Tuple (x, y) representing the target position.
+
+    Returns:
+        List of tuples representing the path from start to target, or None if no path exists.
+    """
+    # Inflate obstacles
+    grid = inflate_obstacles(grid, buffer_size)
+
+    # Create a penalty map based on proximity to obstacles
+    obstacle_map = (grid == 1).astype(np.float32)
+    penalty_map = distance_transform_edt(1 - obstacle_map)  # Distance from obstacles
+    penalty_map = np.max(penalty_map) - penalty_map  # Invert distances to create penalties
+    penalty_map /= np.max(penalty_map)  # Normalize penalties to [0, 1]
+
+    def heuristic(a, b):
+        # Manhattan distance heuristic with penalty
+        return abs(a[0] - b[0]) + abs(a[1] - b[1]) + penalty_map[a[0], a[1]]
+
+    rows, cols = grid.shape
+
+    # Ensure start and target are traversable
+    if grid[start[0], start[1]] != 0 or grid[target[0], target[1]] != 0:
+        print("Start or target position is not traversable.")
+        return None
+
+    # Handle edge case where start == target
+    if start == target:
+        return [start]
+
+    open_set = []
+    heapq.heappush(open_set, (0, start))
+    came_from = {}
+    g_score = {start: 0}
+    f_score = {start: heuristic(start, target)}
+
+    while open_set:
+        _, current = heapq.heappop(open_set)
+
+        if current == target:
+            # Reconstruct the path
+            path = [current]
+            while current in came_from:
+                current = came_from[current]
+                path.append(current)
+            path.reverse()
+            return path
+
+        neighbors = [
+            (current[0] + dx, current[1] + dy)
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Add diagonals if needed
+        ]
+        for neighbor in neighbors:
+            if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols and grid[neighbor] == 0:  # Check for traversable area
+                tentative_g_score = g_score[current] + 1 + penalty_map[neighbor[0], neighbor[1]]
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + heuristic(neighbor, target)
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+
+    print("No path found.")
+    return None  # No path found
 
 def a_star(grid, start, target, buffer_size=1):
     """
@@ -126,8 +197,9 @@ def compute_path(state, start, target):
 
     # Run the A* algorithm
     path = a_star(combined_grid, start, target, buffer_size=2)
+    path2 = a_star_penality(combined_grid, start, target, buffer_size=2)
     
-    return path, combined_grid
+    return path, path2, combined_grid
 
 def simplify_path(path):
     """

@@ -211,10 +211,10 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # levels = [
     #     {
-    #         "maps_path": "squares/16x16/2",
+    #         "maps_path": "squares/64x64/13",
     #         "max_steps_in_episode": 300,
     #         "rewards_type": RewardsType.SPARSE,
-    #         "apply_trench_rewards": False,
+    #         "apply_trench_rewards": True,
     #     },
     # ]
 

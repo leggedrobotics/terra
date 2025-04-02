@@ -24,23 +24,7 @@ from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 from terra.viz.llms_utils import *
 from terra.viz.a_star import compute_path, simplify_path
-def find_nearest_target(start, target_positions):
-    """
-    Find the nearest target position to the starting point.
 
-    Args:
-        start (tuple): The starting position as (x, y).
-        target_positions (list of tuples): A list of target positions as (x, y).
-
-    Returns:
-        tuple: The nearest target position as (x, y), or None if the list is empty.
-    """
-    if not target_positions:
-        return None
-
-    # Calculate the Euclidean distance to each target and find the nearest one
-    nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
-    return nearest_target
 
 def main():
     batch_cfg = BatchConfig()
@@ -79,10 +63,13 @@ def main():
     target = find_nearest_target(start, target_positions)
 
     # Compute the path
-    path, _ = compute_path(timestep.state, start, target)
+    path, path2, _ = compute_path(timestep.state, start, target)
     print("Path: ", path)
+    print("\n Path2: ", path2)
     simplified_path = simplify_path(path)
     print("Simplified Path: ", simplified_path)
+    simplified_path2 = simplify_path(path2)
+    print("Simplified Path2: ", simplified_path2)
 
 
     initial_orientation = extract_base_orientation(timestep.state)
@@ -99,6 +86,7 @@ def main():
         # Pass the path to the Game instance for visualization
         game = env.terra_env.rendering_engine
         game.path = path
+        game.path2 = path2
     else:
         print("No path found.")
 
@@ -158,12 +146,13 @@ def main():
                         start, target_positions = extract_positions(timestep.state)
                         target = find_nearest_target(start, target_positions)
 
-                        # Recompute the path
-                        path, _ = compute_path(timestep.state, start, target)
-
+                        path, path2, _ = compute_path(timestep.state, start, target)
                         print("Path: ", path)
+                        print("\n Path2: ", path2)
                         simplified_path = simplify_path(path)
                         print("Simplified Path: ", simplified_path)
+                        simplified_path2 = simplify_path(path2)
+                        print("Simplified Path2: ", simplified_path2)
 
                         initial_orientation = extract_base_orientation(timestep.state)
                         initial_direction = initial_orientation["direction"]
@@ -178,6 +167,7 @@ def main():
                             # Pass the path to the Game instance for visualization
                             game = env.terra_env.rendering_engine
                             game.path = path
+                            game.path2 = path2
                         else:
                             print("No path found.")
 
