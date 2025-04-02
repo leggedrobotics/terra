@@ -796,9 +796,7 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(
-            map_cyl_coords, self.agent.agent_state.arm_extension
-        )
+        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(map_cyl_coords)
 
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
