@@ -748,9 +748,7 @@ class State(NamedTuple):
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
 
-    def _get_dig_dump_mask_cyl(
-        self, map_cyl_coords: Array, arm_extension: Array
-    ) -> Array:
+    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
 
@@ -767,18 +765,18 @@ class State(NamedTuple):
         )
         min_distance_from_agent = tile_size * max_agent_dim
 
-        r_max = (
-            arm_extension + 1
-        ) * dig_portion_radius * tile_size + min_distance_from_agent
-        r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        # Fixed middle-point arm extension (halfway between 0 and 1)
+        fixed_extension = 0.5
 
+        # Calculate the middle range between what would be arm_extension=0 and arm_extension=1
+        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
         theta_max = np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
             map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
         )
-
         dig_mask_theta = jnp.logical_and(
             map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
         )
