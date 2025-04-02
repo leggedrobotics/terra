@@ -89,13 +89,12 @@ class Agent(NamedTuple):
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     max_center_coord = jnp.ceil(
         jnp.max(
-            jnp.array([env_cfg.agent.width // 2 + 1, env_cfg.agent.height // 2 + 1])
+            jnp.array([env_cfg.agent.width // 2 , env_cfg.agent.height // 2 ])
         )
     ).astype(IntMap)
-    #print("max ->",max_center_coord)
     pos_base = IntMap(jnp.array([max_center_coord, max_center_coord]))
     theta = jnp.full((1,), fill_value=1, dtype=IntMap)
-    #jax.debug.print("pos_base: {}", pos_base)
+    
     return pos_base, theta, key
 
 
@@ -108,10 +107,10 @@ def _get_top_left_two_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
 
     max_center_coord2 = jnp.ceil(
         jnp.max(
-            jnp.array([env_cfg.agent.width // 2 + 1, env_cfg.agent.height // 2 + 10])
+            jnp.array([env_cfg.agent.width // 2 + 5, env_cfg.agent.height // 2 + 5])
         )
     ).astype(IntMap)
-
+    
 
     #print("max ->",max_center_coord)
     pos_base_1 = IntMap(jnp.array([max_center_coord1, max_center_coord1]))
@@ -120,6 +119,7 @@ def _get_top_left_two_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     theta_2 = jnp.full((1,), fill_value=1, dtype=IntMap)
     
     #jax.debug.print("pos_base: {}", pos_base)
+    jax.debug.print("****pos_base: {}, {}", pos_base_1, pos_base_2)
     return pos_base_1, theta_1, pos_base_2, theta_2, key
 
 

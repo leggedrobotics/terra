@@ -166,10 +166,14 @@ class TerraEnv(NamedTuple):
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
-            agent_pos=obs["agent_state"][..., [0, 1]],
-            base_dir=obs["agent_state"][..., [2]],
-            cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [5]],
+            agent_pos_1=obs["agent_state_1"][..., [0, 1]],
+            base_dir_1=obs["agent_state_1"][..., [2]],
+            cabin_dir_1=obs["agent_state_1"][..., [3]],
+            loaded_1=obs["agent_state_1"][..., [5]],
+            agent_pos_2=obs["agent_state_2"][..., [0, 1]],
+            base_dir_2=obs["agent_state_2"][..., [2]],
+            cabin_dir_2=obs["agent_state_2"][..., [3]],
+            loaded_2=obs["agent_state_2"][..., [5]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
@@ -212,7 +216,6 @@ class TerraEnv(NamedTuple):
 
         infos = new_state._get_infos(action, task_done)
         observations = self._update_obs_with_info(observations, infos)
-
         return TimeStep(
             state=new_state,
             observation=observations,
@@ -241,8 +244,19 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state_1.loaded,
             ]
         )
+
+        agent_state_2 = jnp.hstack(
+            [
+                state.agent.agent_state_2.pos_base,  
+                state.agent.agent_state_2.angle_base,
+                state.agent.agent_state_2.angle_cabin,
+                state.agent.agent_state_2.arm_extension,
+                state.agent.agent_state_2.loaded,
+            ]
+        )
         return {
-            "agent_state": agent_state_1,
+            "agent_state_1": agent_state_1,
+            "agent_state_2": agent_state_2,
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,
