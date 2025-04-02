@@ -40,9 +40,11 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 12
+    angles_base: int = 24
     angles_cabin: int = 12
+    max_wheel_angle: int = 3
     max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
+    wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
 
 
 class AgentConfig(NamedTuple):
@@ -51,6 +53,8 @@ class AgentConfig(NamedTuple):
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
     max_arm_extension: int = ImmutableAgentConfig().max_arm_extension
+    max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
+    wheel_step: float = ImmutableAgentConfig().wheel_step
 
     move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
@@ -73,6 +77,7 @@ class Rewards(NamedTuple):
     base_turn: float
 
     cabin_turn: float
+    wheel_turn: float
 
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
@@ -99,6 +104,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.02,
+            wheel_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
@@ -119,6 +125,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.02,
+            wheel_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
@@ -292,7 +299,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
+    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
