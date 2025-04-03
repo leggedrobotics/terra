@@ -35,7 +35,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         None
     """
     # Load the JSON configuration file
-    with open("envs12.json", "r") as file:
+    with open("envs13.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -98,6 +98,8 @@ def run_experiment(model_name, model_key, num_timesteps):
     # base_orientation = extract_base_orientation(state)
     # print(base_orientation)
 
+    previous_action = []
+
     while playing and steps_taken < num_timesteps:
     #while playing:
         for event in pg.event.get():
@@ -112,22 +114,22 @@ def run_experiment(model_name, model_key, num_timesteps):
         bucket_status = extract_bucket_status(state)  # Extract bucket status
 
 
-        usr_msg0 = "What action should be taken?"
-        usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
-        usr_msg2 = (
-            f"Analyze this game frame and the provided local map to select the optimal action. "
-            f"The base of the excavator is currently facing {base_orientation['direction']}. "
-            f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-            f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-        )
+        # usr_msg0 = "What action should be taken?"
+        # usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
+        # usr_msg2 = (
+        #     f"Analyze this game frame and the provided local map to select the optimal action. "
+        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
+        #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+        # )
 
-        usr_msg3 = (
-            f"Analyze this game frame and the provided local map to select the optimal action. "
-            f"The base of the excavator is currently facing {base_orientation['direction']}. "
-            f"The bucket is currently {bucket_status}. "
-            f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-            f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-        )
+        # usr_msg3 = (
+        #     f"Analyze this game frame and the provided local map to select the optimal action. "
+        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
+        #     f"The bucket is currently {bucket_status}. "
+        #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+        # )
 
         
         if USE_LOCAL_MAP:
@@ -162,6 +164,7 @@ def run_experiment(model_name, model_key, num_timesteps):
             print(f"Bucket status: {bucket_status}")
             print(f"Current position: {start} (y,x)")
             print(f"Target position: {target} (y,x)")
+            print(f"Previous action list: {previous_action}")
             
             usr_msg4 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
@@ -173,15 +176,28 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
 
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg4, local_map=local_map_image)
+            usr_msg5 = (
+                f"Analyze this game frame and the provided local map to select the optimal action. "
+                f"The base of the excavator is currently facing {base_orientation['direction']}. "
+                f"The bucket is currently {bucket_status}. "
+                f"The excavator is currently located at {start} (y,x). "
+                f"The nearest target digging position is {target} (y,x). "
+                f"The list of the previous actions is {previous_action}. "
+                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+            )
+
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg5, local_map=local_map_image)
         else:
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg4, local_map=None)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg5, local_map=None)
 
         action_output, reasoning = agent.generate_response("./")
         
-        print(f"Action output: {action_output}, Reasoning: {reasoning}")
+        print(f"\n Action output: {action_output}, Reasoning: {reasoning}")
         
         agent.add_assistant_message()
+
+        previous_action.append(action_output)
 
         # Create the action object
         action = action_type.new(action_output)
