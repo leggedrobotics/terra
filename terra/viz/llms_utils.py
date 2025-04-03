@@ -48,8 +48,6 @@ def local_map_to_image(local_map):
     """
     # Example: Visualize the traversability mask
     local_map_target_pos = np.array(local_map["local_map_target_pos"])
-    print(local_map_target_pos.shape)
-    print(local_map_target_pos)
 
     #local_map_target_pos = np.squeeze(local_map_target_pos)
 

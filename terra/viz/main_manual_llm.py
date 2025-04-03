@@ -130,8 +130,6 @@ def run_experiment(model_name, model_key, num_timesteps):
         
         if USE_LOCAL_MAP:
             local_map = generate_local_map(timestep)
-            print("Local Map Shape:", np.array(local_map).shape)
-            print("Local Map Content:", local_map)
             local_map_image = local_map_to_image(local_map)
 
             local_map_summary = summarize_local_map(local_map)
