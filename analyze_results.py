@@ -37,7 +37,6 @@ def parse_args():
 def find_experiment_dirs(input_dir, models=None):
     """Find experiment directories for the AutonomousExcavatorGame."""
     experiment_dirs = []
-    game = "AutonomousExcavatorGame"  # Hardcoded game name
     
     # List all directories in the input directory
     for item in os.listdir(input_dir):
@@ -45,11 +44,13 @@ def find_experiment_dirs(input_dir, models=None):
         if not os.path.isdir(item_path):
             continue
             
-        # Parse the directory name to extract the model
-        if not item.startswith(game + "_"):
-            continue
+        # Parse the directory name to extract the model name
+        # Assuming the format is "model_name_YYYY-MM-DD_HH-MM-SS"
+        parts = item.rsplit("_", 2)  # Split from the right to separate timestamp
+        if len(parts) < 3:
+            continue  # Skip directories that don't match the expected format
         
-        model = item[len(game) + 1:]  # Extract model name after "AutonomousExcavatorGame_"
+        model = "_".join(parts[:-2])  # Extract the model name (everything before the timestamp)
         
         # Filter by model if specified
         if models and model not in models:
@@ -58,7 +59,6 @@ def find_experiment_dirs(input_dir, models=None):
         experiment_dirs.append((item_path, model))
     
     return experiment_dirs
-
 def load_results(experiment_dir):
     """Load results from an experiment directory."""
     results = {}
@@ -85,26 +85,32 @@ def load_results(experiment_dir):
 
 def analyze_results(experiment_dirs):
     """Analyze results from all experiment directories."""
-    analysis = defaultdict(dict)
+    analysis = defaultdict(list)  # Store a list of experiments for each model
     
     for exp_dir, model in experiment_dirs:
-        logger.info(f"Analyzing results for model {model}")
+        logger.info(f"Analyzing results for model {model} in directory {exp_dir}")
         results = load_results(exp_dir)
         
         if not results:
             logger.warning(f"No results found in {exp_dir}")
             continue
-            
+        
+        # Extract timestamp from the directory name
+        timestamp = "_".join(exp_dir.split("_")[-2:])  # Extract both date and time
+        
         # Calculate metrics
         if 'cumulative_rewards' in results and results['cumulative_rewards']:
             final_reward = results['cumulative_rewards'][-1]
             max_reward = max(results['cumulative_rewards'])
             
-            analysis[model]['final_reward'] = final_reward
-            analysis[model]['max_reward'] = max_reward
-            analysis[model]['rewards'] = results['cumulative_rewards']
+            analysis[model].append({
+                'final_reward': final_reward,
+                'max_reward': max_reward,
+                'rewards': results['cumulative_rewards'],
+                'timestamp': timestamp
+            })
             
-            logger.info(f"Model {model}: Final reward = {final_reward}, Max reward = {max_reward}")
+            logger.info(f"Model {model} ({timestamp}): Final reward = {final_reward}, Max reward = {max_reward}")
     
     return analysis
 
@@ -112,12 +118,13 @@ def plot_results(analysis, output_dir):
     """Generate plots from the analysis results."""
     os.makedirs(output_dir, exist_ok=True)
     
-    # Plot reward curves for each model
+    # Plot reward curves for each experiment
     plt.figure(figsize=(12, 6))
-    for model, data in analysis.items():
-        if 'rewards' in data:
-            rewards = data['rewards']
-            plt.plot(rewards, label=model)
+    for model, experiments in analysis.items():
+        for exp in experiments:
+            rewards = exp['rewards']
+            timestamp = exp['timestamp']
+            plt.plot(rewards, label=f"{model} ({timestamp})")
     
     plt.title('Cumulative Rewards for AutonomousExcavatorGame')
     plt.xlabel('Steps')
@@ -127,15 +134,19 @@ def plot_results(analysis, output_dir):
     plt.savefig(os.path.join(output_dir, 'cumulative_rewards.png'))
     plt.close()
     
-    # Create a bar chart of final rewards for all models
-    models = list(analysis.keys())
-    final_rewards = [analysis[model]['final_reward'] for model in models]
+    # Create a bar chart of final rewards for all experiments
+    models = []
+    final_rewards = []
+    for model, experiments in analysis.items():
+        for exp in experiments:
+            models.append(f"{model} ({exp['timestamp']})")
+            final_rewards.append(exp['final_reward'])
     
     plt.figure(figsize=(10, 6))
     plt.bar(models, final_rewards, color='skyblue')
-    plt.xlabel('Models')
+    plt.xlabel('Experiments')
     plt.ylabel('Final Reward')
-    plt.title('Final Rewards by Model for AutonomousExcavatorGame')
+    plt.title('Final Rewards by Experiment for AutonomousExcavatorGame')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'final_rewards.png'))

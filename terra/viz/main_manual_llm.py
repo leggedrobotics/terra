@@ -7,6 +7,8 @@ import os
 from tqdm import tqdm
 import csv
 import numpy as np
+import datetime
+
 
 
 from pygame.locals import (
@@ -33,7 +35,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         None
     """
     # Load the JSON configuration file
-    with open("envs10.json", "r") as file:
+    with open("envs11.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -216,9 +218,16 @@ def run_experiment(model_name, model_key, num_timesteps):
 
     print(f"Rollout complete. Total reward: {rewards}")
 
-    output_dir = os.path.join("experiments", f"AutonomousExcavatorGame_{model_name}")   
+
+    # Generate a timestamp
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Create a unique output directory for the model and timestamp
+    output_dir = os.path.join("experiments", f"{model_name}_{current_time}")
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f"actions_rewards.csv")
+
+    # Save actions and rewards to a CSV file
+    output_file = os.path.join(output_dir, "actions_rewards.csv")
     with open(output_file, "w") as f:
         writer = csv.writer(f)
         writer.writerow(["actions", "cumulative_rewards"])
@@ -227,6 +236,7 @@ def run_experiment(model_name, model_key, num_timesteps):
 
     print(f"Results saved to {output_file}")
 
-    video_path = os.path.join(output_dir, f"gameplay.mp4")
+    # Save the gameplay video
+    video_path = os.path.join(output_dir, "gameplay.mp4")
     save_video(frames, video_path)
 

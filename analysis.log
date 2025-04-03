@@ -37,3 +37,86 @@
 2025-03-26 11:51:11,096 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25
 2025-03-26 11:51:11,099 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25: Final reward = -0.2373999977717176, Max reward = -0.0012000000569969416
 2025-03-26 11:51:11,738 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:42:26,709 - autonomous-excavator.analysis - INFO - Found 4 experiment directories
+2025-04-03 12:42:26,709 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.0-flash
+2025-04-03 12:42:26,711 - autonomous-excavator.analysis - INFO - Model gemini-2.0-flash: Final reward = -0.1448000066448003, Max reward = -0.0012000000569969416
+2025-04-03 12:42:26,730 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-1.5-flash-latest
+2025-04-03 12:42:26,733 - autonomous-excavator.analysis - INFO - Model gemini-1.5-flash-latest: Final reward = -0.25600001122802496, Max reward = -0.001500000013038516
+2025-04-03 12:42:26,733 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o
+2025-04-03 12:42:26,733 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.08390000066719949, Max reward = -0.001500000013038516
+2025-04-03 12:42:26,734 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25
+2025-04-03 12:42:26,737 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25: Final reward = -0.3474999868776649, Max reward = -0.0010000000474974513
+2025-04-03 12:42:27,346 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:46:17,715 - autonomous-excavator.analysis - INFO - Found 4 experiment directories
+2025-04-03 12:46:17,715 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.0-flash
+2025-04-03 12:46:17,748 - autonomous-excavator.analysis - INFO - Model gemini-2.0-flash: Final reward = -0.1448000066448003, Max reward = -0.0012000000569969416
+2025-04-03 12:46:17,748 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-1.5-flash-latest
+2025-04-03 12:46:17,750 - autonomous-excavator.analysis - INFO - Model gemini-1.5-flash-latest: Final reward = -0.25600001122802496, Max reward = -0.001500000013038516
+2025-04-03 12:46:17,750 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o
+2025-04-03 12:46:17,752 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.08390000066719949, Max reward = -0.001500000013038516
+2025-04-03 12:46:17,753 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25
+2025-04-03 12:46:17,754 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25: Final reward = -0.3474999868776649, Max reward = -0.0010000000474974513
+2025-04-03 12:46:18,296 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:50:09,109 - autonomous-excavator.analysis - ERROR - No experiment directories found in ./experiments
+2025-04-03 12:52:04,497 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-04-03 12:52:04,497 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o
+2025-04-03 12:52:04,499 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 12:52:04,500 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o
+2025-04-03 12:52:04,502 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 12:52:05,046 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:53:48,972 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-04-03 12:53:48,972 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 12:53:48,991 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 12:53:48,991 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 12:53:48,993 - autonomous-excavator.analysis - INFO - Model gpt-4o: Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 12:53:49,509 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:56:43,473 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-04-03 12:56:43,473 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 12:56:43,476 - autonomous-excavator.analysis - INFO - Model gpt-4o (12-50-02): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 12:56:43,476 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 12:56:43,478 - autonomous-excavator.analysis - INFO - Model gpt-4o (12-47-42): Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 12:56:44,019 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 12:59:10,870 - autonomous-excavator.analysis - INFO - Found 3 experiment directories
+2025-04-03 12:59:10,870 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 12:59:10,872 - autonomous-excavator.analysis - INFO - Model gpt-4o (12-50-02): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 12:59:10,872 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 12:59:10,873 - autonomous-excavator.analysis - INFO - Model gpt-4o (12-47-42): Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 12:59:10,873 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-59-06
+2025-04-03 12:59:10,876 - autonomous-excavator.analysis - INFO - Model gpt-4o (12-59-06): Final reward = -0.008500000229105353, Max reward = -0.001500000013038516
+2025-04-03 12:59:11,376 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 13:01:07,952 - autonomous-excavator.analysis - INFO - Found 3 experiment directories
+2025-04-03 13:01:07,952 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 13:01:07,954 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-50-02): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 13:01:07,954 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 13:01:07,956 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-47-42): Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 13:01:07,956 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-59-06
+2025-04-03 13:01:07,958 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-59-06): Final reward = -0.008500000229105353, Max reward = -0.001500000013038516
+2025-04-03 13:01:08,517 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 13:02:49,649 - autonomous-excavator.analysis - INFO - Found 4 experiment directories
+2025-04-03 13:02:49,650 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 13:02:49,651 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-50-02): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 13:02:49,670 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_13-02-34
+2025-04-03 13:02:49,672 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_13-02-34): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 13:02:49,672 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 13:02:49,674 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-47-42): Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 13:02:49,674 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-59-06
+2025-04-03 13:02:49,675 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-59-06): Final reward = -0.008500000229105353, Max reward = -0.001500000013038516
+2025-04-03 13:02:50,235 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 13:10:48,124 - autonomous-excavator.analysis - INFO - Found 5 experiment directories
+2025-04-03 13:10:48,124 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25 in directory ./experiments/gemini-2.5-pro-exp-03-25_2025-04-03_13-10-38
+2025-04-03 13:10:48,126 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25 (2025-04-03_13-10-38): Final reward = -0.00750000006519258, Max reward = -0.001500000013038516
+2025-04-03 13:10:48,150 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-50-02
+2025-04-03 13:10:48,152 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-50-02): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 13:10:48,152 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_13-02-34
+2025-04-03 13:10:48,154 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_13-02-34): Final reward = -0.007700000191107392, Max reward = -0.001500000013038516
+2025-04-03 13:10:48,154 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-47-42
+2025-04-03 13:10:48,155 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-47-42): Final reward = -0.006300000241026282, Max reward = -0.0012000000569969416
+2025-04-03 13:10:48,155 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_12-59-06
+2025-04-03 13:10:48,157 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_12-59-06): Final reward = -0.008500000229105353, Max reward = -0.001500000013038516
+2025-04-03 13:10:48,749 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 14:48:49,963 - autonomous-excavator.analysis - INFO - Found 2 experiment directories
+2025-04-03 14:48:49,964 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25 in directory ./experiments/gemini-2.5-pro-exp-03-25_2025-04-03_13-30-51
+2025-04-03 14:48:49,965 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25 (2025-04-03_13-30-51): Final reward = -0.12399999727495015, Max reward = -0.001500000013038516
+2025-04-03 14:48:49,981 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_14-40-43
+2025-04-03 14:48:49,983 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_14-40-43): Final reward = -0.07710000243969262, Max reward = -0.001500000013038516
+2025-04-03 14:48:50,554 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
