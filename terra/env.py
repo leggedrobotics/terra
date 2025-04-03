@@ -169,7 +169,7 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [5]],
+            loaded=obs["agent_state"][..., [4]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
@@ -237,7 +237,6 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.arm_extension,
                 state.agent.agent_state.loaded,
             ]
         )
@@ -434,31 +433,13 @@ class TerraEnvBatch:
             - value: the tuple representing the shape of the input feature
         """
         return {
-            "agent_states": (6,),
-            "local_map_action_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_action_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_dumpability": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_obstacles": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
+            "agent_states": (5,),
+            "local_map_action_neg": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_action_pos": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_target_neg": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_target_pos": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_dumpability": (self.batch_cfg.agent.angles_cabin,),
+            "local_map_obstacles": (self.batch_cfg.agent.angles_cabin,),
             "action_map": (
                 self.batch_cfg.maps.max_width,
                 self.batch_cfg.maps.max_height,

@@ -42,7 +42,6 @@ class ImmutableAgentConfig(NamedTuple):
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 4
     angles_cabin: int = 8
-    max_arm_extension: int = 1  # numbering starts from 0 (0 is the closest level)
 
 
 class AgentConfig(NamedTuple):
@@ -50,7 +49,6 @@ class AgentConfig(NamedTuple):
 
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
-    max_arm_extension: int = ImmutableAgentConfig().max_arm_extension
 
     move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
