@@ -238,8 +238,7 @@ The agent in Terra perceives the environment through a rich observation space th
   - **action_map**: Current state of the terrain across the entire map
   - **target_map**: Target digging profile across the entire map
   - **traversability_mask**: Areas where the agent can navigate
-  - **do_preview**: Preview of the dig/dump action result if executed
-  - **dig_map**: Areas that have been dug
+  - **dig_map**: Preview of the dig/dump action result if executed
   - **dumpability_mask**: Areas where the agent can dump soil
   - **padding_mask**: Areas with obstacles
 

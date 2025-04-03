@@ -99,9 +99,6 @@ class TerraEnv(NamedTuple):
         state = self.wrap_state(state)
 
         observations = self._state_to_obs_dict(state)
-
-        observations["do_preview"] = state._handle_do().world.action_map.map
-
         dummy_action = BatchConfig().action_type.do_nothing()
 
         return TimeStep(
@@ -156,10 +153,8 @@ class TerraEnv(NamedTuple):
         """
         if info is not None:
             target_tiles = info["target_tiles"]
-            do_preview = info["do_preview"]
         else:
             target_tiles = None
-            do_preview = None
 
         self.rendering_engine.run(
             active_grid=obs["action_map"],
@@ -211,7 +206,6 @@ class TerraEnv(NamedTuple):
         )
 
         infos = new_state._get_infos(action, task_done)
-        observations = self._update_obs_with_info(observations, infos)
 
         return TimeStep(
             state=new_state,
@@ -221,11 +215,6 @@ class TerraEnv(NamedTuple):
             info=infos,
             env_cfg=env_cfg,
         )
-
-    @staticmethod
-    def _update_obs_with_info(obs, info):
-        obs["do_preview"] = info["do_preview"]
-        return obs
 
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
@@ -240,6 +229,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.loaded,
             ]
         )
+        # Note: not all of those fields are used by the network for training!
         return {
             "agent_state": agent_state,
             "local_map_action_neg": state.world.local_map_action_neg.map,
