@@ -20,3 +20,7 @@ experiments/
 all_responses.txt
 local_map.jpg
 analysis/
+analysis.log
+analysis/cumulative_rewards.png
+analysis/final_rewards.png
+analysis/analysis.json

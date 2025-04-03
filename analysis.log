@@ -180,3 +180,53 @@
 2025-04-03 16:57:53,889 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-33-45
 2025-04-03 16:57:53,890 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-33-45): Final reward = -0.08450000151060522, Max reward = -0.0012000000569969416
 2025-04-03 16:57:54,451 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 17:25:23,905 - autonomous-excavator.analysis - INFO - Found 11 experiment directories
+2025-04-03 17:25:23,906 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25 in directory ./experiments/gemini-2.5-pro-exp-03-25_2025-04-03_13-30-51
+2025-04-03 17:25:23,908 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25 (2025-04-03_13-30-51): Final reward = -0.12399999727495015, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,908 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-08-23
+2025-04-03 17:25:23,910 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-08-23): Final reward = -0.08190000127069652, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,910 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-25-10
+2025-04-03 17:25:23,911 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-25-10): Final reward = -0.09110000194050372, Max reward = -0.0020000000949949026
+2025-04-03 17:25:23,912 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_15-09-33
+2025-04-03 17:25:23,914 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_15-09-33): Final reward = -0.08980000182054937, Max reward = -0.0020000000949949026
+2025-04-03 17:25:23,914 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-13-07
+2025-04-03 17:25:23,917 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-13-07): Final reward = -0.002400000113993883, Max reward = -0.0012000000569969416
+2025-04-03 17:25:23,917 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-45-17
+2025-04-03 17:25:23,920 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-45-17): Final reward = -0.09010000084526837, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,920 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-09-44
+2025-04-03 17:25:23,922 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-09-44): Final reward = -0.003999999957159162, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,922 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_14-40-43
+2025-04-03 17:25:23,925 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_14-40-43): Final reward = -0.07710000243969262, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,925 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-57-43
+2025-04-03 17:25:23,928 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-57-43): Final reward = -0.0797000010497868, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,928 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-07-47
+2025-04-03 17:25:23,930 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-07-47): Final reward = -0.003000000026077032, Max reward = -0.001500000013038516
+2025-04-03 17:25:23,930 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-33-45
+2025-04-03 17:25:23,933 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-33-45): Final reward = -0.08450000151060522, Max reward = -0.0012000000569969416
+2025-04-03 17:25:24,522 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-03 17:38:29,964 - autonomous-excavator.analysis - INFO - Found 12 experiment directories
+2025-04-03 17:38:29,964 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25 in directory ./experiments/gemini-2.5-pro-exp-03-25_2025-04-03_17-38-20
+2025-04-03 17:38:29,965 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25 (2025-04-03_17-38-20): Final reward = -0.06340000254567713, Max reward = -0.0020000000949949026
+2025-04-03 17:38:29,966 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-exp-03-25 in directory ./experiments/gemini-2.5-pro-exp-03-25_2025-04-03_13-30-51
+2025-04-03 17:38:29,969 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-exp-03-25 (2025-04-03_13-30-51): Final reward = -0.12399999727495015, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,969 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-08-23
+2025-04-03 17:38:29,970 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-08-23): Final reward = -0.08190000127069652, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,970 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-25-10
+2025-04-03 17:38:29,973 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-25-10): Final reward = -0.09110000194050372, Max reward = -0.0020000000949949026
+2025-04-03 17:38:29,973 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_15-09-33
+2025-04-03 17:38:29,974 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_15-09-33): Final reward = -0.08980000182054937, Max reward = -0.0020000000949949026
+2025-04-03 17:38:29,974 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-13-07
+2025-04-03 17:38:29,976 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-13-07): Final reward = -0.002400000113993883, Max reward = -0.0012000000569969416
+2025-04-03 17:38:29,976 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-45-17
+2025-04-03 17:38:29,978 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-45-17): Final reward = -0.09010000084526837, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,978 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-09-44
+2025-04-03 17:38:29,981 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-09-44): Final reward = -0.003999999957159162, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,981 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_14-40-43
+2025-04-03 17:38:29,982 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_14-40-43): Final reward = -0.07710000243969262, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,986 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-57-43
+2025-04-03 17:38:29,987 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-57-43): Final reward = -0.0797000010497868, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,987 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_17-07-47
+2025-04-03 17:38:29,989 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_17-07-47): Final reward = -0.003000000026077032, Max reward = -0.001500000013038516
+2025-04-03 17:38:29,989 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-03_16-33-45
+2025-04-03 17:38:29,991 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-03_16-33-45): Final reward = -0.08450000151060522, Max reward = -0.0012000000569969416
+2025-04-03 17:38:30,605 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis

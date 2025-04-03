@@ -196,6 +196,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         print(f"\n Action output: {action_output}, Reasoning: {reasoning}")
         
         agent.add_assistant_message()
+        #print("agent.MESSAGES: ", agent.messages)
 
         previous_action.append(action_output)
 
@@ -221,8 +222,8 @@ def run_experiment(model_name, model_key, num_timesteps):
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
-        if steps_taken % 20 == 0:
-            agent.delete_messages()
+        # if steps_taken % 20 == 0:
+        #     agent.delete_messages()
 
         # Update progress
         steps_taken += 1
