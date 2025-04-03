@@ -169,7 +169,7 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [5]],
+            loaded=obs["agent_state"][..., [4]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
