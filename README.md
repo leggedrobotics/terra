@@ -222,11 +222,10 @@ Terra comes with two types of maps: foundations and trenches. Foundations are pr
 ## Observation Space 🔍
 The agent in Terra perceives the environment through a rich observation space that provides comprehensive information about the state of the world and the agent itself. The observation is a dictionary with the following components:
 
-- **agent_states**: A 6-dimensional vector containing:
+- **agent_states**: A 5-dimensional vector containing:
   - Position of the base (x, y coordinates)
   - Base rotation angle
   - Cabin rotation angle
-  - Arm extension
   - Whether the agent is loaded with dirt (0 or 1)
 
 - **Local Maps**: The agent has access to local maps representing different aspects of the environment from the agent's perspective:

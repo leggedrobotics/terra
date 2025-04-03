@@ -9,8 +9,6 @@ from pygame.locals import (
     K_RIGHT,
     K_a,
     K_d,
-    K_e,
-    K_r,
     K_i,
     K_o,
     K_k,
@@ -35,7 +33,6 @@ def main():
     env = TerraEnvBatch(
         rendering=True,
         display=True,
-        rendering_engine="pygame",
         n_envs_x_rendering=n_envs_x,
         n_envs_y_rendering=n_envs_y,
     )
@@ -77,10 +74,6 @@ def main():
                     action = action_type.cabin_anticlock()
                 elif event.key == K_d:
                     action = action_type.cabin_clock()
-                elif event.key == K_e:
-                    action = action_type.extend_arm()
-                elif event.key == K_r:
-                    action = action_type.retract_arm()
                 elif event.key == K_o:
                     action = action_type.clock_forward()
                 elif event.key == K_k:

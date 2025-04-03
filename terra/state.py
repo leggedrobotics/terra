@@ -37,8 +37,6 @@ class State(NamedTuple):
         - Move Backward
         - Rotate Clockwise
         - Rotate Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     - Wheeled Agent
         - Move Forward
@@ -49,8 +47,6 @@ class State(NamedTuple):
         - Move Anticlockwise Backward
         - Rotate Cabin Clockwise
         - Rotate Cabin Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     """
 
@@ -129,8 +125,6 @@ class State(NamedTuple):
             self._handle_anticlock,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
             # Wheeled
             self._handle_move_forward,
@@ -141,11 +135,9 @@ class State(NamedTuple):
             self._handle_move_anticlock_backward,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
         ]
-        cumulative_len = jnp.array([0, 9], dtype=IntLowDim)
+        cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
         )
@@ -493,46 +485,6 @@ class State(NamedTuple):
             lambda: self,
         )
 
-    def _handle_extend_arm(self) -> "State":
-        new_arm_extension = jnp.min(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension + 1,
-                    jnp.full(
-                        (1,),
-                        fill_value=self.env_cfg.agent.max_arm_extension,
-                        dtype=IntLowDim,
-                    ),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
-        )
-
-    def _handle_retract_arm(self) -> "State":
-        new_arm_extension = jnp.max(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension - 1,
-                    jnp.full((1,), fill_value=0, dtype=IntLowDim),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
-        )
-
     @staticmethod
     def _get_current_pos_vector_idx(pos_base: Array, map_height: IntMap) -> IntMap:
         """
@@ -591,9 +543,7 @@ class State(NamedTuple):
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
 
-    def _get_dig_dump_mask_cyl(
-        self, map_cyl_coords: Array, arm_extension: Array
-    ) -> Array:
+    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
 
@@ -610,18 +560,16 @@ class State(NamedTuple):
         )
         min_distance_from_agent = tile_size * max_agent_dim
 
-        r_max = (
-            arm_extension + 1
-        ) * dig_portion_radius * tile_size + min_distance_from_agent
-        r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
-
+        # Fixed middle-point arm extension (halfway between 0 and 1)
+        fixed_extension = 0.5
+        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
             map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
         )
-
         dig_mask_theta = jnp.logical_and(
             map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
         )
@@ -641,9 +589,7 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(
-            map_cyl_coords, self.agent.agent_state.arm_extension
-        )
+        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(map_cyl_coords)
 
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
@@ -1410,15 +1356,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1433,8 +1370,6 @@ class State(NamedTuple):
                 bool_anticlock,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
                 0,  # dummy
                 0,  # dummy
@@ -1496,15 +1431,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1521,8 +1447,6 @@ class State(NamedTuple):
                 bool_move_anticlock_backward,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
             ],
             dtype=jnp.bool_,

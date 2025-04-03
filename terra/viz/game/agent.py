@@ -84,7 +84,7 @@ class Agent:
         agent_pos = np.asarray(agent_pos, dtype=np.int32)
         base_dir = np.asarray(base_dir, dtype=np.int32)
         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
-        loaded = np.asarray(loaded, dtype=np.bool)
+        loaded = np.asarray(loaded, dtype=bool)
         self.agent = self.create_agent(
             agent_pos[0].item(),
             agent_pos[1].item(),
