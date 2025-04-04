@@ -7,6 +7,7 @@ from terra.state import State
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
+from terra.utils import compute_polygon_mask
 from terra.utils import get_arm_angle_int
 from terra.settings import IntLowDim
 
@@ -32,24 +33,12 @@ class TraversabilityMaskWrapper:
             state.env_cfg.agent.width,
             state.env_cfg.agent.height,
         )
-        x, y = state._get_agent_corners_xy(agent_corners)
 
         map_width = state.world.width
         map_height = state.world.height
-        traversability_mask = jnp.where(
-            jnp.logical_or(
-                jnp.logical_or(
-                    (jnp.arange(map_width) > x[1])[:, None].repeat(map_height, axis=1),
-                    (jnp.arange(map_width) < x[0])[:, None].repeat(map_height, axis=1),
-                ),
-                jnp.logical_or(
-                    (jnp.arange(map_height) > y[1])[None].repeat(map_width, axis=0),
-                    (jnp.arange(map_height) < y[0])[None].repeat(map_width, axis=0),
-                ),
-            ),
-            traversability_mask,
-            -1,
-        )
+        
+        polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+        traversability_mask = jnp.where(polygon_mask, -1, traversability_mask)
 
         padding_mask = state.world.padding_mask.map
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
