@@ -35,7 +35,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         None
     """
     # Load the JSON configuration file
-    with open("envs13.json", "r") as file:
+    with open("envs14.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -131,6 +131,23 @@ def run_experiment(model_name, model_key, num_timesteps):
         #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
         # )
 
+        traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
+        #print("Traversability map: ", traversability_map)
+        #print("Traversability map shape: ", traversability_map.shape)
+        #print("Traversability map dtype: ", traversability_map.dtype)
+        #traversability_map_image = traversability_map_to_image(traversability_map)
+        #print("Traversability map image type: ", traversability_map_image.dtype)
+        #traversability_map_image.show()
+        # Assuming `steps_taken` is the current step number
+        # Convert the JAX array to a NumPy array
+        traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
+        traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
+
+        # Save the traversability map as a grayscale image
+        # filename = f"traversability_map_step_{steps_taken}.png"
+        # image_to_save = Image.fromarray(traversability_map_np)  # Scale 0/1 to 0/255 for grayscale
+        # image_to_save.save(filename)
+        # print(f"Traversability map image saved as '{filename}'")
         
         if USE_LOCAL_MAP:
             local_map = generate_local_map(timestep)
@@ -187,9 +204,21 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
 
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg5, local_map=local_map_image)
+            usr_msg6 = (
+                f"Analyze this game frame and the provided local map to select the optimal action. "
+                f"The base of the excavator is currently facing {base_orientation['direction']}. "
+                f"The bucket is currently {bucket_status}. "
+                f"The excavator is currently located at {start} (y,x). "
+                f"The nearest target digging position is {target} (y,x). "
+                f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
+                f"The list of the previous actions is {previous_action}. "
+                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+            )
+
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg6, local_map=local_map_image, traversability_map=traversability_map_np)
         else:
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg5, local_map=None)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg6, local_map=None)
 
         action_output, reasoning = agent.generate_response("./")
         

@@ -130,7 +130,8 @@ class Agent():
     def query_LLM(self):
         #print("\nSending request to LLM. Model:", self.model_name)
         #print("Model Key:", self.model_key)
-        #print("Messages being sent to LLM:", json.dumps(self.messages, indent=2))  # Pretty print for clarity        # Check which model to use and prompt the model 
+        #print(self.messages)
+        #print("Messages being sent to LLM:", json.dumps(self.messages, indent=2))  # Pretty print for clarity
         if self.model_key=='gpt4' or self.model_key=='gpt4o':
             self.response = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -405,10 +406,10 @@ class Agent():
 
         return action_output, response_text
 
-    def add_user_message(self, frame=None, user_msg=None, local_map=None):
+    def add_user_message(self, frame=None, user_msg=None, local_map=None, traversability_map=None):
         
         if self.model_key == 'gpt4' or self.model_key == 'gpt4o':
-            if user_msg is not None and frame is not None and local_map is not None:
+            if user_msg is not None and frame is not None and local_map is not None and traversability_map is not None:
                 self.messages.append(
                     {
                         "role": "user",
@@ -421,10 +422,17 @@ class Agent():
                                     "detail": "low",
                                 },
                             },
-                                                      {
+                            {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{self.encode_image(local_map)}",
+                                    "detail": "low",
+                                },
+                            },
+                                                        {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{self.encode_image(traversability_map)}",
                                     "detail": "low",
                                 },
                             },
@@ -524,7 +532,28 @@ class Agent():
                 )
 
         if self.model_key == 'gemini':
-            if frame is not None and user_msg is not None:
+            if frame is not None and user_msg is not None and traversability_map is not None:
+                image_data = self.encode_image(frame)
+                image_data_traversability = self.encode_image(traversability_map)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "mime_type": "image/jpeg",
+                                "data": image_data
+                            },
+                            {
+                                "mime_type": "image/jpeg",
+                                "data": image_data_traversability
+                            },
+                            {
+                                "text": user_msg
+                            }
+                        ]
+                    }
+                )
+            elif frame is not None and user_msg is not None and traversability_map is None:
                 image_data = self.encode_image(frame)
                 self.messages.append(
                     {
