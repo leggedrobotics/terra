@@ -1471,7 +1471,6 @@ class State(NamedTuple):
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
             "target_tiles": self._build_dig_dump_cone(),
-            "do_preview": self._handle_do().world.dig_map.map,
             # Include termination_type directly without done_task
             "task_done": task_done,
         }
