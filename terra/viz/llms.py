@@ -350,7 +350,7 @@ class Agent():
                 retry_count += 1
         
         # If we've exhausted retries, return a default action (0)
-        logger.error("Failed to get valid action after multiple attempts, using default action 0")
+        logger.error("Failed to get valid action after multiple attempts, using default action -1")
         return 0
 
     def get_response(self):
