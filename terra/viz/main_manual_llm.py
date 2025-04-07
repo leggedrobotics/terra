@@ -145,7 +145,7 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"The target digging positions are {target_positions} (y,x). "
                 f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
                 f"The list of the previous actions is {previous_action}. "
-                f"Ensure that the excavator base maintains a safe minimum distance (5 to 10 pixels) from the target area to allow proper alignment of the orange area with the purple area for efficient digging. "
+                f"Ensure that the excavator base maintains a safe minimum distance (8 to 10 pixels) from the target area to allow proper alignment of the orange area with the purple area for efficient digging. "
                 f"Avoid moving too close to the purple area to prevent overlap with the base. "
                 f"If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig in the next action. "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
