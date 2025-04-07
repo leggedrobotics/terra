@@ -24,3 +24,4 @@ analysis.log
 analysis/cumulative_rewards.png
 analysis/final_rewards.png
 analysis/analysis.json
+ANTHROPIC_API_KEY.txt

@@ -429,7 +429,7 @@ class Agent():
                                     "detail": "low",
                                 },
                             },
-                                                        {
+                            {
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{self.encode_image(traversability_map)}",
@@ -480,7 +480,46 @@ class Agent():
                     }
                 )
         elif self.model_key == 'claude':
-            if frame is not None and user_msg is not None:
+            if frame is not None and user_msg is not None and traversability_map is not None and local_map is not None:
+                image_data = self.encode_image(frame)
+                image_data_traversability = self.encode_image(traversability_map)
+                image_data_local_map = self.encode_image(local_map)
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data
+                                }
+                            },
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data_local_map
+                                }
+                            },
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": image_data_traversability
+                                }
+                            },
+                            {
+                                "type": "text",
+                                "text": user_msg
+                            }
+                        ]
+                    }
+                )
+            elif frame is not None and user_msg is not None and traversability_map is None:
                 image_data = self.encode_image(frame)
                 self.messages.append(
                     {
@@ -532,9 +571,10 @@ class Agent():
                 )
 
         if self.model_key == 'gemini':
-            if frame is not None and user_msg is not None and traversability_map is not None:
+            if frame is not None and user_msg is not None and traversability_map is not None and local_map is not None:
                 image_data = self.encode_image(frame)
                 image_data_traversability = self.encode_image(traversability_map)
+                image_data_local_map = self.encode_image(local_map)
                 self.messages.append(
                     {
                         "role": "user",
@@ -542,6 +582,10 @@ class Agent():
                             {
                                 "mime_type": "image/jpeg",
                                 "data": image_data
+                            },
+                            {
+                                "mime_type": "image/jpeg",
+                                "data": image_data_local_map
                             },
                             {
                                 "mime_type": "image/jpeg",
