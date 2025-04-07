@@ -16,6 +16,7 @@ from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
+from terra.utils import compute_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
 from terra.utils import get_min_distance_point_to_lines
@@ -152,77 +153,72 @@ class State(NamedTuple):
     def _do_nothing(self):
         return self
 
-    @staticmethod
-    def _base_orientation_to_one_hot_forward(base_orientation: IntLowDim):
+    def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
+        return jax.nn.one_hot(base_orientation, 12, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
-        Converts the base orientation (int 0 to N) to a one-hot encoded vector.
-        Use for the backwards action.
+        Converts the base orientation (int 0 to N) to a one-hot encoded vector
+        for the backwards direction.
         """
-        fwd_to_bkwd_transformation = jnp.array(
-            [
-                [0, 0, 1, 0],
-                [0, 0, 0, 1],
-                [1, 0, 0, 0],
-                [0, 1, 0, 0],
-            ],
-            dtype=IntLowDim,
-        )
-        orientation_one_hot = self._base_orientation_to_one_hot_forward(
-            base_orientation
-        )
+        # Create a permutation matrix by shifting the identity
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
+        num_angles = 12
+        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
+        orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
-    @staticmethod
     def _get_agent_corners(
+        self,
         pos_base: Array,
         base_orientation: IntLowDim,
         agent_width: IntLowDim,
         agent_height: IntLowDim,
-    ):
+    ) -> Array:
         """
         Gets the coordinates of the 4 corners of the agent.
+        The function uses a biased rounding strategy to avoid rectangle shrinkage.
         """
-        orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
-        agent_xy_matrix = jnp.array(
-            [[agent_width, agent_height], [agent_height, agent_width]], dtype=IntLowDim
-        )
-        agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
+        # Determine half dimensions using floor/ceil to properly handle odd dimensions.
+        half_width_left = jnp.floor(agent_width / 2.0)
+        half_width_right = jnp.ceil(agent_width / 2.0)
+        half_height_bottom = jnp.floor(agent_height / 2.0)
+        half_height_top = jnp.ceil(agent_height / 2.0)
 
-        x_base = pos_base[0]
-        y_base = pos_base[1]
-        x_half_dim = jnp.floor(agent_xy_dimensions[0, 0] / 2)
-        y_half_dim = jnp.floor(agent_xy_dimensions[0, 1] / 2)
+        # Define corners in local coordinates relative to the center.
+        local_corners = jnp.array([
+            [-half_width_left, -half_height_bottom],
+            [ half_width_right, -half_height_bottom],
+            [ half_width_right,  half_height_top],
+            [-half_width_left,  half_height_top]
+        ])
 
-        agent_corners = jnp.array(
-            [
-                [x_base + x_half_dim, y_base + y_half_dim],
-                [x_base - x_half_dim, y_base + y_half_dim],
-                [x_base + x_half_dim, y_base - y_half_dim],
-                [x_base - x_half_dim, y_base - y_half_dim],
-            ]
-        )
-        return agent_corners
+        # Convert degrees to radians using JAX.
+        angle_rad = (base_orientation.astype(jnp.float32) / jnp.array(self.env_cfg.agent.angles_base, dtype=jnp.float32)) * (2 * jnp.pi)
+        cos_a = jnp.cos(angle_rad)
+        sin_a = jnp.sin(angle_rad)
+        # Build the rotation matrix.
+        R = jnp.array([[cos_a, -sin_a],
+                    [sin_a,  cos_a]])
+        R = R.squeeze()
 
-    @staticmethod
-    def _get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
-        """
-        Args:
-            - agent_corners: (4, 2) Array with agent corners [x, y] column order
-        Returns:
-            - x: (2, ) Array of min and max x values as [min, max]
-            - y: (2, ) Array of min and max y values as [min, max]
-        """
+        # Rotate local corners and translate by the center position.
+        global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=float)
 
-        x = jnp.array([jnp.min(agent_corners[:, 0]), jnp.max(agent_corners[:, 0])])
-        y = jnp.array([jnp.min(agent_corners[:, 1]), jnp.max(agent_corners[:, 1])])
-        return x, y
+        # Bias the rounding: use floor if below the center, ceil otherwise.
+        center_arr = jnp.array(pos_base, dtype=float)
+        biased_corners = jnp.where(
+            global_corners_float < center_arr,
+            jnp.floor(global_corners_float),
+            jnp.ceil(global_corners_float)
+        ).astype(IntLowDim)
+
+        return biased_corners
 
     @staticmethod
     def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
@@ -236,68 +232,34 @@ class State(NamedTuple):
         """
         return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
 
-    def _is_valid_move(self, agent_corners_xy: Array) -> Array:
+    def _is_valid_move(self, agent_corners: Array) -> Array:
         """
-        Returns true if the move action proposed is valid, false otherwise.
-
-        Args:
-            - base_position: (2, ) Array with [x, y] proposed base position
-            - base_orientation: (1, ) Array with int-based orientation encoding of the agent (e.g. 3)
-            - agent_width: width of the agent
-            - agent_height: height of the agent
-                Note: the width and height parameters can be exploited to mask out also the tiles occupied
-                    during a rotation (e.g. width = height = max(width, height))
-        Returns:
-            - bool, true if proposed action is valid
+        Checks if the move is valid by computing the agent occupancy mask (using a
+        polygon mask) and ensuring all affected grid cells are traversable.
         """
         map_width = self.world.width
         map_height = self.world.height
 
-        # Map size constraints
-        valid_matrix_bottom = jnp.array([0, 0]) <= agent_corners_xy
-        valid_matrix_up = agent_corners_xy < jnp.array([map_width, map_height])
-
-        valid_move_map_size = jnp.all(
-            jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0)
+        # Verify that the corners are within map bounds.
+        valid_bounds = jnp.all(
+            jnp.logical_and(
+                agent_corners >= jnp.array([0, 0]),
+                agent_corners < jnp.array([map_width, map_height])
+            )
         )
 
-        # Traversability constraints
+        # Determine the occupancy mask for a grid of size map_width x map_height.
+        polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+        
+        # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
         )
-        x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
-
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(
-                map_height, axis=1
-            ),
-            0,
-            traversability_mask,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_width) > x_minmax_agent[1])[:, None].repeat(
-                map_height, axis=1
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_height) < y_minmax_agent[0])[None].repeat(
-                map_width, axis=0
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        traversability_mask_reduced = jnp.where(
-            (jnp.arange(map_height) > y_minmax_agent[1])[None].repeat(
-                map_width, axis=0
-            ),
-            0,
-            traversability_mask_reduced,
-        )
-        valid_move_traversability = jnp.all(traversability_mask_reduced == 0)
-        valid_move = jnp.logical_and(valid_move_map_size, valid_move_traversability)
-        return valid_move
+        
+        # For a valid move, all cells covered by the agent must be traversable (== 0).
+        # Mask out the cells where the agent is located.
+        valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
+        return jnp.logical_and(valid_bounds, valid_traversability)
 
     @staticmethod
     def _valid_move_to_valid_mask(valid_move: jnp.bool_) -> Array:
@@ -310,29 +272,33 @@ class State(NamedTuple):
         return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        move_tiles = self.env_cfg.agent.move_tiles
-        new_pos_base = self.agent.agent_state.pos_base
-
-        # Propagate action
-        possible_deltas_xy = jnp.array(
-            [[0, move_tiles], [-move_tiles, 0], [0, -move_tiles], [move_tiles, 0]],
-            dtype=IntLowDim,
-        )
-        delta_xy = orientation_vector @ possible_deltas_xy
-
-        new_pos_base = (new_pos_base + delta_xy)[0]
-
+        # Compute the xy delta for a forward move along that angle.
+        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
+        angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
+        angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
+        xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
+        delta_xy = orientation_vector @ xy_delta
+        
+        # Compute candidate new position and immediately round it to discrete grid points.
+        candidate_pos = self.agent.agent_state.pos_base + delta_xy
+        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
+        candidate_pos = jnp.squeeze(candidate_pos, axis=0)
+        
+        # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
-            new_pos_base,
+            candidate_pos,
             base_orientation=self.agent.agent_state.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
+        
+        # Check if the new position is valid.
         valid_move = self._is_valid_move(agent_corners_xy)
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-
-        old_new_pos_base = jnp.array([self.agent.agent_state.pos_base, new_pos_base])
-        new_pos_base = valid_move_mask @ old_new_pos_base
+        
+        # Choose between the old position and the new candidate position.
+        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        new_pos_base = valid_move_mask @ old_new_pos
 
         return self._replace(
             agent=self.agent._replace(
@@ -372,151 +338,28 @@ class State(NamedTuple):
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
         )
 
-    def _apply_base_rotation_mask(
-        self, old_angle_base: Array, new_angle_base: Array, clockwise: jnp.bool_
-    ) -> Array:
+    def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
         """
-        This function creates a move mask and applies it to the new angle of the base.
-
-        The approach is a simplified one: the agent is split in two parts (front and rear), and on each part
-        a square is built taking the max of the two dimensions - and positioned it accordingly to the rotation direction.
-        In the end the mask is going to be the union of these two squares plus the end position square.
-        This approach allows to diversify between clock and anticlock rotation - even if in a rough way.
+        Given an old and a candidate new base angle for the agent, compute the
+        rotated polygon using _get_agent_corners (which works for arbitrary rotations)
+        and then check if that position is valid.
+        If it is, return new_angle_base; otherwise, return old_angle_base.
         """
-        agent_width = self.env_cfg.agent.width
-        agent_height = self.env_cfg.agent.height
-        pos_base = self.agent.agent_state.pos_base
-        x_base = pos_base[0]
-        y_base = pos_base[1]
-
-        orientation_vector_xy = jax.nn.one_hot(old_angle_base % 2, 2, dtype=IntLowDim)
-        agent_xy_matrix = jnp.array(
-            [[agent_width, agent_height], [agent_height, agent_width]], dtype=IntLowDim
+        # Compute the agent's polygon for the candidate new angle.
+        candidate_corners = self._get_agent_corners(
+            self.agent.agent_state.pos_base,
+            base_orientation=new_angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
         )
-        agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
-
-        x_half_dim_f = jnp.floor(agent_xy_dimensions[0, 0] / 2)
-        x_half_dim_c = jnp.ceil(agent_xy_dimensions[0, 0] / 2)
-        y_half_dim_f = jnp.floor(agent_xy_dimensions[0, 1] / 2)
-        y_half_dim_c = jnp.ceil(agent_xy_dimensions[0, 1] / 2)
-
-        # TODO: the following 4 functions can become 2 if parametrized on the clockwise bool
-
-        # Clock
-        def _get_corners_start_horizontal_clock():
-            front_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base + x_half_dim_c, y_base],
-                    [x_base + x_half_dim_c, y_base + y_half_dim_f],
-                    [x_base, y_base + y_half_dim_f],
-                ]
-            )
-            back_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base - x_half_dim_c, y_base],
-                    [x_base - x_half_dim_c, y_base - y_half_dim_f],
-                    [x_base, y_base - y_half_dim_f],
-                ]
-            )
-            return front_corners, back_corners
-
-        def _get_corners_start_vertical_clock():
-            front_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base - x_half_dim_f, y_base],
-                    [x_base - x_half_dim_f, y_base + y_half_dim_c],
-                    [x_base, y_base + y_half_dim_c],
-                ]
-            )
-            back_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base + x_half_dim_f, y_base],
-                    [x_base + x_half_dim_f, y_base - y_half_dim_c],
-                    [x_base, y_base - y_half_dim_c],
-                ]
-            )
-            return front_corners, back_corners
-
-        # Anticlock
-        def _get_corners_start_vertical_anticlock():
-            front_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base + y_half_dim_c, y_base],
-                    [x_base + y_half_dim_c, y_base + x_half_dim_f],
-                    [x_base, y_base + x_half_dim_f],
-                ]
-            )
-            back_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base - y_half_dim_c, y_base],
-                    [x_base - y_half_dim_c, y_base - x_half_dim_f],
-                    [x_base, y_base - x_half_dim_f],
-                ]
-            )
-            return front_corners, back_corners
-
-        def _get_corners_start_horizontal_anticlock():
-            front_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base - y_half_dim_f, y_base],
-                    [x_base - y_half_dim_f, y_base + x_half_dim_c],
-                    [x_base, y_base + x_half_dim_c],
-                ]
-            )
-            back_corners = jnp.array(
-                [
-                    [x_base, y_base],
-                    [x_base + y_half_dim_f, y_base],
-                    [x_base + y_half_dim_f, y_base - x_half_dim_c],
-                    [x_base, y_base - x_half_dim_c],
-                ]
-            )
-            return front_corners, back_corners
-
-        front_corners, back_corners = jax.lax.cond(
-            clockwise,
-            lambda: jax.lax.cond(
-                orientation_vector_xy[0, 0],
-                _get_corners_start_horizontal_clock,
-                _get_corners_start_vertical_clock,
-            ),
-            lambda: jax.lax.cond(
-                orientation_vector_xy[0, 0],
-                _get_corners_start_horizontal_anticlock,
-                _get_corners_start_vertical_anticlock,
-            ),
-        )
-
-        # x and y here are inverted because we use the [x, y] before the 90deg rotation
-        # to compute the corners after the rotation.
-        new_agent_corners = jnp.array(
-            [
-                [x_base + y_half_dim_f, y_base + x_half_dim_f],
-                [x_base - y_half_dim_f, y_base + x_half_dim_f],
-                [x_base + y_half_dim_f, y_base - x_half_dim_f],
-                [x_base - y_half_dim_f, y_base - x_half_dim_f],
-            ]
-        )
-
-        valid_move_front = self._is_valid_move(front_corners)
-        valid_move_back = self._is_valid_move(back_corners)
-        valid_move_corners = self._is_valid_move(new_agent_corners)
-        valid_move = valid_move_front * valid_move_back * valid_move_corners
-        valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-
-        # Concatenate new and old angles to then matmul and pick only one of them
-        #   this operation is equivalent to an if else statement
-        old_new_angle_base = jnp.array(
-            [self.agent.agent_state.angle_base, new_angle_base]
-        )
-        return valid_move_mask @ old_new_angle_base
+        
+        # Check if this rotated polygon is valid.
+        valid_move = self._is_valid_move(candidate_corners)
+        
+        # Choose the new angle if valid, else the old angle.
+        return jax.lax.cond(valid_move, 
+                            lambda: new_angle_base,
+                            lambda: old_angle_base)
 
     def _handle_clock(self) -> "State":
         def _rotate_clock():
@@ -525,7 +368,7 @@ class State(NamedTuple):
                 old_angle_base, self.env_cfg.agent.angles_base
             )
             new_angle_base = self._apply_base_rotation_mask(
-                old_angle_base, new_angle_base, clockwise=True
+                old_angle_base, new_angle_base
             )
 
             return self._replace(
@@ -547,7 +390,7 @@ class State(NamedTuple):
                 old_angle_base, self.env_cfg.agent.angles_base
             )
             new_angle_base = self._apply_base_rotation_mask(
-                old_angle_base, new_angle_base, clockwise=False
+                old_angle_base, new_angle_base
             )
 
             return self._replace(
@@ -721,7 +564,7 @@ class State(NamedTuple):
         fixed_extension = 0.5
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
         r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-        theta_max = np.pi / self.env_cfg.agent.angles_cabin
+        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
@@ -1461,10 +1304,9 @@ class State(NamedTuple):
 
         relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
         target_map_negative = jnp.clip(target_map, a_max=0)
+
         done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
-
         done_unload = agent_loaded[0] == 0
-
         done_task = done_dump & done_dig & done_unload
         return done_task
 

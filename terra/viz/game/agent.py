@@ -7,46 +7,61 @@ from .utils import rotate_triangle
 
 
 class Agent:
-    def __init__(self, width, height, tile_size) -> None:
+    def __init__(self, width, height, tile_size, angles_base, angles_cabin) -> None:
         self.width = width
         self.height = height
         self.tile_size = tile_size
+        self.angles_base = angles_base
+        self.angles_cabin = angles_cabin
 
     def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded):
-        px = px_center - self.width // 2
-        py = py_center - self.height // 2
+    # Convert angle_base index to degrees using the util function
+        base_angle_degrees = agent_base_to_angle(angle_base, self.angles_base)
+        
+        # Calculate center position in pixels
+        center_x = px_center * self.tile_size
+        center_y = py_center * self.tile_size
+        
+        # Calculate half-dimensions for the body
+        half_width = (self.width * self.tile_size) / 2
+        half_height = (self.height * self.tile_size) / 2
+        
+        # Create the four corners of the rectangle (unrotated)
+        rect_points = [
+            (-half_width, -half_height),  # top-left
+            (half_width, -half_height),   # top-right
+            (half_width, half_height),    # bottom-right
+            (-half_width, half_height)    # bottom-left
+        ]
+        
+        # Rotate and translate each point
+        agent_body = []
+        for x, y in rect_points:
+            # Convert to radians for trigonometric calculations
+            angle_rad = math.radians(base_angle_degrees)
+            # Apply rotation
+            rotated_x = x * math.cos(angle_rad) - y * math.sin(angle_rad)
+            rotated_y = x * math.sin(angle_rad) + y * math.cos(angle_rad)
+            # Translate to actual position
+            agent_body.append((center_y + rotated_x, center_x + rotated_y))
+        
+        # Use the actual dimensions for the agent
+        w = self.width
+        h = self.height
 
-        if angle_base in (0, 2):
-            px = px_center - self.height // 2
-            py = py_center - self.width // 2
-            agent_body = [
-                (py * self.tile_size, px * self.tile_size),
-            ]
-            w = self.width
-            h = self.height
-        elif angle_base in (1, 3):
-            px = px_center - self.width // 2
-            py = py_center - self.height // 2
-            agent_body = [
-                (py * self.tile_size, px * self.tile_size),
-            ]
-            w = self.height
-            h = self.width
-
-        angle_cabin = (angle_cabin + 2 * angle_base) % 8
-
-        # Cabin (triangle)
-        deg_angle_cabin = agent_cabin_to_angle(angle_cabin)
+        # Calculate cabin angle (global orientation)
+        cabin_relative_degrees = agent_cabin_to_angle(angle_cabin, self.angles_cabin)
+        global_cabin_angle = (cabin_relative_degrees + base_angle_degrees) % 360
+        
+        # Create cabin triangle
         scaling = self.tile_size / 3
         points = [
             (3 / scaling, 0),
             (-1.5 / scaling, -1.5 / scaling),
             (-1.5 / scaling, 1.5 / scaling),
         ]
-        a_center_x = agent_body[0][0] + w * self.tile_size // 2
-        a_center_y = agent_body[0][1] + h * self.tile_size // 2
         agent_cabin = rotate_triangle(
-            (a_center_x, a_center_y), points, self.tile_size, deg_angle_cabin
+            (center_y, center_x), points, self.tile_size, global_cabin_angle
         )
 
         out = {
