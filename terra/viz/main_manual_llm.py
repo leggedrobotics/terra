@@ -9,8 +9,6 @@ import csv
 import numpy as np
 import datetime
 
-
-
 from pygame.locals import (
     K_q,
     QUIT,
@@ -94,18 +92,22 @@ def run_experiment(model_name, model_key, num_timesteps):
     USE_LOCAL_MAP = True
 
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
-    # state = timestep.state
-    # base_orientation = extract_base_orientation(state)
-    # print(base_orientation)
 
     previous_action = []
+    current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+    previous_map = current_map.copy()  # Initialize the previous map
 
     while playing and steps_taken < num_timesteps:
     #while playing:
         for event in pg.event.get():
             if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
                 playing = False
-        
+
+        current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+        if previous_map is None or not jnp.array_equal(previous_map, current_map):
+            previous_map = current_map.copy()  # Update the previous map
+            previous_action = []  # Reset the previous action list
+
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
 
@@ -114,108 +116,26 @@ def run_experiment(model_name, model_key, num_timesteps):
         bucket_status = extract_bucket_status(state)  # Extract bucket status
 
 
-        # usr_msg0 = "What action should be taken?"
-        # usr_msg1 ='Analyze this game frame and select the optimal action. Focus on immediate gameplay elements visible in this specific frame, and follow the format: {"reasoning": "detailed step-by-step analysis", "action": X}'
-        # usr_msg2 = (
-        #     f"Analyze this game frame and the provided local map to select the optimal action. "
-        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
-        #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-        # )
-
-        # usr_msg3 = (
-        #     f"Analyze this game frame and the provided local map to select the optimal action. "
-        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
-        #     f"The bucket is currently {bucket_status}. "
-        #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-        # )
-
         traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
-        #print("Traversability map: ", traversability_map)
-        #print("Traversability map shape: ", traversability_map.shape)
-        #print("Traversability map dtype: ", traversability_map.dtype)
-        #traversability_map_image = traversability_map_to_image(traversability_map)
-        #print("Traversability map image type: ", traversability_map_image.dtype)
-        #traversability_map_image.show()
-        # Assuming `steps_taken` is the current step number
-        # Convert the JAX array to a NumPy array
+
         traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
         traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
 
-        # Save the traversability map as a grayscale image
-        # filename = f"traversability_map_step_{steps_taken}.png"
-        # image_to_save = Image.fromarray(traversability_map_np)  # Scale 0/1 to 0/255 for grayscale
-        # image_to_save.save(filename)
-        # print(f"Traversability map image saved as '{filename}'")
-        
+
         if USE_LOCAL_MAP:
             local_map = generate_local_map(timestep)
             local_map_image = local_map_to_image(local_map)
 
-            local_map_summary = summarize_local_map(local_map)
-            #print(local_map_summary)
-
-            # usr_msg3 = (
-            #     f"Analyze this game frame and the provided local map to select the optimal action. "
-            #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
-            #     f"The bucket is currently {bucket_status}. "
-            #     f"{local_map_summary} "
-            #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-            #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-            # )
-
-
             start, target_positions = extract_positions(timestep.state)
-            target = find_nearest_target(start, target_positions)
-
-            # current_position_str = f"({current_position['x']}, {current_position['y']})"
-
-
-            # if target_position:
-            #     target_position_str = f"at coordinates ({target_position['x']}, {target_position['y']})"
-            # else:
-            #     target_position_str = "not currently visible in the global map"
+            nearest_target = find_nearest_target(start, target_positions)
 
             print(f"Current direction: {base_orientation['direction']}")
             print(f"Bucket status: {bucket_status}")
             print(f"Current position: {start} (y,x)")
-            print(f"Target position: {target} (y,x)")
+            print(f"Nearest target position: {nearest_target} (y,x)")
             print(f"Previous action list: {previous_action}")
             
-            usr_msg4 = (
-                f"Analyze this game frame and the provided local map to select the optimal action. "
-                f"The base of the excavator is currently facing {base_orientation['direction']}. "
-                f"The bucket is currently {bucket_status}. "
-                f"The excavator is currently located at {start} (y,x). "
-                #f"The nearest target digging position is {target} (y,x). "
-                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-            )
-
-            usr_msg5 = (
-                f"Analyze this game frame and the provided local map to select the optimal action. "
-                f"The base of the excavator is currently facing {base_orientation['direction']}. "
-                f"The bucket is currently {bucket_status}. "
-                f"The excavator is currently located at {start} (y,x). "
-                f"The nearest target digging position is {target} (y,x). "
-                f"The list of the previous actions is {previous_action}. "
-                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-            )
-
-            usr_msg6 = (
-                f"Analyze this game frame and the provided local map to select the optimal action. "
-                f"The base of the excavator is currently facing {base_orientation['direction']}. "
-                f"The bucket is currently {bucket_status}. "
-                f"The excavator is currently located at {start} (y,x). "
-                f"The target digging positions are {target_positions} (y,x). "
-                f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
-                f"The list of the previous actions is {previous_action}. "
-                f"Focus on aligning the orange area with the purple area for efficient digging. "
-                f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-                f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-            )
+            
             usr_msg7 = (
                 f"Analyze this game frame and the provided local map to select the optimal action. "
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
