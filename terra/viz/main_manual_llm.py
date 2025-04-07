@@ -35,7 +35,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         None
     """
     # Load the JSON configuration file
-    with open("envs14.json", "r") as file:
+    with open("envs18.json", "r") as file:
         game_instructions = json.load(file)
 
     # Define the environment name for the Autonomous Excavator Game
@@ -188,7 +188,7 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
                 f"The bucket is currently {bucket_status}. "
                 f"The excavator is currently located at {start} (y,x). "
-                f"The nearest target digging position is {target} (y,x). "
+                #f"The nearest target digging position is {target} (y,x). "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
@@ -209,9 +209,10 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"The base of the excavator is currently facing {base_orientation['direction']}. "
                 f"The bucket is currently {bucket_status}. "
                 f"The excavator is currently located at {start} (y,x). "
-                f"The nearest target digging position is {target} (y,x). "
+                f"The target digging positions are {target_positions} (y,x). "
                 f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
                 f"The list of the previous actions is {previous_action}. "
+                f"Focus on aligning the orange area with the purple area for efficient digging. "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
