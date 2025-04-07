@@ -12,6 +12,6 @@ COLORS = {
     "agent_body": (0, 43, 91),
     "agent_cabin": {
         "loaded": (165, 115, 75),
-        "not_loaded": (234, 84, 85),
+        "not_loaded": (255, 0, 0),
     },
 }
