@@ -107,6 +107,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         if previous_map is None or not jnp.array_equal(previous_map, current_map):
             previous_map = current_map.copy()  # Update the previous map
             previous_action = []  # Reset the previous action list
+            agent.delete_messages()  # Clear previous messages
 
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)

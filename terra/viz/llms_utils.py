@@ -65,7 +65,7 @@ def local_map_to_image(local_map):
     # Save the plot to a buffer
     buf = io.BytesIO()
     plt.savefig(buf, format="jpg", bbox_inches="tight", pad_inches=0)
-    plt.savefig("local_map.jpg", format="jpg", bbox_inches="tight", pad_inches=0)
+    #plt.savefig("local_map.jpg", format="jpg", bbox_inches="tight", pad_inches=0)
     buf.seek(0)
 
     # Convert the buffer to a PIL image and then to a numpy array
