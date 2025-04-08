@@ -270,8 +270,7 @@ def path_to_actions(path, initial_orientation, step_size=1):
         # Determine the required direction to move
         required_direction = get_direction(current_pos, next_pos)
         if required_direction is None:
-            raise ValueError(f"Invalid direction between {current_pos} and {next_pos}")
-
+            actions.append(-1)
         # Determine the turns needed to face the required direction
         while current_orientation != required_direction:
             current_idx = directions.index(current_orientation)
