@@ -258,6 +258,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         timestep = env.step(timestep, batched_action, _rng)
 
         # Update rewards and actions
+        print(f"Reward: {timestep.reward.item()}")
         rewards += timestep.reward.item()
         cumulative_rewards.append(rewards)
         action_list.append(action_output)

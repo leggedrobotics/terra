@@ -212,7 +212,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "squares/64x64/3",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.SPARSE,
-            "apply_trench_rewards": True,
+            "apply_trench_rewards": False,
         },
     ]
 
