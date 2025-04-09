@@ -151,7 +151,8 @@ class Game:
     ):
         def update_world_agent(
             world,
-            agent,
+            agent_1,
+            agent_2,
             active_grid,
             target_grid,
             padding_mask,
@@ -167,7 +168,8 @@ class Game:
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
-            agent.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
+            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
+            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -188,7 +190,7 @@ class Game:
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents_1[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, tt),
+                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, ap2, bd2, cd2, ld2, tt),
             )
             thread.start()
             threads.append(thread)
@@ -198,10 +200,12 @@ class Game:
 
     def draw(self):
         self.surface.fill("#F0F0F0")
-        agent_surfaces = []
-        agent_positions = []
+        agent_surfaces_1 = []
+        agent_positions_1 = []
+        agent_surfaces_2 = []
+        agent_positions_2 = []
 
-        for i, (world, agent) in enumerate(zip(self.worlds, self.agents_1)):
+        for i, (world, agent1, agent2) in enumerate(zip(self.worlds, self.agents_1, self.agents_2)):
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
@@ -211,7 +215,6 @@ class Game:
             total_offset_y = (
                 iy * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
             )
-
             # Action map
             for x in range(world.grid_length_x):
                 for y in range(world.grid_length_y):
@@ -231,41 +234,66 @@ class Game:
                         if flat_idx < len(world.target_tiles) and world.target_tiles[flat_idx]:
                             pg.draw.rect(self.surface, "#FF3300", rect, 2)
 
-            a = agent.agent["body"]["vertices"]
-            w = agent.agent["body"]["width"]
-            h = agent.agent["body"]["height"]
+            a1 = agent1.agent["body"]["vertices"]
+            w1 = agent1.agent["body"]["width"]
+            h1 = agent1.agent["body"]["height"]
 
             # Get vertices for the agent body
-            ca = agent.agent["body"]["color"]
-            agent_x = a[0][0] + total_offset_x
-            agent_y = a[0][1] + total_offset_y
-            a_rect = pg.Rect(0, 0, w * self.tile_size, h * self.tile_size)
-            agent_surfaces.append(
-                pg.Surface((w * self.tile_size, h * self.tile_size), pg.SRCALPHA)
+            ca1 = agent1.agent["body"]["color"]
+            agent_x1 = a1[0][0] + total_offset_x
+            agent_y1 = a1[0][1] + total_offset_y
+            a_rect1 = pg.Rect(0, 0, w1 * self.tile_size, h1 * self.tile_size)
+            agent_surfaces_1.append(
+                pg.Surface((w1 * self.tile_size, h1 * self.tile_size), pg.SRCALPHA)
             )
             if self.progressive_gif:
-                agent_surfaces[-1].set_alpha(50)
+                agent_surfaces_1[-1].set_alpha(50)
 
-            agent_positions.append((agent_x, agent_y))
-            pg.draw.rect(agent_surfaces[-1], ca, a_rect, 0, 3)
+            agent_positions_1.append((agent_x1, agent_y1))
+            pg.draw.rect(agent_surfaces_1[-1], ca1, a_rect1, 0, 3)
 
-            cabin = agent.agent["cabin"]["vertices"]
-            cabin = [(el[0] - a[0][0], el[1] - a[0][1]) for el in cabin]
-            cabin_color = agent.agent["cabin"]["color"]
-            pg.draw.polygon(agent_surfaces[-1], cabin_color, cabin)
+            cabin = agent1.agent["cabin"]["vertices"]
+            cabin = [(el[0] - a1[0][0], el[1] - a1[0][1]) for el in cabin]
+            cabin_color = agent1.agent["cabin"]["color"]
+            pg.draw.polygon(agent_surfaces_1[-1], cabin_color, cabin)
+
+            a2 = agent2.agent["body"]["vertices"]
+            w2 = agent2.agent["body"]["width"]
+            h2 = agent2.agent["body"]["height"]
+
+            # Get vertices for the agent body
+            ca2 = agent2.agent["body"]["color"]
+            agent_x2 = a2[0][0] + total_offset_x
+            agent_y2 = a2[0][1] + total_offset_y
+            a_rect2 = pg.Rect(0, 0, w2 * self.tile_size, h2 * self.tile_size)
+            agent_surfaces_2.append(
+                pg.Surface((w2 * self.tile_size, h2 * self.tile_size), pg.SRCALPHA)
+            )
+            if self.progressive_gif:
+                agent_surfaces_2[-1].set_alpha(50)
+
+            agent_positions_2.append((agent_x2, agent_y2))
+            pg.draw.rect(agent_surfaces_2[-1], ca2, a_rect2, 0, 3)
+
+            cabin = agent2.agent["cabin"]["vertices"]
+            cabin = [(el[0] - a2[0][0], el[1] - a2[0][1]) for el in cabin]
+            cabin_color = agent2.agent["cabin"]["color"]
+            pg.draw.polygon(agent_surfaces_2[-1], cabin_color, cabin)
 
         self.screen.blit(self.surface, (0, 0))
 
         if self.progressive_gif:
             if self.count % 5 == 0:
-                self.old_agents_1.append((agent_surfaces, agent_positions))
+                self.old_agents_1.append((agent_surfaces_1, agent_positions_1))
             for s in self.old_agents_1:
                 for agent_surface, agent_position in zip(s[0], s[1]):
                     self.screen.blit(agent_surface, agent_position)
             self.count += 1
         else:
-            for agent_surface, agent_position in zip(agent_surfaces, agent_positions):
-                self.screen.blit(agent_surface, agent_position)
+            for agent_surface1, agent_position1 in zip(agent_surfaces_1, agent_positions_1):
+                self.screen.blit(agent_surface1, agent_position1)
+            for agent_surface2, agent_position2 in zip(agent_surfaces_2, agent_positions_2):
+                self.screen.blit(agent_surface2, agent_position2)
 
         if self.display:
-            pg.display.flip()
+            pg.display.flip() 
