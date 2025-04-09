@@ -163,7 +163,7 @@ def generate_diagonal_edges(img, edges_range, sizes_small, sizes_long, color_dic
         return None, None, None
 
     # Choose an angle
-    possible_angles = np.arange(15, 360, 15)
+    possible_angles = np.arange(30, 360, 30)
     angle = random.choice(possible_angles)
 
     h_orig, w_orig = img_generated.shape[:2]
