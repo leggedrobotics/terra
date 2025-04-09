@@ -190,7 +190,7 @@ class TerraEnv(NamedTuple):
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
-        new_state = state._step(action)
+        new_state = state._step(action,True)
         reward = state._get_reward(new_state, action)
         new_state = self.wrap_state(new_state)
         observations = self._state_to_obs_dict(new_state)

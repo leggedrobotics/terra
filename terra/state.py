@@ -10,7 +10,7 @@ from terra.actions import Action
 from terra.actions import ActionType
 from terra.actions import TrackedActionType
 from terra.actions import WheeledActionType
-from terra.agent import Agent
+from terra.agent import Agent, AgentState
 from terra.config import EnvConfig
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -59,6 +59,7 @@ class State(NamedTuple):
 
     world: GridWorld
     agent: Agent
+    astate: AgentState
 
     env_steps: int
 
@@ -89,6 +90,7 @@ class State(NamedTuple):
             env_cfg=env_cfg,
             world=world,
             agent=agent,
+            astate=agent.agent_state_1,
             env_steps=0,
         )
 
@@ -115,7 +117,7 @@ class State(NamedTuple):
             dumpability_mask_init=dumpability_mask_init,
         )
 
-    def _step(self, action: Action) -> "State":
+    def _step(self, action: Action, turn:bool) -> "State":
         """
         TrackedAction type --> 0
         WheeledAction type --> 1
@@ -144,6 +146,14 @@ class State(NamedTuple):
             self._handle_retract_arm,
             self._handle_do,
         ]
+
+        astate = jax.lax.cond(
+            turn,
+            self._astate_copy_1,
+            self._astate_copy_2,
+        )
+
+
         cumulative_len = jnp.array([0, 9], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
@@ -160,6 +170,16 @@ class State(NamedTuple):
 
         state.world.padding_mask.print_map
         return state._replace(env_steps=state.env_steps + 1)
+
+    def _astate_copy_1(self):
+        return self._replace(
+            astate = self.agent.agent_state_1
+        )
+    
+    def _astate_copy_2(self):
+        return self._replace(
+            astate = self.agent.agent_state_2
+        )
 
     def _do_nothing(self):
         return self
