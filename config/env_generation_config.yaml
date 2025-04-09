@@ -91,13 +91,13 @@ trenches:
   # obstacles
   n_obs_min: 1
   n_obs_max: 3
-  size_obstacle_min: 5
-  size_obstacle_max: 10
+  size_obstacle_min: 4
+  size_obstacle_max: 9
   # dumping constraints
   n_nodump_min: 1
   n_nodump_max: 3
-  size_nodump_min: 6
-  size_nodump_max: 10
+  size_nodump_min: 8
+  size_nodump_max: 12
 
 foundations:
   dataset_rel_path: "data/openstreet/"
