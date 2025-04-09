@@ -165,7 +165,8 @@ class MapsDimsConfig(NamedTuple):
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 5
     decrease_level_threshold: int = 50
-    last_level_type = "random"  # ["random", "none"]
+    #last_level_type = "random"  # ["random", "none"]
+    last_level_type = "none"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     # levels = [

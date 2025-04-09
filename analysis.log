@@ -298,3 +298,13 @@
 2025-04-08 15:24:04,716 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-08_15-16-09
 2025-04-08 15:24:04,718 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-08_15-16-09): Final reward = -0.11380000389181077, Max reward = -0.001500000013038516
 2025-04-08 15:24:05,302 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis
+2025-04-08 16:10:37,395 - autonomous-excavator.analysis - INFO - Found 4 experiment directories
+2025-04-08 16:10:37,396 - autonomous-excavator.analysis - INFO - Analyzing results for model claude-3-7-sonnet-20250219 in directory ./experiments/claude-3-7-sonnet-20250219_2025-04-08_15-23-45
+2025-04-08 16:10:37,417 - autonomous-excavator.analysis - INFO - Model claude-3-7-sonnet-20250219 (2025-04-08_15-23-45): Final reward = 1.9619000246748328, Max reward = 1.979400025215
+2025-04-08 16:10:37,417 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-08_16-10-26
+2025-04-08 16:10:37,419 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-08_16-10-26): Final reward = -0.09770000213757157, Max reward = -0.0020000000949949026
+2025-04-08 16:10:37,420 - autonomous-excavator.analysis - INFO - Analyzing results for model gemini-2.5-pro-preview-03-25 in directory ./experiments/gemini-2.5-pro-preview-03-25_2025-04-08_14-59-09
+2025-04-08 16:10:37,423 - autonomous-excavator.analysis - INFO - Model gemini-2.5-pro-preview-03-25 (2025-04-08_14-59-09): Final reward = 2.933500036248006, Max reward = 2.9769000379601493
+2025-04-08 16:10:37,423 - autonomous-excavator.analysis - INFO - Analyzing results for model gpt-4o in directory ./experiments/gpt-4o_2025-04-08_15-16-09
+2025-04-08 16:10:37,425 - autonomous-excavator.analysis - INFO - Model gpt-4o (2025-04-08_15-16-09): Final reward = -0.11380000389181077, Max reward = -0.001500000013038516
+2025-04-08 16:10:37,997 - autonomous-excavator.analysis - INFO - Analysis complete. Results saved to ./analysis

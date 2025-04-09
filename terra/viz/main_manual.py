@@ -56,42 +56,20 @@ def main():
     
     current_map = timestep.state.world.target_map.map[0]  # Extract the target map
     previous_map = current_map.copy()  # Initialize the previous map
-
-    start, target_positions = extract_positions(timestep.state)
-    target = find_nearest_target(start, target_positions)
-
-    # Compute the path
-    path, path2, _ = compute_path(timestep.state, start, target)
-    print("Path: ", path)
-    print("\n Path2: ", path2)
-    simplified_path = simplify_path(path)
-    print("Simplified Path: ", simplified_path)
-    simplified_path2 = simplify_path(path2)
-    print("Simplified Path2: ", simplified_path2)
-
-
-    initial_orientation = extract_base_orientation(timestep.state)
-    initial_direction = initial_orientation["direction"]
-    print("Initial Direction: ", initial_direction)
-    
-    actions = path_to_actions(path, initial_direction, 1)
-    actions_simple = path_to_actions(simplified_path, initial_direction, 1)
-    print("Action list", actions)
-    print("Simple Action list", actions_simple)
-
-
-    if path:
-        # Pass the path to the Game instance for visualization
-        game = env.terra_env.rendering_engine
-        game.path = path
-        game.path2 = path2
-    else:
-        print("No path found.")
-
+    count_map_change = 0
+    DETERMINISTIC = True
     
     playing = True
     while playing:
         for event in pg.event.get():
+            current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+
+            # Check if the map has changed
+            if previous_map is None or not jnp.array_equal(previous_map, current_map):
+                print("Map has changed.")
+                count_map_change += 1
+                previous_map = current_map.copy()  # Update the previous map
+
             if event.type == KEYDOWN:
                 action = None
                 if event.key == K_UP:
@@ -119,51 +97,27 @@ def main():
 
                 if action is not None:
                     print("Action: ", action)
+                    #print("count_map_change: ", count_map_change)
+                     
+                    if DETERMINISTIC:
+                        key = jnp.array([[count_map_change, count_map_change]], dtype=jnp.uint32)  # Convert to a JAX array
 
-                    rng, _rng = jax.random.split(rng)
-                    _rng = _rng[None]
-                    timestep = env.step(
-                        timestep,
-                        repeat_action(action),
-                        _rng,
-                    )
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action),
+                            key,
+                        )
+                    else:
+                        rng, _rng = jax.random.split(rng)
+                        _rng = _rng[None]
+
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action),
+                            _rng,
+                        )
+
                     print("Reward: ", timestep.reward.item())
-
-                    # Extract the current map
-                    current_map = timestep.state.world.target_map.map[0]  # Extract the target map
-
-                    # Check if the map has changed
-                    if previous_map is None or not jnp.array_equal(previous_map, current_map):
-                        print("Map has changed. Recomputing path...")
-                        previous_map = current_map.copy()  # Update the previous map
-
-                        start, target_positions = extract_positions(timestep.state)
-                        target = find_nearest_target(start, target_positions)
-
-                        path, path2, _ = compute_path(timestep.state, start, target)
-                        print("Path: ", path)
-                        print("\n Path2: ", path2)
-                        simplified_path = simplify_path(path)
-                        print("Simplified Path: ", simplified_path)
-                        simplified_path2 = simplify_path(path2)
-                        print("Simplified Path2: ", simplified_path2)
-
-                        initial_orientation = extract_base_orientation(timestep.state)
-                        initial_direction = initial_orientation["direction"]
-                        print("Initial Direction: ", initial_direction)
-    
-                        actions = path_to_actions(path, initial_direction, 1)
-                        actions_simple = path_to_actions(simplified_path, initial_direction, 1)
-                        print("Action list", actions)
-                        print("Simple Action list", actions_simple)
-
-                        if path:
-                            # Pass the path to the Game instance for visualization
-                            game = env.terra_env.rendering_engine
-                            game.path = path
-                            game.path2 = path2
-                        else:
-                            print("No path found.")
 
             elif event.type == QUIT:
                 playing = False

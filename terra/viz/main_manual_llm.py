@@ -141,9 +141,17 @@ def run_experiment(model_name, model_key, num_timesteps):
 
         current_map = timestep.state.world.target_map.map[0]  # Extract the target map
         if previous_map is None or not jnp.array_equal(previous_map, current_map):
+            print("Map changed!")
             previous_map = current_map.copy()  # Update the previous map
             previous_action = []  # Reset the previous action list
             agent.delete_messages()  # Clear previous messages
+
+            # seed += 1
+            # rng = jax.random.PRNGKey(seed)
+            # rng, _rng = jax.random.split(rng)
+            # _rng = _rng[None]
+            #timestep = env.reset(env_cfgs, _rng)
+            # Reset the game state
 
             if USE_PATH:
                 # Compute the path
@@ -209,7 +217,7 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"You can use the action list, computed from the path, to help you decide the next action. The list of actions is {actions_simple}. "
                 f"Ensure that the excavator base maintains a safe minimum distance (8 to 11 pixels) from the target area to allow proper alignment of the orange area with the purple area for efficient digging. "
                 f"Avoid moving too close to the purple area to prevent overlap with the base. "
-                f"If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig in the next action. "
+                f"If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig (action 6) in the next action. "
                 f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
                 f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
             )
