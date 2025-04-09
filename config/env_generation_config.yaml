@@ -59,31 +59,31 @@ trenches:
   trenches_per_level: [[1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
   trench_dims:  # Updated section
     easy_size_small:
-      min_ratio: [0.03, 0.06]
+      min_ratio: [0.03, 0.05]
       max_ratio: [0.15, 0.2]
       diagonal: False
     easy_size_medium:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.05, 0.07]
       max_ratio: [0.2, 0.4]
       diagonal: False
     easy_size_large:
-      min_ratio: [0.09, 0.10]
+      min_ratio: [0.07, 0.09]
       max_ratio: [0.3, 0.5]
       diagonal: False
     medium_size_medium:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.05, 0.07]
       max_ratio: [0.3, 0.5]
       diagonal: False
     medium_size_large_diagonal:
-      min_ratio: [0.09, 0.10]
+      min_ratio: [0.07, 0.09]
       max_ratio: [0.3, 0.5]
       diagonal: True
     hard_size_large:
-      min_ratio: [0.09, 0.10]
+      min_ratio: [0.07, 0.09]
       max_ratio: [0.3, 0.5]
       diagonal: False
     hard_size_large_diagonal:
-      min_ratio: [0.09, 0.10]
+      min_ratio: [0.07, 0.09]
       max_ratio: [0.3, 0.5]
       diagonal: True
   img_edge_min: 64
@@ -91,13 +91,13 @@ trenches:
   # obstacles
   n_obs_min: 1
   n_obs_max: 3
-  size_obstacle_min: 2
-  size_obstacle_max: 8
+  size_obstacle_min: 5
+  size_obstacle_max: 10
   # dumping constraints
   n_nodump_min: 1
   n_nodump_max: 3
-  size_nodump_min: 2
-  size_nodump_max: 8
+  size_nodump_min: 6
+  size_nodump_max: 10
 
 foundations:
   dataset_rel_path: "data/openstreet/"
