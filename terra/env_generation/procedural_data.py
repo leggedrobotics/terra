@@ -281,30 +281,71 @@ def add_obstacles(
     - np.ndarray: The updated image array with obstacles added.
     - np.ndarray: The updated cumulative mask including the new obstacles.
     """
-    w, h = img.shape[:2]  # Extract width and height from the image dimensions
-    n_occ = 0  # Initialize the count of obstacles added
-    occ = (
-        np.ones_like(img) * 255
-    )  # Initialize an obstacle layer with the same dimensions as the input image
-    n_obs_now = np.random.randint(
-        n_obs_min, n_obs_max + 1
-    )  # Randomly decide the number of obstacles to add
+    h, w = img.shape[:2] # Use height (rows), width (cols)
+    n_occ = 0
+    # Initialize obstacle layer with white background (as per original function)
+    occ_layer = np.ones_like(img, dtype=np.uint8) * 255
+    obstacle_color = np.array(color_dict["obstacle"])
+    # Make a copy of cumulative_mask to update and return
+    updated_cumulative_mask = cumulative_mask.copy()
+
+    n_obs_now = np.random.randint(n_obs_min, n_obs_max + 1)
+    attempts = 0
+    max_attempts = n_obs_now * 50
 
     while n_occ < n_obs_now:
-        # Randomly determine the size of the obstacle
-        sizeox = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
-        sizeoy = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
-        # Randomly select a position for the obstacle
-        x = np.random.randint(0, w - sizeox)
-        y = np.random.randint(0, h - sizeoy)
-        # Check if the selected area overlaps with existing features
-        if not cumulative_mask[x : x + sizeox, y : y + sizeoy].any():
-            # Update the obstacle layer and the cumulative mask
-            occ[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["obstacle"])
-            cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
-            n_occ += 1  # Increment the count of obstacles added
+        # Choose size and center position
+        size_h = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
+        size_w = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
+        # Ensure center is chosen such that even a rotated box has a chance to fit
+        margin_h = int(np.ceil(np.sqrt(size_h ** 2 + size_w ** 2) / 2)) + 1
+        margin_w = margin_h
+        if h <= 2 * margin_h or w <= 2 * margin_w: continue
 
-    return occ, cumulative_mask
+        center_x = np.random.randint(margin_h, h - margin_h)
+        center_y = np.random.randint(margin_w, w - margin_w)
+
+        # Choose rotation angle
+        angle_deg = np.random.choice(np.arange(0, 360, 30))
+        angle_rad = math.radians(angle_deg)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+
+        # Define corners relative to center (0,0)
+        half_w = size_w / 2.0
+        half_h = size_h / 2.0
+        local_corners = np.array([
+            [-half_w, -half_h], [ half_w, -half_h],
+            [ half_w,  half_h], [-half_w,  half_h]
+        ])
+
+        # Rotate corners
+        R = np.array([[cos_a, -sin_a], [sin_a, cos_a]])
+        rotated_local_corners = local_corners @ R.T
+
+        # Translate corners to global center and make integer
+        global_corners = rotated_local_corners + np.array([center_y, center_x])
+        # Ensure corners are within bounds before creating mask
+        global_corners[:, 0] = np.clip(global_corners[:, 0], 0, w - 1)
+        global_corners[:, 1] = np.clip(global_corners[:, 1], 0, h - 1)
+        global_corners_int = global_corners.astype(np.int32)
+
+        # Create mask for the proposed obstacle
+        proposed_mask = np.zeros((h, w), dtype=np.uint8)
+        # cv2.fillPoly requires list of arrays, points should be (col, row) format
+        cv2.fillPoly(proposed_mask, [global_corners_int], 1)
+        proposed_mask_bool = proposed_mask.astype(bool)
+
+        # Check collision using the proposed mask
+        if not np.any(updated_cumulative_mask & proposed_mask_bool):
+            # Draw the rotated obstacle on the 'occ' layer
+            # cv2.fillPoly modifies the array in place
+            cv2.fillPoly(occ_layer, [global_corners_int], tuple(map(int, obstacle_color))) # Use tuple for color
+            updated_cumulative_mask |= proposed_mask_bool
+            n_occ += 1
+
+    # Return the layer with obstacles on white, and the updated mask
+    return occ_layer, updated_cumulative_mask
 
 
 def add_non_dumpables(
