@@ -5,7 +5,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import skimage
+import random
 
 from terra.env_generation.convert_to_terra import (
     _convert_dumpability_to_terra,
@@ -112,13 +112,7 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
         A = axis_pt2[1] - axis_pt1[1]
         B = axis_pt1[0] - axis_pt2[0]
         C = axis_pt2[0] * axis_pt1[1] - axis_pt1[0] * axis_pt2[1]
-        lines_abc.append(
-            {
-                "A": float(A),
-                "B": float(B),
-                "C": float(C),
-            }
-        )
+        lines_abc.append({"A": float(A), "B": float(B), "C": float(C)})
 
         mask = np.zeros_like(img[..., 0], dtype=np.bool_)
         mask[x : x + size_x, y : y + size_y] = np.ones((size_x, size_y), dtype=np.bool_)
@@ -140,6 +134,103 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
         "lines_pts": lines_pts,
     }
     return img, cumulative_mask, metadata
+
+
+def generate_rotated_trenches(img, edges_range, sizes_small, sizes_long, color_dict):
+    """
+    Wrapper function to generate trenches using generate_edges() and optionally rotate.
+
+    Args:
+        img (np.ndarray): Base image.
+        edges_range, sizes_small, sizes_long: Parameters for generate_edges.
+        color_dict (dict): Color dictionary including 'neutral' and 'digging'.
+
+    Returns:
+        tuple: (final_img, final_mask, final_metadata) or (None, None, None)
+               Metadata includes rotation_angle (0.0 if not rotated or angle was 0).
+    """
+
+    img_generated, mask_generated, metadata_generated = generate_edges(
+        img.copy(),
+        edges_range,
+        sizes_small,
+        sizes_long,
+        color_dict
+    )
+
+    # Check if the original generation succeeded
+    if img_generated is None:
+        return None, None, None
+
+    # Choose an angle
+    possible_angles = np.arange(15, 360, 15)
+    angle = random.choice(possible_angles)
+
+    h_orig, w_orig = img_generated.shape[:2]
+    center = (w_orig / 2, h_orig / 2)
+
+    # Get rotation matrix
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # Rotate the image and mask
+    border_val = tuple(map(int, color_dict["neutral"]))
+    rotated_img = cv2.warpAffine(img_generated, M, (w_orig, h_orig),
+                                    flags=cv2.INTER_NEAREST,
+                                    borderMode=cv2.BORDER_CONSTANT,
+                                    borderValue=border_val)
+    mask_uint8 = mask_generated.astype(np.uint8)
+    rotated_mask_interpolated = cv2.warpAffine(mask_uint8, M, (w_orig, h_orig),
+                                                flags=cv2.INTER_NEAREST,
+                                                borderMode=cv2.BORDER_CONSTANT,
+                                                borderValue=0)
+    rotated_mask = rotated_mask_interpolated > 0
+
+    # --- Rotate Metadata Points ---
+    rotated_lines_pts = []
+    rotated_lines_abc = []
+    center_w, center_h = center
+    angle_rad = math.radians(angle)
+    cos_a = math.cos(angle_rad)
+    sin_a = math.sin(angle_rad)
+
+    if 'lines_pts' in metadata_generated:
+        for pt1_orig, pt2_orig in metadata_generated['lines_pts']:
+            # pt format is (col, row)
+            pt1_col, pt1_row = pt1_orig
+            pt2_col, pt2_row = pt2_orig
+
+            # Translate points to origin, rotate, translate back
+            # Point 1
+            temp_col1 = pt1_col - center_w
+            temp_row1 = pt1_row - center_h
+            new_pt1_col = temp_col1 * cos_a - temp_row1 * sin_a + center_w
+            new_pt1_row = temp_col1 * sin_a + temp_row1 * cos_a + center_h
+            new_pt1 = (float(new_pt1_col), float(new_pt1_row))
+
+            # Point 2
+            temp_col2 = pt2_col - center_w
+            temp_row2 = pt2_row - center_h
+            new_pt2_col = temp_col2 * cos_a - temp_row2 * sin_a + center_w
+            new_pt2_row = temp_col2 * sin_a + temp_row2 * cos_a + center_h
+            new_pt2 = (float(new_pt2_col), float(new_pt2_row))
+
+            rotated_lines_pts.append([new_pt1, new_pt2])
+
+            # Recalculate A, B, C based on *rotated* points
+            # A = y2 - y1, B = x1 - x2, C = x2y1 - x1y2
+            A = new_pt2[1] - new_pt1[1]
+            B = new_pt1[0] - new_pt2[0]
+            C = new_pt2[0] * new_pt1[1] - new_pt1[0] * new_pt2[1]
+            rotated_lines_abc.append({'A': float(A), 'B': float(B), 'C': float(C)})
+
+    # Create the final metadata dictionary for the rotated result
+    final_metadata = {
+        "real_dimensions": metadata_generated["real_dimensions"], # Original dimensions
+        "axes_ABC": rotated_lines_abc,
+        "lines_pts": rotated_lines_pts,
+    }
+
+    return rotated_img, rotated_mask, final_metadata
 
 
 def calculate_line_eq(pt1, pt2):
