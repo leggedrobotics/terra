@@ -58,7 +58,7 @@ def run_experiment(model_name, model_key, num_timesteps):
     n_envs_x = 1
     n_envs_y = 1
     n_envs = n_envs_x * n_envs_y
-    seed = 5810
+    seed = 5810 #24
     rng = jax.random.PRNGKey(seed)
     env = TerraEnvBatch(
         rendering=True,
@@ -132,6 +132,8 @@ def run_experiment(model_name, model_key, num_timesteps):
     previous_action = []
     current_map = timestep.state.world.target_map.map[0]  # Extract the target map
     previous_map = current_map.copy()  # Initialize the previous map
+    count_map_change = 0
+    DETERMINISTIC = True
 
     while playing and steps_taken < num_timesteps:
     #while playing:
@@ -142,16 +144,11 @@ def run_experiment(model_name, model_key, num_timesteps):
         current_map = timestep.state.world.target_map.map[0]  # Extract the target map
         if previous_map is None or not jnp.array_equal(previous_map, current_map):
             print("Map changed!")
+            count_map_change += 1
+
             previous_map = current_map.copy()  # Update the previous map
             previous_action = []  # Reset the previous action list
             agent.delete_messages()  # Clear previous messages
-
-            # seed += 1
-            # rng = jax.random.PRNGKey(seed)
-            # rng, _rng = jax.random.split(rng)
-            # _rng = _rng[None]
-            #timestep = env.reset(env_cfgs, _rng)
-            # Reset the game state
 
             if USE_PATH:
                 # Compute the path
@@ -261,9 +258,27 @@ def run_experiment(model_name, model_key, num_timesteps):
         batched_action = repeat_action(action)
             
         # Perform the action in the environment
-        rng, _rng = jax.random.split(rng)
-        _rng = _rng[None]
-        timestep = env.step(timestep, batched_action, _rng)
+        # rng, _rng = jax.random.split(rng)
+        # _rng = _rng[None]
+        # timestep = env.step(timestep, batched_action, _rng)
+        if DETERMINISTIC:
+            key = jnp.array([[count_map_change, count_map_change]], dtype=jnp.uint32)  # Convert to a JAX array
+
+            timestep = env.step(
+                timestep,
+                repeat_action(action),
+                key,
+            )
+        else:
+            rng, _rng = jax.random.split(rng)
+            _rng = _rng[None]
+
+            timestep = env.step(
+                timestep,
+                repeat_action(action),
+                _rng,
+            )
+
 
         # Update rewards and actions
         print(f"Reward: {timestep.reward.item()}")
