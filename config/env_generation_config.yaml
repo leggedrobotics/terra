@@ -55,35 +55,35 @@ squares:
     size_nodump_max: 3
 
 trenches:
-  difficulty_levels: ["easy_size_small", "easy_size_medium", "easy_size_large", "medium_size_large_diagonal", "medium_size_large", "hard_size_large", "hard_size_large_diagonal"]
+  difficulty_levels: ["easy_size_small", "easy_size_medium", "easy_size_large", "medium_size_medium", "medium_size_large_diagonal", "hard_size_large", "hard_size_large_diagonal"]
   trenches_per_level: [[1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
   trench_dims:  # Updated section
     easy_size_small:
-      min_ratio: [0.05, 0.08]
+      min_ratio: [0.03, 0.06]
       max_ratio: [0.15, 0.2]
       diagonal: False
     easy_size_medium:
-      min_ratio: [0.08, 0.10]
+      min_ratio: [0.06, 0.08]
       max_ratio: [0.2, 0.4]
       diagonal: False
     easy_size_large:
-      min_ratio: [0.11, 0.12]
+      min_ratio: [0.09, 0.10]
       max_ratio: [0.3, 0.5]
       diagonal: False
-    medium_size_large:
-      min_ratio: [0.11, 0.12]
+    medium_size_medium:
+      min_ratio: [0.06, 0.08]
       max_ratio: [0.3, 0.5]
       diagonal: False
     medium_size_large_diagonal:
-      min_ratio: [0.11, 0.12]
+      min_ratio: [0.09, 0.10]
       max_ratio: [0.3, 0.5]
       diagonal: True
     hard_size_large:
-      min_ratio: [0.11, 0.12]
+      min_ratio: [0.09, 0.10]
       max_ratio: [0.3, 0.5]
       diagonal: False
     hard_size_large_diagonal:
-      min_ratio: [0.11, 0.12]
+      min_ratio: [0.09, 0.10]
       max_ratio: [0.3, 0.5]
       diagonal: True
   img_edge_min: 64
