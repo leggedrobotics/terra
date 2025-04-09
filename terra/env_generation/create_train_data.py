@@ -85,6 +85,7 @@ def create_procedural_trenches(main_folder, config):
             n_nodump_max,
             size_nodump_min,
             size_nodump_max,
+            trench_dims_config["diagonal"],
         )
 
 

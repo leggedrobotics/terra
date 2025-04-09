@@ -136,7 +136,7 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
     return img, cumulative_mask, metadata
 
 
-def generate_rotated_trenches(img, edges_range, sizes_small, sizes_long, color_dict):
+def generate_diagonal_edges(img, edges_range, sizes_small, sizes_long, color_dict):
     """
     Wrapper function to generate trenches using generate_edges() and optionally rotate.
 
@@ -415,6 +415,7 @@ def generate_trenches_v2(
     n_nodump_max=3,
     size_nodump_min=2,
     size_nodump_max=8,
+    diagonal=False,
     should_add_obstacles=True,
     should_add_non_dumpables=True,
 ):
@@ -422,9 +423,14 @@ def generate_trenches_v2(
     i = 0
     while i < n_imgs:
         img = initialize_image(img_edge_min, img_edge_max, color_dict)
-        img, cumulative_mask, metadata = generate_edges(
-            img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
-        )
+        if diagonal:
+            img, cumulative_mask, metadata = generate_diagonal_edges(
+                img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
+            )
+        else:
+            img, cumulative_mask, metadata = generate_edges(
+                img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
+            )
         if img is None:
             continue
         if should_add_obstacles:
@@ -439,7 +445,7 @@ def generate_trenches_v2(
         else:
             # Initialize occ with default values if obstacles aren't added
             occ = np.ones_like(img) * 255
-        
+
         if should_add_non_dumpables:
             dmp, cumulative_mask = add_non_dumpables(
                 img,
