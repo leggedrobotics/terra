@@ -35,7 +35,7 @@ def create_procedural_trenches(main_folder, config):
     difficulty_levels = trenches_config["difficulty_levels"]
 
     # Fix for loading tuples/lists correctly
-    trenches_per_level = config["trenches"]["trenches_per_level"]
+    trenches_per_level = trenches_config["trenches_per_level"]
     corrected_trenches_per_level = [tuple(level) for level in trenches_per_level]
 
     n_imgs = config["n_imgs"]
