@@ -48,13 +48,13 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
     # Randomly select a corner to dump
     corner_dump = np.random.randint(0, 4)
     if corner_dump == 0:
-        img[0 : int(0.8 * w), :, :] = np.array(color_dict["dumping"])
+        img[0 : int(0.75 * w), :, :] = np.array(color_dict["dumping"])
     elif corner_dump == 1:
-        img[int(0.2 * w) :, :, :] = np.array(color_dict["dumping"])
+        img[int(0.25 * w) :, :, :] = np.array(color_dict["dumping"])
     elif corner_dump == 2:
-        img[:, int(0.2 * h) :, :] = np.array(color_dict["dumping"])
+        img[:, int(0.25 * h) :, :] = np.array(color_dict["dumping"])
     elif corner_dump == 3:
-        img[:, : int(0.8 * h), :] = np.array(color_dict["dumping"])
+        img[:, : int(0.75 * h), :] = np.array(color_dict["dumping"])
 
     return img
 
