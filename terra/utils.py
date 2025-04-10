@@ -154,41 +154,63 @@ def get_agent_corners(
     base_orientation: IntLowDim,
     agent_width: IntLowDim,
     agent_height: IntLowDim,
+    angles_base: IntLowDim,
 ):
     """
     Gets the coordinates of the 4 corners of the agent.
+    The function uses a biased rounding strategy to avoid rectangle shrinkage.
     """
-    orientation_vector_xy = jax.nn.one_hot(base_orientation % 2, 2, dtype=IntLowDim)
-    agent_xy_matrix = jnp.array(
-        [[agent_width, agent_height], [agent_height, agent_width]], dtype=IntLowDim
-    )
-    agent_xy_dimensions = orientation_vector_xy @ agent_xy_matrix
+    # Determine half dimensions using floor/ceil to properly handle odd dimensions.
+    half_width_left = jnp.floor(agent_width / 2.0)
+    half_width_right = jnp.ceil(agent_width / 2.0)
+    half_height_bottom = jnp.floor(agent_height / 2.0)
+    half_height_top = jnp.ceil(agent_height / 2.0)
 
-    x_base = pos_base[0]
-    y_base = pos_base[1]
-    x_half_dim = jnp.floor(agent_xy_dimensions[0, 0] / 2)
-    y_half_dim = jnp.floor(agent_xy_dimensions[0, 1] / 2)
+    # Define corners in local coordinates relative to the center.
+    local_corners = jnp.array([
+        [-half_width_left, -half_height_bottom],
+        [ half_width_right, -half_height_bottom],
+        [ half_width_right,  half_height_top],
+        [-half_width_left,  half_height_top]
+    ])
 
-    agent_corners = jnp.array(
-        [
-            [x_base + x_half_dim, y_base + y_half_dim],
-            [x_base - x_half_dim, y_base + y_half_dim],
-            [x_base + x_half_dim, y_base - y_half_dim],
-            [x_base - x_half_dim, y_base - y_half_dim],
-        ]
-    )
-    return agent_corners
+    # Convert degrees to radians using JAX.
+    angle_rad = (base_orientation.astype(jnp.float32) / jnp.array(angles_base, dtype=jnp.float32)) * (2 * jnp.pi)
+    cos_a = jnp.cos(angle_rad)
+    sin_a = jnp.sin(angle_rad)
+    # Build the rotation matrix.
+    R = jnp.array([[cos_a, -sin_a],
+                [sin_a,  cos_a]])
+    R = R.squeeze()
+
+    # Rotate local corners and translate by the center position.
+    global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=IntLowDim)
+
+    # Bias the rounding: use floor if below the center, ceil otherwise.
+    center_arr = jnp.array(pos_base, dtype=IntLowDim)
+    biased_corners = jnp.where(
+        global_corners_float < center_arr,
+        jnp.floor(global_corners_float),
+        jnp.ceil(global_corners_float)
+    ).astype(IntLowDim)
+
+    return biased_corners
 
 
-def get_agent_corners_xy(agent_corners: Array) -> tuple[Array, Array]:
+def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Array:
     """
-    Args:
-        - agent_corners: (4, 2) Array with agent corners [x, y] column order
-    Returns:
-        - x: (2, ) Array of min and max x values as [min, max]
-        - y: (2, ) Array of min and max y values as [min, max]
+    Compute a mask (map_width x map_height) indicating the cells covered
+    by the polygon defined by its corners.
     """
-
-    x = jnp.array([jnp.min(agent_corners[:, 0]), jnp.max(agent_corners[:, 0])])
-    y = jnp.array([jnp.min(agent_corners[:, 1]), jnp.max(agent_corners[:, 1])])
-    return x, y
+    # Create a grid of points.
+    xs = jnp.arange(map_height)
+    ys = jnp.arange(map_width)
+    X, Y = jnp.meshgrid(xs, ys, indexing='xy')
+    pts = jnp.stack([Y, X], axis=-1).reshape((-1, 2))  # (N,2) as [y,x]
+    edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
+    diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
+    edges_exp = edges[:, None, :]  # (4, 1, 2)
+    cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
+    inside = jnp.logical_or(jnp.all(cross > 0, axis=0), jnp.all(cross < 0, axis=0))
+    mask = inside.reshape((map_height, map_width))
+    return mask
