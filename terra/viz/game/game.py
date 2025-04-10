@@ -213,7 +213,19 @@ class Game:
                     if hasattr(world, 'target_tiles') and world.target_tiles is not None:
                         flat_idx = y * world.grid_length_x + x
                         if flat_idx < len(world.target_tiles) and world.target_tiles[flat_idx]:
-                            pg.draw.rect(self.surface, "#FF3300", rect, 2)
+                            #pg.draw.rect(self.surface, "#FF3300", rect, 2)
+
+                            # Create a temporary surface with alpha
+                            temp_surface = pg.Surface((rect.width, rect.height), pg.SRCALPHA)
+
+                            # RGBA: orange with alpha 100
+                            transparent_orange = (255, 51, 0, 100)
+
+                            # Draw the transparent outline onto the temp surface
+                            pg.draw.rect(temp_surface, transparent_orange, pg.Rect(0, 0, rect.width, rect.height), 2)
+
+                            # Blit it onto the main surface
+                            self.surface.blit(temp_surface, rect.topleft)
 
             body_vertices = agent.agent["body"]["vertices"]
             ca = agent.agent["body"]["color"]

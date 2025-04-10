@@ -33,7 +33,7 @@ def run_experiment(model_name, model_key, num_timesteps):
     Returns:
         None
     """
-    USE_PATH = True
+    USE_PATH = False
 
     if USE_PATH:
         # Load the JSON configuration file
