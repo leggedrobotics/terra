@@ -99,7 +99,7 @@ class Rewards(NamedTuple):
             cabin_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
+            dump_no_dump_area=-3.0,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
