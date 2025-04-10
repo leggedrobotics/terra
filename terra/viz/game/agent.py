@@ -64,19 +64,19 @@ class Agent:
             (center_y, center_x), points, self.tile_size, global_cabin_angle
         )
         # Compute the front marker position based on the base's direction
-        front_marker_offset = {
-            0: (w * self.tile_size, h * self.tile_size // 2),  # Right
-            1: (w * self.tile_size // 2, 0),  # Up
-            2: (0, h * self.tile_size // 2),  # Left
-            3: (w * self.tile_size // 2, h * self.tile_size),  # Down
-        }
+        # front_marker_offset = {
+        #     0: (w * self.tile_size, h * self.tile_size // 2),  # Right
+        #     1: (w * self.tile_size // 2, 0),  # Up
+        #     2: (0, h * self.tile_size // 2),  # Left
+        #     3: (w * self.tile_size // 2, h * self.tile_size),  # Down
+        # }
 
-        px_front, py_front = front_marker_offset[angle_base]
+        # px_front, py_front = front_marker_offset[angle_base]
 
-        # Add the front marker
-        front_marker = [
-            (agent_body[0][0] + px_front, agent_body[0][1] + py_front)
-        ]
+        # # Add the front marker
+        # front_marker = [
+        #     (agent_body[0][0] + px_front, agent_body[0][1] + py_front)
+        # ]
         
         out = {
             "body": {
@@ -91,10 +91,10 @@ class Agent:
                 if loaded
                 else COLORS["agent_cabin"]["not_loaded"],
             },
-            "front_marker": {  
-                "vertices": front_marker,
-                "color": (255, 255, 0),  
-            },
+            # "front_marker": {  
+            #     "vertices": front_marker,
+            #     "color": (255, 255, 0),  
+            # },
             "angle_base": angle_base,
         }
 

@@ -40,8 +40,8 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 12
-    angles_cabin: int = 12
+    angles_base: int = 4
+    angles_cabin: int = 8
 
 
 class AgentConfig(NamedTuple):
