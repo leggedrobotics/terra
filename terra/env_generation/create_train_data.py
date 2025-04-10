@@ -251,9 +251,12 @@ def create_foundations(config,
         # Use the mask to assign values from dumping_image to img_terra_pad
         img_terra_pad[mask] = dumping_image[mask]
 
-        cumulative_mask = np.zeros_like(img_terra_pad, dtype=np.bool_)
-        # where the img_terra_pad is [255, 255, 255] set to True across the three channels
-        cumulative_mask[img_terra_pad == 255] = True
+        # Initialize as 2D boolean array
+        cumulative_mask = np.zeros((w, h), dtype=bool)
+
+        # If you need to initialize based on white pixels in img_terra_pad:
+        white_mask_2d = np.all(img_terra_pad == np.array([255, 255, 255]), axis=-1)
+        cumulative_mask[white_mask_2d] = True
         occ, cumulative_mask = add_obstacles(
             img_terra_pad,
             cumulative_mask,
