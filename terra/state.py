@@ -11,6 +11,7 @@ from terra.actions import ActionType
 from terra.actions import TrackedActionType
 from terra.actions import WheeledActionType
 from terra.agent import Agent
+from terra.config import AgentConfig
 from terra.config import EnvConfig
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -158,9 +159,7 @@ class State(NamedTuple):
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        #return jax.nn.one_hot(base_orientation, 12, dtype=IntLowDim)
-        return jax.nn.one_hot(base_orientation, 4, dtype=IntLowDim)
+        return jax.nn.one_hot(base_orientation, AgentConfig().angles_base, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
@@ -168,10 +167,8 @@ class State(NamedTuple):
         for the backwards direction.
         """
         # Create a permutation matrix by shifting the identity
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        #num_angles = 12
-        num_angles = 4
-        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
+        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(AgentConfig().angles_base, dtype=IntLowDim),
+                                              shift=AgentConfig().angles_base // 2, axis=0)
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
@@ -275,10 +272,7 @@ class State(NamedTuple):
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        #angles = jnp.linspace(0, 2 * jnp.pi, 12, endpoint=False)
-        angles = jnp.linspace(0, 2 * jnp.pi, 4, endpoint=False)
-
+        angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
