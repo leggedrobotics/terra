@@ -1223,7 +1223,7 @@ class State(NamedTuple):
             _, closest_idx = jax.lax.fori_loop(
                 0, trench_type,
                 find_closest_trench_idx,
-                (jnp.array([9999.0]), jnp.array(0))
+                (jnp.array(9999.0), jnp.array(0))
             )
 
             # Get trench line equation [a, b, c] for ax + by = c
@@ -1243,12 +1243,14 @@ class State(NamedTuple):
 
             # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
             alignment_score = 2.0 * angle_diff / jnp.pi
-            jax.debug.print("alignment_score: {}", alignment_score)
 
-            # Apply alignment reward - higher when aligned with trench
+            # Apply alignment reward - lower when aligned with trench
             alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
 
-            return proximity_reward + alignment_reward
+            # Final calculation should be scalar + scalar
+            total_reward = proximity_reward + alignment_reward
+            # Explicitly ensure the final result is scalar before returning
+            return jnp.squeeze(total_reward)
 
         r = jax.lax.cond(
             self.env_cfg.apply_trench_rewards,
