@@ -219,12 +219,12 @@ def extract_positions(state):
 
 def path_to_actions(path, initial_orientation, step_size=1):
     """
-    Convert a path into a list of action numbers based on the current base orientation and step size.
+    Convert a path into a list of action numbers based on the current base orientation.
 
     Args:
         path (list of tuples): The path as a list of (x, y) positions.
         initial_orientation (str): The initial base orientation ('up', 'down', 'left', 'right').
-        step_size (int): The number of pixels the base moves forward in one step.
+        step_size (int): The step size to consider between path points.
 
     Returns:
         list of int: A list of action numbers corresponding to the path.
@@ -262,15 +262,17 @@ def path_to_actions(path, initial_orientation, step_size=1):
     actions = []
     current_orientation = initial_orientation
 
-    # Iterate through the simplified path
-    for i in range(len(path) - 1):
+    # Iterate through the path with the given step size
+    for i in range(0, len(path) - 1, step_size):
         current_pos = path[i]
-        next_pos = path[i + 1]
+        next_pos = path[min(i + step_size, len(path) - 1)]
 
         # Determine the required direction to move
         required_direction = get_direction(current_pos, next_pos)
         if required_direction is None:
             actions.append(-1)
+            continue
+
         # Determine the turns needed to face the required direction
         while current_orientation != required_direction:
             current_idx = directions.index(current_orientation)
@@ -284,7 +286,7 @@ def path_to_actions(path, initial_orientation, step_size=1):
                 actions.append(ANTICLOCK)
                 current_orientation = directions[(current_idx - 1) % 4]
 
-        # Add a single forward action for the entire straight-line segment
+        # Add a forward action
         actions.append(FORWARD)
 
     return actions
