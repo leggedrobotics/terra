@@ -146,8 +146,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.2
-    distance_coefficient: float = -0.4  # distance_coefficient * distance, if distance > agent_width / 2
+    alignment_coefficient: float = -0.3
+    distance_coefficient: float = -0.1  # distance_coefficient * distance, if distance > agent_width / 2
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -171,41 +171,41 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     levels = [
         {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/easy",
+            "maps_path": "terra/trenches/easy_size_small",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/medium",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/hard",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "terra/trenches/easy",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/medium",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/hard",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
     ]
 
     # levels = [
