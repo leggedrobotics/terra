@@ -146,6 +146,7 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
+    alignment_coefficient: float = -0.2
     distance_coefficient: float = -0.4  # distance_coefficient * distance, if distance > agent_width / 2
 
     curriculum: CurriculumConfig = CurriculumConfig()
