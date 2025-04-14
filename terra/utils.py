@@ -114,8 +114,8 @@ def get_distance_point_to_line(p, abc):
     """
     # Note: this is swapped because in digmap we are computing the axes coefficients
     #   with the opposite convention.
-    p_x = p[1]
-    p_y = p[0]
+    p_x = p[0]
+    p_y = p[1]
 
     numerator = jnp.abs(abc[0] * p_x + abc[1] * p_y + abc[2])
     denominator = jnp.sqrt(abc[0] ** 2 + abc[1] ** 2)
