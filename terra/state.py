@@ -1206,10 +1206,6 @@ class State(NamedTuple):
             trench_axes = self.world.trench_axes
             trench_type = self.world.trench_type
 
-            # Skip calculation if no trenches
-            if trench_type <= 0:
-                return 0.0
-
             # 1. Distance reward
             d_tiles = get_min_distance_point_to_lines(agent_pos, trench_axes, trench_type)
             d_tiles = jax.lax.cond(d_tiles > self.env_cfg.agent.width / 2, lambda: d_tiles, lambda: 0.0)
@@ -1247,6 +1243,7 @@ class State(NamedTuple):
 
             # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
             alignment_score = 2.0 * angle_diff / jnp.pi
+            jax.debug.print("alignment_score: {}", alignment_score)
 
             # Apply alignment reward - higher when aligned with trench
             alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
