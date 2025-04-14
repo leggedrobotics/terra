@@ -1241,8 +1241,8 @@ class State(NamedTuple):
             angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
             angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
 
-            # Calculate alignment score (1 = perfectly aligned, 0 = perpendicular)
-            alignment_score = 1 - 2.0 * angle_diff / jnp.pi
+            # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
+            alignment_score = 2.0 * angle_diff / jnp.pi
 
             # Apply alignment reward - lower when aligned with trench
             alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
