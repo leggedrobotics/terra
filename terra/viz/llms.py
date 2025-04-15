@@ -39,7 +39,7 @@ class Agent():
 
         # Initialize the appropriate client based on the model key
         try:
-            if self.model_key in ['gpt4o', 'gpt4']: 
+            if self.model_key == 'gpt': 
                 self._init_openai_client()
             elif self.model_key == 'claude':
                 self._init_anthropic_client()
@@ -132,12 +132,19 @@ class Agent():
         #print("Model Key:", self.model_key)
         #print(self.messages)
         #print("Messages being sent to LLM:", json.dumps(self.messages, indent=2))  # Pretty print for clarity
-        if self.model_key=='gpt4' or self.model_key=='gpt4o':
-            self.response = self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=self.messages,
-                #temperature=0.8,
-            )
+        if self.model_key=='gpt':
+            if self.model_name=='gpt-4o':
+                self.response = self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=self.messages,
+                    #temperature=0.8,
+                )
+            elif self.model_name=='gpt-4.1':
+                self.response = self.client.chat.completions.create(
+                    model="gpt-4.1",
+                    messages=self.messages,
+                    #temperature=0.8,
+                )
 
         elif self.model_key == 'claude':
             if self.system_message is not None:
@@ -180,7 +187,7 @@ class Agent():
         if self.reset_count >= 3:
             return
         
-        if self.model_key == 'gpt4o' or self.model_key == 'gpt4':
+        if self.model_key == 'gpt':
             file = open("OPENAI_API_KEY.txt", "r")
             api_key = file.read()
             self.client = OpenAI(api_key=api_key)
@@ -243,7 +250,7 @@ class Agent():
         """
         try:
             # Correctly get the response from model
-            if self.model_key in ['gpt4', 'gpt4o']:
+            if self.model_key == 'gpt':
                 response_text = response.choices[0].message.content
             elif self.model_key == 'claude':
                 response_text = response.content[0].text
@@ -408,7 +415,7 @@ class Agent():
 
     def add_user_message(self, frame=None, user_msg=None, local_map=None, traversability_map=None):
         
-        if self.model_key == 'gpt4' or self.model_key == 'gpt4o':
+        if self.model_key == 'gpt':
             if user_msg is not None and frame is not None and local_map is not None and traversability_map is not None:
                 self.messages.append(
                     {
@@ -642,7 +649,7 @@ class Agent():
 
     def add_assistant_message(self, demo_str=None):
 
-        if self.model_key =='gpt4' or self.model_key =='gpt4o':
+        if self.model_key =='gpt':
             if demo_str is not None:
                 self.messages.append({"role": "assistant", "content": self.response})
                 demo_str = None
@@ -707,7 +714,7 @@ class Agent():
     def delete_messages(self):
         print('Deleting Set of Messages...')
 
-        if self.model_key == 'gpt4' or self.model_key == 'gpt4o':
+        if self.model_key == 'gpt':
             message_len = 9
         else:
             message_len = 8

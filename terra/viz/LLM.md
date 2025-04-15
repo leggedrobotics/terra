@@ -17,12 +17,17 @@ Where
 - `<DATASET_SIZE>` is the number of elements in the dataset
 - `<MODEL_NAME>` is the name of the model:
     * "gpt-4o", 
+    * "gpt-4.1",
     * "gemini-1.5-flash-latest",
     * "gemini-2.0-flash", 
     * "gemini-2.5-pro-exp-03-25"
+    * "gemini-2.5-pro-preview-03-25", 
+    * "claude-3-haiku-20240307", 
+    * "claude-3-7-sonnet-20250219"
 - `<MODEL_KEY>` is the key of the model
-    * "gpt4o", 
+    * "gpt", 
     * "gemini"
+    * "claude"
 - `<NUM_TIMESTEPS>` is the number of timesteps (default value is 100)
 
 For example a possible command should be:
