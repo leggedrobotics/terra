@@ -208,23 +208,29 @@ class CurriculumGlobalConfig(NamedTuple):
     #     },
     # ]
 
-    # levels = [
-    #     {
-    #         "maps_path": "squares/64x64/3",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.SPARSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    # ]
-
     levels = [
         {
-            "maps_path": "trenches/easy_size_small",
-            "max_steps_in_episode": 500,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
+            "maps_path": "squares/64x64/3",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
         },
+        # {
+        #     "maps_path": "trenches/easy_size_small",
+        #     "max_steps_in_episode": 300,
+        #     "rewards_type": RewardsType.SPARSE,
+        #     "apply_trench_rewards": False,
+        # }
     ]
+
+    # levels = [
+    #     {
+    #         "maps_path": "trenches/easy_size_small",
+    #         "max_steps_in_episode": 500,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    # ]
 
     # levels = [
     #     {

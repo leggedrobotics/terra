@@ -14,6 +14,8 @@ terra/viz/__pycache__/*
 terra/env_generation/__pycache__/
 terra/digbench/
 data/
+data_big/
+data_big2/
 OPENAI_API_KEY.txt
 GOOGLE_API_KEY_FREE.txt
 experiments/
