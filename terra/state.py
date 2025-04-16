@@ -115,8 +115,9 @@ class State(NamedTuple):
             dumpability_mask_init=dumpability_mask_init,
         )
 
-    def _swap(self) -> "State":
+    def _swap(self):
         """Swaps agent_state_1 and agent_state_2"""
+        jax.debug.print("Swapping agent states")
         return self._replace(
             agent=self.agent._replace(
                 agent_state_1=self.agent.agent_state_2,
@@ -172,15 +173,19 @@ class State(NamedTuple):
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )
-
+        jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
+        jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
+        
         # Swap back if needed
         state = jax.lax.cond(
             turn, 
             state._swap,
             lambda: state
         )
-
-        return state._replace(state.agent,env_steps=state.env_steps + 1)
+        
+        
+        state = state._replace(env_steps=state.env_steps + 1)
+        return state
 
     def _do_nothing(self):
         return self
