@@ -2,57 +2,57 @@ resolution: 1 # Resolution of the images in meters per pixel
 n_imgs: 1000 # it has to be the same else we can't stack images together 
 sizes: [64]
 
-squares:
-  64x64:
-    x_dim: 64
-    y_dim: 64
-    side_lens: [1, 1, 2, 3, 5, 8, 13]  # Up to (64//5)
-    min_margin: 3
-    max_margin: 15
-    # obstacles 
-    n_obs_min: 1
-    n_obs_max: 3
-    size_obstacle_min: 2
-    size_obstacle_max: 8
-    # dumping constraints
-    n_nodump_min: 1
-    n_nodump_max: 3
-    size_nodump_min: 2
-    size_nodump_max: 8
+# squares:
+#   64x64:
+#     x_dim: 64
+#     y_dim: 64
+#     side_lens: [1, 1, 2, 3, 5, 8, 13]  # Up to (64//5)
+#     min_margin: 3
+#     max_margin: 15
+#     # obstacles 
+#     n_obs_min: 1
+#     n_obs_max: 3
+#     size_obstacle_min: 2
+#     size_obstacle_max: 8
+#     # dumping constraints
+#     n_nodump_min: 1
+#     n_nodump_max: 3
+#     size_nodump_min: 2
+#     size_nodump_max: 8
 
-  32x32:
-    x_dim: 32
-    y_dim: 32
-    side_lens: [1, 2, 3, 5]  # Up to (32//5)
-    min_margin: 3
-    max_margin: 15
-    # obstacles
-    n_obs_min: 1
-    n_obs_max: 3
-    size_obstacle_min: 2
-    size_obstacle_max: 4
-    # dumping constraints
-    n_nodump_min: 1
-    n_nodump_max: 3
-    size_nodump_min: 2
-    size_nodump_max: 6
+#   32x32:
+#     x_dim: 32
+#     y_dim: 32
+#     side_lens: [1, 2, 3, 5]  # Up to (32//5)
+#     min_margin: 3
+#     max_margin: 15
+#     # obstacles
+#     n_obs_min: 1
+#     n_obs_max: 3
+#     size_obstacle_min: 2
+#     size_obstacle_max: 4
+#     # dumping constraints
+#     n_nodump_min: 1
+#     n_nodump_max: 3
+#     size_nodump_min: 2
+#     size_nodump_max: 6
 
-  16x16:
-    x_dim: 16
-    y_dim: 16
-    side_lens: [1, 2, 3]  # Up to (16//5)
-    min_margin: 3
-    max_margin: 10
-    # obstacles
-    n_obs_min: 1
-    n_obs_max: 3
-    size_obstacle_min: 1
-    size_obstacle_max: 2
-    # dumping constraints
-    n_nodump_min: 1
-    n_nodump_max: 3
-    size_nodump_min: 1
-    size_nodump_max: 3
+#   16x16:
+#     x_dim: 16
+#     y_dim: 16
+#     side_lens: [1, 2, 3]  # Up to (16//5)
+#     min_margin: 3
+#     max_margin: 10
+#     # obstacles
+#     n_obs_min: 1
+#     n_obs_max: 3
+#     size_obstacle_min: 1
+#     size_obstacle_max: 2
+#     # dumping constraints
+#     n_nodump_min: 1
+#     n_nodump_max: 3
+#     size_nodump_min: 1
+#     size_nodump_max: 3
 
 trenches:
   difficulty_levels: ["easy_size_small", "easy_size_medium", "easy_size_large", "medium_size_large", "hard_size_large"]
