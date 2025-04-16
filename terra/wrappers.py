@@ -47,12 +47,12 @@ class TraversabilityMaskWrapper:
         traversability_mask = jnp.where(
             jnp.logical_or(
                 jnp.logical_or(
-                    (jnp.arange(map_width) > x1[1])[:, None].repeat(map_height, axis=1),
-                    (jnp.arange(map_width) < x1[0])[:, None].repeat(map_height, axis=1),
+                    (jnp.arange(map_width) > x2[1])[:, None].repeat(map_height, axis=1),
+                    (jnp.arange(map_width) < x2[0])[:, None].repeat(map_height, axis=1),
                 ),
                 jnp.logical_or(
-                    (jnp.arange(map_height) > y1[1])[None].repeat(map_width, axis=0),
-                    (jnp.arange(map_height) < y1[0])[None].repeat(map_width, axis=0),
+                    (jnp.arange(map_height) > y2[1])[None].repeat(map_width, axis=0),
+                    (jnp.arange(map_height) < y2[0])[None].repeat(map_width, axis=0),
                 ),
             ),
             traversability_mask,
