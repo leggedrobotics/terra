@@ -277,9 +277,9 @@ class Game:
                 pg.draw.rect(self.surface, color, tile_rect, 0)
 
         # Draw label
-        label_surface = self.font.render(label, True, (0, 0, 0)) # Black text
-        label_rect = label_surface.get_rect(center=(sub_x + sub_w // 2, sub_y - 15)) # Position above subwindow
-        self.surface.blit(label_surface, label_rect)
+        #label_surface = self.font.render(label, True, (0, 0, 0)) # Black text
+        #label_rect = label_surface.get_rect(center=(sub_x + sub_w // 2, sub_y - 15)) # Position above subwindow
+        #self.surface.blit(label_surface, label_rect)
 
     def draw(
         self,

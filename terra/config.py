@@ -46,7 +46,7 @@ class ImmutableAgentConfig(NamedTuple):
 
 
 class AgentConfig(NamedTuple):
-    random_init_state: bool = False
+    random_init_state: bool = True
 
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
@@ -172,7 +172,7 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     levels = [
         {
-            "maps_path": "terra/train/foundations",
+            "maps_path": "terra/train/squares/64x64/2",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,

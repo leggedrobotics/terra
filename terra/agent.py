@@ -119,7 +119,7 @@ def _get_top_left_two_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     theta_2 = jnp.full((1,), fill_value=1, dtype=IntMap)
     
     #jax.debug.print("pos_base: {}", pos_base)
-    jax.debug.print("****pos_base: {}, {}", pos_base_1, pos_base_2)
+    #jax.debug.print("****pos_base: {}, {}", pos_base_1, pos_base_2)
     return pos_base_1, theta_1, pos_base_2, theta_2, key
 
 
