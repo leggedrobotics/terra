@@ -15,6 +15,9 @@ from pygame.locals import (
     K_o,
     K_k,
     K_l,
+    K_1,
+    K_2,
+    K_3,
     K_SPACE,
     KEYDOWN,
     QUIT,
@@ -58,7 +61,7 @@ def main():
     timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
     end_time = time.time()
     print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
-
+    state = 1
     playing = True
     while playing:
         for event in pg.event.get():
@@ -66,6 +69,12 @@ def main():
                 action = None
                 if event.key == K_UP:
                     action = action_type.forward()
+                if event.key == K_1:
+                    state = 1
+                if event.key == K_2:
+                    state = 2 
+                if event.key == K_3:
+                    state = 3
                 elif event.key == K_DOWN:
                     action = action_type.backward()
                 elif event.key == K_LEFT:
@@ -95,11 +104,34 @@ def main():
                     print("Action: ", action)
                     rng, _rng = jax.random.split(rng)
                     _rng = _rng[None]
-                    timestep = env.step(
-                        timestep,
-                        repeat_action(action),
-                        _rng,
-                    )
+                    if state == 1:
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action_type.do_nothing()),
+                            _rng,
+                        )
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action),
+                            _rng,
+                        )
+                    if state == 2:
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action),
+                            _rng,
+                        )
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action_type.do_nothing()),
+                            _rng,
+                        )
+                    if state == 3:
+                        timestep = env.step(
+                            timestep,
+                            repeat_action(action),
+                            _rng,
+                        )
                     print("Reward: ", timestep.reward.item())
 
             elif event.type == QUIT:
