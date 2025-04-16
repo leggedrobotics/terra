@@ -66,7 +66,7 @@ class TraversabilityMaskWrapper:
                     ),)
             ),
             traversability_mask,
-            -1,
+            0,
         )
 
         padding_mask = state.world.padding_mask.map

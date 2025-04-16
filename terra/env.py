@@ -46,12 +46,23 @@ class TerraEnv(NamedTuple):
         if rendering:
             pg.init()
             pg.mixer.init()
-            display_dims = (
-                n_envs_y * (maps_size_px + 4) * tile_size_rendering
-                + 4 * tile_size_rendering,
-                n_envs_x * (maps_size_px + 4) * tile_size_rendering
-                + 4 * tile_size_rendering,
-            )
+            # Calculate dimensions for a 2x2 grid display + padding
+            # Width = 2 * map_width + 3 * padding
+            # Height = 2 * map_height + 3 * padding
+            map_render_size_px = maps_size_px * tile_size_rendering
+            padding_px = 4 * tile_size_rendering # Keep consistent padding unit
+            display_width = 2 * map_render_size_px + 3 * padding_px
+            display_height = 2 * map_render_size_px + 3 * padding_px
+            display_dims = (display_width, display_height)
+            pg.display.set_caption("Terra Environment Visualization") # Set a window title
+
+            # Original multi-env dimension calculation (commented out)
+            # display_dims = (
+            #     n_envs_y * (maps_size_px + 4) * tile_size_rendering
+            #     + 4 * tile_size_rendering,
+            #     n_envs_x * (maps_size_px + 4) * tile_size_rendering
+            #     + 4 * tile_size_rendering,
+            # )
             if not display:
                 print("TerraEnv: disabling display...")
                 screen = pg.display.set_mode(
@@ -166,6 +177,7 @@ class TerraEnv(NamedTuple):
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
+            traversability_mask=obs["traversability_mask"],
             agent_pos_1=obs["agent_state_1"][..., [0, 1]],
             base_dir_1=obs["agent_state_1"][..., [2]],
             cabin_dir_1=obs["agent_state_1"][..., [3]],
@@ -400,7 +412,7 @@ class TerraEnvBatch:
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+    ) -> tuple[State, tuple[dict, Array, Array, dict]]: 
         # Update env_cfgs based on the curriculum, and get the new maps
         timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
         (
