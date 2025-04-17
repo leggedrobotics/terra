@@ -44,6 +44,7 @@ class ImmutableAgentConfig(NamedTuple):
     angles_cabin: int = 12
     max_wheel_angle: int = 3
     wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
+    num_state_obs: int = 6  # number of state observations (used to determine network input)
 
 
 class AgentConfig(NamedTuple):
