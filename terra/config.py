@@ -42,6 +42,7 @@ class ImmutableAgentConfig(NamedTuple):
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 12
     angles_cabin: int = 12
+    num_state_obs: int = 5  # number of state observations (used to determine network input)
 
 
 class AgentConfig(NamedTuple):
