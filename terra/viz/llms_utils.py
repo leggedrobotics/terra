@@ -308,3 +308,31 @@ def find_nearest_target(start, target_positions):
     # Calculate the Euclidean distance to each target and find the nearest one
     nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
     return nearest_target
+
+def calculate_digging_percentage(initial_target_num, timestep):
+    """
+    Calculate the percentage of digging left in the map.
+
+    Args:
+        initial_target_num: The initial number of dig targets (-1) in the target map.
+        timestep: The current timestep object containing the state of the environment.
+
+    Returns:
+        A float representing the percentage of digging left to do.
+    """
+    target_map = timestep.state.world.target_map.map[0]  # -1: must dig here
+    dig_map = timestep.state.world.dig_map.map[0]        # -1: dug here during the episode
+
+    # A location was originally a dig target if target_map == -1
+    # A location has been dug if dig_map == -1
+    # So, if target_map == -1 and dig_map != -1 → still not dug
+
+    still_to_dig_mask = (target_map == -1) & (dig_map != -1)
+    remaining_to_dig = jnp.sum(still_to_dig_mask)
+
+    if initial_target_num > 0:
+        digging_left_percentage = (remaining_to_dig / initial_target_num) * 100
+    else:
+        digging_left_percentage = 0.0
+
+    return float(digging_left_percentage)

@@ -58,7 +58,7 @@ def run_experiment(model_name, model_key, num_timesteps):
     n_envs_x = 1
     n_envs_y = 1
     n_envs = n_envs_x * n_envs_y
-    seed = 33 # 5810 #24
+    seed = 33 #35 #33 # 5810 #24
     rng = jax.random.PRNGKey(seed)
     env = TerraEnvBatch(
         rendering=True,
@@ -131,6 +131,8 @@ def run_experiment(model_name, model_key, num_timesteps):
 
     previous_action = []
     current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+    initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+    print("Initial target number: ", initial_target_num)
     previous_map = current_map.copy()  # Initialize the previous map
     count_map_change = 0
     DETERMINISTIC = True
@@ -145,6 +147,8 @@ def run_experiment(model_name, model_key, num_timesteps):
         if previous_map is None or not jnp.array_equal(previous_map, current_map):
             print("Map changed!")
             count_map_change += 1
+            initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+            print("Current target number: ", initial_target_num)
 
             previous_map = current_map.copy()  # Update the previous map
             previous_action = []  # Reset the previous action list
@@ -196,11 +200,17 @@ def run_experiment(model_name, model_key, num_timesteps):
             start, target_positions = extract_positions(timestep.state)
             nearest_target = find_nearest_target(start, target_positions)
 
+            #current_target_num = jnp.sum(current_map < 0)  # Count the current target pixels
+            #print("Current target number: ", current_target_num)
+            
+            percentage_digging = calculate_digging_percentage(initial_target_num, timestep)
+
             print(f"Current direction: {base_orientation['direction']}")
             print(f"Bucket status: {bucket_status}")
             print(f"Current position: {start} (y,x)")
             print(f"Nearest target position: {nearest_target} (y,x)")
             print(f"Previous action list: {previous_action}")
+            print(f"Percentage of digging left: {percentage_digging:.2f}%")
             
             if USE_PATH:
             #     usr_msg7 = (
@@ -251,7 +261,7 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"- The bucket is currently **{bucket_status}**.\n"
                 f"- Current excavator location: **{start}** (y, x).\n"
                 f"- Target digging positions: **{target_positions}** (y, x).\n"
-                f"- The bucket must be **directly facing and aligned with the long edge of the purple trench**, which may require the excavator to **rotate or reposition**.\n"
+                f"- IMPORTANT: The bucket must be **directly facing and aligned with the long edge of the purple trench**, which may require the excavator to **rotate or reposition**.\n"
                 f"- You can overlap the base of the excavator with the **purple trench** to ensure proper alignment.\n"
                 f"- Digging Rule Update:\n"
                 f"  - Once aligned, you must **start digging from the furthest end of the trench (relative to the front of the excavator)** and proceed **backwards**. **Digging forward into the trench does not work**.\n"
@@ -260,19 +270,59 @@ def run_experiment(model_name, model_key, num_timesteps):
                 f"  - If **facing left**: move forward to reach the **leftmost point**, then dig **rightward**.\n"
                 f"  - If **facing right**: move forward to reach the **rightmost point**, then dig **leftward**.\n"
                 f"  - Always make sure to **approach the trench from the far end** and **pull back** through it.\n"
-                f"  - If the bucket is empty, you can move backward to reposition and then try to dig in the next action. A possible sequence of actions is: 6 (dig), rotate twice, 6 (deposit), rotate back twice, 1 (backward), 6 (dig), rotate twice, ...\n"
+                f"  - If the bucket is empty, you can move backward to reposition and then try to dig in the next action. A possible sequence of actions is: 6 (dig), rotate twice (in the best direction!), 6 (deposit), rotate back twice, 1 (backward) (IMPORTANT), 6 (dig), rotate twice, ...\n"
                 f"- Double check that the light orange area (target) overlaps with the purple area before digging.\n"
                 f"- A traversability mask is provided: `0 = obstacle`, `1 = traversable`.\n"
                 f"- Previous actions: **{previous_action}**.\n"
                 f"- Do not dig where the target map is not negative or where do you have already dig in one of the previous step\n"
-                #f"- As a starting point a suggested action list is available: **{actions}**.\n"
-                f"- Maintain a safe distance of the excavator (**8–10 pixels**) from the target area. This ensures the **light orange** area (digging zone) overlaps properly with the **purple** area.\n"
+                f"- As a starting point a suggested action list is available: **{actions}**.\n"
+                f"- Maintain a safe distance of the excavator (**8–12 pixels**) from the target area. This ensures the **light orange** area (digging zone) overlaps properly with the **purple** area.\n"
                 f"- Purple turns **green** once soil is excavated.\n"
-                f"- You can use the value of {count_map_change} to see when a new map is generated. \n"
+                #f"- You can use the value of {count_map_change} to see when a new map is generated. If this value does NOT change from the previous step it is NOT useful to do the do nothing action (-1) Try instead to explore the trench area further to search for missing purple pixels.\n"
+                f"- You still have to dig the following percentage of the map: **{percentage_digging:.2f}%**. Do not stop trying to excavate and move until 0% is reached\n"
                 f"- Avoid unnecessary repetitions (e.g., repeated forward or backward moves).\n"
                 #f"- Focus only on **this game frame** and the **local map** context.\n\n"
                 f"Return your answer in the following format:\n"
                 f'{{"reasoning": "step-by-step analysis", "action": X}}'
+                )
+
+                usr_msg8 = (
+                    f"Analyze the current game frame and local map to determine the optimal next action.\n\n"
+                    f"- Each forward/backward move advances the excavator by 6 pixels.\n"
+                    f"- Excavator base is facing **{base_orientation['direction']}**.\n"
+                    f"- Bucket status: **{bucket_status}**.\n"
+                    f"- Current location: **{start}** (y, x).\n"
+                    f"- Target digging positions: **{target_positions}** (y, x).\n"
+                    f"- Previous actions: **{previous_action}**.\n"
+                    f"- Suggested actions (NOT compulsory): **{actions}**.\n"
+                    f"- Remaining area to dig: **{percentage_digging:.2f}%**.\n\n"
+
+                    f"**DIGGING RULES**\n"
+                    f"- Align the bucket **directly facing the long edge** of the purple trench. This may require rotation and repositioning.\n"
+                    f"- You may **overlap the base with the purple trench** for proper alignment.\n"
+                    f"- Digging must start from the **furthest end** of the trench (relative to the excavator's front) and proceed **backward**.\n"
+                    f"  - Facing up → reach **topmost** trench point → dig downward\n"
+                    f"  - Facing down → reach **bottommost** → dig upward\n"
+                    f"  - Facing left → reach **leftmost** → dig rightward\n"
+                    f"  - Facing right → reach **rightmost** → dig leftward\n"
+                    f"- Ensure the **orange target area overlaps the purple trench** before digging.\n"
+                    f"- Purple turns **green** after successful excavation.\n\n"
+
+                    f"**MOVEMENT GUIDELINES**\n"
+                    f"- Avoid repeated forward/backward moves unless repositioning.\n"
+                    f"- Maintain **8–12 pixel distance** between the excavator and the trench for best alignment.\n"
+                    f"- If the bucket is empty, it’s okay to reposition and try digging again next.\n"
+                    f"- A common sequence: 6 (dig), rotate twice, 6 (deposit), rotate back, 1 (backward), 6 (dig), ...\n\n"
+
+                    f"**RESTRICTIONS**\n"
+                    f"- Do not dig in areas that are:\n"
+                    f"  - Already dug\n"
+                    f"  - Not marked as negative in the target map\n"
+                    f"- Use the traversability mask (`0 = obstacle`, `1 = traversable`) to guide movement.\n"
+                    f"- Continue acting until **0%** of the trench remains undug.\n\n"
+
+                    f"Return your response in this format:\n"
+                    f'{{"reasoning": "step-by-step analysis", "action": X}}'
                 )
 
 
@@ -293,7 +343,7 @@ def run_experiment(model_name, model_key, num_timesteps):
             )
                 
             
-            agent.add_user_message(frame=game_state_image, user_msg=usr_msg7, local_map=local_map_image, traversability_map=traversability_map_np)
+            agent.add_user_message(frame=game_state_image, user_msg=usr_msg8, local_map=local_map_image, traversability_map=traversability_map_np)
         else:
             agent.add_user_message(frame=game_state_image, user_msg=usr_msg7, local_map=None)
 
