@@ -59,7 +59,7 @@ trenches:
   trenches_per_level: [[1, 1], [1, 1], [1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
   trench_dims:  # Updated section
     easy_size_small:
-      min_ratio: [0.03, 0.05]
+      min_ratio: [0.04, 0.05]
       max_ratio: [0.15, 0.2]
       diagonal: False
     easy_size_medium:
