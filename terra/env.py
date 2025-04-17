@@ -15,8 +15,6 @@ from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.curriculum import CurriculumManager
 import pygame as pg
-from terra.viz_legacy.rendering import RenderingEngine
-from terra.viz_legacy.window import Window
 from terra.viz.game.game import Game
 from terra.viz.game.settings import MAP_TILES
 
@@ -31,8 +29,7 @@ class TimeStep(NamedTuple):
 
 
 class TerraEnv(NamedTuple):
-    rendering_engine: Game | RenderingEngine | None = None
-    window: Window | None = None  # Note: not used if pygame rendering engine is used
+    rendering_engine: Game | None = None
 
     @classmethod
     def new(
@@ -43,47 +40,38 @@ class TerraEnv(NamedTuple):
         n_envs_y: int = 1,
         display: bool = False,
         progressive_gif: bool = False,
-        rendering_engine: str = "pygame",
     ) -> "TerraEnv":
         re = None
-        window = None
         tile_size_rendering = MAP_TILES // maps_size_px
         if rendering:
-            print(f"Using {rendering_engine} rendering_engine")
-            if rendering_engine == "numpy":
-                window = Window("Terra", n_envs_x)
-                re = RenderingEngine()
-            elif rendering_engine == "pygame":
-                pg.init()
-                pg.mixer.init()
-                display_dims = (
-                    n_envs_y * (maps_size_px + 4) * tile_size_rendering
-                    + 4 * tile_size_rendering,
-                    n_envs_x * (maps_size_px + 4) * tile_size_rendering
-                    + 4 * tile_size_rendering,
-                )
-                if not display:
-                    print("TerraEnv: disabling display...")
-                    screen = pg.display.set_mode(
-                        display_dims, pg.FULLSCREEN | pg.HIDDEN
-                    )
-                else:
-                    screen = pg.display.set_mode(display_dims)
-                surface = pg.Surface(display_dims, pg.SRCALPHA)
-                clock = pg.time.Clock()
-                re = Game(
-                    screen,
-                    surface,
-                    clock,
-                    maps_size_px=maps_size_px,
-                    n_envs_x=n_envs_x,
-                    n_envs_y=n_envs_y,
-                    display=display,
-                    progressive_gif=progressive_gif,
+            pg.init()
+            pg.mixer.init()
+            display_dims = (
+                n_envs_y * (maps_size_px + 4) * tile_size_rendering
+                + 4 * tile_size_rendering,
+                n_envs_x * (maps_size_px + 4) * tile_size_rendering
+                + 4 * tile_size_rendering,
+            )
+            if not display:
+                print("TerraEnv: disabling display...")
+                screen = pg.display.set_mode(
+                    display_dims, pg.FULLSCREEN | pg.HIDDEN
                 )
             else:
-                raise (ValueError(f"{rendering_engine=}"))
-        return TerraEnv(rendering_engine=re, window=window)
+                screen = pg.display.set_mode(display_dims)
+            surface = pg.Surface(display_dims, pg.SRCALPHA)
+            clock = pg.time.Clock()
+            re = Game(
+                screen,
+                surface,
+                clock,
+                maps_size_px=maps_size_px,
+                n_envs_x=n_envs_x,
+                n_envs_y=n_envs_y,
+                display=display,
+                progressive_gif=progressive_gif,
+            )
+        return TerraEnv(rendering_engine=re)
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
@@ -111,9 +99,6 @@ class TerraEnv(NamedTuple):
         state = self.wrap_state(state)
 
         observations = self._state_to_obs_dict(state)
-
-        observations["do_preview"] = state._handle_do().world.action_map.map
-
         dummy_action = BatchConfig().action_type.do_nothing()
 
         return TimeStep(
@@ -157,51 +142,6 @@ class TerraEnv(NamedTuple):
         observations = self._state_to_obs_dict(state)
         return state, observations
 
-    def render(
-        self,
-        state: State,
-        key_handler: Callable | None = None,
-        mode: str = "human",
-        block: bool = False,
-        tile_size: int = 32,
-    ) -> Array:
-        """
-        Renders the environment at a given state.
-        """
-        imgs_global = self.rendering_engine.render_global(
-            tile_size=tile_size,
-            active_grid=state.world.action_map.map,
-            target_grid=state.world.target_map.map,
-            padding_mask=state.world.padding_mask.map,
-            dumpability_mask=state.world.dumpability_mask.map,
-            agent_pos=state.agent.agent_state.pos_base,
-            base_dir=state.agent.agent_state.angle_base,
-            cabin_dir=state.agent.agent_state.angle_cabin,
-            agent_width=state.agent.width,
-            agent_height=state.agent.height,
-        )
-
-        imgs_local = state.world.local_map_action_neg.map
-
-        if key_handler:
-            if mode == "human":
-                self.window.set_title(
-                    title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
-                    idx=0,
-                )
-                self.window.show_img(imgs_global, [imgs_local], mode)
-                self.window.reg_key_handler(key_handler)
-                self.window.show(block)
-        if mode == "gif":
-            self.window.set_title(
-                title=f"Arm extension = {state.agent.agent_state.arm_extension.item()}",
-                idx=0,
-            )
-            self.window.show_img(imgs_global, [imgs_local], mode)
-            # self.window.show(block)
-
-        return imgs_global, imgs_local
-
     def render_obs_pygame(
         self,
         obs: dict[str, Array],
@@ -213,10 +153,8 @@ class TerraEnv(NamedTuple):
         """
         if info is not None:
             target_tiles = info["target_tiles"]
-            do_preview = info["do_preview"]
         else:
             target_tiles = None
-            do_preview = None
 
         self.rendering_engine.run(
             active_grid=obs["action_map"],
@@ -226,62 +164,10 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
+            loaded=obs["agent_state"][..., [4]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
-
-    def render_obs(
-        self,
-        obs: dict[str, Array],
-        key_handler: Callable | None = None,
-        mode: str = "human",
-        block: bool = False,
-        tile_size: int = 32,
-        info=None,
-    ) -> Array:
-        """
-        Renders the environment at a given observation.
-        """
-        if info is not None:
-            target_tiles = info["target_tiles"]
-            do_preview = info["do_preview"]
-        else:
-            target_tiles = None
-            do_preview = None
-
-        imgs_global = self.rendering_engine.render_global(
-            tile_size=tile_size,
-            active_grid=obs["action_map"],
-            target_grid=obs["target_map"],
-            padding_mask=obs["padding_mask"],
-            dumpability_mask=obs["dumpability_mask"],
-            agent_pos=obs["agent_state"][..., [0, 1]],
-            base_dir=obs["agent_state"][..., [2]],
-            cabin_dir=obs["agent_state"][..., [3]],
-            agent_width=obs["agent_width"],
-            agent_height=obs["agent_height"],
-            target_tiles=target_tiles,
-            do_preview=do_preview,
-        )
-
-        imgs_local = obs["local_map_action_neg"]
-
-        if key_handler:
-            if mode == "human":
-                # self.window.set_title(
-                #     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
-                # )
-                self.window.show_img(imgs_global, imgs_local, mode)
-                self.window.reg_key_handler(key_handler)
-                self.window.show(block)
-        if mode == "gif":
-            # self.window.set_title(
-            #     title=f"Arm extension = {obs['agent_state'][..., 4].item()}"
-            # )
-            self.window.show_img(imgs_global, imgs_local, mode)
-            # self.window.show(block)
-
-        return imgs_global, imgs_local
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
@@ -320,7 +206,6 @@ class TerraEnv(NamedTuple):
         )
 
         infos = new_state._get_infos(action, task_done)
-        observations = self._update_obs_with_info(observations, infos)
 
         return TimeStep(
             state=new_state,
@@ -332,11 +217,6 @@ class TerraEnv(NamedTuple):
         )
 
     @staticmethod
-    def _update_obs_with_info(obs, info):
-        obs["do_preview"] = info["do_preview"]
-        return obs
-
-    @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
         """
         Transforms a State object to an observation dictionary.
@@ -346,11 +226,11 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.arm_extension,
                 state.agent.agent_state.loaded,
                 state.agent.agent_state.wheel_angle,
             ]
         )
+        # Note: not all of those fields are used by the network for training!
         return {
             "agent_state": agent_state,
             "local_map_action_neg": state.world.local_map_action_neg.map,
@@ -383,7 +263,6 @@ class TerraEnvBatch:
         n_envs_y_rendering: int = 1,
         display: bool = False,
         progressive_gif: bool = False,
-        rendering_engine: str = "pygame",
         shuffle_maps: bool = False,
     ) -> None:
         self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
@@ -393,7 +272,6 @@ class TerraEnvBatch:
             n_envs_x=n_envs_x_rendering,
             n_envs_y=n_envs_y_rendering,
             display=display,
-            rendering_engine=rendering_engine,
             progressive_gif=progressive_gif,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
@@ -521,76 +399,3 @@ class TerraEnvBatch:
             timestep.env_cfg,
         )
         return timestep
-
-    @property
-    def actions_size(self) -> int:
-        """
-        Number of actions played at every env step.
-        """
-        return ()
-
-    @property
-    def num_actions(self) -> int:
-        """
-        Total number of actions
-        """
-        return self.batch_cfg.action_type.get_num_actions()
-
-    @property
-    def observation_shapes(self) -> dict[str, tuple]:
-        """
-        Returns a dict that has:
-            - key: name of the input feature (e.g. "local_map")
-            - value: the tuple representing the shape of the input feature
-        """
-        return {
-            "agent_states": (7,),
-            "local_map_action_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_action_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_neg": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_target_pos": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_dumpability": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "local_map_obstacles": (
-                self.batch_cfg.agent.angles_cabin,
-                self.batch_cfg.agent.max_arm_extension + 1,
-            ),
-            "action_map": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-            "target_map": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-            "traversability_mask": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-            "do_preview": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-            "dig_map": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-            "dumpability_mask": (
-                self.batch_cfg.maps.max_width,
-                self.batch_cfg.maps.max_height,
-            ),
-        }

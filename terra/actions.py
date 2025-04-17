@@ -22,9 +22,7 @@ class TrackedActionType(ActionType):
     ANTICLOCK = 3
     CABIN_CLOCK = 4
     CABIN_ANTICLOCK = 5
-    EXTEND_ARM = 6
-    RETRACT_ARM = 7
-    DO = 8
+    DO = 6
 
 
 Action = NamedTuple
@@ -73,14 +71,6 @@ class TrackedAction(Action):
         )
 
     @classmethod
-    def extend_arm(cls):
-        return cls.new(jnp.full((1,), TrackedActionType.EXTEND_ARM, dtype=IntLowDim))
-
-    @classmethod
-    def retract_arm(cls):
-        return cls.new(jnp.full((1,), TrackedActionType.RETRACT_ARM, dtype=IntLowDim))
-
-    @classmethod
     def do(cls):
         return cls.new(jnp.full((1,), TrackedActionType.DO, dtype=IntLowDim))
 
@@ -96,7 +86,7 @@ class TrackedAction(Action):
 
     @staticmethod
     def get_num_actions():
-        return 9
+        return 7
 
 
 class WheeledActionType(ActionType):
@@ -111,9 +101,7 @@ class WheeledActionType(ActionType):
     WHEELS_RIGHT = 3
     CABIN_CLOCK = 4
     CABIN_ANTICLOCK = 5
-    EXTEND_ARM = 6
-    RETRACT_ARM = 7
-    DO = 8
+    DO = 6
 
 
 class WheeledAction(Action):
@@ -161,14 +149,6 @@ class WheeledAction(Action):
         )
 
     @classmethod
-    def extend_arm(cls):
-        return cls.new(jnp.full((1,), WheeledActionType.EXTEND_ARM, dtype=IntLowDim))
-
-    @classmethod
-    def retract_arm(cls):
-        return cls.new(jnp.full((1,), WheeledActionType.RETRACT_ARM, dtype=IntLowDim))
-
-    @classmethod
     def do(cls):
         return cls.new(jnp.full((1,), WheeledActionType.DO, dtype=IntLowDim))
 
@@ -184,4 +164,4 @@ class WheeledAction(Action):
 
     @staticmethod
     def get_num_actions():
-        return 9
+        return 7

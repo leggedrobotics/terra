@@ -57,6 +57,28 @@ After creating the environment, activate it with:
 conda activate terra
 ```
 
+### Installing Terra and JAX
+
+After activating the environment it is necessary to install Terra
+
+```bash
+pip install -e .
+```
+
+and [JAX](https://docs.jax.dev/en/latest/installation.html).
+
+At the moment you should use jaxlib and jax version <= 0.4.26 as `jax.tree_map` is deprecated in newer versions
+
+```bash
+pip install -U "jax[cuda12]==0.4.26" jaxlib==0.4.26+cuda12.cudnn89 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
+With GPU (NVIDIA, CUDA 12):
+
+```bash
+pip install -U "jax[cuda12]"
+```
+
 ### Verifying the Environment
 
 To verify that the environment was set up correctly, you can:
@@ -204,7 +226,6 @@ The agent in Terra perceives the environment through a rich observation space th
   - Position of the base (x, y coordinates)
   - Base rotation angle
   - Cabin rotation angle
-  - Arm extension
   - Whether the agent is loaded with dirt (0 or 1)
   - Wheel angle (in case of wheeled digger)
 
@@ -218,8 +239,7 @@ The agent in Terra perceives the environment through a rich observation space th
   - **action_map**: Current state of the terrain across the entire map
   - **target_map**: Target digging profile across the entire map
   - **traversability_mask**: Areas where the agent can navigate
-  - **do_preview**: Preview of the dig/dump action result if executed
-  - **dig_map**: Areas that have been dug
+  - **dig_map**: Preview of the dig/dump action result if executed
   - **dumpability_mask**: Areas where the agent can dump soil
   - **padding_mask**: Areas with obstacles
 

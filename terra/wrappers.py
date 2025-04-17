@@ -58,8 +58,8 @@ class LocalMapWrapper:
         """
         Encodes the local map in the GridWorld.
 
-        The local map is is (angles_cabin, max_arm_extension), and encodes
-        the cumulative sum of tiles to dig in the area spanned by the cyilindrical tile.
+        The local map is of dim angles_cabin, and encodes the cumulative
+        sum of tiles to dig in the area spanned by the cyilindrical tile.
         """
         current_pos_idx = state._get_current_pos_vector_idx(
             pos_base=state.agent.agent_state.pos_base,
@@ -83,7 +83,6 @@ class LocalMapWrapper:
             EnvConfig().agent.angles_cabin
         )  # TODO: make state.env_cfg work instead of recreating the object every time
         arm_angles_ints = jnp.arange(angles_cabin)
-        arm_extensions = jnp.arange(EnvConfig().agent.max_arm_extension + 1)
         arm_angles_rads = jax.vmap(
             lambda angle: angle_idx_to_rad(angle, EnvConfig().agent.angles_cabin)
         )(arm_angles_ints)
@@ -98,21 +97,12 @@ class LocalMapWrapper:
             possible_maps_local_coords_arm
         )  # (n_angles x 2 x width*height)
 
-        local_cartesian_masks = jax.vmap(
-            lambda map: jax.vmap(
-                lambda arm_extension: state._get_dig_dump_mask_cyl(map, arm_extension)
-            )(arm_extensions)
-        )(
+        local_cartesian_masks = jax.vmap(lambda map: state._get_dig_dump_mask_cyl(map))(
             possible_maps_cyl_coords
-        )  # (n_angles x n_arm_extensions x width*height)
-
-        # Go from mask to masked height map to local cylindrical cumsum(s)
+        )
+        map_to_wrap_reshaped = map_to_wrap.reshape(state.world.height, state.world.width)
         local_cyl_height_map = jax.vmap(
-            jax.vmap(
-                lambda x: (
-                    (map_to_wrap) * x.reshape(state.world.width, state.world.height)
-                ).sum()
-            )
+            lambda mask: (map_to_wrap_reshaped * mask.reshape(state.world.height, state.world.width)).sum()
         )(local_cartesian_masks)
 
         # Roll it to bring it back in agent view

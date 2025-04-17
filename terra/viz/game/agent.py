@@ -14,7 +14,7 @@ class Agent:
         self.angles_base = angles_base
         self.angles_cabin = angles_cabin
 
-    def create_agent(self, px_center, py_center, angle_base, angle_cabin):
+    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded):
     # Convert angle_base index to degrees using the util function
         base_angle_degrees = agent_base_to_angle(angle_base, self.angles_base)
         
@@ -64,8 +64,6 @@ class Agent:
             (center_y, center_x), points, self.tile_size, global_cabin_angle
         )
 
-        loaded = False
-
         out = {
             "body": {
                 "vertices": agent_body,
@@ -82,13 +80,15 @@ class Agent:
         }
         return out
 
-    def update(self, agent_pos, base_dir, cabin_dir):
+    def update(self, agent_pos, base_dir, cabin_dir, loaded):
         agent_pos = np.asarray(agent_pos, dtype=np.int32)
         base_dir = np.asarray(base_dir, dtype=np.int32)
         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
+        loaded = np.asarray(loaded, dtype=bool)
         self.agent = self.create_agent(
             agent_pos[0].item(),
             agent_pos[1].item(),
             base_dir.item(),
             cabin_dir.item(),
+            loaded.item(),
         )

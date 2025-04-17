@@ -11,6 +11,7 @@ from terra.actions import ActionType
 from terra.actions import TrackedActionType
 from terra.actions import WheeledActionType
 from terra.agent import Agent
+from terra.config import AgentConfig
 from terra.config import EnvConfig
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -37,8 +38,6 @@ class State(NamedTuple):
         - Move Backward
         - Rotate Clockwise
         - Rotate Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     - Wheeled Agent
         - Move Forward
@@ -49,8 +48,6 @@ class State(NamedTuple):
         - Move Anticlockwise Backward
         - Rotate Cabin Clockwise
         - Rotate Cabin Anticlockwise
-        - Extend Arm
-        - Retract Arm
         - Do
     """
 
@@ -129,8 +126,6 @@ class State(NamedTuple):
             self._handle_anticlock,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
             # Wheeled
             self._handle_move_forward_wheeled,
@@ -139,11 +134,9 @@ class State(NamedTuple):
             self._handle_turn_wheels_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
-            self._handle_extend_arm,
-            self._handle_retract_arm,
             self._handle_do,
         ]
-        cumulative_len = jnp.array([0, 9], dtype=IntLowDim)
+        cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
         )
@@ -164,8 +157,7 @@ class State(NamedTuple):
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
         Use for the forward action.
         """
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        return jax.nn.one_hot(base_orientation, 24, dtype=IntLowDim)
+        return jax.nn.one_hot(base_orientation, AgentConfig().angles_base, dtype=IntLowDim)
 
     def _base_orientation_to_one_hot_backwards(self, base_orientation: IntLowDim):
         """
@@ -173,9 +165,8 @@ class State(NamedTuple):
         for the backwards direction.
         """
         # Create a permutation matrix by shifting the identity
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        num_angles = 24
-        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(num_angles, dtype=IntLowDim), shift=num_angles // 2, axis=0)
+        fwd_to_bkwd_transformation = jnp.roll(jnp.eye(AgentConfig().angles_base, dtype=IntLowDim),
+                                              shift=AgentConfig().angles_base // 2, axis=0)
         orientation_one_hot = self._base_orientation_to_one_hot_forward(base_orientation)
         return orientation_one_hot @ fwd_to_bkwd_transformation
 
@@ -279,8 +270,7 @@ class State(NamedTuple):
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
-        # TODO: Do not hardcode - find a way around JIT compilation to provide dimensionality as constant
-        angles = jnp.linspace(0, 2 * jnp.pi, 24, endpoint=False)
+        angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
@@ -575,46 +565,6 @@ class State(NamedTuple):
             )
         )
 
-    def _handle_extend_arm(self) -> "State":
-        new_arm_extension = jnp.min(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension + 1,
-                    jnp.full(
-                        (1,),
-                        fill_value=self.env_cfg.agent.max_arm_extension,
-                        dtype=IntLowDim,
-                    ),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
-        )
-
-    def _handle_retract_arm(self) -> "State":
-        new_arm_extension = jnp.max(
-            jnp.array(
-                [
-                    self.agent.agent_state.arm_extension - 1,
-                    jnp.full((1,), fill_value=0, dtype=IntLowDim),
-                ]
-            ),
-            axis=0,
-        )
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    arm_extension=new_arm_extension
-                )
-            )
-        )
-
     @staticmethod
     def _get_current_pos_vector_idx(pos_base: Array, map_height: IntMap) -> IntMap:
         """
@@ -673,9 +623,7 @@ class State(NamedTuple):
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
 
-    def _get_dig_dump_mask_cyl(
-        self, map_cyl_coords: Array, arm_extension: Array
-    ) -> Array:
+    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
         """
         Note: the map is assumed to be local -> the area to dig is in front of us.
 
@@ -692,18 +640,16 @@ class State(NamedTuple):
         )
         min_distance_from_agent = tile_size * max_agent_dim
 
-        r_max = (
-            arm_extension + 1
-        ) * dig_portion_radius * tile_size + min_distance_from_agent
-        r_min = arm_extension * dig_portion_radius * tile_size + min_distance_from_agent
-
+        # Fixed middle-point arm extension (halfway between 0 and 1)
+        fixed_extension = 0.5
+        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
             map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
         )
-
         dig_mask_theta = jnp.logical_and(
             map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
         )
@@ -723,9 +669,7 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(
-            map_cyl_coords, self.agent.agent_state.arm_extension
-        )
+        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl(map_cyl_coords)
 
         agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
         agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
@@ -1368,7 +1312,7 @@ class State(NamedTuple):
             )  # in tiles
             d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
             d *= self.env_cfg.tile_size  # in meters
-            return d * self.env_cfg.trench_rewards.distance_coefficient
+            return d * self.env_cfg.distance_coefficient
 
         r = jax.lax.cond(
             self.env_cfg.apply_trench_rewards,
@@ -1456,10 +1400,9 @@ class State(NamedTuple):
 
         relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
         target_map_negative = jnp.clip(target_map, a_max=0)
+
         done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
-
         done_unload = agent_loaded[0] == 0
-
         done_task = done_dump & done_dig & done_unload
         return done_task
 
@@ -1509,15 +1452,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1532,8 +1466,6 @@ class State(NamedTuple):
                 bool_anticlock,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
             ],
             dtype=jnp.bool_,
@@ -1579,15 +1511,6 @@ class State(NamedTuple):
             == self.agent.agent_state.angle_cabin
         )
 
-        # extend arm
-        bool_extend_arm = ~(
-            self.agent.agent_state.arm_extension[0]
-            == self.env_cfg.agent.max_arm_extension
-        )
-
-        # retract arm
-        bool_retract_arm = ~(self.agent.agent_state.arm_extension[0] == 0)
-
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
@@ -1602,8 +1525,6 @@ class State(NamedTuple):
                 bool_turn_wheels_right,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
-                bool_extend_arm,
-                bool_retract_arm,
                 bool_do,
             ],
             dtype=jnp.bool_,
@@ -1628,7 +1549,6 @@ class State(NamedTuple):
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
             "target_tiles": self._build_dig_dump_cone(),
-            "do_preview": self._handle_do().world.dig_map.map,
             # Include termination_type directly without done_task
             "task_done": task_done,
         }
