@@ -88,15 +88,15 @@ def create_procedural_trenches(main_folder, config):
         )
 
 
-def create_foundations(config,
+def create_foundations(config, 
                       n_obs_min=1,
                       n_obs_max=3,
-                      size_obstacle_min=4,
+                      size_obstacle_min=2,
                       size_obstacle_max=8,
                       n_nodump_min=1,
                       n_nodump_max=3,
-                      size_nodump_min=4,
-                      size_nodump_max=10,
+                      size_nodump_min=2,
+                      size_nodump_max=8,
                       expansion_factor=1,
                       all_dumpable=False,
                       copy_metadata=True,
@@ -167,8 +167,8 @@ def create_foundations(config,
                 metadata = json.load(json_file)
 
             # Calculate downsample factors based on max_size
-            downsample_factor_w = max(1, math.ceil(img.shape[1] / max_size)) * 1.5
-            downsample_factor_h = max(1, math.ceil(img.shape[0] / max_size)) * 1.5
+            downsample_factor_w = max(1, math.ceil(img.shape[1] / max_size)) * 2
+            downsample_factor_h = max(1, math.ceil(img.shape[0] / max_size)) * 2
 
             img_downsampled = skimage.measure.block_reduce(
                 img, (downsample_factor_h, downsample_factor_w, 1), np.max
