@@ -337,7 +337,8 @@ def add_obstacles(
         proposed_mask_bool = proposed_mask.astype(bool)
 
         # Check collision using the proposed mask
-        if not np.any(updated_cumulative_mask & proposed_mask_bool):
+        cumulative_mask_2d_view = np.any(updated_cumulative_mask, axis=-1)
+        if not np.any(cumulative_mask_2d_view & proposed_mask_bool):
             # Draw the rotated obstacle on the 'occ' layer
             # cv2.fillPoly modifies the array in place
             cv2.fillPoly(occ_layer, [global_corners_int], tuple(map(int, obstacle_color))) # Use tuple for color
