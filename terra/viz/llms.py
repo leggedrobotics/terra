@@ -1,5 +1,6 @@
-from google.generativeai.types import HarmCategory, HarmBlockThreshold 
-import google.generativeai as genai 
+from google import genai
+from google.genai import types
+
 from openai import OpenAI 
 import anthropic 
 import base64 
@@ -9,6 +10,41 @@ import re
 import os 
 import logging
 from typing import Optional, Dict, Any, List, Tuple
+
+# Define a function that the model can call to control smart lights
+set_light_values_declaration = {
+    "name": "set_light_values",
+    "description": "Sets the brightness and color temperature of a light.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "brightness": {
+                "type": "integer",
+                "description": "Light level from 0 to 100. Zero is off and 100 is full brightness",
+            },
+            "color_temp": {
+                "type": "string",
+                "enum": ["daylight", "cool", "warm"],
+                "description": "Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.",
+            },
+        },
+        "required": ["brightness", "color_temp"],
+    },
+}
+
+# This is the actual function that would be called based on the model's suggestion
+def set_light_values(brightness: int, color_temp: str) -> dict[str, int | str]:
+    """Set the brightness and color temperature of a room light. (mock API).
+
+    Args:
+        brightness: Light level from 0 to 100. Zero is off and 100 is full brightness
+        color_temp: Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.
+
+    Returns:
+        A dictionary containing the set brightness and color temperature.
+    """
+    return {"brightness": brightness, "colorTemperature": color_temp}
+
 
 # Set up logging
 logger = logging.getLogger("AutonomousExcavator.llms")
@@ -77,20 +113,8 @@ class Agent():
         """Initialize the Google Gemini client with API key."""
         try:
             api_key = self._get_api_key("GOOGLE_API_KEY_FREE.txt")
-            genai.configure(api_key=api_key)
-            generation_config = genai.GenerationConfig(temperature=1)
-            
-            if self.system_message is not None:
-                self.client = genai.GenerativeModel(
-                    model_name=self.model_name, 
-                    system_instruction=self.system_message, 
-                    generation_config=generation_config
-                )
-            else:
-                self.client = genai.GenerativeModel(
-                    model_name=self.model_name, 
-                    generation_config=generation_config
-                )
+            self.client  = genai.Client(api_key=api_key)
+
         except Exception as e:
             logger.error(f"Failed to initialize Gemini client: {str(e)}")
             raise
@@ -182,13 +206,40 @@ class Agent():
                 )
 
         elif self.model_key == 'gemini':
-            self.response = self.client.generate_content(self.messages,
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            })
+            if self.system_message:
+                system_instruction = types.Part.from_text(text=self.system_message)
+                tools = types.Tool(function_declarations=[set_light_values_declaration])
+
+                try:
+                    logger.info(f"Sending request to Gemini model: {self.model_name}")
+
+                    model_name_formatted = f"models/{self.model_name}" if not self.model_name.startswith("models/") else self.model_name
+
+                    safety_settings= [
+                        types.SafetySetting(category='HARM_CATEGORY_DANGEROUS_CONTENT', threshold='BLOCK_NONE'),
+                        types.SafetySetting(category='HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold='BLOCK_NONE'),
+                        types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_NONE'),
+                        types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_NONE'),
+                    ]
+                        
+                    config = types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        tools=[tools],
+                        safety_settings=safety_settings,
+                    )
+
+                    self.response = self.client.models.generate_content(
+                        model=model_name_formatted,
+                        contents=self.messages,
+                        config=config,
+                    )
+                except Exception as e:
+                    logger.error(f"Error during Gemini generate_content call: {str(e)}")
+
+                    raise # Re-raise the exception
+            else:
+                system_instruction = None
+
 
         else:
             print('Incorrect Model name given please give correct model name')
@@ -222,12 +273,7 @@ class Agent():
         elif self.model_key == 'gemini':
             file = open("GOOGLE_API_KEY_FREE.txt", "r")
             api_key = file.read()
-            genai.configure(api_key=api_key)
-            generation_config = genai.GenerationConfig(temperature=1)
-            if self.system_message is not None:
-                self.client = genai.GenerativeModel(model_name = self.model_name, system_instruction=self.system_message, generation_config=generation_config)
-            else:
-                self.client = genai.GenerativeModel(model_name = self.model_name, generation_config=generation_config)
+            self.client = genai.Client(api_key=api_key)
 
         self.reset_count += 1
 
@@ -600,64 +646,57 @@ class Agent():
                 image_data = self.encode_image(frame)
                 image_data_traversability = self.encode_image(traversability_map)
                 image_data_local_map = self.encode_image(local_map)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "mime_type": "image/jpeg",
-                                "data": image_data
-                            },
-                            {
-                                "mime_type": "image/jpeg",
-                                "data": image_data_local_map
-                            },
-                            {
-                                "mime_type": "image/jpeg",
-                                "data": image_data_traversability
-                            },
-                            {
-                                "text": user_msg
-                            }
-                        ]
-                    }
-                )
+
+                # Create the list of Part objects
+                parts = [
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"), # Create image Part from bytes/base64
+                    types.Part.from_bytes(data=image_data_local_map, mime_type="image/jpeg"),
+                    types.Part.from_bytes(data=image_data_traversability, mime_type="image/jpeg"),
+                    types.Part.from_text(text=user_msg) # Create text Part from string
+                ]
+
+                # Create a Content object with the role and the list of parts
+                user_content = types.Content(role="user", parts=parts)
+
+                # Append the Content object to your messages list
+                self.messages.append(user_content)
+
             elif frame is not None and user_msg is not None and traversability_map is None:
                 image_data = self.encode_image(frame)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "mime_type": "image/jpeg",
-                                "data": image_data
-                            },
-                            {
-                                "text": user_msg
-                            }
-                        ]
-                    }
-                )
+
+                # Create the list of Part objects
+                parts = [
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"), # Create image Part from bytes/base64
+                    types.Part.from_text(text=user_msg) # Create text Part from string
+                ]
+
+                # Create a Content object with the role and the list of parts
+                user_content = types.Content(role="user", parts=parts)
+
+                # Append the Content object to your messages list
+                self.messages.append(user_content)
+
             elif frame is not None and user_msg is None:
                 image_data = self.encode_image(frame)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "parts": [
-                            {
-                                "mime_type": "image/jpeg",
-                                "data": image_data
-                            }
-                        ]
-                    }
-                )
+                
+                # Create the list of Part objects
+                parts = [
+                    types.Part.from_bytes(data=image_data, mime_type="image/jpeg"), # Create image Part from bytes/base64
+                ]
+
+                # Create a Content object with the role and the list of parts
+                user_content = types.Content(role="user", parts=parts)
+
+                # Append the Content object to your messages list
+                self.messages.append(user_content)
+
             elif frame is None and user_msg is not None:
                 self.messages.append(
                     {
                         "role": "user",
                         "parts": [
                             {
-                                "text": user_msg
+                                "text": types.Part.from_text(text=user_msg)
                             }
                         ]
                     }
@@ -665,6 +704,9 @@ class Agent():
             else:
                 pass
 
+            # Ensure self.messages only contains types.Content objects
+            self.messages = [msg for msg in self.messages if isinstance(msg, types.Content)]
+            
     def add_assistant_message(self, demo_str=None):
 
         if self.model_key =='gpt':
@@ -704,7 +746,7 @@ class Agent():
                 self.messages.append(
                     {
                         "role": "model",
-                        "parts": demo_str
+                        "parts": types.Part.from_text(text=demo_str),
                     }
                 )
                 demo_str = None
@@ -715,7 +757,7 @@ class Agent():
                 self.messages.append(
                     {
                         "role": "model",
-                        "parts": assistant_msg
+                        "parts": types.Part.from_text(text=assistant_msg),
                     }
                 )
 
