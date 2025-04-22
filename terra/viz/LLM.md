@@ -18,6 +18,8 @@ Where
 - `<MODEL_NAME>` is the name of the model:
     * "gpt-4o", 
     * "gpt-4.1",
+    * "o4-mini",
+    * "o3",
     * "gemini-1.5-flash-latest",
     * "gemini-2.0-flash", 
     * "gemini-2.5-pro-exp-03-25"

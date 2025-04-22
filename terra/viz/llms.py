@@ -145,6 +145,24 @@ class Agent():
                     messages=self.messages,
                     #temperature=0.8,
                 )
+            elif self.model_name=='o4-mini':
+                self.response = self.client.chat.completions.create(
+                    model="o4-mini",
+                    messages=self.messages,
+                    #temperature=0.8,
+                )
+            elif self.model_name=='o3':
+                self.response = self.client.chat.completions.create(
+                    model="o3",
+                    messages=self.messages,
+                    #temperature=0.8,
+                )
+            else:
+                self.response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=self.messages,
+                    #temperature=0.8,
+                )
 
         elif self.model_key == 'claude':
             if self.system_message is not None:
