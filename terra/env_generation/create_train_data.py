@@ -95,7 +95,7 @@ def create_foundations(config,
                       size_obstacle_max=8,
                       n_nodump_min=1,
                       n_nodump_max=3,
-                      size_nodump_min=6,
+                      size_nodump_min=4,
                       size_nodump_max=10,
                       expansion_factor=1,
                       all_dumpable=False,
@@ -146,6 +146,8 @@ def create_foundations(config,
     for i, fn in enumerate(os.listdir(img_folder)):
         if i >= 1000:
             break
+
+        print(f"Processing image nr {i + 1}")
 
         n = int(fn.split(".png")[0].split("_")[1])
         filename = filename_start + f"_{n}.png"
