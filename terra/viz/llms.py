@@ -706,7 +706,7 @@ class Agent():
 
             # Ensure self.messages only contains types.Content objects
             self.messages = [msg for msg in self.messages if isinstance(msg, types.Content)]
-            
+
     def add_assistant_message(self, demo_str=None):
 
         if self.model_key =='gpt':
@@ -779,19 +779,47 @@ class Agent():
         else:
             message_len = 8
 
-        
-        if len(self.messages) >= message_len:
+        if self.model_key == 'gpt' or self.model_key == 'claude':
+            if len(self.messages) >= message_len:
+                if self.messages[0]['role'] == 'system':
+                    # Delete user message
+                    value = self.messages.pop(1)
 
-            if self.messages[0]['role'] == 'system':
-                # Delete user message
-                value = self.messages.pop(1)
+                    # Delete Assistant message
+                    value = self.messages.pop(1)
 
-                # Delete Assistant message
-                value = self.messages.pop(1)
+                else:
+                    # Delete user message
+                    self.messages.pop(0)
 
-            else:
-                # Delete user message
-                self.messages.pop(0)
+                    # Delete Assistant message
+                    self.messages.pop(0)
 
-                # Delete Assistant message
-                self.messages.pop(0)
+        elif self.model_key == 'gemini':
+                # Check if the first message is a system message (using .role attribute)
+                if self.messages and isinstance(self.messages[0], types.Content) and self.messages[0].role == 'system':
+                    print("Removing oldest user/model pair after system message (Gemini).")
+                    # Delete the oldest user message (at index 1 after system)
+                    # and the oldest model message (at index 2 after system)
+                    # Remove higher index first
+                    if len(self.messages) > 2: # Ensure there are at least 3 messages (system, user, model)
+                        self.messages.pop(2) # Remove model
+                        self.messages.pop(1) # Remove user
+                    elif len(self.messages) > 1: # If only system and user
+                         self.messages.pop(1) # Remove user
+                    # If only system message, do nothing as we need a pair to remove
+
+                else:
+                    print("Removing oldest user/model pair (Gemini).")
+                    # Delete the oldest user message (at index 0)
+                    # and the oldest model message (at index 1)
+                    # Remove higher index first
+                    if len(self.messages) > 1: # Ensure there is at least a user and model message
+                        self.messages.pop(1) # Remove model
+                        self.messages.pop(0) # Remove user
+                    elif len(self.messages) > 0: # If only user message
+                         self.messages.pop(0) # Remove user
+                    # If list is empty, do nothing
+
+        else:
+            print("Message history length below threshold. No messages deleted.")

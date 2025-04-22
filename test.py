@@ -57,6 +57,7 @@ model_0 = "gemini-2.0-flash"
 #model_1 = "gemini-2.5-pro-exp-03-25"
 model_1 = "gemini-2.0-flash-lite"
 model_2 = "gemini-2.5-pro-preview-03-25"
+model_3 = "gemini-2.5-flash-preview-04-17"
 
 list_0 = []
 for i in range(10):
@@ -94,3 +95,16 @@ for i in range(10):
 print("_________________________________________________________________________________________________________________________________________")
 print(f"Response for {model_2}:")
 print(list_2, sep="\n")
+
+
+list_3 = []
+for i in range(10):
+    response_3 = client.models.generate_content(
+        model=model_3, config=config, contents=contents
+    )
+    list_3.append(response_3.candidates[0].content.parts[0].function_call)
+    time.sleep(0.1)
+
+print("_________________________________________________________________________________________________________________________________________")
+print(f"Response for {model_3}:")
+print(list_3, sep="\n")

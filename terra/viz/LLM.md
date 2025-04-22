@@ -24,6 +24,7 @@ Where
     * "gemini-2.0-flash", 
     * "gemini-2.5-pro-exp-03-25"
     * "gemini-2.5-pro-preview-03-25", 
+    * "gemini-2.5-flash-preview-04-17",
     * "claude-3-haiku-20240307", 
     * "claude-3-7-sonnet-20250219"
 - `<MODEL_KEY>` is the key of the model

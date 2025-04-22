@@ -397,7 +397,7 @@ def run_experiment(model_name, model_key, num_timesteps):
         # Render the environment
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
-        # if steps_taken % 10 == 0:
+        # if steps_taken % 5 == 1:
         #     agent.delete_messages()
 
         # Update progress
