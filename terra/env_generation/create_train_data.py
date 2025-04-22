@@ -147,7 +147,7 @@ def create_foundations(config,
         if i >= 1000:
             break
 
-        print(f"Processing image nr {i + 1}")
+        print(f"Processing foundation nr {i + 1}")
 
         n = int(fn.split(".png")[0].split("_")[1])
         filename = filename_start + f"_{n}.png"

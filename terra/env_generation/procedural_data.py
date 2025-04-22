@@ -476,6 +476,7 @@ def generate_trenches_v2(
     min_edges, max_edges = n_edges
     i = 0
     while i < n_imgs:
+        print(f"Processing trench nr {i + 1}")
         img = initialize_image(img_edge_min, img_edge_max, color_dict)
         if diagonal:
             img, cumulative_mask, metadata = generate_diagonal_edges(
