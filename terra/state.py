@@ -1061,13 +1061,14 @@ class State(NamedTuple):
             new_state.agent.agent_state.wheel_angle
         )
 
-        # Apply rewards if wheels turned
+        # Apply extra reward if wheels did not turn
         reward += jax.lax.cond(
             wheel_turned,
             lambda: self.env_cfg.rewards.wheel_turn,
             lambda: 0.0
         )
 
+        reward += self.env_cfg.rewards.wheel_turn
         return reward
 
     def _handle_rewards_cabin_turn(
