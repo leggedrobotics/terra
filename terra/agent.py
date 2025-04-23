@@ -107,7 +107,7 @@ def _get_top_left_two_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
 
     max_center_coord2 = jnp.ceil(
         jnp.max(
-            jnp.array([env_cfg.agent.width // 2 + 5, env_cfg.agent.height // 2 + 5])
+            jnp.array([env_cfg.agent.width // 2 + 10, env_cfg.agent.height // 2 + 10])
         )
     ).astype(IntMap)
     

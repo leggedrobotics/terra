@@ -272,7 +272,11 @@ class State(NamedTuple):
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
         """
-        return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
+        map2 = jnp.ones_like(map, dtype=IntLowDim)
+
+        return (~((map == 0) * ~padding_mask)*map2).astype(IntLowDim)
+    
+    
 
     def _is_valid_move(self, agent_corners_xy: Array) -> Array:
         """
@@ -305,12 +309,35 @@ class State(NamedTuple):
         )
         x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
 
+        agent2_corners_xy = self._get_agent_corners(
+            self.agent.agent_state_2.pos_base,  
+            base_orientation=self.agent.agent_state_2.angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+        x_minmax_agent2, y_minmax_agent2 = self._get_agent_corners_xy(agent2_corners_xy)
+
+        traversability_mask_reduced = jnp.where(
+            jnp.logical_or(
+                jnp.logical_or(
+                    (jnp.arange(map_width) > x_minmax_agent2[1])[:, None].repeat(map_height, axis=1),
+                    (jnp.arange(map_width) < x_minmax_agent2[0])[:, None].repeat(map_height, axis=1),
+                ),
+                jnp.logical_or(
+                    (jnp.arange(map_height) > y_minmax_agent2[1])[None].repeat(map_width, axis=0),
+                    (jnp.arange(map_height) < y_minmax_agent2[0])[None].repeat(map_width, axis=0),
+                ),
+            ),
+            traversability_mask,
+            -1,
+        )
+
         traversability_mask_reduced = jnp.where(
             (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(
                 map_height, axis=1
             ),
             0,
-            traversability_mask,
+            traversability_mask_reduced,
         )
         traversability_mask_reduced = jnp.where(
             (jnp.arange(map_width) > x_minmax_agent[1])[:, None].repeat(
@@ -333,6 +360,7 @@ class State(NamedTuple):
             0,
             traversability_mask_reduced,
         )
+
         valid_move_traversability = jnp.all(traversability_mask_reduced == 0)
         valid_move = jnp.logical_and(valid_move_map_size, valid_move_traversability)
         return valid_move
@@ -350,6 +378,7 @@ class State(NamedTuple):
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         move_tiles = self.env_cfg.agent.move_tiles
         new_pos_base = self.agent.agent_state_1.pos_base
+        
 
         # Propagate action
         possible_deltas_xy = jnp.array(
@@ -366,6 +395,9 @@ class State(NamedTuple):
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
+
+        
+
         valid_move = self._is_valid_move(agent_corners_xy)
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
 
