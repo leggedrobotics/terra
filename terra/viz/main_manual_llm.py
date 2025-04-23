@@ -94,8 +94,8 @@ def run_experiment(model_name, model_key, num_timesteps):
         path, path2, _ = compute_path(timestep.state, start, target)
         #print("Path: ", path)
         #print("\n Path2: ", path2)
-        simplified_path = simplify_path(path)
-        print("Simplified Path: ", simplified_path)
+        #simplified_path = simplify_path(path)
+        #print("Simplified Path: ", simplified_path)
         #simplified_path2 = simplify_path(path2)
         #print("Simplified Path2: ", simplified_path2)
 
@@ -104,9 +104,9 @@ def run_experiment(model_name, model_key, num_timesteps):
         #print("Initial Direction: ", initial_direction)
 
         actions = path_to_actions(path, initial_direction, 6)
-        actions_simple = path_to_actions(simplified_path, initial_direction, 6)
+        #actions_simple = path_to_actions(simplified_path, initial_direction, 6)
         print("Action list", actions)
-        print("Simple Action list", actions_simple)
+        #print("Simple Action list", actions_simple)
 
         if path:
             game = env.terra_env.rendering_engine
@@ -213,78 +213,6 @@ def run_experiment(model_name, model_key, num_timesteps):
             print(f"Percentage of digging left: {percentage_digging:.2f}%")
             
             if USE_PATH:
-            #     usr_msg7 = (
-            #     f"Analyze this game frame and the provided local map to select the optimal action. "
-            #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
-            #     f"The bucket is currently {bucket_status}. "
-            #     f"The excavator is currently located at {start} (y,x). "
-            #     f"The target digging positions are {target_positions} (y,x). "
-            #     f"You MUST exactly align the excavator PARALLEL with the trench and then start digging from the furthest trench position (from the current front of the excavator) and then go backward to the closest trench position (going forward do NOT work). "
-            #     f"Make sure that the front of the excavator is currently aligned with the trench. "
-            #     f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
-            #     f"The list of the previous actions is {previous_action}. "
-            #     f"You can use the action list (but NOT must), computed from the path, to help you decide the next action. The list of actions is {actions_simple}. This list is not exhaustive and you can choose other actions.  In particular, the number of steps forward (action 0) or backward (action 1) are simplfied. "
-            #     f"Ensure that the excavator base maintains a safe minimum distance (7 to 13 pixels) from the target area to allow proper overlapping of the light orange area with the purple area for efficient digging. "
-            #     f"The purple area becomes green when the soil is excavated. "
-            #     f"Avoid repetitive actions (e.g., moving forward or backward) unless necessary. "
-            #     #f"Avoid moving too close to the purple area to prevent overlap with the base."
-            #     #f"If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig (action 6) in the next action. "
-            #     f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
-            #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-            # )
-                
-                # usr_msg7 = (
-                # f"Analyze this game frame and the provided local map to select the optimal action.\n\n"
-                # f"- The excavator base is facing **{base_orientation['direction']}**.\n"
-                # f"- The bucket is currently **{bucket_status}**.\n"
-                # f"- Current excavator location: **{start}** (y, x).\n"
-                # f"- Target digging positions: **{target_positions}** (y, x).\n"
-                # f"- The bucket must be **directly facing and aligned with the long edge of the purple trench**, which may require the excavator to **rotate or reposition**.\n"
-                # f"- You can overlap the base of the excavator with the **purple trench** to ensure proper alignment.\n"
-                # f"- Once aligned, the excavator should **start digging** from the **furthest trench point** (from the front of the excavator) and proceed **backwards**. **Digging forward does not work**.\n"
-                # f"- A traversability mask is provided: `0 = obstacle`, `1 = traversable`.\n"
-                # f"- Previous actions: **{previous_action}**.\n"
-                # f"- A suggested action list (optional) is available: **{actions_simple}**.\n"
-                # f"  > This list is not exhaustive. You may choose other actions. Step counts for forward (0) and backward (1) moves are simplified.\n"
-                # f"- Maintain a safe distance (**5–13 pixels**) from the target area. This ensures the **light orange** area (digging zone) overlaps properly with the **purple** area.\n"
-                # f"- Purple turns **green** once soil is excavated.\n"
-                # f"- Avoid unnecessary repetitions (e.g., repeated forward or backward moves).\n"
-                # f"- Focus only on **this game frame** and the **local map** context.\n\n"
-                # f"Return your answer in the following format:\n"
-                # f'{{"reasoning": "step-by-step analysis", "action": X}}'
-                # )
-
-                usr_msg7 = (
-                f"Analyze this game frame and the provided local map to select the optimal action.\n\n"
-                f"A forward or backward move corresponds to 6 pixels of progress.\n"
-                f"- The excavator base is facing **{base_orientation['direction']}**.\n"
-                f"- The bucket is currently **{bucket_status}**.\n"
-                f"- Current excavator location: **{start}** (y, x).\n"
-                f"- Target digging positions: **{target_positions}** (y, x).\n"
-                f"- IMPORTANT: The bucket must be **directly facing and aligned with the long edge of the purple trench**, which may require the excavator to **rotate or reposition**.\n"
-                f"- You can overlap the base of the excavator with the **purple trench** to ensure proper alignment.\n"
-                f"- Digging Rule Update:\n"
-                f"  - Once aligned, you must **start digging from the furthest end of the trench (relative to the front of the excavator)** and proceed **backwards**. **Digging forward into the trench does not work**.\n"
-                f"  - If **facing up**: move forward to reach the **topmost point** of the trench, then dig **downward**.\n"
-                f"  - If **facing down**: move forward to reach the **bottommost point**, then dig **upward**.\n"
-                f"  - If **facing left**: move forward to reach the **leftmost point**, then dig **rightward**.\n"
-                f"  - If **facing right**: move forward to reach the **rightmost point**, then dig **leftward**.\n"
-                f"  - Always make sure to **approach the trench from the far end** and **pull back** through it.\n"
-                f"  - If the bucket is empty, you can move backward to reposition and then try to dig in the next action. A possible sequence of actions is: 6 (dig), rotate twice (in the best direction!), 6 (deposit), rotate back twice, 1 (backward) (IMPORTANT), 6 (dig), rotate twice, ...\n"
-                f"- Double check that the light orange area (target) overlaps with the purple area before digging.\n"
-                f"- A traversability mask is provided: `0 = obstacle`, `1 = traversable`.\n"
-                f"- Previous actions: **{previous_action}**.\n"
-                f"- Do not dig where the target map is not negative or where do you have already dig in one of the previous step\n"
-                f"- As a starting point a suggested action list is available: **{actions}**.\n"
-                f"- Maintain a safe distance of the excavator (**8–12 pixels**) from the target area. This ensures the **light orange** area (digging zone) overlaps properly with the **purple** area.\n"
-                f"- Purple turns **green** once soil is excavated.\n"
-                #f"- You can use the value of {count_map_change} to see when a new map is generated. If this value does NOT change from the previous step it is NOT useful to do the do nothing action (-1) Try instead to explore the trench area further to search for missing purple pixels.\n"
-                f"- You still have to dig the following percentage of the map: **{percentage_digging:.2f}%**. Do not stop trying to excavate and move until 0% is reached\n"
-                f"- Avoid unnecessary repetitions (e.g., repeated forward or backward moves).\n"
-                #f"- Focus only on **this game frame** and the **local map** context.\n\n"
-                f"Return your answer in the following format:\n"
-                f'{{"reasoning": "step-by-step analysis", "action": X}}'
-                )
 
                 usr_msg8 = (
                     f"Analyze the current game frame and local map to determine the optimal next action.\n\n"
