@@ -263,7 +263,7 @@ class State(NamedTuple):
         return x, y
 
     @staticmethod
-    def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
+    def _build_traversability_mask(map: Array, padding_mask: Array, shovel_mask: Array) -> Array:
         """
         Args:
             - map: (N, M) Array of ints
@@ -272,9 +272,8 @@ class State(NamedTuple):
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
         """
-        map2 = jnp.ones_like(map, dtype=IntLowDim)
-
-        return (~((map == 0) * ~padding_mask)*map2).astype(IntLowDim)
+        
+        return (~(((map == 0) * ~padding_mask )* (~shovel_mask))).astype(IntLowDim)
     
     
 
@@ -303,9 +302,11 @@ class State(NamedTuple):
             jnp.concatenate((valid_matrix_bottom[None], valid_matrix_up[None]), axis=0)
         )
 
+        dig_map2 = self._build_dig_dump_cone2().reshape(map_width, map_height)
+
         # Traversability constraints
         traversability_mask = self._build_traversability_mask(
-            self.world.action_map.map, self.world.padding_mask.map
+            self.world.action_map.map, self.world.padding_mask.map, dig_map2
         )
         x_minmax_agent, y_minmax_agent = self._get_agent_corners_xy(agent_corners_xy)
 
@@ -316,6 +317,8 @@ class State(NamedTuple):
             agent_height=self.env_cfg.agent.height,
         )
         x_minmax_agent2, y_minmax_agent2 = self._get_agent_corners_xy(agent2_corners_xy)
+
+        
 
         traversability_mask_reduced = jnp.where(
             jnp.logical_or(
@@ -329,8 +332,10 @@ class State(NamedTuple):
                 ),
             ),
             traversability_mask,
-            -1,
+            1,
         )
+
+        
 
         traversability_mask_reduced = jnp.where(
             (jnp.arange(map_width) < x_minmax_agent[0])[:, None].repeat(
@@ -798,15 +803,31 @@ class State(NamedTuple):
         return angle_idx_to_rad(
             self.agent.agent_state_1.angle_cabin, self.env_cfg.agent.angles_cabin
         )
+    
+    def _get_cabin_angle_rad2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_cabin, self.env_cfg.agent.angles_cabin
+        )
 
     def _get_base_angle_rad(self) -> Float:
         return angle_idx_to_rad(
             self.agent.agent_state_1.angle_base, self.env_cfg.agent.angles_base
         )
 
+    def _get_base_angle_rad2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_base, self.env_cfg.agent.angles_base
+        )
+
+
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
         cabin_angle = self._get_cabin_angle_rad()
+        return wrap_angle_rad(base_angle + cabin_angle)
+    
+    def _get_arm_angle_rad2(self) -> Float:
+        base_angle = self._get_base_angle_rad2()
+        cabin_angle = self._get_cabin_angle_rad2()
         return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_dig_dump_mask_cyl(
@@ -984,15 +1005,54 @@ class State(NamedTuple):
         map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
 
         # Local coordinates excluding the cabin rotation 
-        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad()))
+        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad2()))
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
+
+
+
+    def _get_map_local_and_cyl_coords2(self):
+        """
+        Returns:
+            - map_cyl_coords: (2, width*height) map with [r, theta] rows
+            - map_local_coords_base: (2, width*height) map with [x, y] rows 
+        """
+        current_pos_idx = self._get_current_pos_vector_idx(
+            pos_base=self.agent.agent_state_2.pos_base,
+            map_height=self.env_cfg.maps.edge_length_px,
+        )
+        map_global_coords = self._map_to_flattened_global_coords(
+            self.world.width, self.world.height, self.env_cfg.tile_size
+        )
+        current_pos = self._get_current_pos_from_flattened_map(
+            map_global_coords, current_pos_idx
+        )
+        current_arm_angle = self._get_arm_angle_rad2()
+
+        # Local coordinates including the cabin rotation
+        current_state_arm = jnp.hstack((current_pos, current_arm_angle))
+        map_local_coords_arm = apply_rot_transl(current_state_arm, map_global_coords)
+        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
+
+        # Local coordinates excluding the cabin rotation 
+        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad2()))
+        map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
+        return map_cyl_coords, map_local_coords_base
+
+
 
     def _build_dig_dump_cone(self) -> Array:
         """
         Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
         """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
+        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
+    
+    def _build_dig_dump_cone2(self) -> Array:
+        """
+        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
+        """
+        map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords2()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
