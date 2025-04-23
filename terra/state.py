@@ -1056,16 +1056,16 @@ class State(NamedTuple):
         reward = 0.0
 
         # Check if wheels actually turned
-        wheel_turned = ~jnp.allclose(
+        wheel_not_turned = jnp.allclose(
             self.agent.agent_state.wheel_angle,
             new_state.agent.agent_state.wheel_angle
         )
 
         # Apply extra reward if wheels did not turn
         reward += jax.lax.cond(
-            wheel_turned,
+            wheel_not_turned,
             lambda: self.env_cfg.rewards.wheel_turn,
-            lambda: 0.0
+            lambda: 0.0,
         )
 
         reward += self.env_cfg.rewards.wheel_turn
