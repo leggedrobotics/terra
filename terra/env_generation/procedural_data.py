@@ -291,9 +291,15 @@ def add_obstacles(
 
     n_obs_now = np.random.randint(n_obs_min, n_obs_max + 1)
     attempts = 0
-    max_attempts = n_obs_now * 50
+    max_attempts = n_obs_now * 10 # Arbitrary limit to avoid infinite loop
 
     while n_occ < n_obs_now:
+        if attempts >= max_attempts:
+            print(f"Warning: Reached max attempts ({max_attempts}) trying to place obstacles. Placed {n_occ}/{n_obs_now}.")
+            break # Exit the loop if max attempts reached
+
+        attempts += 1
+
         # Choose size and center position
         size_h = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
         size_w = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
