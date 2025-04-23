@@ -226,8 +226,8 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.loaded,
                 state.agent.agent_state.wheel_angle,
+                state.agent.agent_state.loaded,
             ]
         )
         # Note: not all of those fields are used by the network for training!
