@@ -88,15 +88,15 @@ def create_procedural_trenches(main_folder, config):
         )
 
 
-def create_foundations(config, 
+def create_foundations(config,
                       n_obs_min=1,
                       n_obs_max=3,
-                      size_obstacle_min=2,
+                      size_obstacle_min=6,
                       size_obstacle_max=8,
                       n_nodump_min=1,
                       n_nodump_max=3,
-                      size_nodump_min=2,
-                      size_nodump_max=8,
+                      size_nodump_min=8,
+                      size_nodump_max=10,
                       expansion_factor=1,
                       all_dumpable=False,
                       copy_metadata=True,
@@ -125,15 +125,16 @@ def create_foundations(config,
     """
     # Extract configuration parameters
     foundation_config = config["foundations"]
+    n_imgs = config["n_imgs"]
     size = foundation_config["max_size"]
     dataset_path = foundation_config["dataset_rel_path"]
-    
+
     # Define save folder using os.path.join
     save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
-    
+
     # Get the full dataset path using os.path.join
     full_dataset_path = os.path.join(PACKAGE_DIR, dataset_path)
-    
+
     # Process foundation images
     max_size = size
     foundations_name = "foundations"
@@ -144,8 +145,10 @@ def create_foundations(config,
     filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
 
     for i, fn in enumerate(os.listdir(img_folder)):
-        if i >= 1000:
+        if i >= n_imgs:
             break
+
+        print(f"Processing foundation nr {i + 1}")
 
         n = int(fn.split(".png")[0].split("_")[1])
         filename = filename_start + f"_{n}.png"
@@ -167,8 +170,8 @@ def create_foundations(config,
                 metadata = json.load(json_file)
 
             # Calculate downsample factors based on max_size
-            downsample_factor_w = max(1, math.ceil(img.shape[1] / max_size)) * 2
-            downsample_factor_h = max(1, math.ceil(img.shape[0] / max_size)) * 2
+            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size)) * 1.2)
+            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size)) * 1.2)
 
             img_downsampled = skimage.measure.block_reduce(
                 img, (downsample_factor_h, downsample_factor_w, 1), np.max
@@ -274,42 +277,3 @@ def create_foundations(config,
         save_or_display_image(img_terra_pad, occ, dmp, metadata, save_folder, n)
     
     print("Foundations created successfully.")
-
-
-# if __name__ == "__main__":
-#     config_path = "config/config.yaml"
-#     package_dir = os.path.dirname(
-#         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#     )
-#     with open(package_dir + "/" + config_path, "r") as file:
-#         config = yaml.safe_load(file)
-#     # creeate config['dataset_rel_path'] folder
-#     os.makedirs("data/", exist_ok=True)
-#     os.makedirs("data/terra/", exist_ok=True)
-#     main_folder = "data/terra"
-#     create_procedural_trenches(main_folder, config)
-#     create_foundations(config)
-#     # now transform the pngs into npy arrays
-#     # sizes = [(16, 16), (32, 32), (64, 64)]#, (40, 80), (80, 160), (160, 320), (320, 640)]
-#     sizes = [(size, size) for size in config["sizes"]]
-#     npy_dataset_folder = package_dir + "/data/terra"
-#     print("npy_dataset_folder: ", npy_dataset_folder)
-#     for size in sizes:
-#         convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size)
-
-#         # Access the 'squares' configuration specifically
-#     squares_config = config["squares"]
-#     n_imgs = config[
-#         "n_imgs"
-#     ]  # 'n_imgs' is a top-level key, not nested within each square configuration
-#     base_save_folder = os.path.join(package_dir, "data/terra/train/squares")
-
-#     # Iterate over all configurations within 'squares'
-#     for config_name, config_values in squares_config.items():
-#         # Create a unique folder for each configuration
-#         save_folder = os.path.join(base_save_folder, config_name)
-#         os.makedirs(save_folder, exist_ok=True)
-
-#         # Generate squares for each configuration and save them in their respective folder
-#         generate_squares(n_imgs, config_values, save_folder)
-#         print("generated squares for ", config_name)

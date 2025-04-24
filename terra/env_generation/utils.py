@@ -22,8 +22,8 @@ color_dict = {
 def _get_img_mask(img, color_triplet):
     return (
         (img[..., 0] == color_triplet[0])
-        * (img[..., 1] == color_triplet[1])
-        * (img[..., 2] == color_triplet[2])
+        & (img[..., 1] == color_triplet[1])
+        & (img[..., 2] == color_triplet[2])
     )
 
 

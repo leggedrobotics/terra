@@ -213,7 +213,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         },
         {
             "maps_path": "trenches/easy_size_small",
@@ -222,16 +222,10 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "trenches/easy_size_medium",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         },
         {
             "maps_path": "trenches/easy_size_large",
@@ -240,7 +234,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "trenches/medium_size_large",
+            "maps_path": "trenches/medium_size_large_diagonal",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
@@ -253,6 +247,12 @@ class CurriculumGlobalConfig(NamedTuple):
         },
         {
             "maps_path": "trenches/hard_size_large",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "trenches/hard_size_large_diagonal",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
