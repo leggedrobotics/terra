@@ -10,40 +10,31 @@ import re
 import os 
 import logging
 from typing import Optional, Dict, Any, List, Tuple
+#from terra.viz.a_star import *
 
-# Define a function that the model can call to control smart lights
-set_light_values_declaration = {
-    "name": "set_light_values",
-    "description": "Sets the brightness and color temperature of a light.",
+get_path_declaration = {
+    "name": "get_path",
+    "description": "Choose start and target position from the map (given as [y, x]). Compute the shortest path by considering the obstacles.",
     "parameters": {
         "type": "object",
         "properties": {
-            "brightness": {
-                "type": "integer",
-                "description": "Light level from 0 to 100. Zero is off and 100 is full brightness",
-            },
-            "color_temp": {
-                "type": "string",
-                "enum": ["daylight", "cool", "warm"],
-                "description": "Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.",
-            },
+            "path": {
+                "type": "array",
+                "description": "Array of [y, x] coordinate pairs representing the shortest path.",
+                "items": {  
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                }
+        }   
         },
-        "required": ["brightness", "color_temp"],
-    },
+        "required": ["path"],
+    }
 }
 
-# This is the actual function that would be called based on the model's suggestion
-def set_light_values(brightness: int, color_temp: str) -> dict[str, int | str]:
-    """Set the brightness and color temperature of a room light. (mock API).
-
-    Args:
-        brightness: Light level from 0 to 100. Zero is off and 100 is full brightness
-        color_temp: Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.
-
-    Returns:
-        A dictionary containing the set brightness and color temperature.
-    """
-    return {"brightness": brightness, "colorTemperature": color_temp}
 
 
 # Set up logging
@@ -208,7 +199,7 @@ class Agent():
         elif self.model_key == 'gemini':
             if self.system_message:
                 system_instruction = types.Part.from_text(text=self.system_message)
-                tools = types.Tool(function_declarations=[set_light_values_declaration])
+                tools = types.Tool(function_declarations=[get_path_declaration])
 
                 try:
                     logger.info(f"Sending request to Gemini model: {self.model_name}")
@@ -221,10 +212,19 @@ class Agent():
                         types.SafetySetting(category='HARM_CATEGORY_HARASSMENT', threshold='BLOCK_NONE'),
                         types.SafetySetting(category='HARM_CATEGORY_HATE_SPEECH', threshold='BLOCK_NONE'),
                     ]
+
+                    # Configure function calling mode
+                    tool_config = types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode="ANY", 
+                            allowed_function_names=["get_path"], # Specify the function names that are allowed to be called
+                        )
+                    )
                         
                     config = types.GenerateContentConfig(
                         system_instruction=system_instruction,
                         tools=[tools],
+                        #tool_config=tool_config,
                         safety_settings=safety_settings,
                     )
 
@@ -233,6 +233,35 @@ class Agent():
                         contents=self.messages,
                         config=config,
                     )
+                    # response_i = self.client.models.generate_content(
+                    #     model=model_name_formatted,
+                    #     contents=self.messages,
+                    #     config=config,
+                    # )
+                    # print(response_i.candidates[0].content.parts[0].function_call)
+                    # print(response_i)
+
+                    # tool_call = response_i.candidates[0].content.parts[0].function_call
+                    # if tool_call.name == "get_path":
+                    #     # Extract the arguments from the function call
+                    #     args = tool_call.args
+                    #     print(f"Function to call: {tool_call.name}")
+                    #     print(f"Arguments: {args}")
+
+                    
+
+                    # print(f"Response from Gemini model: {self.response}")
+
+                    # if self.response.candidates[0].content.parts[0].function_call:
+                    #         function_call = self.response.candidates[0].content.parts[0].function_call
+                    #         print(f"Function to call: {function_call.name}")
+                    #         print(f"Arguments: {function_call.args}")
+
+                    # else:
+                    #     print("No function call found in the response.")
+                    #     #print(self.response.text)
+
+
                 except Exception as e:
                     logger.error(f"Error during Gemini generate_content call: {str(e)}")
 

@@ -127,6 +127,8 @@ def run_experiment(model_name, model_key, num_timesteps):
 
     USE_LOCAL_MAP = True
 
+    #pg.image.save(screen, "screenshot.png")
+
     progress_bar = tqdm(total=num_timesteps, desc="Rollout", unit="steps")
 
     previous_action = []
