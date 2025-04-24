@@ -12,28 +12,28 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple
 #from terra.viz.a_star import *
 
-get_path_declaration = {
-    "name": "get_path",
-    "description": "Choose start and target position from the map (given as [y, x]). Compute the shortest path by considering the obstacles.",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "array",
-                "description": "Array of [y, x] coordinate pairs representing the shortest path.",
-                "items": {  
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
-                }
-        }   
-        },
-        "required": ["path"],
-    }
-}
+# get_path_declaration = {
+#     "name": "get_path",
+#     "description": "Choose start and target position from the map (given as [y, x]). Compute the shortest path by considering the obstacles.",
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "path": {
+#                 "type": "array",
+#                 "description": "Array of [y, x] coordinate pairs representing the shortest path.",
+#                 "items": {  
+#                     "type": "array",
+#                     "items": {
+#                         "type": "integer"
+#                     },
+#                     "minItems": 2,
+#                     "maxItems": 2
+#                 }
+#         }   
+#         },
+#         "required": ["path"],
+#     }
+# }
 
 
 
@@ -199,7 +199,8 @@ class Agent():
         elif self.model_key == 'gemini':
             if self.system_message:
                 system_instruction = types.Part.from_text(text=self.system_message)
-                tools = types.Tool(function_declarations=[get_path_declaration])
+                #tools = types.Tool(function_declarations=[get_path_declaration])
+                tools = types.Tool(code_execution=types.ToolCodeExecution)
 
                 try:
                     logger.info(f"Sending request to Gemini model: {self.model_name}")
@@ -214,12 +215,12 @@ class Agent():
                     ]
 
                     # Configure function calling mode
-                    tool_config = types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(
-                            mode="ANY", 
-                            allowed_function_names=["get_path"], # Specify the function names that are allowed to be called
-                        )
-                    )
+                    # tool_config = types.ToolConfig(
+                    #     function_calling_config=types.FunctionCallingConfig(
+                    #         mode="ANY", 
+                    #         allowed_function_names=["get_path"], # Specify the function names that are allowed to be called
+                    #     )
+                    # )
                         
                     config = types.GenerateContentConfig(
                         system_instruction=system_instruction,
@@ -233,6 +234,50 @@ class Agent():
                         contents=self.messages,
                         config=config,
                     )
+                    
+                    # for part in self.response.candidates[0].content.parts:
+                    #     print(part, "\n")
+
+                    # print("-" * 80)
+                    # The .text accessor concatenates the parts into a markdown-formatted text.
+                    print("\n", self.response.executable_code, "\n")
+
+
+                    #print(self.response)
+                    
+                    #print(self.response.executable_code)    
+                    #print(self.response.code_execution_result)
+
+                    # # --- Add this section to check the response for tool use ---
+                    # if self.response.candidates:
+                    #     candidate = self.response.candidates[0]
+                    #     if candidate.content and candidate.content.parts:
+                    #         for part in candidate.content.parts:
+                    #             # Check if the part is a tool code execution request
+                    #             if hasattr(part, 'tool_code') and part.tool_code:
+                    #                 # This is where you know the model requested code execution
+                    #                 print("--- Model requested CODE EXECUTION! ---")
+                    #                 print("Code to execute:")
+                    #                 print(part.tool_code.code)
+                    #                 print("-------------------------------------")
+                    #                 # Note: In a real application, you would now execute this code
+                    #                 # and send the result back to the model in a new turn.
+                    #             elif hasattr(part, 'function_call') and part.function_call:
+                    #                  # Check for function call (if you were using function calling)
+                    #                  # This part is here for completeness, but tool_config is commented out
+                    #                  print("--- Model requested FUNCTION CALL! ---")
+                    #                  print(f"Function Name: {part.function_call.name}")
+                    #                  print(f"Arguments: {part.function_call.args}")
+                    #                  print("--------------------------------------")
+                    #                  # Note: You would execute the function and send the result back.
+                    #             else:
+                    #                 # This part is likely text
+                    #                 # print("Model response part (text):", part.text) # Uncomment to see text parts
+                    #                 pass # Or handle text parts as needed
+
+                    # #--- End of added section ---
+
+
                     # response_i = self.client.models.generate_content(
                     #     model=model_name_formatted,
                     #     contents=self.messages,

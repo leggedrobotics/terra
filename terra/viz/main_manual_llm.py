@@ -225,7 +225,8 @@ def run_experiment(model_name, model_key, num_timesteps):
                     f"- Target digging positions: **{target_positions}** (y, x).\n"
                     f"- Previous actions: **{previous_action}**.\n"
                     f"- Suggested actions (NOT compulsory): **{actions}**.\n"
-                    f"- Remaining area to dig: **{percentage_digging:.2f}%**.\n\n"
+                    f"- Remaining area to dig: **{percentage_digging:.2f}%**.\n"
+                    f"- You could generate and execute Python code to help you to dig correctly (for example for mathematical operations).\n\n"
 
                     f"**DIGGING RULES**\n"
                     f"- Align the bucket **directly facing the long edge** of the purple trench. This may require rotation and repositioning.\n"
@@ -243,6 +244,7 @@ def run_experiment(model_name, model_key, num_timesteps):
                     f"- Maintain **8–12 pixel distance** between the excavator and the trench for best alignment.\n"
                     f"- If the bucket is empty, it’s okay to reposition and try digging again next.\n"
                     f"- A common sequence: 6 (dig), rotate twice, 6 (deposit), rotate back, 1 (backward), 6 (dig), ...\n\n"
+                    f"- Do not dig twice (or more) in the same position. The sequence of action [..., 6, 6, ...] is NOT allowed\n"
 
                     f"**RESTRICTIONS**\n"
                     f"- Do not dig in areas that are:\n"
