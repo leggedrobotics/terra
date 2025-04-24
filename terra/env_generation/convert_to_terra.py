@@ -47,66 +47,6 @@ def _convert_dumpability_to_terra(img):
     return img.astype(np.bool_)
 
 
-def _generate_border(img):
-    """
-    img needs to be in Terra conventions and all dumpable
-    """
-    kernel_dim = int(min(img.shape[:2]) * 0.2)
-    kernel = np.ones((kernel_dim, kernel_dim))
-    img = img.astype(np.int16)
-    img1 = img * 255
-    img1 = np.where(
-        img1 == 255,
-        0,
-        img1,
-    )
-    expanded_img = convolve2d(img1, kernel, mode="same")
-    expanded_img = np.where(
-        expanded_img == 0,
-        1,
-        expanded_img,
-    )
-    expanded_img = np.where(
-        (expanded_img < 255) & (expanded_img != 1),
-        0,
-        expanded_img,
-    )
-    img = np.where(
-        img == 1,
-        expanded_img,
-        img,
-    )
-    return img.astype(np.int8)
-
-
-def _generate_dumping_constraints(img):
-    """
-    img needs to be in Terra conventions and all dumpable
-    """
-    kernel_dim = int(min(img.shape[:2]) * 0.4)
-    kernel = np.ones((kernel_dim, kernel_dim))
-    img = img.astype(np.int16)
-    img1 = img * 255
-    img1 = np.where(
-        img1 == 255,
-        0,
-        img1,
-    )
-    expanded_img = convolve2d(img1, kernel, mode="same")
-    # expanded_img = np.where(
-    #     expanded_img == 0,
-    #     1,
-    #     expanded_img,
-    # )
-    expanded_img = np.where(
-        expanded_img != 1,
-        1,
-        expanded_img,
-    )
-    img = np.where(img == -1, img, expanded_img)
-    return img.astype(np.int8)
-
-
 def _convert_all_imgs_to_terra(
     img_folder,
     metadata_folder,
@@ -314,14 +254,3 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
         dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
     )
     print("Trenches processed successfully.")
-
-
-# if __name__ == "__main__":
-#     sizes = [(16, 16), (32, 32), (64, 64)]#, (40, 80), (80, 160), (160, 320), (320, 640)]
-#     sizes = [(64, 64)]
-#     package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-#     for size in sizes:
-#         # dataset_folder = package_dir + '/../data/openstreet/train/benchmark_60_61'
-#         dataset_folder = package_dir + '/data/openstreet/train/benchmark_20_50'
-#         dataset_folder = package_dir + '/data/train'
-#         generate_dataset_terra_format(dataset_folder, size)
