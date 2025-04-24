@@ -88,7 +88,7 @@ def create_procedural_trenches(main_folder, config):
         )
 
 
-def create_foundations(config, 
+def create_foundations(config,
                       n_obs_min=1,
                       n_obs_max=3,
                       size_obstacle_min=6,
@@ -125,16 +125,16 @@ def create_foundations(config,
     """
     # Extract configuration parameters
     foundation_config = config["foundations"]
+    n_imgs = config["n_imgs"]
     size = foundation_config["max_size"]
     dataset_path = foundation_config["dataset_rel_path"]
-    n_imgs = foundation_config["n_imgs"]
-    
+
     # Define save folder using os.path.join
     save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
-    
+
     # Get the full dataset path using os.path.join
     full_dataset_path = os.path.join(PACKAGE_DIR, dataset_path)
-    
+
     # Process foundation images
     max_size = size
     foundations_name = "foundations"
