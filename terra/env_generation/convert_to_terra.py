@@ -114,6 +114,7 @@ def _convert_all_imgs_to_terra(
     dumpability_folder,
     destination_folder,
     size,
+    n_imgs,
     expansion_factor=1,
     all_dumpable=False,
     copy_metadata=True,
@@ -128,7 +129,7 @@ def _convert_all_imgs_to_terra(
     filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
 
     for i, fn in tqdm(enumerate(os.listdir(img_folder))):
-        if i >= 1000:
+        if i >= n_imgs:
             break
 
         n = int(fn.split(".png")[0].split("_")[1])
@@ -248,13 +249,13 @@ def _convert_all_imgs_to_terra(
             np.save(
                 destination_folder_dumpability / f"img_{i + 1}",
                 np.ones_like(img_terra_pad),
-            )            
+            )
     if copy_metadata:
         utils.copy_and_increment_filenames(str(metadata_folder), str(destination_folder_metadata))
         # we increase the index by 1 for consistency
 
 
-def generate_foundations_terra(dataset_folder, size, all_dumpable):
+def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
     print("Converting foundations...")
     foundation_name = "foundations"
     img_folder = Path(dataset_folder) / "foundations" / "images"
@@ -271,6 +272,7 @@ def generate_foundations_terra(dataset_folder, size, all_dumpable):
         dumpability_folder,
         destination_folder,
         size,
+        n_imgs,
         all_dumpable=all_dumpable,
         copy_metadata=True,
         downsample=False,
@@ -279,7 +281,7 @@ def generate_foundations_terra(dataset_folder, size, all_dumpable):
     )
 
 
-def generate_trenches_terra(dataset_folder, size, expansion_factor, all_dumpable):
+def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_dumpable):
     print("Converting trenches...")
     trenches_name = "trenches"
     trenches_path = Path(dataset_folder) / trenches_name
@@ -298,17 +300,18 @@ def generate_trenches_terra(dataset_folder, size, expansion_factor, all_dumpable
             dumpability_folder,
             destination_folder,
             size,
+            n_imgs,
             expansion_factor=expansion_factor,
             all_dumpable=all_dumpable,
         )
 
 
-def generate_dataset_terra_format(dataset_folder, size):
+def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
     print("dataset folder: ", dataset_folder)
-    generate_foundations_terra(dataset_folder, size, all_dumpable=False)
+    generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable=False)
     print("Foundations processed successfully.")
     generate_trenches_terra(
-        dataset_folder, size, expansion_factor=1, all_dumpable=False
+        dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
     )
     print("Trenches processed successfully.")
 

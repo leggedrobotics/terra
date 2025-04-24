@@ -127,6 +127,7 @@ def create_foundations(config,
     foundation_config = config["foundations"]
     size = foundation_config["max_size"]
     dataset_path = foundation_config["dataset_rel_path"]
+    n_imgs = foundation_config["n_imgs"]
     
     # Define save folder using os.path.join
     save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
@@ -144,7 +145,7 @@ def create_foundations(config,
     filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
 
     for i, fn in enumerate(os.listdir(img_folder)):
-        if i >= 1000:
+        if i >= n_imgs:
             break
 
         print(f"Processing foundation nr {i + 1}")
