@@ -60,11 +60,11 @@ trenches:
   trench_dims:  # Updated section
     easy_size_small:
       min_ratio: [0.04, 0.05]
-      max_ratio: [0.15, 0.2]
+      max_ratio: [0.2, 0.3]
       diagonal: False
     easy_size_large:
       min_ratio: [0.06, 0.08]
-      max_ratio: [0.2, 0.4]
+      max_ratio: [0.3, 0.5]
       diagonal: False
     medium_size_large_diagonal:
       min_ratio: [0.06, 0.08]
