@@ -263,48 +263,134 @@ def calculate_line_eq(pt1, pt2):
     return A, B, C
 
 
+# The add_obstacles function (as provided before)
 def add_obstacles(
-    img, cumulative_mask, n_obs_min, n_obs_max, size_obstacle_min, size_obstacle_max
+    img,
+    cumulative_mask,
+    n_obs_min,
+    n_obs_max,
+    size_obstacle_min,
+    size_obstacle_max,
+    max_attempts_per_obstacle=100,
 ):
     """
-    Adds obstacles to an image within specified parameters, ensuring they do not overlap with existing features.
-
-    Parameters:
-    - img (np.ndarray): The image array where obstacles will be added.
-    - cumulative_mask (np.ndarray): A boolean mask indicating areas where obstacles or other features already exist.
-    - n_obs_min (int): Minimum number of obstacles to add.
-    - n_obs_max (int): Maximum number of obstacles to add.
-    - size_obstacle_min (int): Minimum size of the obstacles.
-    - size_obstacle_max (int): Maximum size of the obstacles.
-
-    Returns:
-    - np.ndarray: The updated image array with obstacles added.
-    - np.ndarray: The updated cumulative mask including the new obstacles.
+    Adds obstacles of various shapes (rectangles, circles, blobs) to an image,
+    ensuring they do not overlap with existing features defined in cumulative_mask.
+    (Function definition as provided in the previous answer)
+    ... (rest of the add_obstacles function code) ...
     """
-    w, h = img.shape[:2]  # Extract width and height from the image dimensions
-    n_occ = 0  # Initialize the count of obstacles added
-    occ = (
-        np.ones_like(img) * 255
-    )  # Initialize an obstacle layer with the same dimensions as the input image
-    n_obs_now = np.random.randint(
-        n_obs_min, n_obs_max + 1
-    )  # Randomly decide the number of obstacles to add
+    h, w = img.shape[:2]
+    n_occ_added = 0
+    occ_layer = np.ones((h, w, 3), dtype=np.uint8) * 255
+    n_obs_target = np.random.randint(n_obs_min, n_obs_max + 1)
 
-    while n_occ < n_obs_now:
-        # Randomly determine the size of the obstacle
-        sizeox = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
-        sizeoy = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
-        # Randomly select a position for the obstacle
-        x = np.random.randint(0, w - sizeox)
-        y = np.random.randint(0, h - sizeoy)
-        # Check if the selected area overlaps with existing features
-        if not cumulative_mask[x : x + sizeox, y : y + sizeoy].any():
-            # Update the obstacle layer and the cumulative mask
-            occ[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["obstacle"])
-            cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
-            n_occ += 1  # Increment the count of obstacles added
+    while n_occ_added < n_obs_target:
+        obstacle_placed = False
+        for attempt in range(max_attempts_per_obstacle):
+            shape_type = random.choice([0, 1, 2])
+            pixels_to_check = []
+            potential_mask = np.zeros_like(cumulative_mask, dtype=bool)
 
-    return occ, cumulative_mask
+            # --- Generate Rectangle ---
+            if shape_type == 0:
+                size_h = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
+                size_w = np.random.randint(size_obstacle_min, size_obstacle_max + 1)
+                if h - size_h < 0 or w - size_w < 0: continue
+                start_row = np.random.randint(0, h - size_h + 1)
+                start_col = np.random.randint(0, w - size_w + 1)
+                rr, cc = np.meshgrid(np.arange(start_row, start_row + size_h),
+                                     np.arange(start_col, start_col + size_w),
+                                     indexing='ij')
+                pixels_to_check = list(zip(rr.flatten(), cc.flatten()))
+                if pixels_to_check:
+                     potential_mask[start_row : start_row + size_h, start_col : start_col + size_w] = True
+
+            # --- Generate Circle ---
+            elif shape_type == 1:
+                radius = np.random.randint(max(1, size_obstacle_min // 2), size_obstacle_max // 2 + 1)
+                margin = radius # Keep center away from edge
+                if h <= 2*margin or w <= 2*margin: continue # Image too small for this radius/margin
+                center_row = np.random.randint(margin, h - margin)
+                center_col = np.random.randint(margin, w - margin)
+                min_r, max_r = max(0, center_row - radius), min(h, center_row + radius + 1)
+                min_c, max_c = max(0, center_col - radius), min(w, center_col + radius + 1)
+                if max_r <= min_r or max_c <= min_c: continue
+                rows, cols = np.meshgrid(np.arange(min_r, max_r), np.arange(min_c, max_c), indexing='ij')
+                dist_sq = (rows - center_row)**2 + (cols - center_col)**2
+                mask_in_circle = dist_sq <= radius**2
+                pixels_coords = np.argwhere(mask_in_circle) # Get indices where mask_in_circle is True
+                # Adjust coords relative to the bounding box start
+                abs_rows = pixels_coords[:, 0] + min_r
+                abs_cols = pixels_coords[:, 1] + min_c
+                pixels_to_check = list(zip(abs_rows, abs_cols))
+                if pixels_to_check:
+                    potential_mask[abs_rows, abs_cols] = True
+
+            # --- Generate Blob (Random Walk/Growth) ---
+            elif shape_type == 2:
+                target_pixels = np.random.randint(
+                    max(5, size_obstacle_min**2 // 2),
+                    size_obstacle_max**2 + 1
+                )
+                seed_found = False
+                for seed_attempt in range(20): # More attempts to find seed
+                    start_row = np.random.randint(0, h)
+                    start_col = np.random.randint(0, w)
+                    if not cumulative_mask[start_row, start_col]:
+                         seed_found = True
+                         break
+                if not seed_found: continue
+
+                blob_pixels = set([(start_row, start_col)])
+                frontier = set()
+                for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                    nr, nc = start_row + dr, start_col + dc
+                    if 0 <= nr < h and 0 <= nc < w and not cumulative_mask[nr, nc]:
+                        frontier.add((nr, nc))
+
+                while len(blob_pixels) < target_pixels and frontier:
+                    curr_r, curr_c = random.choice(list(frontier))
+                    frontier.remove((curr_r, curr_c))
+                    if (curr_r, curr_c) not in blob_pixels and not cumulative_mask[curr_r, curr_c]:
+                        blob_pixels.add((curr_r, curr_c))
+                        if len(blob_pixels) >= target_pixels: break
+                        for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                            nr, nc = curr_r + dr, curr_c + dc
+                            if (0 <= nr < h and 0 <= nc < w and
+                                (nr, nc) not in blob_pixels and
+                                (nr, nc) not in frontier and
+                                not cumulative_mask[nr, nc]):
+                                frontier.add((nr, nc))
+
+                pixels_to_check = list(blob_pixels)
+                if pixels_to_check:
+                     rows_blob, cols_blob = zip(*pixels_to_check)
+                     potential_mask[rows_blob, cols_blob] = True
+
+            # --- Check Validity and Place Obstacle ---
+            if not pixels_to_check:
+                continue
+
+            # The crucial check: does the potential obstacle mask overlap with the existing cumulative mask?
+            is_valid_placement = not np.any(cumulative_mask[potential_mask])
+
+            if is_valid_placement:
+                # Draw obstacle on its layer
+                rows_idx, cols_idx = zip(*pixels_to_check) # Safe now because pixels_to_check is not empty
+                occ_layer[rows_idx, cols_idx] = color_dict["obstacle"]
+
+                # Update the main cumulative mask
+                cumulative_mask[potential_mask] = True # Mark these pixels as occupied
+
+                n_occ_added += 1
+                obstacle_placed = True
+                break # Exit attempt loop for this obstacle
+
+        if not obstacle_placed:
+            print(f"Warning: Could not place obstacle {n_occ_added + 1} after {max_attempts_per_obstacle} attempts. Target was {n_obs_target}.")
+            pass
+
+    return occ_layer, cumulative_mask
 
 
 def add_non_dumpables(
