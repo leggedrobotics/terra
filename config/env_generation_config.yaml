@@ -93,6 +93,6 @@ trenches:
 
 foundations:
   dataset_rel_path: "data/openstreet/"
-  min_size: 13
+  min_size: 10
   max_size: 64
   max_buildings: 3000
