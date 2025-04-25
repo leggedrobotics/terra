@@ -170,8 +170,8 @@ def create_foundations(config,
                 metadata = json.load(json_file)
 
             # Calculate downsample factors based on max_size
-            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size)) * 1.2)
-            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size)) * 1.2)
+            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size)))
+            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size)))
 
             img_downsampled = skimage.measure.block_reduce(
                 img, (downsample_factor_h, downsample_factor_w, 1), np.max
