@@ -210,49 +210,49 @@ class CurriculumGlobalConfig(NamedTuple):
 
     levels = [
         {
-            "maps_path": "foundations",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "trenches/easy_size_small",
+            "maps_path": "terra/trenches/easy_size_small",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "foundations",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "trenches/easy_size_large",
+            "maps_path": "terra/trenches/easy_size_large",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "trenches/medium_size_large_diagonal",
+            "maps_path": "terra/trenches/medium_size_large_diagonal",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "foundations",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "trenches/hard_size_large",
+            "maps_path": "terra/trenches/hard_size_large",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "trenches/hard_size_large_diagonal",
+            "maps_path": "terra/trenches/hard_size_large_diagonal",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
