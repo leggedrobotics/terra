@@ -213,7 +213,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
+            "apply_trench_rewards": False,
         },
         {
             "maps_path": "trenches/easy_size_small",
@@ -225,7 +225,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
+            "apply_trench_rewards": False,
         },
         {
             "maps_path": "trenches/easy_size_large",
