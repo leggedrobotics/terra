@@ -39,5 +39,28 @@ For example a possible command should be:
 DATASET_PATH=/home/gioelemo/Documents/terra/data/terra/train DATASET_SIZE=100 python -m terra.viz.main_llm --model_name gemini-2.5-pro-exp-03-25 --model_key gemini --num_timesteps 100 
 ```
 
+## Execution with Google Agent Development Kit ADK
+You can find the documentation to the ADK [here](https://google.github.io/adk-docs/).
+
+The version currently is still in beta and support only a single agent. It will be extended to support multiple agents.
+
+The code can be run similarly as before:
+
+```bash
+DATASET_PATH=/home/gioelemo/Documents/terra/data/terra/train DATASET_SIZE=100 python -m terra.viz.main_llm_adk --model_name gemini-2.5-pro-exp-03-25 --model_key gemini --num_timesteps 100 
+```
+
+Currently only Google models are supported (Gemini). You need to export the key with:
+```bash
+export GOOGLE_API_KEY=<KEY>
+```
+
+You can check if the key is correctly set with
+```bash
+echo $GOOGLE_API_KEY
+```
+
+Other models will be added in the next future.
+
 ## References
 This implementation is higly based on [Atari-GPT: Investigating the Capabilities of Multimodal Large Language Models as Low-Level Policies for Atari Games](https://github.com/nwayt001/atari-gpt)
