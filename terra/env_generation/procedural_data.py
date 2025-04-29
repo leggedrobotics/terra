@@ -309,15 +309,15 @@ def add_obstacles(
             elif shape_type == 1:
                 radius = np.random.randint(max(1, size_obstacle_min // 2), size_obstacle_max // 2 + 1)
                 margin = radius # Keep center away from edge
-                if h <= 2*margin or w <= 2*margin: continue # Image too small for this radius/margin
+                if h <= 2 * margin or w <= 2 * margin: continue # Image too small for this radius/margin
                 center_row = np.random.randint(margin, h - margin)
                 center_col = np.random.randint(margin, w - margin)
                 min_r, max_r = max(0, center_row - radius), min(h, center_row + radius + 1)
                 min_c, max_c = max(0, center_col - radius), min(w, center_col + radius + 1)
                 if max_r <= min_r or max_c <= min_c: continue
                 rows, cols = np.meshgrid(np.arange(min_r, max_r), np.arange(min_c, max_c), indexing='ij')
-                dist_sq = (rows - center_row)**2 + (cols - center_col)**2
-                mask_in_circle = dist_sq <= radius**2
+                dist_sq = (rows - center_row) ** 2 + (cols - center_col) ** 2
+                mask_in_circle = dist_sq <= radius ** 2
                 pixels_coords = np.argwhere(mask_in_circle) # Get indices where mask_in_circle is True
                 # Adjust coords relative to the bounding box start
                 abs_rows = pixels_coords[:, 0] + min_r
@@ -345,13 +345,13 @@ def add_obstacles(
                 frontier = set()
                 for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
                     nr, nc = start_row + dr, start_col + dc
-                    if 0 <= nr < h and 0 <= nc < w and not np.all(cumulative_mask[nr, nc] == 0):
+                    if 0 <= nr < h and 0 <= nc < w and np.all(cumulative_mask[nr, nc] == 0):
                         frontier.add((nr, nc))
 
                 while len(blob_pixels) < target_pixels and frontier:
                     curr_r, curr_c = random.choice(list(frontier))
                     frontier.remove((curr_r, curr_c))
-                    if (curr_r, curr_c) not in blob_pixels and not np.all(cumulative_mask[curr_r, curr_c] == 0):
+                    if (curr_r, curr_c) not in blob_pixels and np.all(cumulative_mask[curr_r, curr_c] == 0):
                         blob_pixels.add((curr_r, curr_c))
                         if len(blob_pixels) >= target_pixels: break
                         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
@@ -359,7 +359,7 @@ def add_obstacles(
                             if (0 <= nr < h and 0 <= nc < w and
                                 (nr, nc) not in blob_pixels and
                                 (nr, nc) not in frontier and
-                                not np.all(cumulative_mask[nr, nc] == 0)):
+                                np.all(cumulative_mask[nr, nc] == 0)):
                                 frontier.add((nr, nc))
 
                 pixels_to_check = list(blob_pixels)
