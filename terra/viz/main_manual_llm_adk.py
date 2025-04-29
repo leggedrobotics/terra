@@ -416,6 +416,7 @@ def run_experiment(model_name, model_key, num_timesteps):
 
     # Create a unique output directory for the model and timestamp
     output_dir = os.path.join("experiments", f"{model_name}_{current_time}")
+    print(f"Output directory: {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
 
     # Save actions and rewards to a CSV file
