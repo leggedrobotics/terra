@@ -68,6 +68,8 @@ def create_procedural_trenches(main_folder, config):
             max(1, int(trench_dims_max_ratio[1] * trenches_config["img_edge_max"])),
         )
 
+        diagonal = trench_dims_config["diagonal"]
+
         generate_trenches_v2(
             n_imgs,
             trenches_config["img_edge_min"],
@@ -85,6 +87,7 @@ def create_procedural_trenches(main_folder, config):
             n_nodump_max,
             size_nodump_min,
             size_nodump_max,
+            diagonal,
         )
 
 
