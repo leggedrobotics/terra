@@ -336,7 +336,7 @@ def add_obstacles(
                 for seed_attempt in range(20): # More attempts to find seed
                     start_row = np.random.randint(0, h)
                     start_col = np.random.randint(0, w)
-                    if not cumulative_mask[start_row, start_col]:
+                    if not np.all(cumulative_mask[start_row, start_col] == 0):
                          seed_found = True
                          break
                 if not seed_found: continue
@@ -345,13 +345,13 @@ def add_obstacles(
                 frontier = set()
                 for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
                     nr, nc = start_row + dr, start_col + dc
-                    if 0 <= nr < h and 0 <= nc < w and not cumulative_mask[nr, nc]:
+                    if 0 <= nr < h and 0 <= nc < w and not np.all(cumulative_mask[nr, nc] == 0):
                         frontier.add((nr, nc))
 
                 while len(blob_pixels) < target_pixels and frontier:
                     curr_r, curr_c = random.choice(list(frontier))
                     frontier.remove((curr_r, curr_c))
-                    if (curr_r, curr_c) not in blob_pixels and not cumulative_mask[curr_r, curr_c]:
+                    if (curr_r, curr_c) not in blob_pixels and not np.all(cumulative_mask[curr_r, curr_c] == 0):
                         blob_pixels.add((curr_r, curr_c))
                         if len(blob_pixels) >= target_pixels: break
                         for dr, dc in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
@@ -359,7 +359,7 @@ def add_obstacles(
                             if (0 <= nr < h and 0 <= nc < w and
                                 (nr, nc) not in blob_pixels and
                                 (nr, nc) not in frontier and
-                                not cumulative_mask[nr, nc]):
+                                not np.all(cumulative_mask[nr, nc] == 0)):
                                 frontier.add((nr, nc))
 
                 pixels_to_check = list(blob_pixels)
