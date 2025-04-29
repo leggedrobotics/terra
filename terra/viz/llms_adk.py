@@ -126,18 +126,18 @@ class LLM_query:
 
         response_text = ""
 
-        for i, message in enumerate(self.messages):
-
-            async for event in self.runner.run_async(user_id=self.user_id, session_id=self.session_id, new_message=message):
-                if event.is_final_response():
-                    if event.content and event.content.parts:
-                        response_text = event.content.parts[0].text
-                    elif event.actions and event.actions.escalate:
-                        response_text = f"Agent escalated: {event.error_message or 'No specific message'}"
-                    break
-                else:
-                    if event.content and event.content.parts and event.content.parts[0].text:
-                        response_text += event.content.parts[0].text
+        #for i, message in enumerate(self.messages):
+        message = self.messages[-1]
+        async for event in self.runner.run_async(user_id=self.user_id, session_id=self.session_id, new_message=message):
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    response_text = event.content.parts[0].text
+                elif event.actions and event.actions.escalate:
+                    response_text = f"Agent escalated: {event.error_message or 'No specific message'}"
+                break
+            else:
+                if event.content and event.content.parts and event.content.parts[0].text:
+                    response_text += event.content.parts[0].text
 
 
         self.response = response_text
@@ -152,6 +152,8 @@ class LLM_query:
 
         if self.reset_count >= 3:
             return
+        
+        self.messages = []
         
         # if self.model_key == 'gpt':
         #     file = open("OPENAI_API_KEY.txt", "r")
