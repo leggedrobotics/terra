@@ -209,12 +209,12 @@ class CurriculumGlobalConfig(NamedTuple):
     # ]
 
     levels = [
-        # {
-        #     "maps_path": "terra/foundations",
-        #     "max_steps_in_episode": 400,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         {
             "maps_path": "terra/trenches/easy_size_small",
             "max_steps_in_episode": 400,
@@ -240,7 +240,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations",
+            "maps_path": "terra/foundations_large",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
