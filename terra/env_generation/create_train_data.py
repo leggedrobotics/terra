@@ -10,8 +10,8 @@ from terra.env_generation.procedural_data import (
     generate_trenches_v2,
     add_obstacles,
     add_non_dumpables,
+    initialize_image,
     save_or_display_image,
-    convert_numpy,
     convert_terra_pad_to_color,
 )
 from terra.env_generation.convert_to_terra import (
@@ -21,7 +21,6 @@ from terra.env_generation.convert_to_terra import (
 )
 import terra.env_generation.convert_to_terra as convert_to_terra
 from terra.env_generation.utils import _get_img_mask, color_dict
-from terra.env_generation.procedural_squares import generate_squares
 import os
 import yaml
 
@@ -241,20 +240,7 @@ def create_foundations(config,
                 expansion_factor, 1
             )
             img_terra_pad = convert_terra_pad_to_color(img_terra_pad, color_dict)
-            dumping_image = np.zeros(
-                (img_terra_pad.shape[0], img_terra_pad.shape[1], 3), dtype=np.uint8
-            )
-            corner_dump = np.random.randint(0, 4)
-            w, h = img_terra_pad.shape[:2]
-            if corner_dump == 0:
-                dumping_image[0 : int(0.8 * w), :, :] = np.array(color_dict["dumping"])
-            elif corner_dump == 1:
-                dumping_image[int(0.2 * w) :, :, :] = np.array(color_dict["dumping"])
-            elif corner_dump == 2:
-                dumping_image[:, int(0.2 * h) :, :] = np.array(color_dict["dumping"])
-            elif corner_dump == 3:
-                dumping_image[:, : int(0.8 * h), :] = np.array(color_dict["dumping"])
-            # add dumping to the image where it's not equal to color_dict["digging"]
+            dumping_image = initialize_image(size, size, color_dict)
 
             # Create a mask where img_terra_pad is not equal to color_dict["digging"]
             mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)

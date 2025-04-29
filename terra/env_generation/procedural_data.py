@@ -31,7 +31,7 @@ def distance_point_to_line(x, y, A, B, C):
 
 def initialize_image(img_edge_min, img_edge_max, color_dict):
     """
-    Initializes an image array with dimensions within given range, applying a color scheme based on a corner dump strategy.
+    Initializes an image array with dimensions within given range, applying a color scheme.
 
     Parameters:
     - img_edge_min, img_edge_max (int): Minimum and maximum edge sizes for the image.
@@ -43,19 +43,7 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
     """
     # Randomly select dimensions within the specified range
     w, h = np.random.randint(img_edge_min, img_edge_max + 1, size=2, dtype=np.int32)
-    img = np.ones((w, h, 3)) * np.array(color_dict["neutral"])
-
-    # Randomly select a corner to dump
-    corner_dump = np.random.randint(0, 4)
-    if corner_dump == 0:
-        img[0 : int(0.75 * w), :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 1:
-        img[int(0.25 * w) :, :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 2:
-        img[:, int(0.25 * h) :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 3:
-        img[:, : int(0.75 * h), :] = np.array(color_dict["dumping"])
-
+    img = np.ones((w, h, 3)) * np.array(color_dict["dumping"])
     return img
 
 
