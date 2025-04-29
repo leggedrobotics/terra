@@ -22,6 +22,7 @@ from terra.viz.llms_utils import *
 from terra.viz.a_star import compute_path, simplify_path
 
 from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
 from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.genai import types
@@ -83,15 +84,31 @@ def run_experiment(model_name, model_key, num_timesteps):
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
-    
+
+    if model_key == "gpt":
+        model_name_extended = "openai/{}".format(model_name)
+    elif model_key == "claude":
+        model_name_extended = "anthropic/{}".format(model_name)
+    else:
+        model_name_extended =  model_name
+
     # Initialize the agent
-    print("Using model: ", model_name)
-    agent_excavator = Agent(
-        name="ExcavatorAgent",
-        model=model_name,
-        description="You are an excavator agent. You can control the excavator to dig and move.",
-        instruction=system_message,
-    )
+    print("Using model: ", model_name_extended)
+
+    if model_key == "gemini":
+        agent_excavator = Agent(
+            name="ExcavatorAgent",
+            model=model_name_extended,
+            description="You are an excavator agent. You can control the excavator to dig and move.",
+            instruction=system_message,
+        )
+    else:
+        agent_excavator = Agent(
+            name="ExcavatorAgent",
+            model=LiteLlm(model=model_name_extended),
+            description="You are an excavator agent. You can control the excavator to dig and move.",
+            instruction=system_message,
+        )
     print("Agent initialized.")
 
     session_service = InMemorySessionService()
@@ -117,7 +134,7 @@ def run_experiment(model_name, model_key, num_timesteps):
     print(f"Runner initialized for agent {runner.agent.name}.")
 
     llm_query = LLM_query(
-        model_name=model_name,
+        model_name=model_name_extended,
         model=model_key,
         system_message=system_message,
         env=env,
@@ -205,7 +222,7 @@ def run_experiment(model_name, model_key, num_timesteps):
 
             previous_map = current_map.copy()  # Update the previous map
             previous_action = []  # Reset the previous action list
-            #agent.delete_messages()  # Clear previous messages
+            llm_query.delete_messages()  # Clear previous messages
 
             if USE_PATH:
                 # Compute the path

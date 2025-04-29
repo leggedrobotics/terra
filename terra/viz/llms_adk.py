@@ -1,8 +1,6 @@
 from google import genai
 from google.genai import types
 
-from openai import OpenAI 
-import anthropic 
 import base64 
 import json 
 import cv2 
@@ -43,80 +41,6 @@ class LLM_query:
         self.user_id = user_id
         self.session_id = session_id
 
-        # Initialize the appropriate client based on the model key
-        # try:
-        #     if self.model_key == 'gpt': 
-        #         self._init_openai_client()S
-        #     elif self.model_key == 'claude':
-        #         self._init_anthropic_client()
-        #     elif self.model_key == 'gemini':
-        #         self._init_gemini_client()
-        #     else:
-        #         raise ValueError(f"Unsupported model key: {self.model_key}")
-        # except Exception as e:
-        #     logger.error(f"Error initializing {self.model_key} client: {str(e)}")
-        #     raise
-
-    # def _init_openai_client(self):
-    #     """Initialize the OpenAI client with API key."""
-    #     try:
-    #         api_key = self._get_api_key("OPENAI_API_KEY.txt")
-    #         self.client = OpenAI(api_key=api_key) 
-
-    #         if self.system_message is not None: 
-    #             system_prompt = {"role": "system", "content": [self.system_message]} 
-    #             self.messages.append(system_prompt)
-    #     except Exception as e:
-    #         logger.error(f"Failed to initialize OpenAI client: {str(e)}")
-    #         raise
-
-    # def _init_anthropic_client(self):
-    #     """Initialize the Anthropic client with API key."""
-    #     try:
-    #         api_key = self._get_api_key("ANTHROPIC_API_KEY.txt")
-    #         self.client = anthropic.Anthropic(api_key=api_key)
-    #     except Exception as e:
-    #         logger.error(f"Failed to initialize Anthropic client: {str(e)}")
-    #         raise
-
-    # def _init_gemini_client(self):
-    #     """Initialize the Google Gemini client with API key."""
-    #     try:
-    #         api_key = self._get_api_key("GOOGLE_API_KEY_FREE.txt")
-    #         self.client  = genai.Client(api_key=api_key)
-
-    #     except Exception as e:
-    #         logger.error(f"Failed to initialize Gemini client: {str(e)}")
-    #         raise
-
-    # def _get_api_key(self, key_file: str) -> str:
-    #     """
-    #     Get API key from file or environment variable.
-        
-    #     Args:
-    #         key_file: The file containing the API key
-            
-    #     Returns:
-    #         The API key as a string
-        
-    #     Raises:
-    #         FileNotFoundError: If the key file doesn't exist and no environment variable is set
-    #     """
-    #     # Try to get from environment variable first
-    #     env_var = key_file.replace(".txt", "")
-    #     api_key = os.environ.get(env_var)
-        
-    #     if api_key:
-    #         return api_key
-            
-    #     # Fall back to file
-    #     try:
-    #         with open(key_file, "r") as file:
-    #             return file.read().strip()
-    #     except FileNotFoundError:
-    #         logger.error(f"API key file {key_file} not found and {env_var} environment variable not set")
-    #         raise FileNotFoundError(f"API key file {key_file} not found and {env_var} environment variable not set")
-
     def encode_image(self, cv_image):
         _, buffer = cv2.imencode(".jpg", cv_image)
         return base64.b64encode(buffer).decode("utf-8")
@@ -148,32 +72,11 @@ class LLM_query:
     
     def reset_model(self):
 
-        #self.client = None
-
         if self.reset_count >= 3:
             return
         
         self.messages = []
         
-        # if self.model_key == 'gpt':
-        #     file = open("OPENAI_API_KEY.txt", "r")
-        #     api_key = file.read()
-        #     self.client = OpenAI(api_key=api_key)
-
-        #     if self.system_message is not None:
-        #         system_prompt = {"role": "system", "content": [self.system_message]}
-        #         self.messages.append(system_prompt)
-
-        # elif self.model_key == 'claude':
-        #     file = open("ANTHROPIC_API_KEY.txt", "r")
-        #     api_key = file.read()
-        #     self.client = anthropic.Anthropic(api_key=api_key)
-        
-        # elif self.model_key == 'gemini':
-        #     file = open("GOOGLE_API_KEY_FREE.txt", "r")
-        #     api_key = file.read()
-        #     self.client = genai.Client(api_key=api_key)
-
         self.reset_count += 1
 
         print('Model is re-initiated...')
@@ -212,16 +115,6 @@ class LLM_query:
             Parsed JSON response or None if parsing fails
         """
         try:
-            # Correctly get the response from model
-            # if self.model_key == 'gpt':
-            #     response_text = response.choices[0].message.content
-            # elif self.model_key == 'claude':
-            #     response_text = response.content[0].text
-            # elif self.model_key == 'gemini':
-            #     response_text = response.text
-            # else:
-            #     raise ValueError(f"Unknown model key: {self.model_key}")
-
             response_text = response
             
             if response_text is None:
@@ -329,7 +222,6 @@ class LLM_query:
         # Check to see if you get a response from the model
         try: 
             response = asyncio.run(self.query_LLM())
-            #print(f'\n\nResponse: {response}\n\n')
 
         # If there is an error with generating a response (internal error)
         # Reset the model and try again
@@ -380,169 +272,7 @@ class LLM_query:
 
     def add_user_message(self, frame=None, user_msg=None, local_map=None, traversability_map=None):
         
-        if self.model_key == 'gpt':
-            if user_msg is not None and frame is not None and local_map is not None and traversability_map is not None:
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": user_msg},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{self.encode_image(frame)}",
-                                    "detail": "low",
-                                },
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{self.encode_image(local_map)}",
-                                    "detail": "low",
-                                },
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{self.encode_image(traversability_map)}",
-                                    "detail": "low",
-                                },
-                            },
-                        ],
-                    }
-                )
-            elif user_msg is not None and frame is not None and local_map is None:
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": user_msg},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{self.encode_image(frame)}",
-                                    "detail": "low",
-                                },
-                            },
-                        ],
-                    }
-                )
-            elif user_msg is not None and frame is None:
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": user_msg},
-                        ],
-                    }
-                )
-            elif user_msg is None and frame is not None:
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{self.encode_image(frame)}",
-                                    "detail": "low",
-                                },
-                            },
-                        ],
-                    }
-                )
-        elif self.model_key == 'claude':
-            if frame is not None and user_msg is not None and traversability_map is not None and local_map is not None:
-                image_data = self.encode_image(frame)
-                image_data_traversability = self.encode_image(traversability_map)
-                image_data_local_map = self.encode_image(local_map)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_data
-                                }
-                            },
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_data_local_map
-                                }
-                            },
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_data_traversability
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": user_msg
-                            }
-                        ]
-                    }
-                )
-            elif frame is not None and user_msg is not None and traversability_map is None:
-                image_data = self.encode_image(frame)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_data
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": user_msg
-                            }
-                        ]
-                    }
-                )
-            elif frame is not None:
-                image_data = self.encode_image(frame)
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/jpeg",
-                                    "data": image_data
-                                }
-                            }
-                        ]
-                    }
-                )
-            elif user_msg is not None:
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": user_msg
-                            }
-                        ]
-                    }
-                )
-
-        if self.model_key == 'gemini':
+        if self.model_key == 'gemini' or self.model_key == 'claude' or self.model_key == 'gpt':
             if frame is not None and user_msg is not None and traversability_map is not None and local_map is not None:
                 image_data = self.encode_image(frame)
                 image_data_traversability = self.encode_image(traversability_map)
@@ -610,39 +340,7 @@ class LLM_query:
 
     def add_assistant_message(self, demo_str=None):
 
-        if self.model_key =='gpt':
-            if demo_str is not None:
-                self.messages.append({"role": "assistant", "content": self.response})
-                demo_str = None
-                return
-            
-            if self.response is not None:
-                self.messages.append({"role": "assistant", "content": self.response})
-        
-        elif self.model_key == 'claude':
-            if demo_str is not None:
-                self.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [
-                            {"type": "text", "text": demo_str},
-                        ]
-                    }
-                )
-                demo_str = None
-                return
-
-            if self.response is not None:
-                self.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [
-                            {"type": "text", "text": self.response.content[0].text},
-                        ]
-                    }
-                )
-
-        elif self.model_key =='gemini':
+        if self.model_key =='gemini' or self.model_key == 'claude' or self.model_key == 'gpt':
             if demo_str is not None:
                 self.messages.append(
                     {
@@ -676,28 +374,7 @@ class LLM_query:
     def delete_messages(self):
         print('Deleting Set of Messages...')
 
-        if self.model_key == 'gpt':
-            message_len = 9
-        else:
-            message_len = 8
-
-        if self.model_key == 'gpt' or self.model_key == 'claude':
-            if len(self.messages) >= message_len:
-                if self.messages[0]['role'] == 'system':
-                    # Delete user message
-                    value = self.messages.pop(1)
-
-                    # Delete Assistant message
-                    value = self.messages.pop(1)
-
-                else:
-                    # Delete user message
-                    self.messages.pop(0)
-
-                    # Delete Assistant message
-                    self.messages.pop(0)
-
-        elif self.model_key == 'gemini':
+        if self.model_key == 'gemini' or self.model_key == 'claude' or self.model_key == 'gpt':
                 # Check if the first message is a system message (using .role attribute)
                 if self.messages and isinstance(self.messages[0], types.Content) and self.messages[0].role == 'system':
                     print("Removing oldest user/model pair after system message (Gemini).")
