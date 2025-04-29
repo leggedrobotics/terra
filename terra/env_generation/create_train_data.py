@@ -10,8 +10,8 @@ from terra.env_generation.procedural_data import (
     generate_trenches_v2,
     add_obstacles,
     add_non_dumpables,
+    initialize_image,
     save_or_display_image,
-    convert_numpy,
     convert_terra_pad_to_color,
 )
 from terra.env_generation.convert_to_terra import (
@@ -21,7 +21,6 @@ from terra.env_generation.convert_to_terra import (
 )
 import terra.env_generation.convert_to_terra as convert_to_terra
 from terra.env_generation.utils import _get_img_mask, color_dict
-from terra.env_generation.procedural_squares import generate_squares
 import os
 import yaml
 
@@ -103,7 +102,6 @@ def create_foundations(config,
                       expansion_factor=1,
                       all_dumpable=False,
                       copy_metadata=True,
-                      downsample=True,
                       has_dumpability=False,
                       center_padding=True):
     """
@@ -122,7 +120,6 @@ def create_foundations(config,
     - expansion_factor (int): Factor to expand the image by.
     - all_dumpable (bool): Whether all areas should be dumpable.
     - copy_metadata (bool): Whether to copy metadata.
-    - downsample (bool): Whether to downsample the image.
     - has_dumpability (bool): Whether the image has dumpability information.
     - center_padding (bool): Whether to center the padding.
     """
@@ -132,8 +129,15 @@ def create_foundations(config,
     size = foundation_config["max_size"]
     dataset_path = foundation_config["dataset_rel_path"]
 
-    # Define save folder using os.path.join
+    # Define save folder for the envs using os.path.join
     save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
+    save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_large")
+
+    # Choose different downsampling factors for different curriculum levels
+    downsampling_factors = {
+        save_folder: 2,
+        save_folder_large: 1,
+    }
 
     # Get the full dataset path using os.path.join
     full_dataset_path = os.path.join(PACKAGE_DIR, dataset_path)
@@ -147,34 +151,35 @@ def create_foundations(config,
     dumpability_folder = Path(full_dataset_path) / foundations_name / "dumpability"
     filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
 
-    for i, fn in enumerate(os.listdir(img_folder)):
-        if i >= n_imgs:
-            break
 
-        print(f"Processing foundation nr {i + 1}")
+    for curriculum_level, downsampling_factor in downsampling_factors.items():
+        for i, fn in enumerate(os.listdir(img_folder)):
+            if i >= n_imgs:
+                break
 
-        n = int(fn.split(".png")[0].split("_")[1])
-        filename = filename_start + f"_{n}.png"
-        file_path = img_folder / filename
+            print(f"Processing foundation nr {i + 1}")
 
-        occupancy_path = occupancy_folder / filename
-        img = cv2.imread(str(file_path))
+            n = int(fn.split(".png")[0].split("_")[1])
+            filename = filename_start + f"_{n}.png"
+            file_path = img_folder / filename
 
-        occupancy = cv2.imread(str(occupancy_path))
+            occupancy_path = occupancy_folder / filename
+            img = cv2.imread(str(file_path))
 
-        if has_dumpability:
-            dumpability_path = dumpability_folder / filename
-            dumpability = cv2.imread(str(dumpability_path))
+            occupancy = cv2.imread(str(occupancy_path))
 
-        if downsample:
+            if has_dumpability:
+                dumpability_path = dumpability_folder / filename
+                dumpability = cv2.imread(str(dumpability_path))
+
             with open(
                 metadata_folder / f"{filename.split('.png')[0]}.json"
             ) as json_file:
                 metadata = json.load(json_file)
 
             # Calculate downsample factors based on max_size
-            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size)))
-            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size)))
+            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size))) * downsampling_factor
+            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size))) * downsampling_factor
 
             img_downsampled = skimage.measure.block_reduce(
                 img, (downsample_factor_h, downsample_factor_w, 1), np.max
@@ -193,90 +198,77 @@ def create_foundations(config,
                 )
                 dumpability = dumpability_downsampled
 
-        # assert img_downsampled.shape[:-1] == occupancy_downsampled.shape
-        img_terra = _convert_img_to_terra(img, all_dumpable)
+            # assert img_downsampled.shape[:-1] == occupancy_downsampled.shape
+            img_terra = _convert_img_to_terra(img, all_dumpable)
 
-        # Pad to max size
-        if center_padding:
-            xdim = max_size - img_terra.shape[0]
-            ydim = max_size - img_terra.shape[1]
-            # Note: applying full dumping tiles for the centered version
-            img_terra_pad = np.ones((max_size, max_size), dtype=img_terra.dtype)
-            img_terra_pad[
-                xdim // 2 : max_size - (xdim - xdim // 2),
-                ydim // 2 : max_size - (ydim - ydim // 2),
-            ] = img_terra
-            # Note: applying no occupancy for the centered version (mismatch with Terra env)
-            img_terra_occupancy = np.zeros((max_size, max_size), dtype=np.bool_)
-            img_terra_occupancy[
-                xdim // 2 : max_size - (xdim - xdim // 2),
-                ydim // 2 : max_size - (ydim - ydim // 2),
-            ] = _convert_occupancy_to_terra(occupancy)
-            if has_dumpability:
-                img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
-                img_terra_dumpability[
+            # Pad to max size
+            if center_padding:
+                xdim = max_size - img_terra.shape[0]
+                ydim = max_size - img_terra.shape[1]
+                # Note: applying full dumping tiles for the centered version
+                img_terra_pad = np.ones((max_size, max_size), dtype=img_terra.dtype)
+                img_terra_pad[
                     xdim // 2 : max_size - (xdim - xdim // 2),
                     ydim // 2 : max_size - (ydim - ydim // 2),
-                ] = _convert_dumpability_to_terra(dumpability)
-        else:
-            img_terra_pad = np.zeros((max_size, max_size), dtype=img_terra.dtype)
-            img_terra_pad[: img_terra.shape[0], : img_terra.shape[1]] = img_terra
-            img_terra_occupancy = np.ones((max_size, max_size), dtype=np.bool_)
-            img_terra_occupancy[: occupancy.shape[0], : occupancy.shape[1]] = (
-                _convert_occupancy_to_terra(occupancy)
+                ] = img_terra
+                # Note: applying no occupancy for the centered version (mismatch with Terra env)
+                img_terra_occupancy = np.zeros((max_size, max_size), dtype=np.bool_)
+                img_terra_occupancy[
+                    xdim // 2 : max_size - (xdim - xdim // 2),
+                    ydim // 2 : max_size - (ydim - ydim // 2),
+                ] = _convert_occupancy_to_terra(occupancy)
+                if has_dumpability:
+                    img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
+                    img_terra_dumpability[
+                        xdim // 2 : max_size - (xdim - xdim // 2),
+                        ydim // 2 : max_size - (ydim - ydim // 2),
+                    ] = _convert_dumpability_to_terra(dumpability)
+            else:
+                img_terra_pad = np.zeros((max_size, max_size), dtype=img_terra.dtype)
+                img_terra_pad[: img_terra.shape[0], : img_terra.shape[1]] = img_terra
+                img_terra_occupancy = np.ones((max_size, max_size), dtype=np.bool_)
+                img_terra_occupancy[: occupancy.shape[0], : occupancy.shape[1]] = (
+                    _convert_occupancy_to_terra(occupancy)
+                )
+                if has_dumpability:
+                    img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
+                    img_terra_dumpability[
+                        : dumpability.shape[0], : dumpability.shape[1]
+                    ] = _convert_dumpability_to_terra(dumpability)
+
+            img_terra_pad = img_terra_pad.repeat(expansion_factor, 0).repeat(
+                expansion_factor, 1
             )
-            if has_dumpability:
-                img_terra_dumpability = np.zeros((max_size, max_size), dtype=np.bool_)
-                img_terra_dumpability[
-                    : dumpability.shape[0], : dumpability.shape[1]
-                ] = _convert_dumpability_to_terra(dumpability)
+            img_terra_pad = convert_terra_pad_to_color(img_terra_pad, color_dict)
+            dumping_image = initialize_image(size, size, color_dict)
 
-        img_terra_pad = img_terra_pad.repeat(expansion_factor, 0).repeat(
-            expansion_factor, 1
-        )
-        img_terra_pad = convert_terra_pad_to_color(img_terra_pad, color_dict)
-        dumping_image = np.zeros(
-            (img_terra_pad.shape[0], img_terra_pad.shape[1], 3), dtype=np.uint8
-        )
-        corner_dump = np.random.randint(0, 4)
-        w, h = img_terra_pad.shape[:2]
-        if corner_dump == 0:
-            dumping_image[0 : int(0.8 * w), :, :] = np.array(color_dict["dumping"])
-        elif corner_dump == 1:
-            dumping_image[int(0.2 * w) :, :, :] = np.array(color_dict["dumping"])
-        elif corner_dump == 2:
-            dumping_image[:, int(0.2 * h) :, :] = np.array(color_dict["dumping"])
-        elif corner_dump == 3:
-            dumping_image[:, : int(0.8 * h), :] = np.array(color_dict["dumping"])
-        # add dumping to the image where it's not equal to color_dict["digging"]
+            # Create a mask where img_terra_pad is not equal to color_dict["digging"]
+            mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
 
-        # Create a mask where img_terra_pad is not equal to color_dict["digging"]
-        mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
+            # Use the mask to assign values from dumping_image to img_terra_pad
+            img_terra_pad[mask] = dumping_image[mask]
 
-        # Use the mask to assign values from dumping_image to img_terra_pad
-        img_terra_pad[mask] = dumping_image[mask]
+            cumulative_mask = np.zeros_like(img_terra_pad, dtype=np.bool_)
+            # where the img_terra_pad is [255, 255, 255] set to True across the three channels
+            cumulative_mask[img_terra_pad == 255] = True
+            occ, cumulative_mask = add_obstacles(
+                img_terra_pad,
+                cumulative_mask,
+                n_obs_min,
+                n_obs_max,
+                size_obstacle_min,
+                size_obstacle_max,
+            )
 
-        cumulative_mask = np.zeros_like(img_terra_pad, dtype=np.bool_)
-        # where the img_terra_pad is [255, 255, 255] set to True across the three channels
-        cumulative_mask[img_terra_pad == 255] = True
-        occ, cumulative_mask = add_obstacles(
-            img_terra_pad,
-            cumulative_mask,
-            n_obs_min,
-            n_obs_max,
-            size_obstacle_min,
-            size_obstacle_max,
-        )
+            dmp, cumulative_mask = add_non_dumpables(
+                img_terra_pad,
+                occ,
+                cumulative_mask,
+                n_nodump_min,
+                n_nodump_max,
+                size_nodump_min,
+                size_nodump_max,
+            )
+            save_or_display_image(img_terra_pad, occ, dmp, metadata, curriculum_level, n)
 
-        dmp, cumulative_mask = add_non_dumpables(
-            img_terra_pad,
-            occ,
-            cumulative_mask,
-            n_nodump_min,
-            n_nodump_max,
-            size_nodump_min,
-            size_nodump_max,
-        )
-        save_or_display_image(img_terra_pad, occ, dmp, metadata, save_folder, n)
-    
-    print("Foundations created successfully.")
+        print("Foundations created successfully.")

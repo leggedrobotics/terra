@@ -197,28 +197,28 @@ def _convert_all_imgs_to_terra(
 
 def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
     print("Converting foundations...")
-    foundation_name = "foundations"
-    img_folder = Path(dataset_folder) / "foundations" / "images"
-    print("Image folder: ", img_folder)
-    metadata_folder = Path(dataset_folder) / "foundations" / "metadata"
-    occupancy_folder = Path(dataset_folder) / "foundations" / "occupancy"
-    dumpability_folder = Path(dataset_folder) / "foundations" / "dumpability"
-    destination_folder = Path(dataset_folder) / "train" / foundation_name
-    destination_folder.mkdir(parents=True, exist_ok=True)
-    _convert_all_imgs_to_terra(
-        img_folder,
-        metadata_folder,
-        occupancy_folder,
-        dumpability_folder,
-        destination_folder,
-        size,
-        n_imgs,
-        all_dumpable=all_dumpable,
-        copy_metadata=True,
-        downsample=False,
-        has_dumpability=True,
-        center_padding=False,
-    )
+    foundations_levels = ["foundations", "foundations_large"]
+    for level in foundations_levels:
+        img_folder = Path(dataset_folder) / level / "images"
+        metadata_folder = Path(dataset_folder) / level / "metadata"
+        occupancy_folder = Path(dataset_folder) / level/ "occupancy"
+        dumpability_folder = Path(dataset_folder) / level / "dumpability"
+        destination_folder = Path(dataset_folder) / "train" / level
+        destination_folder.mkdir(parents=True, exist_ok=True)
+        _convert_all_imgs_to_terra(
+            img_folder,
+            metadata_folder,
+            occupancy_folder,
+            dumpability_folder,
+            destination_folder,
+            size,
+            n_imgs,
+            all_dumpable=all_dumpable,
+            copy_metadata=True,
+            downsample=False,
+            has_dumpability=True,
+            center_padding=False,
+        )
 
 
 def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_dumpable):

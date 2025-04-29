@@ -241,7 +241,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations",
+            "maps_path": "terra/foundations_large",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
