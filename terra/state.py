@@ -20,7 +20,7 @@ from terra.utils import apply_rot_transl
 from terra.utils import compute_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
-from terra.utils import get_min_distance_point_to_lines
+from terra.utils import get_distance_point_to_line, get_min_distance_point_to_lines
 from terra.utils import increase_angle_circular
 from terra.settings import IntLowDim
 from terra.settings import IntMap
@@ -1072,8 +1072,7 @@ class State(NamedTuple):
             dump_reward_fn,
         )
 
-        r_trenches = self._get_trench_specific_rewards()
-        return dig_reward + dump_reward + r_trenches
+        return dig_reward + dump_reward
 
     @staticmethod
     def _get_action_map_negative_progress(
@@ -1201,20 +1200,57 @@ class State(NamedTuple):
         )
         return reward
 
-    def _get_trench_specific_rewards(
-        self,
-    ) -> Float:
+    def _get_trench_specific_rewards(self) -> Float:
         def _get_trench_reward():
             agent_pos = self.agent.agent_state.pos_base
             trench_axes = self.world.trench_axes
             trench_type = self.world.trench_type
 
-            d = get_min_distance_point_to_lines(
-                agent_pos, trench_axes, trench_type
-            )  # in tiles
-            d = jax.lax.cond(d > self.env_cfg.agent.width / 2, lambda: d, lambda: 0.0)
-            d *= self.env_cfg.tile_size  # in meters
-            return d * self.env_cfg.distance_coefficient
+            # 1. Distance reward
+            d_tiles = get_min_distance_point_to_lines(agent_pos, trench_axes, trench_type)
+            d_tiles = jax.lax.cond(d_tiles > self.env_cfg.agent.width / 2, lambda: d_tiles, lambda: 0.0)
+            d_meters = d_tiles * self.env_cfg.tile_size
+            proximity_reward = d_meters * self.env_cfg.distance_coefficient
+
+            # 2. Alignment reward
+            def find_closest_trench_idx(i, state):
+                dist, best_idx = state
+                curr_dist = get_distance_point_to_line(agent_pos, trench_axes[i])
+                new_best_idx = jax.lax.cond(curr_dist < dist, lambda: i, lambda: best_idx)
+                new_dist = jnp.minimum(dist, curr_dist)
+                return (new_dist, new_best_idx)
+
+            _, closest_idx = jax.lax.fori_loop(
+                0, trench_type,
+                find_closest_trench_idx,
+                (jnp.array(9999.0), jnp.array(0))
+            )
+
+            # Get trench line equation [a, b, c] for ax + by = c
+            closest_trench = trench_axes[closest_idx]
+
+            # Get trench direction vector [-b, a]
+            trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
+            trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
+
+            # Get agent angle in radians
+            agent_angle = self._get_base_angle_rad()
+
+            # Calculate angular difference (normalized between 0 and pi/2)
+            angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
+            angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
+            angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
+
+            # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
+            alignment_score = 2.0 * angle_diff / jnp.pi
+
+            # Apply alignment reward - lower when aligned with trench
+            alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
+
+            # Final calculation should be scalar + scalar
+            total_reward = proximity_reward + alignment_reward
+            # Explicitly ensure the final result is scalar before returning
+            return jnp.squeeze(total_reward)
 
         r = jax.lax.cond(
             self.env_cfg.apply_trench_rewards,
@@ -1267,6 +1303,9 @@ class State(NamedTuple):
             self._get_terminal_completed_tiles_reward,
             lambda: 0.0,
         )
+
+        # Apply trench rewards
+        reward += self._get_trench_specific_rewards()
 
         # Existence
         reward += self.env_cfg.rewards.existence

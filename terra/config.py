@@ -100,7 +100,7 @@ class Rewards(NamedTuple):
             cabin_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
+            dump_no_dump_area=-3.0,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
@@ -147,7 +147,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    distance_coefficient: float = -0.4  # distance_coefficient * distance, if distance > agent_width / 2
+    alignment_coefficient: float = -0.05
+    distance_coefficient: float = -0.02
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -222,12 +223,6 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
             "maps_path": "terra/trenches/easy_size_large",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
@@ -240,7 +235,7 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
         {
-            "maps_path": "terra/foundations_large",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
@@ -250,6 +245,12 @@ class CurriculumGlobalConfig(NamedTuple):
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/foundations_large",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
         },
         {
             "maps_path": "terra/trenches/hard_size_large_diagonal",
