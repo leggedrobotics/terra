@@ -20,6 +20,7 @@ Where
     * "gpt-4.1",
     * "o4-mini",
     * "o3",
+    * "o3-mini",
     * "gemini-1.5-flash-latest",
     * "gemini-2.0-flash", 
     * "gemini-2.5-pro-exp-03-25"
