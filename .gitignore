@@ -13,7 +13,9 @@ terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*
 terra/env_generation/__pycache__/
 terra/digbench/
-data/
+data/*
+!data/custom/
+!data/custom/**
 data_big/
 data_big2/
 OPENAI_API_KEY.txt
@@ -36,3 +38,5 @@ agent_transfer.py
 voice.py
 terra/viz/.env
 *.pkl
+*.png
+terra/env_generation/data/

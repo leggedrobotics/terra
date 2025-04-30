@@ -5,7 +5,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import skimage
+import random
 
 from terra.env_generation.convert_to_terra import (
     _convert_dumpability_to_terra,
@@ -31,7 +31,7 @@ def distance_point_to_line(x, y, A, B, C):
 
 def initialize_image(img_edge_min, img_edge_max, color_dict):
     """
-    Initializes an image array with dimensions within given range, applying a color scheme based on a corner dump strategy.
+    Initializes an image array with dimensions within given range, applying a color scheme.
 
     Parameters:
     - img_edge_min, img_edge_max (int): Minimum and maximum edge sizes for the image.
@@ -43,19 +43,7 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
     """
     # Randomly select dimensions within the specified range
     w, h = np.random.randint(img_edge_min, img_edge_max + 1, size=2, dtype=np.int32)
-    img = np.ones((w, h, 3)) * np.array(color_dict["neutral"])
-
-    # Randomly select a corner to dump
-    corner_dump = np.random.randint(0, 4)
-    if corner_dump == 0:
-        img[0 : int(0.8 * w), :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 1:
-        img[int(0.2 * w) :, :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 2:
-        img[:, int(0.2 * h) :, :] = np.array(color_dict["dumping"])
-    elif corner_dump == 3:
-        img[:, : int(0.8 * h), :] = np.array(color_dict["dumping"])
-
+    img = np.ones((w, h, 3)) * np.array(color_dict["dumping"])
     return img
 
 
@@ -112,13 +100,7 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
         A = axis_pt2[1] - axis_pt1[1]
         B = axis_pt1[0] - axis_pt2[0]
         C = axis_pt2[0] * axis_pt1[1] - axis_pt1[0] * axis_pt2[1]
-        lines_abc.append(
-            {
-                "A": float(A),
-                "B": float(B),
-                "C": float(C),
-            }
-        )
+        lines_abc.append({"A": float(A), "B": float(B), "C": float(C)})
 
         mask = np.zeros_like(img[..., 0], dtype=np.bool_)
         mask[x : x + size_x, y : y + size_y] = np.ones((size_x, size_y), dtype=np.bool_)
@@ -140,6 +122,115 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
         "lines_pts": lines_pts,
     }
     return img, cumulative_mask, metadata
+
+
+def generate_diagonal_edges(img, edges_range, sizes_small, sizes_long, color_dict):
+    """
+    Wrapper function to generate trenches using generate_edges() and optionally rotate.
+
+    Args:
+        img (np.ndarray): Base image.
+        edges_range, sizes_small, sizes_long: Parameters for generate_edges.
+        color_dict (dict): Color dictionary including 'neutral' and 'digging'.
+
+    Returns:
+        tuple: (final_img, final_mask, final_metadata) or (None, None, None)
+               Metadata includes rotation_angle (0.0 if not rotated or angle was 0).
+    """
+
+    img_background = img.copy()
+    h, w = img_background.shape[:2]
+
+    # Call generate_edges on a throwaway copy to get the mask and metadata
+    # The returned image 'img_generated_with_bg' won't be used directly for rotation
+    img_generated_with_bg, mask_generated, metadata_generated = generate_edges(
+        img_background.copy(), # Pass a copy so original isn't modified here
+        edges_range,
+        sizes_small,
+        sizes_long,
+        color_dict
+    )
+
+    # Check if the original generation succeeded
+    if img_generated_with_bg is None:
+        return None, None, None
+
+    # --- Isolate the orthogonal trenches onto a new layer ---
+    # Start with a neutral layer
+    trench_layer_ortho = np.ones_like(img_background) * np.array(color_dict["neutral"])
+    # Where the mask is true, put the digging color
+    trench_layer_ortho[mask_generated] = np.array(color_dict["digging"])
+
+    # --- Rotation ---
+    possible_angles = np.arange(30, 360, 30)
+    angle = random.choice(possible_angles)
+    center = (w / 2, h / 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    # Rotate ONLY the trench layer
+    border_val_neutral = tuple(map(int, color_dict["neutral"]))
+    rotated_trench_layer = cv2.warpAffine(trench_layer_ortho, M, (w, h),
+                                          flags=cv2.INTER_NEAREST,
+                                          borderMode=cv2.BORDER_CONSTANT,
+                                          borderValue=border_val_neutral)
+
+    # Rotate the MASK
+    mask_uint8 = mask_generated.astype(np.uint8)
+    rotated_mask_interpolated = cv2.warpAffine(mask_uint8, M, (w, h),
+                                               flags=cv2.INTER_NEAREST,
+                                               borderMode=cv2.BORDER_CONSTANT,
+                                               borderValue=0)
+    rotated_mask = rotated_mask_interpolated > 0
+
+    # --- Rotate Metadata Points ---
+    rotated_lines_pts = []
+    rotated_lines_abc = []
+    final_metadata = metadata_generated.copy()
+
+    if 'lines_pts' in metadata_generated:
+        center_w, center_h = center
+        angle_rad = math.radians(angle)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+
+        for pt1_orig, pt2_orig in metadata_generated['lines_pts']:
+            pt1_col, pt1_row = pt1_orig
+            pt2_col, pt2_row = pt2_orig
+
+            # Rotate pt1
+            temp_col1 = pt1_col - center_w
+            temp_row1 = pt1_row - center_h
+            new_pt1_col = temp_col1 * cos_a - temp_row1 * sin_a + center_w
+            new_pt1_row = temp_col1 * sin_a + temp_row1 * cos_a + center_h
+            new_pt1 = (float(new_pt1_col), float(new_pt1_row))
+
+            # Point 2
+            temp_col2 = pt2_col - center_w
+            temp_row2 = pt2_row - center_h
+            new_pt2_col = temp_col2 * cos_a - temp_row2 * sin_a + center_w
+            new_pt2_row = temp_col2 * sin_a + temp_row2 * cos_a + center_h
+            new_pt2 = (float(new_pt2_col), float(new_pt2_row))
+
+            rotated_lines_pts.append([new_pt1, new_pt2])
+            # Recalculate A, B, C
+            A = new_pt2[1] - new_pt1[1]
+            B = new_pt1[0] - new_pt2[0]
+            C = new_pt2[0] * new_pt1[1] - new_pt1[0] * new_pt2[1]
+            rotated_lines_abc.append({'A':float(A),'B':float(B),'C':float(C)})
+
+        final_metadata["axes_ABC"] = rotated_lines_abc
+        final_metadata["lines_pts"] = rotated_lines_pts
+
+
+    # --- Combine original background with rotated trenches ---
+    # Find where the rotated trench layer has the digging color
+    final_trench_mask = ~np.all(rotated_trench_layer == np.array(color_dict["neutral"]), axis=-1)
+    # Create the final image starting from the original background
+    final_img = img_background.copy()
+    # Paste the rotated digging color pixels onto the original background
+    final_img[final_trench_mask] = np.array(color_dict["digging"])
+
+    return final_img, rotated_mask, final_metadata
 
 
 def calculate_line_eq(pt1, pt2):
@@ -324,16 +415,23 @@ def generate_trenches_v2(
     n_nodump_max=3,
     size_nodump_min=2,
     size_nodump_max=8,
+    diagonal=False,
     should_add_obstacles=True,
     should_add_non_dumpables=True,
 ):
     min_edges, max_edges = n_edges
     i = 0
     while i < n_imgs:
+        print(f"Processing trench nr {i + 1}")
         img = initialize_image(img_edge_min, img_edge_max, color_dict)
-        img, cumulative_mask, metadata = generate_edges(
-            img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
-        )
+        if diagonal:
+            img, cumulative_mask, metadata = generate_diagonal_edges(
+                img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
+            )
+        else:
+            img, cumulative_mask, metadata = generate_edges(
+                img, (min_edges, max_edges), sizes_small, sizes_long, color_dict
+            )
         if img is None:
             continue
         if should_add_obstacles:
@@ -348,7 +446,7 @@ def generate_trenches_v2(
         else:
             # Initialize occ with default values if obstacles aren't added
             occ = np.ones_like(img) * 255
-        
+
         if should_add_non_dumpables:
             dmp, cumulative_mask = add_non_dumpables(
                 img,

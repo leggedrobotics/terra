@@ -120,7 +120,7 @@ def get_distance_point_to_line(p, abc):
     numerator = jnp.abs(abc[0] * p_x + abc[1] * p_y + abc[2])
     denominator = jnp.sqrt(abc[0] ** 2 + abc[1] ** 2)
     distance = numerator / denominator
-    return jnp.array([distance])
+    return distance
 
 
 def get_min_distance_point_to_lines(p, lines, trench_type):
@@ -135,7 +135,7 @@ def get_min_distance_point_to_lines(p, lines, trench_type):
     def _for_body_it(i, d_min):
         d = get_distance_point_to_line(p, lines[i])
         return jnp.min(
-            jnp.concatenate((d, d_min)),
+            jnp.concatenate((jnp.array([d]), d_min)),
             axis=0,
             keepdims=True,
         ).astype(Float)

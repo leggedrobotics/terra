@@ -42,6 +42,7 @@ class ImmutableAgentConfig(NamedTuple):
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 4
     angles_cabin: int = 8
+    num_state_obs: int = 5  # number of state observations (used to determine network input)
 
 
 class AgentConfig(NamedTuple):
@@ -99,7 +100,7 @@ class Rewards(NamedTuple):
             cabin_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
+            dump_no_dump_area=-3.0,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
@@ -146,7 +147,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    distance_coefficient: float = -0.4  # distance_coefficient * distance, if distance > agent_width / 2
+    alignment_coefficient: float = -0.05
+    distance_coefficient: float = -0.02
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -231,87 +233,6 @@ class CurriculumGlobalConfig(NamedTuple):
             "apply_trench_rewards": True,
         },
     ]
-
-    # levels = [
-    #     {
-    #         "maps_path": "squares/64x64/2",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "squares/64x64/3",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "trenches/easy_size_small",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "squares/64x64/5",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "squares/64x64/8",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "trenches/easy_size_medium",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "squares/64x64/13",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "foundations",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "trenches/easy_size_large",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "foundations",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "trenches/medium_size_large",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "foundations",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "trenches/hard_size_large",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    # ]
 
 
 class BatchConfig(NamedTuple):
