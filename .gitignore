@@ -14,4 +14,6 @@ terra/viz/__pycache__/*
 viz/
 terra/env_generation/__pycache__/
 terra/digbench/
-data/
+data/*
+!data/custom/
+!data/custom/**
