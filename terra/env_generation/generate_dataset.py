@@ -72,14 +72,14 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
     print("Step 3: Converting data to Terra format...")
     sizes = [(size, size) for size in config["sizes"]]
     npy_dataset_folder = package_dir + "/data/terra"
+    n_imgs = config["n_imgs"]
     for size in sizes:
-        convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size)
+        convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs)
     
     # Process squares if present in config
     if "squares" in config:
         print("Step 4: Generating square environments...")
         squares_config = config["squares"]
-        n_imgs = config["n_imgs"]
         base_save_folder = os.path.join(package_dir, "data/terra/train/squares")
         
         # Process each square configuration
