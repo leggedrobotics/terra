@@ -40,3 +40,4 @@ terra/viz/.env
 *.pkl
 *.png
 terra/env_generation/data/
+test.gif

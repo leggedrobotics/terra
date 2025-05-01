@@ -40,8 +40,11 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 4
-    angles_cabin: int = 8
+    angles_base: int = 12
+    angles_cabin: int = 12
+    # angles_base: int = 4  # number of angles for the base
+    # angles_cabin: int = 8  # number of angles for the cabin
+
     num_state_obs: int = 5  # number of state observations (used to determine network input)
 
 
@@ -226,11 +229,17 @@ class CurriculumGlobalConfig(NamedTuple):
     # ]
 
     levels = [
+        # {
+        #     "maps_path": "trenches/easy_size_small",
+        #     "max_steps_in_episode": 500,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         {
-            "maps_path": "trenches/easy_size_small",
-            "max_steps_in_episode": 500,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
+            "maps_path": "squares/64x64/3",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.SPARSE,
+            "apply_trench_rewards": False,
         },
     ]
 
