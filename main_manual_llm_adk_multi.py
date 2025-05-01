@@ -91,7 +91,7 @@ import argparse
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True
+FORCE_DELEGATE_TO_RL = False
 
 async def call_agent_async(query: str, runner, user_id, session_id):
   """Sends a query to the agent and prints the final response."""
@@ -128,7 +128,7 @@ def load_neural_network(config, env):
     return model
 
 
-def run_experiment(model_name, model_key, num_timesteps, n_envs_x, n_envs_y, out_path, seed, progressive_gif, run):
+def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_envs_y, out_path, seed, progressive_gif, run):
     """
     Run an LLM-based simulation experiment.
 
@@ -206,23 +206,34 @@ def run_experiment(model_name, model_key, num_timesteps, n_envs_x, n_envs_y, out
 
 
 
-    llm_model = "gemini-2.5-pro-preview-03-25"  
+    # Initialize the LLM agent
+    if llm_model_key == "gpt":
+        llm_model_name_extended = "openai/{}".format(llm_model_name)
+    elif llm_model_key == "claude":
+        llm_model_name_extended = "anthropic/{}".format(llm_model_name)
+    else:
+        llm_model_name_extended =  llm_model_name
+    
+    print("Using model: ", llm_model_name_extended)
 
-
-
-
-
-    # # Initialize the agent
-    print("Using model: ", llm_model)
-
-    llm_agent = Agent(
-        name="MasterAgent",
-        model=llm_model,
-        description="You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl').",
-        instruction=system_message,
-    )
-
+    if llm_model_key == "gemini":
+        llm_agent = Agent(
+            name="MasterAgent",
+            model=llm_model_name_extended,
+            description="You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl').",
+            instruction=system_message,
+        )
+    else:
+        llm_agent = Agent(
+            name="MasterAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description="You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl').",
+            instruction=system_message,
+        )
+    
     print("Agent initialized.")
+
+
 
     session_service = InMemorySessionService()
 
