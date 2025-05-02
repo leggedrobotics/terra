@@ -1128,7 +1128,7 @@ class State(NamedTuple):
             dump_reward_fn,
         )
 
-        dig_proximity_penalty = jax.lax.cond(
+        dig_proximity_reward = jax.lax.cond(
             dump_reward_condition,
             lambda: 0.0,
             lambda: self._get_dug_area_proximity_reward(
@@ -1137,7 +1137,7 @@ class State(NamedTuple):
             ) * self.env_cfg.rewards.dump_close_to_dug_area,
         )
 
-        return dig_reward + dump_reward + dig_proximity_penalty
+        return dig_reward + dump_reward + dig_proximity_reward
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
