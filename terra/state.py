@@ -1038,36 +1038,28 @@ class State(NamedTuple):
         action_map_old: Array, action_map_new: Array
     ) -> Float:
         """
-        Returns the reward awarded for dumping soil too close to an excavated area.
+        Returns a penalty for dumping soil within 2 tiles of any previously‐dug cell.
         """
-        action_map_clip_old = jnp.clip(action_map_old, a_min=0, a_max=None)
-        action_map_clip_new = jnp.clip(action_map_new, a_min=0, a_max=None)
-        dump_delta = jnp.clip(action_map_clip_new - action_map_clip_old, a_min=0, a_max=None)
-        dump_changed = dump_delta > 0
+        # Compute how much soil was newly dumped at each cell
+        dumped_old = jnp.clip(action_map_old, a_min=0)
+        dumped_new = jnp.clip(action_map_new, a_min=0)
+        dump_delta = jnp.clip(dumped_new - dumped_old, a_min=0)
 
-        h, w = action_map_old.shape
-        dug_tiles = action_map_new < 0
-        dump_changed_selected = jnp.argwhere(dump_changed)
+        # Mask of all cells that were dug
+        dug_mask = (action_map_new < 0).astype(IntMap)
 
-        # Check if there are any digged tiles nearby of the tiles with new dump
-        def _check_nearby_tiles_dug(coord):
-            r, c = coord
-            r0 = jnp.maximum(0, r - 2)
-            r1 = jnp.minimum(h - 1, r + 2)
-            c0 = jnp.maximum(0, c - 2)
-            c1 = jnp.minimum(w - 1, c + 2)
-            window = dug_tiles[r0 : r1 + 1, c0 : c1 + 1]
-            return jnp.any(window).astype(IntMap)
+        # Build a 5×5 “any‐dug” filter by convolving dug_mask with a 5×5 ones kernel
+        kernel = jnp.ones((5, 5), dtype=IntMap)
+        nearby_dug_count = jax.scipy.signal.convolve2d(
+            dug_mask, kernel, mode="same", boundary="fill", fillvalue=0
+        )
+        # nearby_mask[i,j] == True iff there was at least one dug tile in ±2 window
+        nearby_dug_mask = nearby_dug_count > 0
 
-        dump_near_dig_coords = jax.vmap(_check_nearby_tiles_dug)(dump_changed_selected)
+        # Penalty = sum of (amount dumped × nearby_dug_mask)
+        penalty = (dump_delta.astype(jnp.float32) * nearby_dug_mask.astype(jnp.float32)).sum()
 
-        # Compute the reward depending on how much soil is next to the digged area
-        dump_amounts = jax.vmap(
-            lambda coord: dump_delta[coord[0], coord[1]].astype(IntMap)
-        )(dump_changed_selected)
-        reward = (dump_amounts * dump_near_dig_coords).sum().astype(jnp.float32) # Has to be normalized!
-
-        return reward
+        return penalty
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
@@ -1136,6 +1128,8 @@ class State(NamedTuple):
                 new_state.world.action_map.map,
             ) * self.env_cfg.rewards.dump_close_to_dug_area,
         )
+
+        jax.debug.print("dig_proximity_reward: {}", dig_proximity_reward)
 
         return dig_reward + dump_reward + dig_proximity_reward
 
