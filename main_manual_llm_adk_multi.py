@@ -95,6 +95,7 @@ import csv
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False
+LLM_CALL_FREQUENCY = 5  # Number of steps between LLM calls
 
 async def call_agent_async(query: str, runner, user_id, session_id):
   """Sends a query to the agent and prints the final response."""
@@ -281,44 +282,52 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     obs_seq = []
     action_list = []
 
+    last_llm_decision = "delegate_to_rl" # Initial decision (or 'act_directly')
+
+
     for step in range(max_steps):
+        print(f"\n--- Step {step} ---")
         current_observation = timestep.observation
         obs_seq.append(current_observation)
 
         rng, rng_act, rng_step = jax.random.split(rng, 3)
+        llm_decision = last_llm_decision # Default to last decision
 
-
-        try:
-            obs_dict = {k: v.tolist() for k, v in current_observation.items()}
-            observation_str = json.dumps(obs_dict)
-        except AttributeError:
-            # Handle the case where current_observation is not a dictionary
-            observation_str = str(current_observation)
-
-        prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
-        #print(f"Prompt: {prompt}")
-        print(f"\n--- Step {step} ---")
-
-        llm_decision = "act directly"  # Placeholder for the LLM decision
-        #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
-
-        action = None
-
-        if not FORCE_DELEGATE_TO_RL:
+        if step % LLM_CALL_FREQUENCY == 0:
+            print("Calling LLM agent for decision...")
             try:
-                response =  asyncio.run(call_agent_async(prompt, runner, USER_ID, SESSION_ID))
-                llm_response_text = response
-                print(f"LLM response: {llm_response_text}")
-                if "delegate_to_rl" in llm_response_text.lower():
-                    llm_decision = "delegate_to_rl"
+                obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+                observation_str = json.dumps(obs_dict)
+            except AttributeError:
+                # Handle the case where current_observation is not a dictionary
+                observation_str = str(current_observation)
 
-            except Exception as adk_err:
-                print(f"Error during ADK agent communication: {adk_err}")
-                print("Defaulting to fallback action due to ADK error.")
-                llm_decision = "fallback" # Indicate fallback needed
-        else:
-            print("Forcing delegation to RL agent for testing.")
-            llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+            prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
+            #print(f"Prompt: {prompt}")
+
+            llm_decision = "act directly"  # Placeholder for the LLM decision
+            #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+
+            action = None
+
+            if not FORCE_DELEGATE_TO_RL:
+                try:
+                    response =  asyncio.run(call_agent_async(prompt, runner, USER_ID, SESSION_ID))
+                    llm_response_text = response
+                    print(f"LLM response: {llm_response_text}")
+                    if "delegate_to_rl" in llm_response_text.lower():
+                        llm_decision = "delegate_to_rl"
+                        last_llm_decision = llm_decision # Update last decision
+
+                except Exception as adk_err:
+                    print(f"Error during ADK agent communication: {adk_err}")
+                    print("Defaulting to fallback action due to ADK error.")
+                    llm_decision = "fallback" # Indicate fallback needed
+                    last_llm_decision = llm_decision # Update last decision
+            else:
+                print("Forcing delegation to RL agent for testing.")
+                llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+                last_llm_decision = llm_decision # Update last decision
 
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
@@ -338,6 +347,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Using fallback random action due to RL error.")
                 action = env.action_space.sample(rng) # Fallback random action
                 llm_decision = "fallback" # Mark as fallback
+                last_llm_decision = llm_decision # Update last decision
 
         else:
             if llm_decision != "delegate_to_rl":
@@ -356,6 +366,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Error: Delegation requested, but RL agent is not available. Using random action.")
                 action = env.action_space.sample(rng) # Fallback random action
                 llm_decision = "fallback"
+                last_llm_decision = llm_decision # Update last decision
         
         if action is not None:
             #action_formatted = jnp.array(action).reshape(1, -1)  # Reshape to match expected input
@@ -395,9 +406,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     numeric_reward_seq = [r[0] if hasattr(r, '__getitem__') and len(r) > 0 else r for r in reward_seq]
     cumulative_rewards = np.cumsum(numeric_reward_seq)
 
-    print("Individual Rewards:", reward_seq)
-    print("Cumulative Rewards:", cumulative_rewards)
-    print("Actions:", action_list)
+    #print("Individual Rewards:", reward_seq)
+    #print("Cumulative Rewards:", cumulative_rewards)
+    #print("Actions:", action_list)
 
 
     # Generate a timestamp
