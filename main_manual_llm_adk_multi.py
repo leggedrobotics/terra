@@ -2,7 +2,7 @@
 # # import jax
 # # import jax.numpy as jnp
 # # import pygame as pg
-import json
+# import json
 # # import os
 # # from tqdm import tqdm
 # # import csv
@@ -88,6 +88,9 @@ from google.genai import types
 import asyncio
 import os
 import argparse
+import datetime
+import json
+import csv
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
@@ -276,6 +279,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     t_counter = 0
     reward_seq = []
     obs_seq = []
+    action_list = []
 
     for step in range(max_steps):
         current_observation = timestep.observation
@@ -325,6 +329,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 _, logits_pi = model.apply(model_params, obs)
                 pi = tfp.distributions.Categorical(logits=logits_pi)
                 action = pi.sample(seed=rng_act)
+                action_list.append(action)
                 
                 print(f"RL agent action: {action}")
 
@@ -385,10 +390,44 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     for o in tqdm(obs_seq, desc="Rendering"):
         env.terra_env.render_obs_pygame(o, generate_gif=True)
 
-    env.terra_env.rendering_engine.create_gif("test.gif")
+    # Calculate cumulative rewards
+    # Ensure reward_seq contains numbers before calculating cumulative sum
+    numeric_reward_seq = [r[0] if hasattr(r, '__getitem__') and len(r) > 0 else r for r in reward_seq]
+    cumulative_rewards = np.cumsum(numeric_reward_seq)
+
+    print("Individual Rewards:", reward_seq)
+    print("Cumulative Rewards:", cumulative_rewards)
+    print("Actions:", action_list)
 
 
-    
+    # Generate a timestamp
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Create a unique output directory for the model and timestamp
+    # Use a safe version of the model name for the directory
+    safe_model_name = llm_model_name.replace('/', '_') # Replace slashes if any
+    output_dir = os.path.join("experiments", f"{safe_model_name}_{current_time}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save actions and cumulative rewards to a CSV file
+    output_file = os.path.join(output_dir, "actions_rewards.csv") # Renamed file
+    with open(output_file, "w", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(["actions", "cumulative_rewards"]) # Header updated
+        # Iterate through actions and the calculated cumulative rewards
+        for action, cum_reward in zip(action_list, cumulative_rewards):
+            # Assuming action is array-like (e.g., JAX array) with one element
+            action_value = action[0] if hasattr(action, '__getitem__') and len(action) > 0 else action
+            # cum_reward from np.cumsum is already a scalar number
+            reward_value = cum_reward
+            writer.writerow([action_value, reward_value])
+
+    print(f"Results saved to {output_file}")
+
+    # Save the gameplay video
+    gif_path = os.path.join(output_dir, "gameplay.gif")
+    # ... (rest of the code, including gif saving) ...
+    env.terra_env.rendering_engine.create_gif(gif_path)
 
 
 if __name__ == "__main__":
