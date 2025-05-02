@@ -1132,7 +1132,7 @@ class State(NamedTuple):
             dump_reward_condition,
             lambda: 0.0,
             lambda: self._get_digged_area_proximity_reward(
-                self.world.action_map.map,
+                self.world.dig_map.map,
                 new_state.world.action_map.map,
             ) * self.env_cfg.rewards.dump_close_to_digged_area,
         )
