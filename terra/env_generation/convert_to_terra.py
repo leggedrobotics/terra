@@ -245,7 +245,7 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             all_dumpable=all_dumpable,
         )
 
-def generate_custom_terra(dataset_folder, size, n_imgs, all_dumpable):
+def generate_custom_terra(dataset_folder, size, n_imgs):
     print("Converting custom maps...")
     img_folder = Path(dataset_folder) / ".." / "custom" / "images"
     metadata_folder = Path(dataset_folder) / ".." / "custom" / "metadata"
