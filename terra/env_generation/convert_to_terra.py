@@ -245,6 +245,29 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             all_dumpable=all_dumpable,
         )
 
+def generate_custom_terra(dataset_folder, size, n_imgs, all_dumpable):
+    print("Converting custom maps...")
+    img_folder = Path(dataset_folder) / "custom" / "images"
+    metadata_folder = Path(dataset_folder) / "custom" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "custom"/ "occupancy"
+    dumpability_folder = Path(dataset_folder) / "custom" / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / "custom"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+    )
+
 
 def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
     print("dataset folder: ", dataset_folder)
@@ -254,3 +277,5 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
         dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
     )
     print("Trenches processed successfully.")
+    generate_custom_terra(dataset_folder, size, n_imgs)
+    print("Custom maps processed successfully.")
