@@ -50,14 +50,7 @@
 # from terra.viz.llms_utils import *
 # from terra.viz.a_star import compute_path, simplify_path
 
-# from google.adk.agents import Agent
-# from google.adk.models.lite_llm import LiteLlm
-# from google.adk.sessions import InMemorySessionService
-# from google.adk.runners import Runner
-# from google.genai import types
 
-
-#os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 """
 Partially from https://github.com/RobertTLange/gymnax-blines
@@ -308,7 +301,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             llm_decision = "act directly"  # Placeholder for the LLM decision
             #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
 
-            action = None
+            #action = None
 
             if not FORCE_DELEGATE_TO_RL:
                 try:
@@ -345,7 +338,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             except:
                 print(f"Error during RL agent action generation: ")
                 print("Using fallback random action due to RL error.")
-                action = env.action_space.sample(rng) # Fallback random action
+                #action = env.action_space.sample(rng) # Fallback random action
+                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+                action_list.append(action)
                 llm_decision = "fallback" # Mark as fallback
                 last_llm_decision = llm_decision # Update last decision
 
@@ -354,20 +349,18 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Master Agent acts directly (or RL agent unavailable/ADK error).")
                  # --- Add LLM Action Parsing Logic Here ---
                 # TODO PASS LLM response to a function that parses the action
-                continue
-                 # Example: Try to parse action from llm_response_text
-                 # If parsing fails or llm_decision is "fallback":
-                print("LLM direct action parsing not implemented or fallback needed. Using random action.")
-                action = env.action_space.sample(rng) # Example: random action
-                # --- End LLM Action Parsing ---
-                print(f"LLM/Fallback action: {action}")
+                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+                action_list.append(action)
+
             else:
                 # This case means delegation was intended but RL agent wasn't loaded properly
-                print("Error: Delegation requested, but RL agent is not available. Using random action.")
-                action = env.action_space.sample(rng) # Fallback random action
+                print("Error: Delegation requested, but RL agent is not available. Using do nothing action.")
+                #action = env.action_space.sample(rng) # Fallback random action
+                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+                action_list.append(action)
                 llm_decision = "fallback"
                 last_llm_decision = llm_decision # Update last decision
-        
+
         if action is not None:
             #action_formatted = jnp.array(action).reshape(1, -1)  # Reshape to match expected input
 
@@ -396,7 +389,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             print("No action generated. Skipping step.")
             break
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
-
+    print(len(action_list), len(reward_seq), len(obs_seq))
     
     for o in tqdm(obs_seq, desc="Rendering"):
         env.terra_env.render_obs_pygame(o, generate_gif=True)
