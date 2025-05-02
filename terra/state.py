@@ -1033,6 +1033,42 @@ class State(NamedTuple):
         ).sum()
         return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
+    @staticmethod
+    def _get_digged_area_proximity_reward(
+        action_map_old: Array, action_map_new: Array
+    ) -> Float:
+        """
+        Returns the reward awarded for dumping soil too close to an excavated area.
+        """
+        action_map_clip_old = jnp.clip(action_map_old, a_min=0, a_max=None)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=0, a_max=None)
+        dump_delta = jnp.clip(action_map_clip_new - action_map_clip_old, a_min=0, a_max=None)
+        dump_changed = dump_delta > 0
+
+        h, w = action_map_old.shape
+        digged_tiles = action_map_new < 0
+        dump_changed_selected = jnp.argwhere(dump_changed)
+
+        # Check if there are any digged tiles nearby of the tiles with new dump
+        def _check_nearby_tiles_digged(coord):
+            r, c = coord
+            r0 = jnp.maximum(0, r - 2)
+            r1 = jnp.minimum(h - 1, r + 2)
+            c0 = jnp.maximum(0, c - 2)
+            c1 = jnp.minimum(w - 1, c + 2)
+            window = digged_tiles[r0 : r1 + 1, c0 : c1 + 1]
+            return jnp.any(window).astype(IntMap)
+
+        dump_near_dig_coords = jax.vmap(_check_nearby_tiles_digged)(dump_changed_selected)
+
+        # Compute the reward depending on how much soil is next to the digged area
+        dump_amounts = jax.vmap(
+            lambda coord: dump_delta[coord[0], coord[1]].astype(IntMap)
+        )(dump_changed_selected)
+        reward = (dump_amounts * dump_near_dig_coords).sum().astype(jnp.float32) # Has to be normalized!
+
+        return reward
+
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
