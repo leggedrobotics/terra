@@ -996,6 +996,26 @@ class State(NamedTuple):
         return action_map_progress
 
     @staticmethod
+    def _get_action_map_negative_progress(
+        action_map_old: Array, action_map_new: Array, target_map: Array
+    ) -> IntMap:
+        """
+        Returns
+        > 0 if there was progress on the dig tiles
+        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
+        = 0 if there was no progress on the dig tiles
+        """
+        action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
+
+        target_map_mask = target_map < 0
+        action_map_progress = (
+            (action_map_clip_old - action_map_clip_new) * target_map_mask
+        ).sum()
+
+        return action_map_progress
+
+    @staticmethod
     def _get_action_map_spread_out_rate(
         action_map_old: Array, action_map_new: Array, target_map: Array, loaded: int
     ) -> IntMap:
@@ -1073,26 +1093,6 @@ class State(NamedTuple):
         )
 
         return dig_reward + dump_reward
-
-    @staticmethod
-    def _get_action_map_negative_progress(
-        action_map_old: Array, action_map_new: Array, target_map: Array
-    ) -> IntMap:
-        """
-        Returns
-        > 0 if there was progress on the dig tiles
-        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
-        = 0 if there was no progress on the dig tiles
-        """
-        action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
-        action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
-
-        target_map_mask = target_map < 0
-        action_map_progress = (
-            (action_map_clip_old - action_map_clip_new) * target_map_mask
-        ).sum()
-
-        return action_map_progress
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
