@@ -150,8 +150,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.05
-    distance_coefficient: float = -0.02
+    alignment_coefficient: float = -0.08
+    distance_coefficient: float = -0.03
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -168,7 +168,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 5
+    increase_level_threshold: int = 20
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
@@ -215,19 +215,19 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
         {
             "maps_path": "terra/trenches/easy_size_small",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "terra/trenches/easy_size_large",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 800,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
@@ -245,7 +245,7 @@ class CurriculumGlobalConfig(NamedTuple):
         },
         {
             "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 800,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
@@ -257,7 +257,7 @@ class CurriculumGlobalConfig(NamedTuple):
         },
         {
             "maps_path": "terra/foundations_large",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 1000,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
