@@ -21,7 +21,7 @@ from terra.config import BatchConfig
 
 from terra.viz.llms_utils import *
 from terra.viz.llms_adk import *
-# from terra.viz.a_star import compute_path, simplify_path
+from terra.viz.a_star import compute_path, simplify_path
 
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
@@ -48,6 +48,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
 LLM_CALL_FREQUENCY = 5          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM
+USE_LOCAL_MAP = True          # Use local map for LLM
 
 def encode_image(cv_image):
     _, buffer = cv2.imencode(".jpg", cv_image)
@@ -131,10 +132,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     config.num_test_rollouts = n_envs
     config.num_devices = 1    
 
-    system_message = "You are a master agent controlling an excavator. Observe the state. " \
-    "Decide if you should act directly (provide action) or delegate digging tasks to " \
-    "a specialized RL agent (respond with 'delegate_to_rl')."
-
+  
     batch_cfg = BatchConfig()
     action_type = batch_cfg.action_type
     env_cfgs = log["env_config"]
@@ -175,26 +173,71 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     
     print("Using model: ", llm_model_name_extended)
 
-    description = "You are a master agent controlling an excavator. Observe the state. " \
+    description_master = "You are a master agent controlling an excavator. Observe the state. " \
     "Decide if you should act directly (provide action) or delegate digging tasks to a " \
-    "specialized RL agent (respond with 'delegate_to_rl')."
+    "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+    "specialized LLM agent (respond with 'delegate_to_llm')."
+
+    system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
+    "Decide if you should act directly (provide action) or delegate digging tasks to a " \
+    "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+    "specialized LLM agent (respond with 'delegate_to_llm')."
+
+    description_excavator = "You are an excavator agent. You can control the excavator to dig and move."
+
+    USE_PATH = True
+
+    if USE_PATH:
+        # Load the JSON configuration file
+        with open("envs19.json", "r") as file:
+            game_instructions = json.load(file)
+    else:
+        # Load the JSON configuration file
+        with open("envs18.json", "r") as file:
+            game_instructions = json.load(file)
+
+    # Define the environment name for the Autonomous Excavator Game
+    environment_name = "AutonomousExcavatorGame"
+
+    # Retrieve the system message for the environment
+    system_message_excavator = game_instructions.get(
+        environment_name,
+        "You are a game playing assistant. Provide the best action for the current game state."
+    )
 
     if llm_model_key == "gemini":
-        llm_agent = Agent(
+        llm_excavator_agent = Agent(
+            name="ExcavatorAgent",
+            model=llm_model_name_extended,
+            description=description_excavator,
+            instruction=system_message_excavator,
+        )
+
+        llm_master_agent = Agent(
             name="MasterAgent",
             model=llm_model_name_extended,
-            description=description,
-            instruction=system_message,
+            description=description_master,
+            instruction=system_message_master,
+            sub_agents=[llm_excavator_agent],
         )
     else:
-        llm_agent = Agent(
+        llm_excavator_agent = Agent(
+            name="ExcavatorAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description=description_excavator,
+            instruction=system_message_excavator,
+        )
+
+        llm_master_agent = Agent(
             name="MasterAgent",
             model=LiteLlm(model=llm_model_name_extended),
-            description=description,
-            instruction=system_message,
+            description=description_master,
+            instruction=system_message_master,
+            sub_agents=[llm_excavator_agent],
         )
     
     print("Master Agent initialized.")
+    print("Excavator Agent initialized.")
 
     session_service = InMemorySessionService()
 
@@ -211,7 +254,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     print("Session created. App: ", APP_NAME, " User ID: ", USER_ID, " Session ID: ", SESSION_ID)
     
     runner = Runner(
-        agent=llm_agent,
+        agent=llm_master_agent,
         app_name=APP_NAME,
         session_service=session_service,
     )
@@ -235,6 +278,34 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     action_list = []
 
     last_llm_decision = "delegate_to_rl" # Initial decision (or 'act_directly')
+    llm_query = LLM_query(
+        model_name=llm_model_name_extended,
+        model=llm_model_key,
+        system_message=system_message_excavator,
+        env=env,
+        session_id=SESSION_ID,
+        runner=runner,
+        user_id=USER_ID,
+    )
+
+    if USE_PATH:
+        # Compute the path
+        start, target_positions = extract_positions(timestep.state)
+        target = find_nearest_target(start, target_positions)
+        path, path2, _ = compute_path(timestep.state, start, target)
+
+
+        initial_orientation = extract_base_orientation(timestep.state)
+        initial_direction = initial_orientation["direction"]
+
+        actions = path_to_actions(path, initial_direction, 6)
+        print("Action list", actions)
+
+        if path:
+            game = env.terra_env.rendering_engine
+            game.path = path
+        else:
+            print("No path found.")
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):
@@ -249,6 +320,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     step = 0
     playing = True
 
+    previous_action = []
+    current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+    initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+    print("Initial target number: ", initial_target_num)
+    previous_map = current_map.copy()  # Initialize the previous map
+    count_map_change = 0
+    DETERMINISTIC = True
 
     while playing and step < num_timesteps:
         for event in pg.event.get():
@@ -275,9 +353,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 observation_str = str(current_observation)
 
             if USE_IMAGE_PROMPT:
-                prompt = f"Current observation: See image \n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
+                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}\n\nDecide: Act directly (provide action details) or delegate digging to RL ('delegate_to_rl') or to LLM ('delegate_to_llm')?"
             else:
-                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
+                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl') or to LLM ('delegate_to_llm')?"
             #print(f"Prompt: {prompt}")
 
             llm_decision = "act directly"  # Placeholder for the LLM decision
@@ -304,8 +382,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
                 last_llm_decision = llm_decision # Update last decision
-
-
+        if step > 0:
+            llm_decision= "delegate_to_llm" # For testing, force delegation to LLM agent
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
             print("Delegating to RL agent...")
@@ -316,6 +394,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 pi = tfp.distributions.Categorical(logits=logits_pi)
                 action = pi.sample(seed=rng_act)
                 action_list.append(action)
+                previous_action.append(action)
                 
                 print(f"RL agent action: {action}")
 
@@ -325,16 +404,166 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 #action = env.action_space.sample(rng) # Fallback random action
                 action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
                 action_list.append(action)
+                previous_action.append(action)
                 llm_decision = "fallback" # Mark as fallback
                 last_llm_decision = llm_decision # Update last decision
+        elif llm_decision == "delegate_to_llm":
+            print("Acting directly based on LLM decision...")
+            # --- Add LLM Action Parsing Logic Here ---
+            # TODO PASS LLM response to a function that parses the action
+            current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+            if previous_map is None or not jnp.array_equal(previous_map, current_map):
+                print("Map changed!")
+                count_map_change += 1
+                initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+                print("Current target number: ", initial_target_num)
+
+                previous_map = current_map.copy()  # Update the previous map
+                previous_action = []  # Reset the previous action list
+                llm_query.delete_messages()  # Clear previous messages
+
+                if USE_PATH:
+                    # Compute the path
+                    start, target_positions = extract_positions(timestep.state)
+                    target = find_nearest_target(start, target_positions)
+                    path, path2, _ = compute_path(timestep.state, start, target)
+
+                    simplified_path = simplify_path(path)
+                    print("Simplified Path: ", simplified_path)
+                    initial_orientation = extract_base_orientation(timestep.state)
+                    initial_direction = initial_orientation["direction"]
+                    print("Initial Direction: ", initial_direction)
+
+                    actions = path_to_actions(path, initial_direction, 6)
+                    actions_simple = path_to_actions(simplified_path, initial_direction, 6)
+                    print("Action list", actions)
+                    print("Simple Action list", actions_simple)
+
+                    if path:
+                        game = env.terra_env.rendering_engine
+                        game.path = path
+                    else:
+                        print("No path found.")
+            state = timestep.state
+            base_orientation = extract_base_orientation(state)
+            bucket_status = extract_bucket_status(state)  # Extract bucket status
+
+
+            traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
+
+            traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
+            traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
+
+            if USE_LOCAL_MAP:
+                local_map = generate_local_map(timestep)
+                local_map_image = local_map_to_image(local_map)
+
+                start, target_positions = extract_positions(timestep.state)
+                nearest_target = find_nearest_target(start, target_positions)
+
+                #current_target_num = jnp.sum(current_map < 0)  # Count the current target pixels
+                #print("Current target number: ", current_target_num)
+            
+                percentage_digging = calculate_digging_percentage(initial_target_num, timestep)
+
+                print(f"Current direction: {base_orientation['direction']}")
+                print(f"Bucket status: {bucket_status}")
+                print(f"Current position: {start} (y,x)")
+                print(f"Nearest target position: {nearest_target} (y,x)")
+                print(f"Previous action list: {action_list}")
+                print(f"Percentage of digging left: {percentage_digging:.2f}%")
+            
+                if USE_PATH:
+
+                    usr_msg8 = (
+                        f"Analyze the current game frame and local map to determine the optimal next action.\n\n"
+                        f"- Each forward/backward move advances the excavator by 6 pixels.\n"
+                        f"- Excavator base is facing **{base_orientation['direction']}**.\n"
+                        f"- Bucket status: **{bucket_status}**.\n"
+                        f"- Current location: **{start}** (y, x).\n"
+                        f"- Target digging positions: **{target_positions}** (y, x).\n"
+                        f"- Previous actions: **{action_list}**.\n"
+                        f"- Suggested actions (NOT compulsory): **{actions}**.\n"
+                        f"- Remaining area to dig: **{percentage_digging:.2f}%**.\n"
+                        #f"- You could generate and execute Python code to help you to dig correctly (for example for mathematical operations).\n\n"
+
+                        f"**DIGGING RULES**\n"
+                        f"- Align the bucket **directly facing the long edge** of the purple trench. This may require rotation and repositioning.\n"
+                        f"- You may **overlap the base with the purple trench** for proper alignment.\n"
+                        f"- Digging must start from the **furthest end** of the trench (relative to the excavator's front) and proceed **backward**.\n"
+                        f"  - Facing up → reach **topmost** trench point → dig downward\n"
+                        f"  - Facing down → reach **bottommost** → dig upward\n"
+                        f"  - Facing left → reach **leftmost** → dig rightward\n"
+                        f"  - Facing right → reach **rightmost** → dig leftward\n"
+                        f"- Ensure the **orange target area overlaps the purple trench** before digging.\n"
+                        f"- Purple turns **green** after successful excavation.\n\n"
+
+                        f"**MOVEMENT GUIDELINES**\n"
+                        f"- Avoid repeated forward/backward moves unless repositioning.\n"
+                        f"- Maintain **8–12 pixel distance** between the excavator and the trench for best alignment.\n"
+                        f"- If the bucket is empty, it’s okay to reposition and try digging again next.\n"
+                        f"- A common sequence: 6 (dig), rotate twice, 6 (deposit), rotate back, 1 (backward), 6 (dig), ...\n\n"
+                        f"- Do not dig twice (or more) in the same position. The sequence of action [..., 6, 6, ...] is NOT allowed\n"
+
+                        f"**RESTRICTIONS**\n"
+                        f"- Do not dig in areas that are:\n"
+                        f"  - Already dug\n"
+                        f"  - Not marked as negative in the target map\n"
+                        f"- Use the traversability mask (`0 = obstacle`, `1 = traversable`) to guide movement.\n"
+                        f"- Continue acting until **0%** of the trench remains undug.\n\n"
+
+                        f"Return your response in this format:\n"
+                        f'{{"reasoning": "step-by-step analysis", "action": X}}'
+                    )
+
+
+                else:
+                    usr_msg7 = (
+                        f"Analyze this game frame and the provided local map to select the optimal action. "
+                        f"The base of the excavator is currently facing {base_orientation['direction']}. "
+                        f"The bucket is currently {bucket_status}. "
+                        f"The excavator is currently located at {start} (y,x). "
+                        f"The target digging positions are {target_positions} (y,x). "
+                        f"The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas. "
+                        f"The list of the previous actions is {previous_action}. "
+                        f"Ensure that the excavator base maintains a safe minimum distance (8 to 10 pixels) from the target area to allow proper alignment of the orange area with the purple area for efficient digging. "
+                        f"Avoid moving too close to the purple area to prevent overlap with the base. "
+                        f"If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig in the next action. "
+                        f"Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map. "
+                        f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+                    )
+                
+            
+                llm_query.add_user_message(frame=game_state_image, user_msg=usr_msg8, local_map=local_map_image, traversability_map=traversability_map_np)
+            else:
+                llm_query.add_user_message(frame=game_state_image, user_msg=usr_msg7, local_map=None)
+            action_output, reasoning = llm_query.generate_response("./")
+
+            print(f"\n Action output: {action_output}, Reasoning: {reasoning}")
+            llm_query.add_assistant_message()
+            previous_action.append(action_output)
+            print("Action output: ", action_output)
+            #action = action_type.new(action_output)
+
+
+            # Example: Parse the action from the LLM response
+            # action = parse_llm_action(llm_response_text)
+            action = jnp.array([action_output], dtype=jnp.int32)  # Convert to JAX array
+            action_list.append(action)
+
+            #action = jnp.array([-1], dtype=jnp.int32)
 
         else:
-            if llm_decision != "delegate_to_rl":
+
+            if llm_decision != "delegate_to_rl" or llm_decision != "delegate_to_llm":
                 print("Master Agent acts directly (or RL agent unavailable/ADK error).")
                  # --- Add LLM Action Parsing Logic Here ---
                 # TODO PASS LLM response to a function that parses the action
+
+
                 action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
                 action_list.append(action)
+                previous_action.append(action)
 
             else:
                 # This case means delegation was intended but RL agent wasn't loaded properly
@@ -342,6 +571,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 #action = env.action_space.sample(rng) # Fallback random action
                 action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
                 action_list.append(action)
+                previous_action.append(action)
                 llm_decision = "fallback"
                 last_llm_decision = llm_decision # Update last decision
 
@@ -391,6 +621,17 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     #print("Individual Rewards:", reward_seq)
     #print("Cumulative Rewards:", cumulative_rewards)
     #print("Actions:", action_list)
+    print("Previous Actions:", previous_action)
+    print("Actions:", action_list)
+    print(type(previous_action), type(action_list))
+    print("Previous Actions Length:", len(previous_action))
+    print("Actions Length:", len(action_list))
+    # Ensure the lengths of action_list and previous_action match
+    if len(previous_action) != len(action_list):
+        print(f"Warning: Length mismatch! Previous Actions: {len(previous_action)}, Actions: {len(action_list)}")
+    else:
+        print("Length match confirmed.")
+    
 
 
     # Generate a timestamp
