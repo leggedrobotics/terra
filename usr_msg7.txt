@@ -1,0 +1,17 @@
+Analyze this game frame and the provided local map to select the optimal action.
+
+- The base of the excavator is currently facing **{base_direction}**.
+- The bucket is currently **{bucket_status}**.
+- The excavator is currently located at **{current_pos}** (y,x).
+- The target digging positions are **{target_pos_list}** (y,x).
+- The traversability mask is provided, where 0 indicates obstacles and 1 indicates traversable areas.
+- The list of the previous actions is **{prev_actions}**.
+
+**GUIDELINES**
+- Ensure that the excavator base maintains a safe minimum distance (8 to 10 pixels) from the target area to allow proper alignment of the orange area with the purple area for efficient digging.
+- Avoid moving too close to the purple area to prevent overlap with the base.
+- If the previous action was digging and the bucket is still empty, moving backward can be an appropriate action to reposition. You can then try to dig in the next action.
+- Focus on immediate gameplay elements visible in this specific frame and the spatial context from the map.
+
+Follow the format:
+{{"reasoning": "detailed step-by-step analysis", "action": X}}

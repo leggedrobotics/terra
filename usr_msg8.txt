@@ -1,0 +1,40 @@
+Analyze the current game frame and local map to determine the optimal next action.
+
+- Each forward/backward move advances the excavator by 6 pixels.
+- Excavator base is facing **{base_direction}**.
+- Bucket status: **{bucket_status}**.
+- Current location: **{current_pos}** (y, x).
+- Target digging positions: **{target_pos_list}** (y, x).
+- Previous actions: **{prev_actions}**.
+- Suggested actions (NOT compulsory): **{suggested_actions}**.
+- Remaining area to dig: **{dig_percentage}**.
+#- You could generate and execute Python code to help you to dig correctly (for example for mathematical operations).
+
+**DIGGING RULES**
+- Align the bucket **directly facing the long edge** of the purple trench. This may require rotation and repositioning.
+- You may **overlap the base with the purple trench** for proper alignment.
+- Digging must start from the **furthest end** of the trench (relative to the excavator's front) and proceed **backward**.
+  - Facing up → reach **topmost** trench point → dig downward
+  - Facing down → reach **bottommost** → dig upward
+  - Facing left → reach **leftmost** → dig rightward
+  - Facing right → reach **rightmost** → dig leftward
+- Ensure the **orange target area overlaps the purple trench** before digging.
+- Purple turns **green** after successful excavation.
+
+**MOVEMENT GUIDELINES**
+- Avoid repeated forward/backward moves unless repositioning.
+- Maintain **8–12 pixel distance** between the excavator and the trench for best alignment.
+- If the bucket is empty, it’s okay to reposition and try digging again next.
+- A common sequence: 6 (dig), rotate twice, 6 (deposit), rotate back, 1 (backward), 6 (dig), ...
+
+- Do not dig twice (or more) in the same position. The sequence of action [..., 6, 6, ...] is NOT allowed
+
+**RESTRICTIONS**
+- Do not dig in areas that are:
+  - Already dug
+  - Not marked as negative in the target map
+- Use the traversability mask (`0 = obstacle`, `1 = traversable`) to guide movement.
+- Continue acting until **0%** of the trench remains undug.
+
+Return your response in this format:
+{{"reasoning": "step-by-step analysis", "action": X}}
