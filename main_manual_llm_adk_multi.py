@@ -389,7 +389,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             print("No action generated. Skipping step.")
             break
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
-    print(len(action_list), len(reward_seq), len(obs_seq))
+    #print(len(action_list), len(reward_seq), len(obs_seq))
     
     for o in tqdm(obs_seq, desc="Rendering"):
         env.terra_env.render_obs_pygame(o, generate_gif=True)
@@ -523,4 +523,5 @@ if __name__ == "__main__":
                    args.out_path, 
                    args.seed, 
                    args.progressive_gif, 
-                   args.run_name)
+                   args.run_name
+                   )
