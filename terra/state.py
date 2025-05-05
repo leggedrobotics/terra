@@ -1129,8 +1129,6 @@ class State(NamedTuple):
             ) * self.env_cfg.rewards.dump_close_to_dug_area,
         )
 
-        jax.debug.print("dig_proximity_reward: {}", dig_proximity_reward)
-
         return dig_reward + dump_reward + dig_proximity_reward
 
     def _handle_rewards_dig(
