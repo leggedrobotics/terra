@@ -38,10 +38,7 @@
 # from terra.config import EnvConfig
 
 
-# from pygame.locals import (
-#     K_q,
-#     QUIT,
-# )
+
 
 # from terra.config import BatchConfig
 # from terra.config import EnvConfig
@@ -71,6 +68,11 @@ import matplotlib.animation as animation
 from tensorflow_probability.substrates import jax as tfp
 from train import TrainConfig  # needed for unpickling checkpoints
 from terra.config import EnvConfig
+from terra.config import BatchConfig
+
+from terra.viz.llms_utils import *
+from terra.viz.llms_adk import *
+# from terra.viz.a_star import compute_path, simplify_path
 
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
@@ -84,46 +86,70 @@ import argparse
 import datetime
 import json
 import csv
+import pygame as pg
+import cv2
+import base64
+from pygame.locals import (
+    K_q,
+    QUIT,
+)
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = False
-LLM_CALL_FREQUENCY = 5  # Number of steps between LLM calls
+FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
+LLM_CALL_FREQUENCY = 5          # Number of steps between LLM calls
+USE_IMAGE_PROMPT = True         # Use image prompt for LLM
 
-async def call_agent_async(query: str, runner, user_id, session_id):
-  """Sends a query to the agent and prints the final response."""
-  #print(f"\n>>> User Query: {query}")
+def encode_image(cv_image):
+    _, buffer = cv2.imencode(".jpg", cv_image)
+    return base64.b64encode(buffer).decode("utf-8")
 
-  # Prepare the user's message in ADK format
-  content = types.Content(role='user', parts=[types.Part(text=query)])
 
-  final_response_text = "Agent did not produce a final response." # Default
+async def call_agent_async(query: str, image, runner, user_id, session_id):
+    """Sends a query to the agent and prints the final response."""
+    #print(f"\n>>> User Query: {query}")
 
-  # Key Concept: run_async executes the agent logic and yields Events.
-  # We iterate through events to find the final answer.
-  async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=content):
-      # You can uncomment the line below to see *all* events during execution
-      # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
+    # Prepare the user's message in ADK format
+    #content = types.Content(role='user', parts=[types.Part(text=query)])
+    text = types.Part.from_text(text=query)
+    parts = [text]
+    if image is not None:
+        # Convert the image to a format suitable for ADK
+        image_data = encode_image(image)
 
-      # Key Concept: is_final_response() marks the concluding message for the turn.
-      if event.is_final_response():
-          if event.content and event.content.parts:
-             # Assuming text response in the first part
-             final_response_text = event.content.parts[0].text
-          elif event.actions and event.actions.escalate: # Handle potential errors/escalations
-             final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
-          # Add more checks here if needed (e.g., specific error codes)
-          break # Stop processing events once the final response is found
+        content_image = types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
+        parts.append(content_image)
 
-  #print(f"<<< Agent Response: {final_response_text}")
-  return final_response_text
+    user_content = types.Content(role='user', parts=parts)
+    
+    
+    
+    final_response_text = "Agent did not produce a final response." # Default
+
+    # Key Concept: run_async executes the agent logic and yields Events.
+    # We iterate through events to find the final answer.
+    async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=user_content):
+        # You can uncomment the line below to see *all* events during execution
+        # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
+
+        # Key Concept: is_final_response() marks the concluding message for the turn.
+        if event.is_final_response():
+            if event.content and event.content.parts:
+                # Assuming text response in the first part
+                final_response_text = event.content.parts[0].text
+            elif event.actions and event.actions.escalate: # Handle potential errors/escalations
+                final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
+            # Add more checks here if needed (e.g., specific error codes)
+            break # Stop processing events once the final response is found
+
+    #print(f"<<< Agent Response: {final_response_text}")
+    return final_response_text
 
 
 def load_neural_network(config, env):
     rng = jax.random.PRNGKey(0)
     model, _ = get_model_ready(rng, config, env)
     return model
-
 
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_envs_y, out_path, seed, progressive_gif, run):
     """
@@ -144,29 +170,26 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         None
     """
 
-
     agent_checkpoint_path = run
     model = None
     model_params = None
     config = None
-
-    print(f"Loading RL agent from: {agent_checkpoint_path}")
-    # Load the dictionary containing config, params, etc.
     n_envs_x = n_envs_x
     n_envs_y = n_envs_y
     n_envs = n_envs_x * n_envs_y
 
+    print(f"Loading RL agent from: {agent_checkpoint_path}")
     log = load_pkl_object(agent_checkpoint_path)
     config = log["train_config"]
     config.num_test_rollouts = n_envs
     config.num_devices = 1    
 
+    system_message = "You are a master agent controlling an excavator. Observe the state. " \
+    "Decide if you should act directly (provide action) or delegate digging tasks to " \
+    "a specialized RL agent (respond with 'delegate_to_rl')."
 
-
-    system_message = "You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl')."
-
-
-
+    batch_cfg = BatchConfig()
+    action_type = batch_cfg.action_type
     env_cfgs = log["env_config"]
     env_cfgs = jax.tree_map(
         lambda x: x[0][None, ...].repeat(n_envs, 0), env_cfgs
@@ -177,7 +200,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         rendering=True,
         n_envs_x_rendering=n_envs_x,
         n_envs_y_rendering=n_envs_y,
-        display=False,
+        display=True,
         progressive_gif=progressive_gif,
         shuffle_maps=suffle_maps,
     )
@@ -185,13 +208,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     model = load_neural_network(config, env)
     model_params = log["model"]
-    # replicated_params = log['network']
-    # model_params = jax.tree_map(lambda x: x[0], replicated_params)
 
-
-    # print("Starting the environment...")
-    # start_time = time.time()
-    # env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
     rng = jax.random.PRNGKey(seed)
     rng, _rng = jax.random.split(rng)
     rng_reset = jax.random.split(_rng, config.num_test_rollouts)
@@ -228,7 +245,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             instruction=system_message,
         )
     
-    print("Agent initialized.")
+    print("Master Agent initialized.")
 
 
 
@@ -268,7 +285,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
 
     print("Starting the game loop...")
-    max_steps = num_timesteps
 
     t_counter = 0
     reward_seq = []
@@ -277,8 +293,24 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     last_llm_decision = "delegate_to_rl" # Initial decision (or 'act_directly')
 
+    # Define the repeat_action function
+    def repeat_action(action, n_times=n_envs):
+        return action_type.new(action.action[None].repeat(n_times, 0))
+    
+    # Trigger the JIT compilation
+    timestep = env.step(timestep, repeat_action(action_type.do_nothing()), rng_reset)
+    env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
-    for step in range(max_steps):
+    screen = pg.display.get_surface()
+    frames = []
+    step = 0
+    playing = True
+
+
+    while playing and step < num_timesteps:
+        for event in pg.event.get():
+            if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
+                playing = False
         print(f"\n--- Step {step} ---")
         current_observation = timestep.observation
         obs_seq.append(current_observation)
@@ -286,26 +318,34 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         rng, rng_act, rng_step = jax.random.split(rng, 3)
         llm_decision = last_llm_decision # Default to last decision
 
+        game_state_image = capture_screen(screen)
+        frames.append(game_state_image)
+
         if step % LLM_CALL_FREQUENCY == 0:
             print("Calling LLM agent for decision...")
             try:
                 obs_dict = {k: v.tolist() for k, v in current_observation.items()}
                 observation_str = json.dumps(obs_dict)
+
             except AttributeError:
                 # Handle the case where current_observation is not a dictionary
                 observation_str = str(current_observation)
 
-            prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
+            if USE_IMAGE_PROMPT:
+                prompt = f"Current observation: See image \n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
+            else:
+                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl')?"
             #print(f"Prompt: {prompt}")
 
             llm_decision = "act directly"  # Placeholder for the LLM decision
             #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
 
-            #action = None
-
             if not FORCE_DELEGATE_TO_RL:
                 try:
-                    response =  asyncio.run(call_agent_async(prompt, runner, USER_ID, SESSION_ID))
+                    if USE_IMAGE_PROMPT:
+                        response =  asyncio.run(call_agent_async(prompt, game_state_image, runner, USER_ID, SESSION_ID))
+                    else:
+                        response = asyncio.run(call_agent_async(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
                     llm_response_text = response
                     print(f"LLM response: {llm_response_text}")
                     if "delegate_to_rl" in llm_response_text.lower():
@@ -321,6 +361,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
                 last_llm_decision = llm_decision # Update last decision
+
 
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
@@ -377,10 +418,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             print(t_counter, timestep.reward, action, timestep.done)
             print(10 * "=")
             t_counter += 1
+
+            env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
+
             # if done or t_counter == max_frames:
             #     break
             # else:
-            if jnp.all(timestep.done).item() or t_counter == max_steps:
+            if jnp.all(timestep.done).item() or t_counter == num_timesteps:
                 break
             # env_state = next_env_state
             # obs = next_obs            if timestep.done.any() or timestep.truncated.any():
@@ -388,11 +432,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         else:
             print("No action generated. Skipping step.")
             break
+        step += 1
+
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
     #print(len(action_list), len(reward_seq), len(obs_seq))
     
-    for o in tqdm(obs_seq, desc="Rendering"):
-        env.terra_env.render_obs_pygame(o, generate_gif=True)
+    # for o in tqdm(obs_seq, desc="Rendering"):
+    #     env.terra_env.render_obs_pygame(o, generate_gif=True)
 
     # Calculate cumulative rewards
     # Ensure reward_seq contains numbers before calculating cumulative sum
@@ -414,7 +460,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     os.makedirs(output_dir, exist_ok=True)
 
     # Save actions and cumulative rewards to a CSV file
-    output_file = os.path.join(output_dir, "actions_rewards.csv") # Renamed file
+    output_file = os.path.join(output_dir, "actions_rewards.csv")
     with open(output_file, "w", newline='') as f:
         writer = csv.writer(f)
         writer.writerow(["actions", "cumulative_rewards"]) # Header updated
@@ -429,10 +475,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     print(f"Results saved to {output_file}")
 
     # Save the gameplay video
-    gif_path = os.path.join(output_dir, "gameplay.gif")
-    # ... (rest of the code, including gif saving) ...
-    env.terra_env.rendering_engine.create_gif(gif_path)
+    # gif_path = os.path.join(output_dir, "gameplay.gif")
+    # # ... (rest of the code, including gif saving) ...
+    # env.terra_env.rendering_engine.create_gif(gif_path)
+    # print(f"Gameplay video saved to {gif_path}"
 
+    # Save the gameplay video
+    video_path = os.path.join(output_dir, "gameplay.mp4")
+    save_video(frames, video_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run an LLM-based simulation experiment with RL agents.")
