@@ -1,54 +1,3 @@
-# # import time
-# # import jax
-# # import jax.numpy as jnp
-# # import pygame as pg
-# import json
-# # import os
-# # from tqdm import tqdm
-# # import csv
-# # import numpy as np
-# # import datetime
-# # import pickle
-# # import asyncio
-
-# import os # Import os
-# import sys # Import sys
-# import datetime
-# import pickle
-# import asyncio
-
-
-# # Imports based on visualize.py
-# import numpy as np
-# import jax
-# from tqdm import tqdm
-# from utils.models import get_model_ready
-# from utils.helpers import load_pkl_object
-# from terra.env import TerraEnvBatch
-# import jax.numpy as jnp
-# from utils.utils_ppo import obs_to_model_input, wrap_action
-# from terra.state import State
-# import matplotlib.animation as animation
-
-# # from utils.curriculum import Curriculum
-# from tensorflow_probability.substrates import jax as tfp
-# from train import TrainConfig  # needed for unpickling checkpoints
-
-
-# from terra.config import EnvConfig
-
-
-
-
-# from terra.config import BatchConfig
-# from terra.config import EnvConfig
-# from terra.env import TerraEnvBatch
-# from terra.viz.llms_adk import *
-# from terra.viz.llms_utils import *
-# from terra.viz.a_star import compute_path, simplify_path
-
-
-
 """
 Partially from https://github.com/RobertTLange/gymnax-blines
 """
@@ -121,8 +70,6 @@ async def call_agent_async(query: str, image, runner, user_id, session_id):
         parts.append(content_image)
 
     user_content = types.Content(role='user', parts=parts)
-    
-    
     
     final_response_text = "Agent did not produce a final response." # Default
 
@@ -218,8 +165,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     #     dtype=jnp.int32
     # )
 
-
-
     # Initialize the LLM agent
     if llm_model_key == "gpt":
         llm_model_name_extended = "openai/{}".format(llm_model_name)
@@ -230,24 +175,26 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     
     print("Using model: ", llm_model_name_extended)
 
+    description = "You are a master agent controlling an excavator. Observe the state. " \
+    "Decide if you should act directly (provide action) or delegate digging tasks to a " \
+    "specialized RL agent (respond with 'delegate_to_rl')."
+
     if llm_model_key == "gemini":
         llm_agent = Agent(
             name="MasterAgent",
             model=llm_model_name_extended,
-            description="You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl').",
+            description=description,
             instruction=system_message,
         )
     else:
         llm_agent = Agent(
             name="MasterAgent",
             model=LiteLlm(model=llm_model_name_extended),
-            description="You are a master agent controlling an excavator. Observe the state. Decide if you should act directly (provide action) or delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl').",
+            description=description,
             instruction=system_message,
         )
     
     print("Master Agent initialized.")
-
-
 
     session_service = InMemorySessionService()
 
@@ -271,8 +218,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     print(f"Runner initialized for agent {runner.agent.name}.")
 
-
-
     prev_actions = None
     if config:
         prev_actions = jnp.zeros(
@@ -281,8 +226,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         )
     else:
         print("Warning: rl_config is None, prev_actions will not be initialized.")
-
-
 
     print("Starting the game loop...")
 
