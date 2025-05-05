@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from terra.config import Rewards
-from jax.experimental.host_callback import id_tap
 
 
 def print_arrays(arr, what):
