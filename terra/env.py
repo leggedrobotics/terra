@@ -177,7 +177,8 @@ class TerraEnv(NamedTuple):
     def step(
         self,
         state: State,
-        action: Action,
+        action1: Action,
+        action2: Action,
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
@@ -185,9 +186,12 @@ class TerraEnv(NamedTuple):
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
-        new_state = state._step(action)
-        reward = state._get_reward(new_state, action)
-        new_state = self.wrap_state(new_state)
+        new_state_1 = state._step(action1)
+        reward_1 = state._get_reward(new_state_1, action1)
+        new_state_2 = new_state_1._step(action2)
+        #reward_2 = new_state_1._get_reward(new_state_2, action2)
+        reward = reward_1 #+ reward_2
+        new_state = self.wrap_state(new_state_2)
         obs = self._state_to_obs_dict(new_state)
 
         done, task_done = state._is_done(
@@ -220,7 +224,7 @@ class TerraEnv(NamedTuple):
             env_cfg,
         )
 
-        infos = new_state._get_infos(action, task_done)
+        infos = new_state._get_infos(action1, task_done)
         return TimeStep(
             state=new_state,
             observation=obs,
@@ -398,7 +402,8 @@ class TerraEnvBatch:
     def step(
         self,
         timestep: TimeStep,
-        actions: Action,
+        actions1: Action,
+        actions2: Action,
         maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         # Update env_cfgs based on the curriculum, and get the new maps
@@ -414,7 +419,8 @@ class TerraEnvBatch:
         # Step the environment
         timestep = jax.vmap(self.terra_env.step)(
             timestep.state,
-            actions,
+            actions1,
+            actions2,
             target_maps,
             padding_masks,
             trench_axes,
