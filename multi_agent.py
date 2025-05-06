@@ -224,7 +224,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
                 last_llm_decision = llm_decision # Update last decision
-        if FORCE_DELEGATE_TO_LLM:
+        if FORCE_DELEGATE_TO_LLM or step % LLM_CALL_FREQUENCY == 0:
             llm_decision= "delegate_to_llm" # For testing, force delegation to LLM agent
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
@@ -279,12 +279,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 nearest_target = find_nearest_target(start, target_positions)
 
                 percentage_digging = calculate_digging_percentage(initial_target_num, timestep)
+                simple_action_list = [int(arr[0]) for arr in action_list]
 
                 print(f"Current direction: {base_orientation['direction']}")
                 print(f"Bucket status: {bucket_status}")
                 print(f"Current position: {start} (y,x)")
                 print(f"Nearest target position: {nearest_target} (y,x)")
-                print(f"Previous action list: {action_list}")
+                print(f"Previous action list: {simple_action_list}")
                 print(f"Percentage of digging left: {percentage_digging:.2f}%")
             
                 if USE_PATH:
@@ -294,7 +295,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                         bucket_status=bucket_status,
                         current_pos=start,
                         target_pos_list=target_positions,
-                        prev_actions=action_list,
+                        prev_actions=simple_action_list,
                         suggested_actions=actions,
                         dig_percentage=f"{percentage_digging:.2f}%"
                     )
@@ -334,6 +335,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 action_list.append(action)
                 llm_decision = "fallback"
                 last_llm_decision = llm_decision # Update last decision
+        
+        if len(llm_query.messages) > 3:
+            llm_query.delete_messages()
 
         if action is not None:
 
@@ -375,7 +379,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     #print("Individual Rewards:", reward_seq)
     #print("Cumulative Rewards:", cumulative_rewards)
 
-    print("Actions:", action_list)
+    #print("Actions:", action_list)
 
     # Generate a timestamp
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
