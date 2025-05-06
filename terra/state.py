@@ -112,8 +112,18 @@ class State(NamedTuple):
             trench_type=trench_type,
             dumpability_mask_init=dumpability_mask_init,
         )
+    
+    def _swap(self):
+        """Swaps agent_state_1 and agent_state_2"""
+        jax.debug.print("Swapping agent states")
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state_1=self.agent.agent_state_2,
+                agent_state_2=self.agent.agent_state_1
+            )
+        )
 
-    def _step(self, action: Action) -> "State":
+    def _step(self, action: Action, turn:bool = True) -> "State":
         """
         TrackedAction type --> 0
         WheeledAction type --> 1
@@ -138,17 +148,23 @@ class State(NamedTuple):
             self._handle_cabin_anticlock,
             self._handle_do,
         ]
+
         cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
-        )
-
+        ) 
         
 
         state = jax.lax.cond(
             action.action[0] == -1,
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
+        )
+
+        state = jax.lax.cond(
+            turn, 
+            state._swap,
+            lambda: state
         )
 
         jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
