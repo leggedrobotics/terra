@@ -224,7 +224,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
                 last_llm_decision = llm_decision # Update last decision
-        if FORCE_DELEGATE_TO_LLM or step % LLM_CALL_FREQUENCY == 0:
+        if FORCE_DELEGATE_TO_LLM:
             llm_decision= "delegate_to_llm" # For testing, force delegation to LLM agent
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
