@@ -165,7 +165,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20
+    increase_level_threshold: int = 10
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
