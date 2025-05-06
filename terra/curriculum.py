@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from terra.config import Rewards
-from jax.experimental.host_callback import id_tap
 
 
 def print_arrays(arr, what):
@@ -32,19 +31,7 @@ class CurriculumManager(NamedTuple):
         env_cfg = timestep.env_cfg
         done = timestep.done
         completed = timestep.info["task_done"]
-        # done = id_tap(lambda arr, _: print_arrays(arr, "done all"), done)
-        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed"), completed)
 
-        # done_sum = jnp.sum(done)
-        # completed_sum = jnp.sum(completed)
-        
-        # done = id_tap(lambda arr, _: print_arrays(arr, "done sum"), done_sum)
-        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed sum"), completed_sum)
-
-        # # print the shape of the arrays
-        # done = id_tap(lambda arr, _: print_arrays(arr.shape, "done shape"), done)
-        # completed = id_tap(lambda arr, _: print_arrays(arr.shape, "completed shape"), completed)
-        
         failure = done & ~completed
         success = done & completed
 
