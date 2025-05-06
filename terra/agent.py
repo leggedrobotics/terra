@@ -34,7 +34,7 @@ class Agent(NamedTuple):
     """
 
     agent_state_1: AgentState
-    #agent_state_2: AgentState 
+    agent_state_2: AgentState 
     width: int
     height: int
 
@@ -46,7 +46,7 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
     ) -> tuple["Agent", jax.random.PRNGKey]:
-        pos_base, angle_base, key = jax.lax.cond(
+        pos_base_1, angle_base_1, key = jax.lax.cond(
             env_cfg.agent.random_init_state,
             lambda k: _get_random_init_state(
                 k,
@@ -62,8 +62,8 @@ class Agent(NamedTuple):
         )
 
         agent_state_1 = AgentState(
-            pos_base=pos_base,
-            angle_base=angle_base,
+            pos_base=pos_base_1,
+            angle_base=angle_base_1,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
         )
@@ -71,7 +71,7 @@ class Agent(NamedTuple):
         width = env_cfg.agent.width
         height = env_cfg.agent.height
 
-        return Agent(agent_state_1=agent_state_1, width=width, height=height), key
+        return Agent(agent_state_1=agent_state_1, agent_state_2 =agent_state_1 ,width=width, height=height), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
