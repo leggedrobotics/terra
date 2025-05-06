@@ -47,7 +47,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
-LLM_CALL_FREQUENCY = 5          # Number of steps between LLM calls
+LLM_CALL_FREQUENCY = 25          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
