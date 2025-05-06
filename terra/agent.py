@@ -33,8 +33,8 @@ class Agent(NamedTuple):
     Defines the state and type of the agent.
     """
 
-    agent_state: AgentState
-
+    agent_state_1: AgentState
+    #agent_state_2: AgentState 
     width: int
     height: int
 
@@ -61,7 +61,7 @@ class Agent(NamedTuple):
             key,
         )
 
-        agent_state = AgentState(
+        agent_state_1 = AgentState(
             pos_base=pos_base,
             angle_base=angle_base,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
@@ -71,7 +71,7 @@ class Agent(NamedTuple):
         width = env_cfg.agent.width
         height = env_cfg.agent.height
 
-        return Agent(agent_state=agent_state, width=width, height=height), key
+        return Agent(agent_state_1=agent_state_1, width=width, height=height), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):

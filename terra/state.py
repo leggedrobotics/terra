@@ -278,14 +278,14 @@ class State(NamedTuple):
         delta_xy = orientation_vector @ xy_delta
         
         # Compute candidate new position and immediately round it to discrete grid points.
-        candidate_pos = self.agent.agent_state.pos_base + delta_xy
+        candidate_pos = self.agent.agent_state_1.pos_base + delta_xy
         candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
         candidate_pos = jnp.squeeze(candidate_pos, axis=0)
         
         # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
             candidate_pos,
-            base_orientation=self.agent.agent_state.angle_base,
+            base_orientation=self.agent.agent_state_1.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
@@ -295,12 +295,12 @@ class State(NamedTuple):
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
         
         # Choose between the old position and the new candidate position.
-        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        old_new_pos = jnp.array([self.agent.agent_state_1.pos_base, candidate_pos])
         new_pos_base = valid_move_mask @ old_new_pos
 
         return self._replace(
             agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(pos_base=new_pos_base)
+                agent_state_1=self.agent.agent_state_1._replace(pos_base=new_pos_base)
             )
         )
 
@@ -310,14 +310,14 @@ class State(NamedTuple):
         """
 
         def _move_forward():
-            base_orientation = self.agent.agent_state.angle_base
+            base_orientation = self.agent.agent_state_1.angle_base
             orientation_vector = self._base_orientation_to_one_hot_forward(
                 base_orientation
             )
             return self._move_on_orientation(orientation_vector)
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
+            self.agent.agent_state_1.loaded[0] > 0, self._do_nothing, _move_forward
         )
 
     def _handle_move_backward(self) -> "State":
@@ -326,14 +326,14 @@ class State(NamedTuple):
         """
 
         def _move_backward():
-            base_orientation = self.agent.agent_state.angle_base
+            base_orientation = self.agent.agent_state_1.angle_base
             orientation_vector = self._base_orientation_to_one_hot_backwards(
                 base_orientation
             )
             return self._move_on_orientation(orientation_vector)
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
+            self.agent.agent_state_1.loaded[0] > 0, self._do_nothing, _move_backward
         )
 
     def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
@@ -345,7 +345,7 @@ class State(NamedTuple):
         """
         # Compute the agent's polygon for the candidate new angle.
         candidate_corners = self._get_agent_corners(
-            self.agent.agent_state.pos_base,
+            self.agent.agent_state_1.pos_base,
             base_orientation=new_angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
@@ -361,7 +361,7 @@ class State(NamedTuple):
 
     def _handle_clock(self) -> "State":
         def _rotate_clock():
-            old_angle_base = self.agent.agent_state.angle_base
+            old_angle_base = self.agent.agent_state_1.angle_base
             new_angle_base = decrease_angle_circular(
                 old_angle_base, self.env_cfg.agent.angles_base
             )
@@ -371,19 +371,19 @@ class State(NamedTuple):
 
             return self._replace(
                 agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
+                    agent_state_1=self.agent.agent_state_1._replace(
                         angle_base=new_angle_base
                     )
                 )
             )
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_clock
+            self.agent.agent_state_1.loaded[0] > 0, self._do_nothing, _rotate_clock
         )
 
     def _handle_anticlock(self) -> "State":
         def _rotate_anticlock():
-            old_angle_base = self.agent.agent_state.angle_base
+            old_angle_base = self.agent.agent_state_1.angle_base
             new_angle_base = increase_angle_circular(
                 old_angle_base, self.env_cfg.agent.angles_base
             )
@@ -393,37 +393,37 @@ class State(NamedTuple):
 
             return self._replace(
                 agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
+                    agent_state_1=self.agent.agent_state_1._replace(
                         angle_base=new_angle_base
                     )
                 )
             )
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_anticlock
+            self.agent.agent_state_1.loaded[0] > 0, self._do_nothing, _rotate_anticlock
         )
 
     def _handle_cabin_clock(self) -> "State":
-        old_angle_cabin = self.agent.agent_state.angle_cabin
+        old_angle_cabin = self.agent.agent_state_1.angle_cabin
         new_angle_cabin = decrease_angle_circular(
             old_angle_cabin, self.env_cfg.agent.angles_cabin
         )
 
         return self._replace(
             agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
+                agent_state_1=self.agent.agent_state_1._replace(angle_cabin=new_angle_cabin)
             )
         )
 
     def _handle_cabin_anticlock(self) -> "State":
-        old_angle_cabin = self.agent.agent_state.angle_cabin
+        old_angle_cabin = self.agent.agent_state_1.angle_cabin
         new_angle_cabin = increase_angle_circular(
             old_angle_cabin, self.env_cfg.agent.angles_cabin
         )
 
         return self._replace(
             agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
+                agent_state_1=self.agent.agent_state_1._replace(angle_cabin=new_angle_cabin)
             )
         )
 
@@ -528,12 +528,12 @@ class State(NamedTuple):
 
     def _get_cabin_angle_rad(self) -> Float:
         return angle_idx_to_rad(
-            self.agent.agent_state.angle_cabin, self.env_cfg.agent.angles_cabin
+            self.agent.agent_state_1.angle_cabin, self.env_cfg.agent.angles_cabin
         )
 
     def _get_base_angle_rad(self) -> Float:
         return angle_idx_to_rad(
-            self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base
+            self.agent.agent_state_1.angle_base, self.env_cfg.agent.angles_base
         )
 
     def _get_arm_angle_rad(self) -> Float:
@@ -671,7 +671,7 @@ class State(NamedTuple):
             lambda: (IntMap(dump_mask), dump_mask.sum()),
         )
 
-        loaded_volume = self.agent.agent_state.loaded
+        loaded_volume = self.agent.agent_state_1.loaded
         remaining_volume = loaded_volume % dump_volume
         even_volume_per_tile = (loaded_volume - remaining_volume) / dump_volume
 
@@ -693,7 +693,7 @@ class State(NamedTuple):
             - map_local_coords_base: (2, width*height) map with [x, y] rows
         """
         current_pos_idx = self._get_current_pos_vector_idx(
-            pos_base=self.agent.agent_state.pos_base,
+            pos_base=self.agent.agent_state_1.pos_base,
             map_height=self.env_cfg.maps.edge_length_px,
         )
         map_global_coords = self._map_to_flattened_global_coords(
@@ -832,7 +832,7 @@ class State(NamedTuple):
                     )
                 ),
                 agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
+                    agent_state_1=self.agent.agent_state_1._replace(
                         loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
                     )
                 ),
@@ -856,12 +856,12 @@ class State(NamedTuple):
         dump_volume = dump_mask.sum()
 
         # dump_volume_per_tile = jnp.rint(
-        #     self.agent.agent_state.loaded / (dump_volume + 1e-6)
+        #     self.agent.agent_state_1.loaded / (dump_volume + 1e-6)
         # ).astype(IntLowDim)
 
-        remaining_volume = self.agent.agent_state.loaded % dump_volume
+        remaining_volume = self.agent.agent_state_1.loaded % dump_volume
         even_volume_per_tile = (
-            self.agent.agent_state.loaded - remaining_volume
+            self.agent.agent_state_1.loaded - remaining_volume
         ) / dump_volume
 
         def _apply_dump():
@@ -894,7 +894,7 @@ class State(NamedTuple):
                     ),
                 ),
                 agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
+                    agent_state_1=self.agent.agent_state_1._replace(
                         loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
                     )
                 ),
@@ -904,7 +904,7 @@ class State(NamedTuple):
 
     def _handle_do(self) -> "State":
         state = jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded.astype(jnp.bool_)),
+            jnp.all(self.agent.agent_state_1.loaded.astype(jnp.bool_)),
             self._handle_dump,
             self._handle_dig,
         )
@@ -916,7 +916,7 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent moved"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base
+            old_state.agent.agent_state_1.pos_base, new_state.agent.agent_state_1.pos_base
         )
 
     @staticmethod
@@ -925,8 +925,8 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent turned"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.angle_base,
-            new_state.agent.agent_state.angle_base,
+            old_state.agent.agent_state_1.angle_base,
+            new_state.agent.agent_state_1.angle_base,
         )
 
     def _handle_rewards_move(
@@ -942,7 +942,7 @@ class State(NamedTuple):
 
         # Move while loaded
         reward += jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded > 0),
+            jnp.all(self.agent.agent_state_1.loaded > 0),
             lambda: self.env_cfg.rewards.move_while_loaded,
             lambda: 0.0,
         )
@@ -1064,11 +1064,11 @@ class State(NamedTuple):
             self.world.dig_map.map,  # note dig_map here
             new_state.world.action_map.map,
             self.world.target_map.map,
-            self.agent.agent_state.loaded,
+            self.agent.agent_state_1.loaded,
         )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
+            self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
         )
 
         def dump_reward_fn() -> Float:
@@ -1100,7 +1100,7 @@ class State(NamedTuple):
         # Dig
         return jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
+                self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
@@ -1110,7 +1110,7 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         return jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded > 0),
+            jnp.all(self.agent.agent_state_1.loaded > 0),
             self._handle_rewards_dump,
             self._handle_rewards_dig,
             new_state,
@@ -1202,7 +1202,7 @@ class State(NamedTuple):
 
     def _get_trench_specific_rewards(self) -> Float:
         def _get_trench_reward():
-            agent_pos = self.agent.agent_state.pos_base
+            agent_pos = self.agent.agent_state_1.pos_base
             trench_axes = self.world.trench_axes
             trench_type = self.world.trench_type
 
@@ -1287,7 +1287,7 @@ class State(NamedTuple):
             self._is_done_task(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
-                new_state.agent.agent_state.loaded,
+                new_state.agent.agent_state_1.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
             lambda: 0.0,
@@ -1298,7 +1298,7 @@ class State(NamedTuple):
             self._is_done(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
-                new_state.agent.agent_state.loaded,
+                new_state.agent.agent_state_1.loaded,
             )[0],
             self._get_terminal_completed_tiles_reward,
             lambda: 0.0,
@@ -1358,45 +1358,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # clock
         new_state = self._handle_clock()
         bool_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # anticlock
         new_state = self._handle_anticlock()
         bool_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # cabin clock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+            new_state.agent.agent_state_1.loaded == self.agent.agent_state_1.loaded
         )
 
         action_mask = jnp.array(
@@ -1419,59 +1419,59 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # move clock forward
         new_state = self._handle_move_clock_forward()
         bool_move_clock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # move clock backward
         new_state = self._handle_move_clock_backward()
         bool_move_clock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # move anticlock forward
         new_state = self._handle_move_anticlock_forward()
         bool_move_anticlock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # move anticlock backward
         new_state = self._handle_move_anticlock_backward()
         bool_move_anticlock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # cabin anticlock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state.agent.agent_state_1.angle_cabin
+            == self.agent.agent_state_1.angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+            new_state.agent.agent_state_1.loaded == self.agent.agent_state_1.loaded
         )
 
         action_mask = jnp.array(

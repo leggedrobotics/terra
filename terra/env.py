@@ -161,10 +161,10 @@ class TerraEnv(NamedTuple):
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
-            agent_pos=obs["agent_state"][..., [0, 1]],
-            base_dir=obs["agent_state"][..., [2]],
-            cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [4]],
+            agent_pos=obs["agent_state_1"][..., [0, 1]],
+            base_dir=obs["agent_state_1"][..., [2]],
+            cabin_dir=obs["agent_state_1"][..., [3]],
+            loaded=obs["agent_state_1"][..., [4]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
@@ -189,7 +189,7 @@ class TerraEnv(NamedTuple):
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
-            new_state.agent.agent_state.loaded,
+            new_state.agent.agent_state_1.loaded,
         )
 
         def _reset_branch(s, o, cfg):
@@ -231,17 +231,17 @@ class TerraEnv(NamedTuple):
         """
         Transforms a State object to an observation dictionary.
         """
-        agent_state = jnp.hstack(
+        agent_state_1 = jnp.hstack(
             [
-                state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
-                state.agent.agent_state.angle_base,
-                state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.loaded,
+                state.agent.agent_state_1.pos_base,  # pos_base is encoded in traversability_mask
+                state.agent.agent_state_1.angle_base,
+                state.agent.agent_state_1.angle_cabin,
+                state.agent.agent_state_1.loaded,
             ]
         )
         # Note: not all of those fields are used by the network for training!
         return {
-            "agent_state": agent_state,
+            "agent_state_1": agent_state_1,
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,
