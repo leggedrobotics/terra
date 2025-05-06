@@ -189,8 +189,8 @@ class TerraEnv(NamedTuple):
         new_state_1 = state._step(action1)
         reward_1 = state._get_reward(new_state_1, action1)
         new_state_2 = new_state_1._step(action2)
-        #reward_2 = new_state_1._get_reward(new_state_2, action2)
-        reward = reward_1 #+ reward_2
+        reward_2 = new_state_1._get_reward(new_state_2, action2)
+        reward = reward_1 + reward_2
         new_state = self.wrap_state(new_state_2)
         obs = self._state_to_obs_dict(new_state)
 
