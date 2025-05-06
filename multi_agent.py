@@ -46,7 +46,7 @@ from pygame.locals import (
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
+FORCE_DELEGATE_TO_LLM = True   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 25          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
@@ -206,9 +206,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             if not FORCE_DELEGATE_TO_RL:
                 try:
                     if USE_IMAGE_PROMPT:
-                        response = asyncio.run(call_agent_async(prompt, game_state_image, runner, USER_ID, SESSION_ID))
+                        response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, SESSION_ID))
                     else:
-                        response = asyncio.run(call_agent_async(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
+                        response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
                     llm_response_text = response
                     print(f"LLM response: {llm_response_text}")
                     if "delegate_to_rl" in llm_response_text.lower():

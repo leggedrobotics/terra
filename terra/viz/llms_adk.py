@@ -53,6 +53,7 @@ class LLM_query:
         #for i, message in enumerate(self.messages):
         message = self.messages[-1]
         async for event in self.runner.run_async(user_id=self.user_id, session_id=self.session_id, new_message=message):
+            print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}")
             if event.is_final_response():
                 if event.content and event.content.parts:
                     response_text = event.content.parts[0].text
@@ -377,7 +378,7 @@ class LLM_query:
         if self.model_key == 'gemini' or self.model_key == 'claude' or self.model_key == 'gpt':
                 # Check if the first message is a system message (using .role attribute)
                 if self.messages and isinstance(self.messages[0], types.Content) and self.messages[0].role == 'system':
-                    print("Removing oldest user/model pair after system message (Gemini).")
+                    print("Removing oldest user/model pair after system message.")
                     # Delete the oldest user message (at index 1 after system)
                     # and the oldest model message (at index 2 after system)
                     # Remove higher index first
@@ -389,7 +390,7 @@ class LLM_query:
                     # If only system message, do nothing as we need a pair to remove
 
                 else:
-                    print("Removing oldest user/model pair (Gemini).")
+                    print("Removing oldest user/model pair.")
                     # Delete the oldest user message (at index 0)
                     # and the oldest model message (at index 1)
                     # Remove higher index first

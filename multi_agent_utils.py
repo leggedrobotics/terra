@@ -19,7 +19,7 @@ def encode_image(cv_image):
     _, buffer = cv2.imencode(".jpg", cv_image)
     return base64.b64encode(buffer).decode("utf-8")
 
-async def call_agent_async(query: str, image, runner, user_id, session_id):
+async def call_agent_async_master(query: str, image, runner, user_id, session_id):
     """Sends a query to the agent and prints the final response."""
     #print(f"\n>>> User Query: {query}")
 
@@ -42,7 +42,7 @@ async def call_agent_async(query: str, image, runner, user_id, session_id):
     # We iterate through events to find the final answer.
     async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=user_content):
         # You can uncomment the line below to see *all* events during execution
-        # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
+        print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
 
         # Key Concept: is_final_response() marks the concluding message for the turn.
         if event.is_final_response():
@@ -116,7 +116,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
             model=llm_model_name_extended,
             description=description_master,
             instruction=system_message_master,
-            sub_agents=[llm_excavator_agent],
+            #sub_agents=[llm_excavator_agent],
         )
     else:
         llm_excavator_agent = Agent(
@@ -131,7 +131,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
             model=LiteLlm(model=llm_model_name_extended),
             description=description_master,
             instruction=system_message_master,
-            sub_agents=[llm_excavator_agent],
+            #sub_agents=[llm_excavator_agent],
         )
     
     
@@ -157,8 +157,34 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
         app_name=APP_NAME,
         session_service=session_service,
     )
-
     print(f"Runner initialized for agent {runner.agent.name}.")
+    
+
+    APP_NAME_2 = APP_NAME + "_excavator"
+    SESSION_ID_2 = SESSION_ID + "_excavator"
+    USER_ID_2 = USER_ID + "_excavator"     
+        
+    session_service_2 = InMemorySessionService()
+    session_2 = session_service_2.create_session(
+        app_name=APP_NAME_2,
+        user_id=USER_ID_2,
+        session_id=SESSION_ID_2,
+    )
+    runner_2 = Runner(
+        agent=llm_excavator_agent,
+        app_name=APP_NAME_2,
+        session_service=session_service_2,
+    )
+
+    llm_query = LLM_query(
+        model_name=llm_model_name_extended,
+        model=llm_model_key,
+        system_message=system_message_excavator,
+        env=env,
+        session_id=SESSION_ID_2,
+        runner=runner_2,
+        user_id=USER_ID_2,
+    )
 
     prev_actions = None
     if config:
@@ -168,17 +194,6 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
         )
     else:
         print("Warning: rl_config is None, prev_actions will not be initialized.")
-
-    llm_query = LLM_query(
-        model_name=llm_model_name_extended,
-        model=llm_model_key,
-        system_message=system_message_excavator,
-        env=env,
-        session_id=SESSION_ID,
-        runner=runner,
-        user_id=USER_ID,
-    )
-
     
     return llm_query, runner, prev_actions, system_message_master
 
