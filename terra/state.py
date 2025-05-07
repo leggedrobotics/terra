@@ -1033,6 +1033,34 @@ class State(NamedTuple):
         ).sum()
         return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
+    @staticmethod
+    def _get_dug_area_proximity_reward(
+        action_map_old: Array, action_map_new: Array
+    ) -> Float:
+        """
+        Returns a penalty for dumping soil within 2 tiles of any previously‐dug cell.
+        """
+        # Compute how much soil was newly dumped at each cell
+        dumped_old = jnp.clip(action_map_old, a_min=0)
+        dumped_new = jnp.clip(action_map_new, a_min=0)
+        dump_delta = jnp.clip(dumped_new - dumped_old, a_min=0)
+
+        # Mask of all cells that were dug
+        dug_mask = (action_map_new < 0).astype(IntMap)
+
+        # Build a 5×5 “any‐dug” filter by convolving dug_mask with a 5×5 ones kernel
+        kernel = jnp.ones((5, 5), dtype=IntMap)
+        nearby_dug_count = jax.scipy.signal.convolve2d(
+            dug_mask, kernel, mode="same", boundary="fill", fillvalue=0
+        )
+        # nearby_mask[i,j] == True iff there was at least one dug tile in ±2 window
+        nearby_dug_mask = nearby_dug_count > 0
+
+        # Penalty = sum of (amount dumped × nearby_dug_mask)
+        penalty = (dump_delta.astype(jnp.float32) * nearby_dug_mask.astype(jnp.float32)).sum()
+
+        return penalty
+
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
@@ -1092,7 +1120,16 @@ class State(NamedTuple):
             dump_reward_fn,
         )
 
-        return dig_reward + dump_reward
+        dig_proximity_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: 0.0,
+            lambda: self._get_dug_area_proximity_reward(
+                self.world.dig_map.map,
+                new_state.world.action_map.map,
+            ) * self.env_cfg.rewards.dump_close_to_dug_area,
+        )
+
+        return dig_reward + dump_reward + dig_proximity_reward
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
