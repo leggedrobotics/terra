@@ -216,48 +216,37 @@ class CurriculumGlobalConfig(NamedTuple):
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
-    #     {
-    #         "maps_path": "terra/trenches/easy_size_large",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 800,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/medium_size_large_diagonal",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/hard_size_large",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 800,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/hard_size_large_diagonal",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations_large",
-    #         "max_steps_in_episode": 1000,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
+        {
+            "maps_path": "trenches/easy",
+            "max_steps_in_episode": 300,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "trenches/medium",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "trenches/hard",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "foundations",
+            "max_steps_in_episode": 800,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "trenches/hard",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        
     ]
 
 
