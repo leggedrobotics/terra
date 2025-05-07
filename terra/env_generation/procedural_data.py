@@ -48,116 +48,243 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
 
 
 def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
-    """
-    Generate orthogonal trenches in `img`.  New branches (after the first)
-    start only at endpoints or midpoints of existing branches,
-    and always at 90° to the segment they attach to.
-    Returns (img_with_trenches, cumulative_mask, metadata) or (None, None, None).
-    """
-    min_ss, max_ss = sizes_small
-    min_sl, max_sl = sizes_long
-    min_e,  max_e  = edges_range
+    min_ssmall, max_ssmall = sizes_small
+    min_slong, max_slong = sizes_long
+    min_edges, max_edges = edges_range
+    n_edges = np.random.randint(min_edges, max_edges + 1)
 
-    n_edges = np.random.randint(min_e, max_e+1)
-    w, h = img.shape[0], img.shape[1]
+    if n_edges == 0:
+        # If no edges, return the original image and empty metadata,
+        # but it likely won't pass the margin check later.
+        # Consider what an appropriate empty/neutral state should be.
+        # For now, let's ensure it returns something that doesn't break downstream.
+        metadata = {
+            "real_dimensions": {"width": float(img.shape[1]), "height": float(img.shape[0])},
+            "axes_ABC": [],
+            "lines_pts": [],
+        }
+        return img.copy(), np.zeros_like(img[..., 0], dtype=bool), metadata
 
-    # Each entry: { "pt1":(col,row), "pt2":(col,row), "horizontal":bool }
-    segments = []
-    cumulative_mask = np.zeros((w,h), dtype=bool)
 
-    for i in range(n_edges):
-        if i == 0:
-            # pick ANY pixel to start
-            idx = np.random.randint(0, w*h)
-            x0 = idx // h
-            y0 = idx %  h
-            # choose random orientation
-            horizontal = bool(np.random.choice([0,1]))
-        else:
-            # pick a random endpoint or midpoint AND its source segment
-            choices = []
-            for seg in segments:
-                p1, p2 = seg["pt1"], seg["pt2"]
-                mid = ((p1[0]+p2[0])/2, (p1[1]+p2[1])/2)
-                choices.append((p1, seg))
-                choices.append((p2, seg))
-                choices.append((mid, seg))
-            (col0, row0), src = random.choice(choices)
-            y0 = int(round(col0))
-            x0 = int(round(row0))
-            # new branch must be perpendicular to src
-            horizontal = not src["horizontal"]
+    img_rows, img_cols = img.shape[0], img.shape[1]
+    lines_abc = [] # Renamed from lines_abc_list
+    lines_pts = [] # Renamed from lines_pts_list
+    
+    # Stores details of generated edges:
+    # {'axis_pt1': (col,row), 'axis_pt2': (col,row), 'is_horizontal': bool,
+    #  'rect_origin_row': int, 'rect_origin_col': int,
+    #  'rect_height_rows': int, 'rect_width_cols': int}
+    generated_edge_details = []
+    
+    cumulative_mask = np.zeros_like(img[..., 0], dtype=bool)
 
-        # clamp start‐pixel
-        x0 = max(0, min(x0, w-1))
-        y0 = max(0, min(y0, h-1))
+    for edge_i in range(n_edges):
+        current_size_small = np.random.randint(min_ssmall, max_ssmall + 1)
+        current_size_long = np.random.randint(min_slong, max_slong + 1)
 
-        # branch thickness vs length
-        thickness = np.random.randint(min_ss, max_ss+1)
-        length    = np.random.randint(min_sl, max_sl+1)
+        # Ensure sizes are at least 1
+        current_size_small = max(1, current_size_small)
+        current_size_long = max(1, current_size_long)
 
-        # compute rectangle so that its *edge* sits on (x0,y0)
-        if horizontal:
-            # horizontal trench: length along cols, thickness in rows
-            row0 = x0 - thickness//2
-            col0 = y0 if src is None else y0  # always start *at* y0
-            row0 = max(0, min(row0, w - thickness))
-            col0 = max(0, min(col0, h - length))
-            # final dims
-            dx, dy = thickness, length
-            # mid‐row for the axis
-            row_mid = row0 + thickness//2
-            pt1 = (float(col0),            float(row_mid))
-            pt2 = (float(col0 + length-1), float(row_mid))
-        else:
-            # vertical trench: length along rows, thickness in cols
-            row0 = x0 if src is None else x0
-            col0 = y0 - thickness//2
-            row0 = max(0, min(row0, w - length))
-            col0 = max(0, min(col0, h - thickness))
-            dx, dy = length, thickness
-            col_mid = col0 + thickness//2
-            pt1 = (float(col_mid), float(row0))
-            pt2 = (float(col_mid), float(row0 + length-1))
+        new_edge_is_horizontal = False
+        axis_pt1, axis_pt2 = None, None
+        
+        # Declare rect properties that will be defined in if/else
+        rect_origin_row, rect_origin_col = 0, 0
+        rect_height_rows, rect_width_cols = 0, 0
 
-        # skip if dims invalid
-        if dx <= 0 or dy <= 0:
+
+        if not generated_edge_details: # First edge
+            new_edge_is_horizontal = random.choice([True, False])
+            
+            ideal_rect_height_rows, ideal_rect_width_cols = \
+                (current_size_small, current_size_long) if new_edge_is_horizontal else \
+                (current_size_long, current_size_small)
+
+            # Max starting row/col ensures the ideal rect *could* start there
+            # It doesn't guarantee it fits, that's handled by clipping.
+            # Ensure upper bound of randint is at least 0.
+            max_start_row = max(0, img_rows - ideal_rect_height_rows)
+            max_start_col = max(0, img_cols - ideal_rect_width_cols)
+            
+            # If image is smaller than ideal rect, start at 0,0
+            start_row_candidate = np.random.randint(0, max_start_row + 1) if max_start_row >=0 else 0
+            start_col_candidate = np.random.randint(0, max_start_col + 1) if max_start_col >=0 else 0
+            
+            rect_origin_row = start_row_candidate
+            rect_origin_col = start_col_candidate
+
+            rect_height_rows = min(ideal_rect_height_rows, img_rows - rect_origin_row)
+            rect_width_cols = min(ideal_rect_width_cols, img_cols - rect_origin_col)
+
+            if rect_height_rows <= 0 or rect_width_cols <= 0:
+                # First edge couldn't be placed (e.g. image too small for min_sizes)
+                return None, None, None 
+
+            if new_edge_is_horizontal:
+                axis_row_coord = rect_origin_row + (rect_height_rows - 1) / 2.0
+                axis_pt1 = (float(rect_origin_col), axis_row_coord)
+                axis_pt2 = (float(rect_origin_col + rect_width_cols - 1), axis_row_coord)
+            else: # Vertical
+                axis_col_coord = rect_origin_col + (rect_width_cols - 1) / 2.0
+                axis_pt1 = (axis_col_coord, float(rect_origin_row))
+                axis_pt2 = (axis_col_coord, float(rect_origin_row + rect_height_rows - 1))
+            
+        else: # Subsequent edges
+            if not generated_edge_details: # Should not happen if n_edges > 0
+                 return None, None, None # Safety break
+
+            parent_edge = random.choice(generated_edge_details)
+            new_edge_is_horizontal = not parent_edge['is_horizontal']
+
+            parent_ax_p1_col, parent_ax_p1_row = parent_edge['axis_pt1']
+            parent_ax_p2_col, parent_ax_p2_row = parent_edge['axis_pt2']
+
+            attach_choice = random.randint(0, 2) # 0: midpoint, 1: endpoint1, 2: endpoint2
+            if attach_choice == 0:
+                attach_col = (parent_ax_p1_col + parent_ax_p2_col) / 2.0
+                attach_row = (parent_ax_p1_row + parent_ax_p2_row) / 2.0
+            elif attach_choice == 1:
+                attach_col, attach_row = parent_ax_p1_col, parent_ax_p1_row
+            else:
+                attach_col, attach_row = parent_ax_p2_col, parent_ax_p2_row
+
+            ideal_rect_height_rows, ideal_rect_width_cols = \
+                (current_size_small, current_size_long) if new_edge_is_horizontal else \
+                (current_size_long, current_size_small)
+            
+            extension_direction = random.choice([-1, 1])
+
+            # Calculate initial unclipped rectangle origin and axis points
+            unclipped_rect_origin_row, unclipped_rect_origin_col = 0,0
+            unclipped_axis_pt1, unclipped_axis_pt2 = (0,0),(0,0)
+
+            if new_edge_is_horizontal:
+                # New edge's axis is horizontal, passing through attach_row
+                new_axis_row_coord = attach_row
+                unclipped_rect_origin_row = round(new_axis_row_coord - (ideal_rect_height_rows - 1) / 2.0)
+                
+                if extension_direction == 1: # Extends "positively" (right for horizontal)
+                    unclipped_rect_origin_col = round(attach_col)
+                    unclipped_axis_pt1 = (float(attach_col), new_axis_row_coord)
+                    unclipped_axis_pt2 = (float(attach_col + ideal_rect_width_cols - 1), new_axis_row_coord)
+                else: # Extends "negatively" (left for horizontal)
+                    unclipped_rect_origin_col = round(attach_col - (ideal_rect_width_cols - 1))
+                    unclipped_axis_pt1 = (float(attach_col - (ideal_rect_width_cols - 1)), new_axis_row_coord)
+                    unclipped_axis_pt2 = (float(attach_col), new_axis_row_coord)
+            else: # New edge is vertical
+                # New edge's axis is vertical, passing through attach_col
+                new_axis_col_coord = attach_col
+                unclipped_rect_origin_col = round(new_axis_col_coord - (ideal_rect_width_cols - 1) / 2.0)
+
+                if extension_direction == 1: # Extends "positively" (down for vertical)
+                    unclipped_rect_origin_row = round(attach_row)
+                    unclipped_axis_pt1 = (new_axis_col_coord, float(attach_row))
+                    unclipped_axis_pt2 = (new_axis_col_coord, float(attach_row + ideal_rect_height_rows - 1))
+                else: # Extends "negatively" (up for vertical)
+                    unclipped_rect_origin_row = round(attach_row - (ideal_rect_height_rows - 1))
+                    unclipped_axis_pt1 = (new_axis_col_coord, float(attach_row - (ideal_rect_height_rows - 1)))
+                    unclipped_axis_pt2 = (new_axis_col_coord, float(attach_row))
+
+            # Clip to image boundaries
+            rect_origin_row = int(max(0, unclipped_rect_origin_row))
+            rect_origin_col = int(max(0, unclipped_rect_origin_col))
+            
+            rect_height_rows = min(ideal_rect_height_rows, img_rows - rect_origin_row)
+            rect_width_cols = min(ideal_rect_width_cols, img_cols - rect_origin_col)
+            
+            # Ensure dimensions are positive after clipping
+            rect_height_rows = max(0, rect_height_rows)
+            rect_width_cols = max(0, rect_width_cols)
+
+            if rect_height_rows <= 0 or rect_width_cols <= 0:
+                continue # Skip this edge if it cannot be placed
+
+            # Recalculate axis points for the *actual* (clipped) rectangle
+            if new_edge_is_horizontal:
+                final_axis_row = rect_origin_row + (rect_height_rows - 1) / 2.0
+                # The axis starts at the rect_origin_col and spans rect_width_cols
+                axis_pt1 = (float(rect_origin_col), final_axis_row)
+                axis_pt2 = (float(rect_origin_col + rect_width_cols - 1), final_axis_row)
+            else: # New edge is vertical
+                final_axis_col = rect_origin_col + (rect_width_cols - 1) / 2.0
+                axis_pt1 = (final_axis_col, float(rect_origin_row))
+                axis_pt2 = (final_axis_col, float(rect_origin_row + rect_height_rows - 1))
+
+        # Ensure axis points are ordered (pt1's coord <= pt2's coord) for consistency
+        if axis_pt1[0] > axis_pt2[0] or axis_pt1[1] > axis_pt2[1]:
+            axis_pt1, axis_pt2 = axis_pt2, axis_pt1
+        
+        # Draw the edge
+        # Ensure rect_origin and dimensions are integers for slicing
+        final_rect_origin_row = int(rect_origin_row)
+        final_rect_origin_col = int(rect_origin_col)
+        final_rect_height = int(rect_height_rows)
+        final_rect_width = int(rect_width_cols)
+
+        if final_rect_height <= 0 or final_rect_width <= 0: # Should be caught by earlier continue
             continue
 
-        # paint trench
-        img[row0:row0+dx, col0:col0+dy] = np.array(color_dict["digging"])
-        # update mask
-        m = np.zeros((w,h), dtype=bool)
-        m[row0:row0+dx, col0:col0+dy] = True
-        cumulative_mask |= m
+        img[
+            final_rect_origin_row : final_rect_origin_row + final_rect_height,
+            final_rect_origin_col : final_rect_origin_col + final_rect_width,
+        ] = np.array(color_dict["digging"])
 
-        # store for next branching + metadata‐ABC
-        segments.append({
-            "pt1": pt1, "pt2": pt2, "horizontal": horizontal
+        A_coeff = axis_pt2[1] - axis_pt1[1]  # row2 - row1
+        B_coeff = axis_pt1[0] - axis_pt2[0]  # col1 - col2
+        C_coeff = axis_pt2[0] * axis_pt1[1] - axis_pt1[0] * axis_pt2[1] # col2*row1 - col1*row2
+        lines_abc.append({"A": float(A_coeff), "B": float(B_coeff), "C": float(C_coeff)})
+        lines_pts.append([axis_pt1, axis_pt2])
+
+        mask_for_edge = np.ones((final_rect_height, final_rect_width), dtype=bool)
+        cumulative_mask[
+            final_rect_origin_row : final_rect_origin_row + final_rect_height,
+            final_rect_origin_col : final_rect_origin_col + final_rect_width,
+        ] = cumulative_mask[
+            final_rect_origin_row : final_rect_origin_row + final_rect_height,
+            final_rect_origin_col : final_rect_origin_col + final_rect_width,
+        ] | mask_for_edge
+
+        generated_edge_details.append({
+            'axis_pt1': axis_pt1, 'axis_pt2': axis_pt2,
+            'is_horizontal': new_edge_is_horizontal,
+            'rect_origin_row': final_rect_origin_row,
+            'rect_origin_col': final_rect_origin_col,
+            'rect_height_rows': final_rect_height,
+            'rect_width_cols': final_rect_width
         })
 
-    # sanity‐check: no digging in center
-    ix = int(w*0.15); iy = int(h*0.15)
-    test = img.copy()
-    test[ix:w-ix, iy:h-iy] = np.array(color_dict["neutral"])
-    if np.any(_get_img_mask(test, color_dict["digging"])):
+    if not generated_edge_details and n_edges > 0 : # All edges failed to be placed
         return None, None, None
 
-    # build metadata
-    axes = []
-    for seg in segments:
-        A = seg["pt2"][1] - seg["pt1"][1]
-        B = seg["pt1"][0] - seg["pt2"][0]
-        C = seg["pt2"][0]*seg["pt1"][1] - seg["pt1"][0]*seg["pt2"][1]
-        axes.append({"A":float(A),"B":float(B),"C":float(C)})
+    # Margin check (same as original)
+    ixts = img.shape[0]
+    iyts = img.shape[1]
+    ixt = int(ixts * 0.15)
+    iyt = int(iyts * 0.15)
+    img_test = img.copy()
+    
+    neutral_color_arr = np.array(color_dict["neutral"])
+    # Ensure the slice for neutral color is valid
+    slice_row_start, slice_row_end = ixt, ixts - ixt
+    slice_col_start, slice_col_end = iyt, iyts - iyt
+
+    if slice_row_start < slice_row_end and slice_col_start < slice_col_end:
+        if img_test.ndim == 3 and neutral_color_arr.ndim == 1 and neutral_color_arr.shape[0] == img_test.shape[2]:
+            img_test[slice_row_start:slice_row_end, slice_col_start:slice_col_end, :] = neutral_color_arr
+        elif img_test.ndim == neutral_color_arr.ndim: # e.g. grayscale or already matching
+             img_test[slice_row_start:slice_row_end, slice_col_start:slice_col_end] = neutral_color_arr
+        # Add more sophisticated handling if needed, or ensure color_dict["neutral"] is always appropriate
+    
+    if np.any(_get_img_mask(img_test, color_dict["digging"])):
+        return None, None, None
 
     metadata = {
-        "real_dimensions": {"width":float(h),"height":float(w)},
-        "axes_ABC": axes,
-        "lines_pts": [(s["pt1"],s["pt2"]) for s in segments]
+        "real_dimensions": {"width": float(img_cols), "height": float(img_rows)},
+        "axes_ABC": lines_abc,
+        "lines_pts": lines_pts,
     }
     return img, cumulative_mask, metadata
-
 
 def generate_diagonal_edges(img, edges_range, sizes_small, sizes_long, color_dict):
     """
