@@ -47,7 +47,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
-LLM_CALL_FREQUENCY = 25          # Number of steps between LLM calls
+LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
@@ -173,7 +173,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     count_RL = 0
     count_LLM_master = 0
     count_LLM_excavator = 0
-    count_act_direct = 0
+    count_stop = 0
 
     while playing and step < num_timesteps:
         # for event in pg.event.get():
@@ -232,9 +232,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 observation_str = str(current_observation)
 
             if USE_IMAGE_PROMPT:
-                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}\n\nDecide: Act directly (provide action details) or delegate digging to RL ('delegate_to_rl') or to LLM ('delegate_to_llm')?"
+                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
             else:
-                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}\n\nDecide: Act directly (provide action details) or delegate digging ('delegate_to_rl') or to LLM ('delegate_to_llm')?"
+                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
             #print(f"Prompt: {prompt}")
 
             llm_decision = "act directly"  # Placeholder for the LLM decision
@@ -246,11 +246,20 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                         response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, SESSION_ID))
                     else:
                         response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
+                    
                     llm_response_text = response
                     print(f"LLM response: {llm_response_text}")
+                    
                     if "delegate_to_rl" in llm_response_text.lower():
                         llm_decision = "delegate_to_rl"
                         last_llm_decision = llm_decision # Update last decision
+                        print("Delegating to RL agent based on LLM response.")
+                    elif "delegate_to_llm" in llm_response_text.lower():
+                        llm_decision = "delegate_to_llm"
+                        last_llm_decision = llm_decision
+                        print("Delegating to LLM agent based on LLM response.")
+                    else:
+                        llm_decision = "STOP"                    
 
                 except Exception as adk_err:
                     print(f"Error during ADK agent communication: {adk_err}")
@@ -261,9 +270,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
                 last_llm_decision = llm_decision # Update last decision
+
+
         if FORCE_DELEGATE_TO_LLM:
             llm_decision= "delegate_to_llm" # For testing, force delegation to LLM agent
-        #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
+
+        #llm_decision= "stop"
+
+        ### Delegation ###
         if llm_decision == "delegate_to_rl":
             print("Delegating to RL agent...")
             count_RL += 1
@@ -285,7 +299,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 llm_decision = "fallback" # Mark as fallback
                 last_llm_decision = llm_decision # Update last decision
         elif llm_decision == "delegate_to_llm":
-            print("Acting directly based on LLM decision...")
+            print("Delegate to LLM excavator...")
             count_LLM_excavator += 1
 
 
@@ -340,24 +354,28 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             action_list.append(action)
 
         else:
+            print("Master Agent stop.")
+            #playing = False
+            # if llm_decision != "delegate_to_rl" or llm_decision != "delegate_to_llm":
 
-            if llm_decision != "delegate_to_rl" or llm_decision != "delegate_to_llm":
-                print("Master Agent acts directly (or RL agent unavailable/ADK error).")
                 
-                # TODO PASS LLM response to a function that parses the action
-                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
-                action_list.append(action)
-                count_act_direct += 1
-            else:
-                # This case means delegation was intended but RL agent wasn't loaded properly
-                print("Error: Delegation requested, but RL agent is not available. Using do nothing action.")
-                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
-                action_list.append(action)
-                llm_decision = "fallback"
-                last_llm_decision = llm_decision # Update last decision
-        
+            #     # TODO PASS LLM response to a function that parses the action
+            action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+            action_list.append(action)
+            count_stop += 1
+            # else:
+            #     # This case means delegation was intended but RL agent wasn't loaded properly
+            #     print("Error: Delegation requested, but RL agent is not available. Using do nothing action.")
+            #     action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+            #     action_list.append(action)
+            #     llm_decision = "fallback"
+                #last_llm_decision = llm_decision # Update last decision
+        ### End Delegation ###
+        ###delete messages if too many###
+
         if len(llm_query.messages) > 3:
             llm_query.delete_messages()
+        ### perform action ###
 
         if action is not None:
 
@@ -386,7 +404,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         step += 1
 
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
-    print(f"LLM Master calls: {count_LLM_master}, Act directly calls: {count_act_direct}, RL agent calls: {count_RL}, LLM Excavator calls: {count_LLM_excavator}")
+    print(f"LLM Master calls: {count_LLM_master}, stop calls: {count_stop}, RL agent calls: {count_RL}, LLM Excavator calls: {count_LLM_excavator}")
     #assert num_timesteps == count_act_direct + count_RL + count_LLM_excavator, "The number of steps does not match the expected number of actions taken."
     #print(len(action_list), len(reward_seq), len(obs_seq))
     

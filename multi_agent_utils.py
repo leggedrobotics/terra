@@ -74,12 +74,12 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     print("Using model: ", llm_model_name_extended)
 
     description_master = "You are a master agent controlling an excavator. Observe the state. " \
-    "Decide if you should act directly (provide action) or delegate digging tasks to a " \
+    "Decide if you should delegate digging tasks to a " \
     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
     "specialized LLM agent (respond with 'delegate_to_llm')."
 
     system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
-    "Decide if you should act directly (provide action) or delegate digging tasks to a " \
+    "Decide if you should delegate digging tasks to a " \
     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
     "specialized LLM agent (respond with 'delegate_to_llm')."
 
