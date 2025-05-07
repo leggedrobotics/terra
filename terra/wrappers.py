@@ -27,9 +27,16 @@ class TraversabilityMaskWrapper:
         traversability_mask = (state.world.action_map.map != 0).astype(IntLowDim)
 
         # encode agent pos and size in the map
-        agent_corners = state._get_agent_corners(
+        agent_corners_1 = state._get_agent_corners(
             state.agent.agent_state_1.pos_base,
             state.agent.agent_state_1.angle_base,
+            state.env_cfg.agent.width,
+            state.env_cfg.agent.height,
+        )
+
+        agent_corners_2 = state._get_agent_corners(
+            state.agent.agent_state_2.pos_base,
+            state.agent.agent_state_2.angle_base,
             state.env_cfg.agent.width,
             state.env_cfg.agent.height,
         )
@@ -37,8 +44,10 @@ class TraversabilityMaskWrapper:
         map_width = state.world.width
         map_height = state.world.height
         
-        polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
-        traversability_mask = jnp.where(polygon_mask, -1, traversability_mask)
+        polygon_mask1 = compute_polygon_mask(agent_corners_1, map_width, map_height)
+        polygon_mask2 = compute_polygon_mask(agent_corners_1, map_width, map_height)
+        traversability_mask = jnp.where(polygon_mask1, -1, traversability_mask)
+        traversability_mask = jnp.where(polygon_mask2, -1, traversability_mask)
 
         padding_mask = state.world.padding_mask.map
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
