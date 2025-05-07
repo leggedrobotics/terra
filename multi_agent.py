@@ -193,10 +193,21 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         tuple([i for i in range(len(target_maps_init.shape))][1:])
     )
 
+    areas_list = []
+    areas_list.append(areas)
+
     episode_done_once = None
     episode_length = None
     move_cumsum = None
     do_cumsum = None
+
+    episode_done_once_list = []
+    episode_length_list = []
+    move_cumsum_list = []
+    do_cumsum_list = []
+    dug_tiles_per_action_map_list = []
+    dig_tiles_per_target_map_init_list = []
+    dig_tiles_per_target_map_init_list.append(dig_tiles_per_target_map_init)
 
     count_RL = 0
     count_LLM_master = 0
@@ -221,6 +232,35 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         if previous_map is None or not jnp.array_equal(previous_map, current_map):
             print("Map changed!")
             count_map_change += 1
+
+            episode_done_once_list.append(episode_done_once)
+            episode_length_list.append(episode_length)
+            move_cumsum_list.append(move_cumsum)
+            do_cumsum_list.append(do_cumsum)
+
+    
+
+            # Reset the variables for the next episode
+            episode_done_once = None
+            episode_length = None
+            move_cumsum = None
+            do_cumsum = None
+
+            tile_size = env_cfgs.tile_size[0].item()
+            move_tiles = env_cfgs.agent.move_tiles[0].item()
+            obs = timestep.observation
+            areas = (obs["target_map"] == -1).sum(
+                tuple([i for i in range(len(obs["target_map"].shape))][1:])
+                ) * (tile_size**2)
+            target_maps_init = obs["target_map"].copy()
+            dig_tiles_per_target_map_init = (target_maps_init == -1).sum(
+                tuple([i for i in range(len(target_maps_init.shape))][1:])
+                )
+
+            areas_list.append(areas)
+            dig_tiles_per_target_map_init_list.append(dig_tiles_per_target_map_init)
+
+
             initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
             print("Current target number: ", initial_target_num)
 
@@ -420,6 +460,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             next_obs = timestep.observation
             done = timestep.info["task_done"]
 
+            if done:
+                dug_tiles_per_action_map = (current_observation["action_map"] == -1).sum()
+                dug_tiles_per_action_map_list.append(dug_tiles_per_action_map)
+
             reward_seq.append(timestep.reward)
             print(t_counter, timestep.reward, action, timestep.done)
             print(10 * "=")
@@ -468,34 +512,86 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     # for o in tqdm(obs_seq, desc="Rendering"):
     #     env.terra_env.render_obs_pygame(o, generate_gif=True)
     # Path efficiency -- only include finished envs
-    move_cumsum *= episode_done_once
-    path_efficiency = (move_cumsum / jnp.sqrt(areas))[episode_done_once]
-    path_efficiency_std = path_efficiency.std()
-    path_efficiency_mean = path_efficiency.mean()
-
-
-    # Workspaces efficiency -- only include finished envs
-    reference_workspace_area = 0.5 * np.pi * (8**2)
-    n_dig_actions = do_cumsum // 2
-    workspaces_efficiency = (
-        reference_workspace_area
-        * ((n_dig_actions * episode_done_once) / areas)[episode_done_once]
-    )
-    workspaces_efficiency_mean = workspaces_efficiency.mean()
-    workspaces_efficiency_std = workspaces_efficiency.std()
-
-    # Coverage scores
-    dug_tiles_per_action_map = (obs["action_map"] == -1).sum(
-        tuple([i for i in range(len(obs["action_map"].shape))][1:])
-    )
-    coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
-    coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
-    coverage_score_mean = coverage_scores.mean()
-    coverage_score_std = coverage_scores.std()    
     
+    print(f"Episode done once list {episode_done_once_list}\n"
+            f"Episode length list {episode_length_list}\n"
+            f"Move cumsum list {move_cumsum_list}\n"
+            f"Do cumsum list {do_cumsum_list}\n"
+            f"dug tiles per action map list {dug_tiles_per_action_map_list}\n")
+
+    length = len(episode_done_once_list)
+
+    path_efficiency_list = []
+    workspaces_efficiency_list = []
+    coverage_scores_list = []
+    coverage_ratios_list = []
+
+    for i in range(length):
+        move_cumsum = move_cumsum_list[i]
+        do_cumsum = do_cumsum_list[i]
+        areas = areas_list[i]
+        episode_done_once = episode_done_once_list[i]
+        episode_length = episode_length_list[i]
+        dug_tiles_per_action_map = dug_tiles_per_action_map_list[i]
+        dig_tiles_per_target_map_init = dig_tiles_per_target_map_init_list[i]
+
+        move_cumsum *= episode_done_once
+        path_efficiency = (move_cumsum / jnp.sqrt(areas))[episode_done_once]
+        path_efficiency_list.append(path_efficiency)
+
+        reference_workspace_area = 0.5 * np.pi * (8**2)
+        n_dig_actions = do_cumsum // 2
+        workspaces_efficiency = (
+            reference_workspace_area
+            *((n_dig_actions * episode_done_once) / areas)[episode_done_once]
+        )
+        workspaces_efficiency_list.append(workspaces_efficiency)
+
+        coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
+        coverage_ratios_list.append(coverage_ratios)
+        coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
+        coverage_scores_list.append(coverage_scores)
+
+
+    path_efficiency_std = np.array(path_efficiency_list).std()
+    path_efficiency_mean = np.array(path_efficiency_list).mean()
+    print(path_efficiency_list)
+    print(f"Path efficiency mean: {path_efficiency_mean}, std: {path_efficiency_std}")
+    workspaces_efficiency_std = np.array(workspaces_efficiency_list).std()
+    workspaces_efficiency_mean = np.array(workspaces_efficiency_list).mean()
+    print(f"Workspaces efficiency mean: {workspaces_efficiency_mean}, std: {workspaces_efficiency_std}")
+    print(workspaces_efficiency_list)
+    coverage_score_std = np.array(coverage_scores_list).std()
+    coverage_score_mean = np.array(coverage_scores_list).mean()
+    print(f"Coverage score mean: {coverage_score_mean}, std: {coverage_score_std}")
+    print(coverage_scores_list)
+
+
+
+    # # Workspaces efficiency -- only include finished envs
+    # reference_workspace_area = 0.5 * np.pi * (8**2)
+    # n_dig_actions = do_cumsum // 2
+    # workspaces_efficiency = (
+    #     reference_workspace_area
+    #     * ((n_dig_actions * episode_done_once) / areas)[episode_done_once]
+    # )
+    # workspaces_efficiency_mean = workspaces_efficiency.mean()
+    # workspaces_efficiency_std = workspaces_efficiency.std()
+
+    # # Coverage scores
+    # dug_tiles_per_action_map = (obs["action_map"] == -1).sum(
+    #     tuple([i for i in range(len(obs["action_map"].shape))][1:])
+    # )
+    # coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
+    # coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
+    # coverage_score_mean = coverage_scores.mean()
+    # coverage_score_std = coverage_scores.std()
+    # 
+    #     
+    print(f"Episode done once: {episode_done_once}")
     stats = {
-        "episode_done_once": episode_done_once,
-        "episode_length": episode_length,
+        "episode_done_once": np.array(episode_done_once_list),
+        "episode_length": np.array(episode_length_list),
         "path_efficiency": {
             "mean": path_efficiency_mean,
             "std": path_efficiency_std,
@@ -509,7 +605,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             "std": coverage_score_std,
         },
     }
-    print(episode_done_once)
+    # print(episode_done_once)
     print_stats(stats)
 
 
