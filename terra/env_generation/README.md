@@ -99,5 +99,5 @@ All generated data undergoes format conversion for training:
 
 2. **Output Structure**:
    - Final data is organized in the `/data/terra/train/` directory
-   - Subdirectories include foundations, trenches (with difficulty levels), and squares
+   - Subdirectories include foundations, trenches (with difficulty levels) and custom maps
    - Each environment has consistent format and metadata
