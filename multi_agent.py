@@ -24,6 +24,12 @@ from multi_agent_utils import *
 from multi_agent_map import *
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
+from terra.actions import (
+    WheeledAction,
+    TrackedAction,
+    WheeledActionType,
+    TrackedActionType,
+)
 
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
@@ -46,7 +52,7 @@ from pygame.locals import (
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -171,6 +177,26 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     except FileNotFoundError as e:
         print(f"ERROR: Prompt template file not found: {e.filename}")
         # Handle the error appropriately, e.g., exit or use a default prompt
+    
+    
+    move_actions = (TrackedActionType.FORWARD, TrackedActionType.BACKWARD)
+    l_actions = ()
+    do_action = TrackedActionType.DO
+    tile_size = env_cfgs.tile_size[0].item()
+    move_tiles = env_cfgs.agent.move_tiles[0].item()
+    obs = timestep.observation
+    areas = (obs["target_map"] == -1).sum(
+        tuple([i for i in range(len(obs["target_map"].shape))][1:])
+    ) * (tile_size**2)
+    target_maps_init = obs["target_map"].copy()
+    dig_tiles_per_target_map_init = (target_maps_init == -1).sum(
+        tuple([i for i in range(len(target_maps_init.shape))][1:])
+    )
+
+    episode_done_once = None
+    episode_length = None
+    move_cumsum = None
+    do_cumsum = None
 
     count_RL = 0
     count_LLM_master = 0
@@ -389,11 +415,40 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             timestep = env.step(
                 timestep, wrap_action(action, env.batch_cfg.action_type), rng_step
             )
+            
+            reward = timestep.reward
+            next_obs = timestep.observation
+            done = timestep.info["task_done"]
 
             reward_seq.append(timestep.reward)
             print(t_counter, timestep.reward, action, timestep.done)
             print(10 * "=")
             t_counter += 1
+
+            obs = next_obs
+
+            if episode_done_once is None:
+                episode_done_once = done
+            if episode_length is None:
+                episode_length = jnp.zeros_like(done, dtype=jnp.int32)
+            if move_cumsum is None:
+                move_cumsum = jnp.zeros_like(done, dtype=jnp.int32)
+            if do_cumsum is None:
+                do_cumsum = jnp.zeros_like(done, dtype=jnp.int32)
+            episode_done_once = episode_done_once | done
+
+            episode_length += ~episode_done_once
+
+            move_cumsum_tmp = jnp.zeros_like(done, dtype=jnp.int32)
+            for move_action in move_actions:
+                move_mask = (action == move_action) * (~episode_done_once)
+                move_cumsum_tmp += move_tiles * tile_size * move_mask.astype(jnp.int32)
+            for l_action in l_actions:
+                l_mask = (action == l_action) * (~episode_done_once)
+                move_cumsum_tmp += 2 * move_tiles * tile_size * l_mask.astype(jnp.int32)
+            move_cumsum += move_cumsum_tmp
+
+            do_cumsum += (action == do_action) * (~episode_done_once)
 
             env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
@@ -412,6 +467,51 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     
     # for o in tqdm(obs_seq, desc="Rendering"):
     #     env.terra_env.render_obs_pygame(o, generate_gif=True)
+    # Path efficiency -- only include finished envs
+    move_cumsum *= episode_done_once
+    path_efficiency = (move_cumsum / jnp.sqrt(areas))[episode_done_once]
+    path_efficiency_std = path_efficiency.std()
+    path_efficiency_mean = path_efficiency.mean()
+
+
+    # Workspaces efficiency -- only include finished envs
+    reference_workspace_area = 0.5 * np.pi * (8**2)
+    n_dig_actions = do_cumsum // 2
+    workspaces_efficiency = (
+        reference_workspace_area
+        * ((n_dig_actions * episode_done_once) / areas)[episode_done_once]
+    )
+    workspaces_efficiency_mean = workspaces_efficiency.mean()
+    workspaces_efficiency_std = workspaces_efficiency.std()
+
+    # Coverage scores
+    dug_tiles_per_action_map = (obs["action_map"] == -1).sum(
+        tuple([i for i in range(len(obs["action_map"].shape))][1:])
+    )
+    coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
+    coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
+    coverage_score_mean = coverage_scores.mean()
+    coverage_score_std = coverage_scores.std()    
+    
+    stats = {
+        "episode_done_once": episode_done_once,
+        "episode_length": episode_length,
+        "path_efficiency": {
+            "mean": path_efficiency_mean,
+            "std": path_efficiency_std,
+        },
+        "workspaces_efficiency": {
+            "mean": workspaces_efficiency_mean,
+            "std": workspaces_efficiency_std,
+        },
+        "coverage": {
+            "mean": coverage_score_mean,
+            "std": coverage_score_std,
+        },
+    }
+    print(episode_done_once)
+    print_stats(stats)
+
 
     # Calculate cumulative rewards
     # Ensure reward_seq contains numbers before calculating cumulative sum

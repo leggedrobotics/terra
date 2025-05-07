@@ -15,6 +15,30 @@ import csv
 
 from utils.models import get_model_ready
 import json
+
+def print_stats(
+    stats,
+):
+    episode_done_once = stats["episode_done_once"]
+    episode_length = stats["episode_length"]
+    path_efficiency = stats["path_efficiency"]
+    workspaces_efficiency = stats["workspaces_efficiency"]
+    coverage = stats["coverage"]
+
+    completion_rate = 100 * episode_done_once.sum() / len(episode_done_once)
+
+    print("\nStats:\n")
+    print(f"Completion: {completion_rate:.2f}%")
+    # print(f"First episode length average: {episode_length.mean()}")
+    # print(f"First episode length min: {episode_length.min()}")
+    # print(f"First episode length max: {episode_length.max()}")
+    print(
+        f"Path efficiency: {path_efficiency['mean']:.2f} ({path_efficiency['std']:.2f})"
+    )
+    print(
+        f"Workspaces efficiency: {workspaces_efficiency['mean']:.2f} ({workspaces_efficiency['std']:.2f})"
+    )
+    print(f"Coverage: {coverage['mean']:.2f} ({coverage['std']:.2f})")
 def encode_image(cv_image):
     _, buffer = cv2.imencode(".jpg", cv_image)
     return base64.b64encode(buffer).decode("utf-8")

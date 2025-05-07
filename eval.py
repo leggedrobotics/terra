@@ -189,6 +189,7 @@ def rollout_episode(
             "std": coverage_score_std,
         },
     }
+    print(episode_done_once)
     return np.cumsum(reward_seq), stats, obs_seq
 
 
