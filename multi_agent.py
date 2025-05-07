@@ -46,7 +46,7 @@ from pygame.locals import (
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = True   # Force delegation to LLM agent for testing
+FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 25          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
@@ -170,6 +170,11 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         print(f"ERROR: Prompt template file not found: {e.filename}")
         # Handle the error appropriately, e.g., exit or use a default prompt
 
+    count_RL = 0
+    count_LLM_master = 0
+    count_LLM_excavator = 0
+    count_act_direct = 0
+
     while playing and step < num_timesteps:
         for event in pg.event.get():
             if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
@@ -186,6 +191,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         if step % LLM_CALL_FREQUENCY == 0:
             print("Calling LLM agent for decision...")
+            count_LLM_master += 1
             try:
                 obs_dict = {k: v.tolist() for k, v in current_observation.items()}
                 observation_str = json.dumps(obs_dict)
@@ -229,6 +235,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         #if llm_decision == "delegate_to_rl" and model is not None and model_params is not None and prev_actions is not None and config is not None:
         if llm_decision == "delegate_to_rl":
             print("Delegating to RL agent...")
+            count_RL += 1
             try:
                 # Prepare the observation for the RL model
                 obs = obs_to_model_input(current_observation, prev_actions, config)
@@ -248,6 +255,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 last_llm_decision = llm_decision # Update last decision
         elif llm_decision == "delegate_to_llm":
             print("Acting directly based on LLM decision...")
+            count_LLM_excavator += 1
             current_map = timestep.state.world.target_map.map[0]  # Extract the target map
             if previous_map is None or not jnp.array_equal(previous_map, current_map):
                 print("Map changed!")
@@ -325,9 +333,11 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
             if llm_decision != "delegate_to_rl" or llm_decision != "delegate_to_llm":
                 print("Master Agent acts directly (or RL agent unavailable/ADK error).")
+                
                 # TODO PASS LLM response to a function that parses the action
                 action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
                 action_list.append(action)
+                count_act_direct += 1
             else:
                 # This case means delegation was intended but RL agent wasn't loaded properly
                 print("Error: Delegation requested, but RL agent is not available. Using do nothing action.")
@@ -366,6 +376,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         step += 1
 
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
+    print(f"LLM Master calls: {count_LLM_master}, Act directly calls: {count_act_direct}, RL agent calls: {count_RL}, LLM Excavator calls: {count_LLM_excavator}")
+    assert num_timesteps == count_act_direct + count_RL + count_LLM_excavator, "The number of steps does not match the expected number of actions taken."
     #print(len(action_list), len(reward_seq), len(obs_seq))
     
     # for o in tqdm(obs_seq, desc="Rendering"):
