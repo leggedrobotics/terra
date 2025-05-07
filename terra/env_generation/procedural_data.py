@@ -161,73 +161,111 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
 
 def generate_diagonal_edges(img, edges_range, sizes_small, sizes_long, color_dict):
     """
-    Wrapper: calls generate_edges, then rotates trench layer + metadata.
-    Returns (final_img, final_mask, final_metadata) or (None,None,None).
-    """
-    bg = img.copy()
-    h,w = bg.shape[:2]
+    Wrapper function to generate trenches using generate_edges() and optionally rotate.
 
-    img_e, mask_e, meta = generate_edges(
-        bg.copy(), edges_range, sizes_small, sizes_long, color_dict
+    Args:
+        img (np.ndarray): Base image.
+        edges_range, sizes_small, sizes_long: Parameters for generate_edges.
+        color_dict (dict): Color dictionary including 'neutral' and 'digging'.
+
+    Returns:
+        tuple: (final_img, final_mask, final_metadata) or (None, None, None)
+               Metadata includes rotation_angle (0.0 if not rotated or angle was 0).
+    """
+
+    img_background = img.copy()
+    h, w = img_background.shape[:2]
+
+    # Call generate_edges on a throwaway copy to get the mask and metadata
+    # The returned image 'img_generated_with_bg' won't be used directly for rotation
+    img_generated_with_bg, mask_generated, metadata_generated = generate_edges(
+        img_background.copy(), # Pass a copy so original isn't modified here
+        edges_range,
+        sizes_small,
+        sizes_long,
+        color_dict
     )
-    if img_e is None:
+
+    # Check if the original generation succeeded
+    if img_generated_with_bg is None:
         return None, None, None
 
-    # isolate
-    trench = np.ones_like(bg)*np.array(color_dict["neutral"])
-    trench[mask_e] = np.array(color_dict["digging"])
+    # --- Isolate the orthogonal trenches onto a new layer ---
+    # Start with a neutral layer
+    trench_layer_ortho = np.ones_like(img_background) * np.array(color_dict["neutral"])
+    # Where the mask is true, put the digging color
+    trench_layer_ortho[mask_generated] = np.array(color_dict["digging"])
 
-    # pick angle
-    angle = random.choice(np.arange(30,360,30))
-    center=(w/2,h/2)
+    # --- Rotation ---
+    possible_angles = np.arange(30, 360, 30)
+    angle = random.choice(possible_angles)
+    center = (w / 2, h / 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    border = tuple(map(int,color_dict["neutral"]))
 
-    rot_trench = cv2.warpAffine(
-        trench, M, (w,h),
-        flags=cv2.INTER_NEAREST,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=border
-    )
-    mask_u8 = mask_e.astype(np.uint8)
-    rot_mask = cv2.warpAffine(
-        mask_u8, M, (w,h),
-        flags=cv2.INTER_NEAREST,
-        borderMode=cv2.BORDER_CONSTANT,
-        borderValue=0
-    )>0
+    # Rotate ONLY the trench layer
+    border_val_neutral = tuple(map(int, color_dict["neutral"]))
+    rotated_trench_layer = cv2.warpAffine(trench_layer_ortho, M, (w, h),
+                                          flags=cv2.INTER_NEAREST,
+                                          borderMode=cv2.BORDER_CONSTANT,
+                                          borderValue=border_val_neutral)
 
-    # rotate metadata
-    pts_rot, abc_rot = [], []
-    a = math.radians(angle)
-    c,s = math.cos(a), math.sin(a)
-    cx,cy = center
-    for (c1,r1),(c2,r2) in meta["lines_pts"]:
-        dx1, dy1 = c1-cx, r1-cy
-        nx1 = dx1*c - dy1*s + cx
-        ny1 = dx1*s + dy1*c + cy
-        dx2, dy2 = c2-cx, r2-cy
-        nx2 = dx2*c - dy2*s + cx
-        ny2 = dx2*s + dy2*c + cy
-        pts_rot.append(((nx1,ny1),(nx2,ny2)))
-        A = ny2 - ny1
-        B = nx1 - nx2
-        C = nx2*ny1 - nx1*ny2
-        abc_rot.append({"A":float(A),"B":float(B),"C":float(C)})
+    # Rotate the MASK
+    mask_uint8 = mask_generated.astype(np.uint8)
+    rotated_mask_interpolated = cv2.warpAffine(mask_uint8, M, (w, h),
+                                               flags=cv2.INTER_NEAREST,
+                                               borderMode=cv2.BORDER_CONSTANT,
+                                               borderValue=0)
+    rotated_mask = rotated_mask_interpolated > 0
 
-    final_meta = {
-        **meta,
-        "rotation_angle": float(angle),
-        "lines_pts": pts_rot,
-        "axes_ABC": abc_rot
-    }
+    # --- Rotate Metadata Points ---
+    rotated_lines_pts = []
+    rotated_lines_abc = []
+    final_metadata = metadata_generated.copy()
 
-    # composite onto background
-    out = bg.copy()
-    mask_tr = ~(rot_trench==np.array(color_dict["neutral"])).all(axis=-1)
-    out[mask_tr] = np.array(color_dict["digging"])
+    if 'lines_pts' in metadata_generated:
+        center_w, center_h = center
+        angle_rad = math.radians(angle)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
 
-    return out, rot_mask, final_meta
+        for pt1_orig, pt2_orig in metadata_generated['lines_pts']:
+            pt1_col, pt1_row = pt1_orig
+            pt2_col, pt2_row = pt2_orig
+
+            # Rotate pt1
+            temp_col1 = pt1_col - center_w
+            temp_row1 = pt1_row - center_h
+            new_pt1_col = temp_col1 * cos_a - temp_row1 * sin_a + center_w
+            new_pt1_row = temp_col1 * sin_a + temp_row1 * cos_a + center_h
+            new_pt1 = (float(new_pt1_col), float(new_pt1_row))
+
+            # Point 2
+            temp_col2 = pt2_col - center_w
+            temp_row2 = pt2_row - center_h
+            new_pt2_col = temp_col2 * cos_a - temp_row2 * sin_a + center_w
+            new_pt2_row = temp_col2 * sin_a + temp_row2 * cos_a + center_h
+            new_pt2 = (float(new_pt2_col), float(new_pt2_row))
+
+            rotated_lines_pts.append([new_pt1, new_pt2])
+            # Recalculate A, B, C
+            A = new_pt2[1] - new_pt1[1]
+            B = new_pt1[0] - new_pt2[0]
+            C = new_pt2[0] * new_pt1[1] - new_pt1[0] * new_pt2[1]
+            rotated_lines_abc.append({'A':float(A),'B':float(B),'C':float(C)})
+
+        final_metadata["axes_ABC"] = rotated_lines_abc
+        final_metadata["lines_pts"] = rotated_lines_pts
+
+
+    # --- Combine original background with rotated trenches ---
+    # Find where the rotated trench layer has the digging color
+    final_trench_mask = ~np.all(rotated_trench_layer == np.array(color_dict["neutral"]), axis=-1)
+    # Create the final image starting from the original background
+    final_img = img_background.copy()
+    # Paste the rotated digging color pixels onto the original background
+    final_img[final_trench_mask] = np.array(color_dict["digging"])
+
+    return final_img, rotated_mask, final_metadata
 
 
 def calculate_line_eq(pt1, pt2):
