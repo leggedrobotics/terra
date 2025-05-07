@@ -48,91 +48,103 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
 
 
 def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
-    # Generate edges based on 'n_edges', 'sizes_small', and 'sizes_long'
+    """
+    Generate orthogonal trenches in `img`.  New branches (after the first)
+    start only at endpoints or midpoints of existing branches.
+    Returns (img_with_trenches, cumulative_mask, metadata) or (None, None, None).
+    """
     min_ssmall, max_ssmall = sizes_small
     min_slong, max_slong = sizes_long
     min_edges, max_edges = edges_range
 
     n_edges = np.random.randint(min_edges, max_edges + 1)
-
-    prev_horizontal = True if np.random.choice([0, 1]).astype(np.bool_) else False
+    prev_horizontal = bool(np.random.choice([0, 1]))
     w, h = img.shape[0], img.shape[1]
+
     lines_abc = []
     lines_pts = []
+    cumulative_mask = np.zeros((w, h), dtype=bool)
 
     for edge_i in range(n_edges):
         if edge_i == 0:
-            # first segment: pick a random pixel in the full mask
-            mask = np.ones_like(img[...,0], dtype=np.bool_)
-            cumulative_mask = np.zeros_like(img[..., 0], dtype=np.bool_)
-            fmask = mask.reshape(-1)
-            fmask_idx_set = list(set((np.arange(w * h) * fmask).tolist()))[1:]
-            fidxs = np.array(fmask_idx_set)
-            idx = np.random.choice(fidxs)
+            # first segment: pick a random starting pixel anywhere
+            flat_mask = np.ones(w * h, dtype=bool)
+            idxs = np.where(flat_mask)[0]
+            idx = np.random.choice(idxs)
             x = idx // h
             y = idx % h
         else:
-            # subsequent branches: only from endpoints or midpoints of existing segments
+            # subsequent branches: pick from endpoints or midpoints
             start_points = []
             for pt1, pt2 in lines_pts:
-                # pt1, pt2 are (col, row)
                 start_points.append(pt1)
                 start_points.append(pt2)
-                # midpoint
-                mid_col = (pt1[0] + pt2[0]) / 2
-                mid_row = (pt1[1] + pt2[1]) / 2
-                start_points.append((mid_col, mid_row))
+                mid = ((pt1[0] + pt2[0]) / 2, (pt1[1] + pt2[1]) / 2)
+                start_points.append(mid)
             pt_col, pt_row = random.choice(start_points)
-            # convert to integer image coords: x=row, y=col
             y = int(round(pt_col))
             x = int(round(pt_row))
+
+        # clamp to image bounds
+        x = max(0, min(x, w - 1))
+        y = max(0, min(y, h - 1))
 
         size_small = np.random.randint(min_ssmall, max_ssmall + 1)
         size_long  = np.random.randint(min_slong, max_slong + 1)
 
         if prev_horizontal:
             size_x, size_y = size_long, size_small
-            y_coord = (2 * y + size_y - 1) / 2
-            axis_pt1 = (float(y_coord), float(x))
-            axis_pt2 = (float(y_coord), float(x + size_x - 1))
+            y_c = (2 * y + size_y - 1) / 2
+            axis_pt1 = (float(y_c), float(x))
+            axis_pt2 = (float(y_c), float(x + size_x - 1))
         else:
             size_x, size_y = size_small, size_long
-            x_coord = (2 * x + size_x - 1) / 2
-            axis_pt1 = (float(y), float(x_coord))
-            axis_pt2 = (float(y + size_y - 1), float(x_coord))
+            x_c = (2 * x + size_x - 1) / 2
+            axis_pt1 = (float(y), float(x_c))
+            axis_pt2 = (float(y + size_y - 1), float(x_c))
 
         prev_horizontal = not prev_horizontal
-        lines_pts.append([axis_pt1, axis_pt2])
+        # store for next‐branch generation
+        lines_pts.append((axis_pt1, axis_pt2))
 
-        size_x = min(size_x, w - x)
-        size_y = min(size_y, h - y)
+        # clamp sizes to fit within image
+        avail_x = w - x
+        avail_y = h - y
+        if avail_x <= 0 or avail_y <= 0:
+            continue
+        size_x = min(size_x, avail_x)
+        size_y = min(size_y, avail_y)
+        if size_x <= 0 or size_y <= 0:
+            continue
 
-        img[x : x + size_x, y : y + size_y] = np.array(color_dict["digging"])
+        # draw trench
+        img[x:x + size_x, y:y + size_y] = np.array(color_dict["digging"])
 
+        # compute line ABC
         A = axis_pt2[1] - axis_pt1[1]
         B = axis_pt1[0] - axis_pt2[0]
         C = axis_pt2[0] * axis_pt1[1] - axis_pt1[0] * axis_pt2[1]
-        lines_abc.append({"A": float(A), "B": float(B), "C": float(C)})
+        lines_abc.append({"A":float(A), "B":float(B), "C":float(C)})
 
-        mask = np.zeros_like(img[..., 0], dtype=np.bool_)
-        mask[x : x + size_x, y : y + size_y] = np.ones((size_x, size_y), dtype=np.bool_)
-        cumulative_mask = cumulative_mask | mask
+        # update cumulative mask
+        mask = np.zeros((w, h), dtype=bool)
+        mask[x:x + size_x, y:y + size_y] = True
+        cumulative_mask |= mask
 
-    ixts = img.shape[0]
-    iyts = img.shape[1]
-    # Set margin % here
-    ixt = int(ixts * 0.15)
-    iyt = int(iyts * 0.15)
-    img_test = img.copy()
-    img_test[ixt : ixts - ixt, iyt : iyts - iyt] = np.array(color_dict["neutral"])
-    if np.any(_get_img_mask(img_test, color_dict["digging"])):
+    # sanity check: no digging in central margin
+    ixt = int(w * 0.15)
+    iyt = int(h * 0.15)
+    test = img.copy()
+    test[ixt:w - ixt, iyt:h - iyt] = np.array(color_dict["neutral"])
+    if np.any(_get_img_mask(test, color_dict["digging"])):
         return None, None, None
 
     metadata = {
-        "real_dimensions": {"width": float(h), "height": float(w)},
+        "real_dimensions": {"width":float(h), "height":float(w)},
         "axes_ABC": lines_abc,
-        "lines_pts": lines_pts,
+        "lines_pts": lines_pts
     }
+
     return img, cumulative_mask, metadata
 
 
