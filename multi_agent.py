@@ -21,6 +21,7 @@ from terra.config import BatchConfig
 
 from terra.viz.llms_utils import *
 from multi_agent_utils import *
+from multi_agent_map import *
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
 
@@ -154,6 +155,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     previous_map = current_map.copy()  # Initialize the previous map
     count_map_change = 0
     DETERMINISTIC = True
+
 
     PROMPT_FILENAME = "usr_msg8.txt"
     PROMPT_NO_PATH_FILENAME = "usr_msg7.txt" # New filename
