@@ -59,36 +59,48 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
     w, h = img.shape[0], img.shape[1]
     lines_abc = []
     lines_pts = []
+
     for edge_i in range(n_edges):
         if edge_i == 0:
-            mask = np.ones_like(img[..., 0], dtype=np.bool_)
+            # first segment: pick a random pixel in the full mask
+            mask = np.ones_like(img[...,0], dtype=np.bool_)
             cumulative_mask = np.zeros_like(img[..., 0], dtype=np.bool_)
-        fmask = mask.reshape(-1)
-        fmask_idx_set = list(set((np.arange(w * h) * fmask).tolist()))[
-            1:
-        ]  # remove idx 0 as it's always going to be present
-        fidxs = np.array(fmask_idx_set)
-        idx = np.random.choice(fidxs)
-        x = idx // h
-        y = idx % h
-        size_small = np.random.randint(min_ssmall, max_ssmall + 1)
-        size_long = np.random.randint(min_slong, max_slong + 1)
-        if prev_horizontal:
-            size_x = size_long
-            size_y = size_small
+            fmask = mask.reshape(-1)
+            fmask_idx_set = list(set((np.arange(w * h) * fmask).tolist()))[1:]
+            fidxs = np.array(fmask_idx_set)
+            idx = np.random.choice(fidxs)
+            x = idx // h
+            y = idx % h
+        else:
+            # subsequent branches: only from endpoints or midpoints of existing segments
+            start_points = []
+            for pt1, pt2 in lines_pts:
+                # pt1, pt2 are (col, row)
+                start_points.append(pt1)
+                start_points.append(pt2)
+                # midpoint
+                mid_col = (pt1[0] + pt2[0]) / 2
+                mid_row = (pt1[1] + pt2[1]) / 2
+                start_points.append((mid_col, mid_row))
+            pt_col, pt_row = random.choice(start_points)
+            # convert to integer image coords: x=row, y=col
+            y = int(round(pt_col))
+            x = int(round(pt_row))
 
-            # Compute axes
+        size_small = np.random.randint(min_ssmall, max_ssmall + 1)
+        size_long  = np.random.randint(min_slong, max_slong + 1)
+
+        if prev_horizontal:
+            size_x, size_y = size_long, size_small
             y_coord = (2 * y + size_y - 1) / 2
             axis_pt1 = (float(y_coord), float(x))
-            axis_pt2 = (float(y_coord), float(x) + size_x - 1)
+            axis_pt2 = (float(y_coord), float(x + size_x - 1))
         else:
-            size_x = size_small
-            size_y = size_long
-
-            # Compute axes
+            size_x, size_y = size_small, size_long
             x_coord = (2 * x + size_x - 1) / 2
             axis_pt1 = (float(y), float(x_coord))
-            axis_pt2 = (float(y) + size_y - 1, float(x_coord))
+            axis_pt2 = (float(y + size_y - 1), float(x_coord))
+
         prev_horizontal = not prev_horizontal
         lines_pts.append([axis_pt1, axis_pt2])
 
