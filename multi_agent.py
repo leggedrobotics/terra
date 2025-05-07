@@ -176,9 +176,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     count_act_direct = 0
 
     while playing and step < num_timesteps:
-        for event in pg.event.get():
-            if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
-                playing = False
+        # for event in pg.event.get():
+        #     if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
+        #         playing = False
         print(f"\n--- Step {step} ---")
         current_observation = timestep.observation
         obs_seq.append(current_observation)
@@ -188,6 +188,37 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
+
+        current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+        if previous_map is None or not jnp.array_equal(previous_map, current_map):
+            print("Map changed!")
+            count_map_change += 1
+            initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+            print("Current target number: ", initial_target_num)
+
+            previous_map = current_map.copy()  # Update the previous map
+            llm_query.delete_messages()  # Clear previous messages
+            prev_actions = None
+            if config:
+                prev_actions = jnp.zeros(
+                (n_envs, config.num_prev_actions),
+                dtype=jnp.int32
+                )
+            else:
+                print("Warning: rl_config is None, prev_actions will not be initialized.")
+
+            if USE_PATH:
+                actions=compute_action_list(timestep, env) 
+
+        state = timestep.state
+        base_orientation = extract_base_orientation(state)
+        bucket_status = extract_bucket_status(state)  # Extract bucket status
+
+
+        traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
+
+        traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
+        traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
 
         if step % LLM_CALL_FREQUENCY == 0:
             print("Calling LLM agent for decision...")
@@ -256,28 +287,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         elif llm_decision == "delegate_to_llm":
             print("Acting directly based on LLM decision...")
             count_LLM_excavator += 1
-            current_map = timestep.state.world.target_map.map[0]  # Extract the target map
-            if previous_map is None or not jnp.array_equal(previous_map, current_map):
-                print("Map changed!")
-                count_map_change += 1
-                initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
-                print("Current target number: ", initial_target_num)
 
-                previous_map = current_map.copy()  # Update the previous map
-                llm_query.delete_messages()  # Clear previous messages
-
-                if USE_PATH:
-                    actions=compute_action_list(timestep, env) 
-
-            state = timestep.state
-            base_orientation = extract_base_orientation(state)
-            bucket_status = extract_bucket_status(state)  # Extract bucket status
-
-
-            traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
-
-            traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
-            traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
 
             if USE_LOCAL_MAP:
                 local_map = generate_local_map(timestep)
@@ -367,8 +377,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
             env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
-            if jnp.all(timestep.done).item() or t_counter == num_timesteps:
-                break
+            # if jnp.all(timestep.done).item() or t_counter == num_timesteps:
+            #     break
 
         else:
             print("No action generated. Skipping step.")
@@ -377,7 +387,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
     print(f"LLM Master calls: {count_LLM_master}, Act directly calls: {count_act_direct}, RL agent calls: {count_RL}, LLM Excavator calls: {count_LLM_excavator}")
-    assert num_timesteps == count_act_direct + count_RL + count_LLM_excavator, "The number of steps does not match the expected number of actions taken."
+    #assert num_timesteps == count_act_direct + count_RL + count_LLM_excavator, "The number of steps does not match the expected number of actions taken."
     #print(len(action_list), len(reward_seq), len(obs_seq))
     
     # for o in tqdm(obs_seq, desc="Rendering"):

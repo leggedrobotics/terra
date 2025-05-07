@@ -56,7 +56,8 @@ contents = [
 model_0 = "gemini-2.0-flash"
 #model_1 = "gemini-2.5-pro-exp-03-25"
 model_1 = "gemini-2.0-flash-lite"
-model_2 = "gemini-2.5-pro-preview-03-25"
+#model_2 = "gemini-2.5-pro-preview-03-25"
+model_2 = "gemini-2.5-pro-preview-05-06"
 model_3 = "gemini-2.5-flash-preview-04-17"
 
 list_0 = []
