@@ -168,18 +168,18 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20
+    increase_level_threshold: int = 10
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     levels = [
-        {
-            "maps_path": "terra/trenches/easy_size_small",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "terra/trenches/easy_size_small",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         {
             "maps_path": "terra/trenches/easy_size_large",
             "max_steps_in_episode": 400,
