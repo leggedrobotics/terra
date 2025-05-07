@@ -115,7 +115,7 @@ class State(NamedTuple):
     
     def _swap(self):
         """Swaps agent_state_1 and agent_state_2"""
-        jax.debug.print("Swapping agent states")
+        #jax.debug.print("Swapping agent states")
         return self._replace(
             agent=self.agent._replace(
                 agent_state_1=self.agent.agent_state_2,
@@ -167,8 +167,8 @@ class State(NamedTuple):
             lambda: state
         )
 
-        jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
-        jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
+        # jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
+        # jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
 
         return state._replace(env_steps=state.env_steps + 1)
 
