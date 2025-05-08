@@ -705,8 +705,10 @@ if __name__ == "__main__":
         type=str,
         # default="/home/gioelemo/Documents/terra/new-maps-different-order.pkl",
         # help="new-maps-different-order.pkl (12 cabin and 12 base rotations)",
-        default="/home/gioelemo/Documents/terra/gioele.pkl",
-        help="new-maps-different-order.pkl (8 cabin and 4 base rotations)",
+        # default="/home/gioelemo/Documents/terra/gioele.pkl",
+        # help="new-maps-different-order.pkl (8 cabin and 4 base rotations)",
+        default="/home/gioelemo/Documents/terra/gioele_new.pkl",
+        help="new-maps-different-order.pkl (8 cabin and 4 base rotations) Version 7 May",
     )
 
     args = parser.parse_args()
