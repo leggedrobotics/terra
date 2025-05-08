@@ -708,10 +708,10 @@ if __name__ == "__main__":
         # help="new-maps-different-order.pkl (12 cabin and 12 base rotations)",
         # default="/home/gioelemo/Documents/terra/gioele.pkl",
         # help="gioele.pkl (8 cabin and 4 base rotations)",
-        # default="/home/gioelemo/Documents/terra/gioele_new.pkl",
-        # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
-        default="/home/gioelemo/Documents/terra/new-penalties.pkl",
-        help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
+        default="/home/gioelemo/Documents/terra/gioele_new.pkl",
+        help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
+        #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
+        #help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 
     args = parser.parse_args()
