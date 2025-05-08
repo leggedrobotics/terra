@@ -52,7 +52,7 @@ from pygame.locals import (
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -138,8 +138,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     last_llm_decision = "delegate_to_rl" 
 
-    if USE_PATH:
-        actions=compute_action_list(timestep, env) 
+    # if USE_PATH:
+    #     actions=compute_action_list(timestep, env) 
 
     # Define the repeat_action function
     def repeat_action(action, n_times=n_envs):
@@ -275,8 +275,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             else:
                 print("Warning: rl_config is None, prev_actions will not be initialized.")
 
-            if USE_PATH:
-                actions=compute_action_list(timestep, env) 
+            # if USE_PATH:
+            #     actions=compute_action_list(timestep, env) 
 
         state = timestep.state
         base_orientation = extract_base_orientation(state)
@@ -396,7 +396,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                         current_pos=start,
                         target_pos_list=target_positions,
                         prev_actions=simple_action_list,
-                        suggested_actions=actions,
+                        #suggested_actions=actions,
+                        suggested_actions=None,
                         dig_percentage=f"{percentage_digging:.2f}%"
                     )
 
