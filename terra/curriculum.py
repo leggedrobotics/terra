@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from terra.config import Rewards
-from jax.experimental.host_callback import id_tap
 
 
 def print_arrays(arr, what):
@@ -32,19 +31,7 @@ class CurriculumManager(NamedTuple):
         env_cfg = timestep.env_cfg
         done = timestep.done
         completed = timestep.info["task_done"]
-        # done = id_tap(lambda arr, _: print_arrays(arr, "done all"), done)
-        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed"), completed)
 
-        # done_sum = jnp.sum(done)
-        # completed_sum = jnp.sum(completed)
-        
-        # done = id_tap(lambda arr, _: print_arrays(arr, "done sum"), done_sum)
-        # completed = id_tap(lambda arr, _: print_arrays(arr, "completed sum"), completed_sum)
-
-        # # print the shape of the arrays
-        # done = id_tap(lambda arr, _: print_arrays(arr.shape, "done shape"), done)
-        # completed = id_tap(lambda arr, _: print_arrays(arr.shape, "completed shape"), completed)
-        
         failure = done & ~completed
         success = done & completed
 
@@ -128,11 +115,12 @@ class CurriculumManager(NamedTuple):
         return timestep
 
     def _reset_single_cfg(self, env_cfg):
-        max_steps_in_episode = self.max_steps_in_episode_per_level[0]
-        apply_trench_rewards = self.apply_trench_rewards_per_level[0]
+        level = env_cfg.curriculum.level
+        max_steps_in_episode = self.max_steps_in_episode_per_level[level]
+        apply_trench_rewards = self.apply_trench_rewards_per_level[level]
 
         rewards_list = [Rewards.dense, Rewards.sparse]
-        reward_type = self.reward_type_per_level[0]
+        reward_type = self.reward_type_per_level[level]
         rewards = jax.lax.switch(reward_type, rewards_list)
 
         env_cfg = env_cfg._replace(

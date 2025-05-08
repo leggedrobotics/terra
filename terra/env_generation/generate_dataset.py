@@ -8,7 +8,6 @@ from terra.env_generation.create_train_data import (
     create_foundations as create_train_foundations
 )
 import terra.env_generation.convert_to_terra as convert_to_terra
-from terra.env_generation.procedural_squares import generate_squares
 
 def generate_complete_dataset(config_path="config/env_generation/config.yml"):
     """
@@ -25,12 +24,12 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
     # Load configuration
     with open(package_dir + "/" + config_path, "r") as file:
         config = yaml.safe_load(file)
-    
+
     # Create necessary directories
     os.makedirs("data/", exist_ok=True)
     os.makedirs("data/terra/", exist_ok=True)
     os.makedirs("data/openstreet/", exist_ok=True)
-    
+
     print("Step 1: Downloading and processing foundation maps...")
     # Download foundations
     # Read foundation parameters from the config file
@@ -48,7 +47,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
 
     # Get bounding box from config, or use default
     bbox = config.get("center_bbox", (47.5376, 47.6126, 7.5401, 7.6842))
-    
+
     # Download foundations
     dataset_folder = os.path.join(package_dir, "data", "openstreet")
     download_foundations(
@@ -59,15 +58,15 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
         max_buildings=max_buildings
     )
     create_foundations(dataset_folder)
-    
+
     print("Step 2: Creating procedural trenches and processing training data...")
     # Create procedural trenches
     main_folder = "data/terra"
     create_procedural_trenches(main_folder, config)
-    
+
     # Process foundation maps for training
     create_train_foundations(config)
-    
+
     # Generate Terra format datasets
     print("Step 3: Converting data to Terra format...")
     sizes = [(size, size) for size in config["sizes"]]
@@ -75,20 +74,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
     n_imgs = config["n_imgs"]
     for size in sizes:
         convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs)
-    
-    # Process squares if present in config
-    if "squares" in config:
-        print("Step 4: Generating square environments...")
-        squares_config = config["squares"]
-        base_save_folder = os.path.join(package_dir, "data/terra/train/squares")
-        
-        # Process each square configuration
-        for config_name, config_values in squares_config.items():
-            save_folder = os.path.join(base_save_folder, config_name)
-            os.makedirs(save_folder, exist_ok=True)
-            generate_squares(n_imgs, config_values, save_folder)
-            print(f"Generated squares for {config_name}")
-    
+
     print("Dataset generation complete!")
     print(f"Data saved to {os.path.join(package_dir, 'data/terra')}")
 
@@ -101,5 +87,5 @@ if __name__ == "__main__":
         help="Path to the configuration file"
     )
     args = parser.parse_args()
-    
+
     generate_complete_dataset(args.config)

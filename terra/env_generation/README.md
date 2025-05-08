@@ -74,19 +74,6 @@ Trenches are procedurally generated environments for excavation tasks:
    - Each trench includes image data, metadata, occupancy, and dumpability maps
    - The `generate_trenches_terra` function in `convert_to_terra.py` converts all data to the Terra format
 
-### Squares Data Workflow
-
-Squares provide another procedural environment type:
-
-1. **Generation**:
-   - `generate_squares` function in `procedural_squares.py` creates square-based environments
-   - `generate_curriculum.py` can be used to create a curriculum of square environments
-
-2. **Configuration**:
-   - Various configurations within the "squares" section of the config file
-   - Each configuration generates a different type or difficulty of square environment
-   - Multiple square types can be generated in a single run
-
 ### Curriculum Generation
 
 For structured training progression:
@@ -112,5 +99,5 @@ All generated data undergoes format conversion for training:
 
 2. **Output Structure**:
    - Final data is organized in the `/data/terra/train/` directory
-   - Subdirectories include foundations, trenches (with difficulty levels), and squares
+   - Subdirectories include foundations, trenches (with difficulty levels) and custom maps
    - Each environment has consistent format and metadata

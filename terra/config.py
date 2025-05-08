@@ -79,6 +79,7 @@ class Rewards(NamedTuple):
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
     dump_no_dump_area: float  # given if dumps in an area that is not the dump area
+    dump_close_to_dug_area: float # given proportionaly if soil is dumped next to dug out area
 
     dig_correct: (
         float  # dig where the target map is negative, and not more than required
@@ -100,10 +101,11 @@ class Rewards(NamedTuple):
             move=-0.05,
             collision_turn=-0.1,
             base_turn=-0.1,
-            cabin_turn=-0.02,
+            cabin_turn=-0.01,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=-3.0,
+            dump_close_to_dug_area=-0.15,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
@@ -120,10 +122,11 @@ class Rewards(NamedTuple):
             move=-0.05,
             collision_turn=-0.1,
             base_turn=-0.1,
-            cabin_turn=-0.02,
+            cabin_turn=-0.01,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
+            dump_close_to_dug_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
@@ -150,8 +153,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.05
-    distance_coefficient: float = -0.02
+    alignment_coefficient: float = -0.1
+    distance_coefficient: float = -0.05
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -168,117 +171,56 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 5
+    increase_level_threshold: int = 10
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
     #last_level_type = "none"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
-    # levels = [
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/easy",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/medium",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/hard",
-    #         "max_steps_in_episode": 300,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    # ]
-
-
-    # levels = [
-    #     {
-    #         "maps_path": "squares/64x64/3",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    # ]
-
-    # for all maps in /home/gioelemo/Documents/terra/data  DATASET_PATH=/home/gioelemo/Documents/terra/data/terra/train
     levels = [
         {
-            "maps_path": "trenches/easy_size_medium",
-            "max_steps_in_episode": 500,
+            "maps_path": "terra/trenches/single",
+            "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "terra/trenches/double",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/trenches/double_diagonal",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "terra/trenches/triple_diagonal",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "terra/foundations_large",
+            "max_steps_in_episode": 500,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
     ]
-
-    # levels = [
-    #     {
-    #         "maps_path": "terra/trenches/single",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/double",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/double_diagonal",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    #     {
-    #         "maps_path": "terra/trenches/triple_diagonal",
-    #         "max_steps_in_episode": 400,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": True,
-    #     },
-    #     {
-    #         "maps_path": "terra/foundations_large",
-    #         "max_steps_in_episode": 500,
-    #         "rewards_type": RewardsType.DENSE,
-    #         "apply_trench_rewards": False,
-    #     },
-    # ]
-
-
 
 
 class BatchConfig(NamedTuple):

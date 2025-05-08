@@ -184,7 +184,7 @@ class TerraEnv(NamedTuple):
         new_state = state._step(action)
         reward = state._get_reward(new_state, action)
         new_state = self.wrap_state(new_state)
-        observations = self._state_to_obs_dict(new_state)
+        obs = self._state_to_obs_dict(new_state)
 
         done, task_done = state._is_done(
             new_state.world.action_map.map,
@@ -192,28 +192,38 @@ class TerraEnv(NamedTuple):
             new_state.agent.agent_state.loaded,
         )
 
-        new_state, observations = jax.lax.cond(
+        def _reset_branch(s, o, cfg):
+            s_reset, o_reset = self._reset_existent(
+                s,
+                target_map,
+                padding_mask,
+                trench_axes,
+                trench_type,
+                dumpability_mask_init,
+                cfg,
+            )
+            return s_reset, o_reset, cfg
+
+        def _nominal_branch(s, o, cfg):
+            return s, o, cfg
+
+        new_state, obs, env_cfg = jax.lax.cond(
             done,
-            self._reset_existent,
-            lambda x, y, z, k, w, j, l: (new_state, observations),
+            _reset_branch,
+            _nominal_branch,
             new_state,
-            target_map,
-            padding_mask,
-            trench_axes,
-            trench_type,
-            dumpability_mask_init,
+            obs,
             env_cfg,
         )
 
         infos = new_state._get_infos(action, task_done)
-
         return TimeStep(
             state=new_state,
-            observation=observations,
+            observation=obs,
             reward=reward,
             done=done,
             info=infos,
-            env_cfg=env_cfg,
+            env_cfg=env_cfg,   # now the right, possibly flipped `apply_trench_rewards`
         )
 
     @staticmethod
@@ -348,6 +358,8 @@ class TerraEnvBatch:
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+        env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
+        env_cfgs = self.update_env_cfgs(env_cfgs)
         (
             target_maps,
             padding_masks,
@@ -356,8 +368,6 @@ class TerraEnvBatch:
             dumpability_mask_init,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
-        env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
-        env_cfgs = self.update_env_cfgs(env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key,
             target_maps,
