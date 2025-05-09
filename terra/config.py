@@ -147,8 +147,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.08
-    distance_coefficient: float = -0.03
+    alignment_coefficient: float = 0
+    distance_coefficient: float = 0
 
     curriculum: CurriculumConfig = CurriculumConfig()
 

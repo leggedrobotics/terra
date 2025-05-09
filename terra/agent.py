@@ -46,7 +46,11 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
     ) -> tuple["Agent", jax.random.PRNGKey]:
-        pos_base_1, angle_base_1, key = jax.lax.cond(
+        # Split the key for the two agent initializations
+        key, key_agent1, key_agent2 = jax.random.split(key, 3)
+        
+        # Initialize first agent
+        pos_base_1, angle_base_1, _ = jax.lax.cond(
             env_cfg.agent.random_init_state,
             lambda k: _get_random_init_state(
                 k,
@@ -58,7 +62,24 @@ class Agent(NamedTuple):
                 env_cfg.agent.height,
             ),
             lambda k: _get_top_left_init_state(k, env_cfg),
-            key,
+            key_agent1,
+        )
+
+        # Initialize second agent with similar logic but different random key
+        pos_base_2, angle_base_2, _ = jax.lax.cond(
+            env_cfg.agent.random_init_state,
+            lambda k: _get_random_init_state(
+                k,
+                env_cfg,
+                max_traversable_x,
+                max_traversable_y,
+                padding_mask,
+                env_cfg.agent.width,
+                env_cfg.agent.height,
+            ),
+            # For second agent, use bottom right if not random
+            lambda k: _get_bottom_right_init_state(k, env_cfg),
+            key_agent2,
         )
 
         agent_state_1 = AgentState(
@@ -67,11 +88,18 @@ class Agent(NamedTuple):
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
         )
+        
+        agent_state_2 = AgentState(
+            pos_base=pos_base_2,
+            angle_base=angle_base_2,
+            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded=jnp.full((1,), 0, dtype=IntLowDim),
+        )
 
         width = env_cfg.agent.width
         height = env_cfg.agent.height
 
-        return Agent(agent_state_1=agent_state_1, agent_state_2 =agent_state_1 ,width=width, height=height), key
+        return Agent(agent_state_1=agent_state_1, agent_state_2=agent_state_2, width=width, height=height), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
@@ -82,6 +110,25 @@ def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     ).astype(IntMap)
     pos_base = IntMap(jnp.array([max_center_coord, max_center_coord]))
     theta = jnp.full((1,), fill_value=0, dtype=IntMap)
+    return pos_base, theta, key
+
+
+def _get_bottom_right_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
+    # Place the agent in the bottom-right corner
+    max_center_coord = jnp.ceil(
+        jnp.max(
+            jnp.array([env_cfg.agent.width // 2 - 1, env_cfg.agent.height // 2 - 1])
+        )
+    ).astype(IntMap)
+    
+    # Calculate position at bottom right
+    edge_length = env_cfg.maps.edge_length_px
+    pos_base = IntMap(jnp.array([edge_length - max_center_coord - 1, 
+                                edge_length - max_center_coord - 1]))
+    
+    # Start with a different orientation (180° from first agent)
+    theta = jnp.full((1,), fill_value=2, dtype=IntMap)  # 2 = 180 degrees if angles are 0-3
+    
     return pos_base, theta, key
 
 
