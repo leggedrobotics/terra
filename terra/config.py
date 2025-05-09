@@ -212,37 +212,37 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
         {
             "maps_path": "foundations",
-            "max_steps_in_episode": 300,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "trenches/easy",
-            "max_steps_in_episode": 300,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "trenches/medium",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "trenches/hard",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
         {
             "maps_path": "foundations",
-            "max_steps_in_episode": 800,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
             "maps_path": "trenches/hard",
-            "max_steps_in_episode": 400,
+            "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
