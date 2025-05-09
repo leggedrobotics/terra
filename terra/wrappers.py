@@ -45,7 +45,7 @@ class TraversabilityMaskWrapper:
         map_height = state.world.height
         
         polygon_mask1 = compute_polygon_mask(agent_corners_1, map_width, map_height)
-        polygon_mask2 = compute_polygon_mask(agent_corners_1, map_width, map_height)
+        polygon_mask2 = compute_polygon_mask(agent_corners_2, map_width, map_height)
         traversability_mask = jnp.where(polygon_mask1, -1, traversability_mask)
         traversability_mask = jnp.where(polygon_mask2, -1, traversability_mask)
 
