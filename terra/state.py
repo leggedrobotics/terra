@@ -270,12 +270,23 @@ class State(NamedTuple):
 
         # Determine the occupancy mask for a grid of size map_width x map_height.
         polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+
+        agent_2_corners_xy = self._get_agent_corners(
+            self.agent.agent_state_2.pos_base,
+            base_orientation=self.agent.agent_state_2.angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+
+        polygon_mask_2 = compute_polygon_mask(agent_2_corners_xy, map_width, map_height)
+        dig_map_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
         )
-        
+        traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
+        traversability_mask = jnp.where(dig_map_2, 1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         # Mask out the cells where the agent is located.
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
@@ -556,10 +567,25 @@ class State(NamedTuple):
         return angle_idx_to_rad(
             self.agent.agent_state_1.angle_base, self.env_cfg.agent.angles_base
         )
+    
+    def _get_cabin_angle_rad_2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_cabin, self.env_cfg.agent.angles_cabin
+        )
+
+    def _get_base_angle_rad_2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_base, self.env_cfg.agent.angles_base
+        )
 
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
         cabin_angle = self._get_cabin_angle_rad()
+        return wrap_angle_rad(base_angle + cabin_angle)
+    
+    def _get_arm_angle_rad_2(self) -> Float:
+        base_angle = self._get_base_angle_rad_2()
+        cabin_angle = self._get_cabin_angle_rad_2()
         return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
@@ -734,12 +760,47 @@ class State(NamedTuple):
         current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad()))
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
+    
+    def _get_map_local_and_cyl_coords_2(self):
+        """
+        Returns:
+            - map_cyl_coords: (2, width*height) map with [r, theta] rows
+            - map_local_coords_base: (2, width*height) map with [x, y] rows
+        """
+        current_pos_idx = self._get_current_pos_vector_idx(
+            pos_base=self.agent.agent_state_2.pos_base,
+            map_height=self.env_cfg.maps.edge_length_px,
+        )
+        map_global_coords = self._map_to_flattened_global_coords(
+            self.world.width, self.world.height, self.env_cfg.tile_size
+        )
+        current_pos = self._get_current_pos_from_flattened_map(
+            map_global_coords, current_pos_idx
+        )
+        current_arm_angle = self._get_arm_angle_rad_2()
+
+        # Local coordinates including the cabin rotation
+        current_state_arm = jnp.hstack((current_pos, current_arm_angle))
+        map_local_coords_arm = apply_rot_transl(current_state_arm, map_global_coords)
+        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
+
+        # Local coordinates excluding the cabin rotation
+        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad_2()))
+        map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
+        return map_cyl_coords, map_local_coords_base
 
     def _build_dig_dump_cone(self) -> Array:
         """
         Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
         """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
+        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
+
+    def _build_dig_dump_cone_2(self) -> Array:
+        """
+        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
+        """
+        map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords_2()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
