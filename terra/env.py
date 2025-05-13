@@ -199,7 +199,10 @@ class TerraEnv(NamedTuple):
             new_state.world.target_map.map,
             new_state.agent.agent_state_1.loaded,
         )
-
+        # for reward debug
+        jax.debug.print("reward_1 : {reward_1}", reward_1=reward_1)
+        #jax.debug.print("reward_2 : ",reward_2)
+        #jax.debug.print(f"reward_2: {}",reward_2)
         def _reset_branch(s, o, cfg):
             s_reset, o_reset = self._reset_existent(
                 s,

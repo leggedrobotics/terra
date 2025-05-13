@@ -1182,7 +1182,7 @@ class State(NamedTuple):
         # Dig
         return jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
+                self.agent.agent_state_2.loaded, new_state.agent.agent_state_1.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
