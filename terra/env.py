@@ -193,12 +193,7 @@ class TerraEnv(NamedTuple):
         reward = reward_1 + reward_2
         new_state = self.wrap_state(new_state_2)
         obs = self._state_to_obs_dict(new_state)
-        #jax.debug.breakpoint()
-        #print agent state position using jax.debug.print
-        jax.debug.print("agent_1_reward: {}", reward_1)
-        jax.debug.print("agent_2_reward: {}", reward_2)
-        jax.debug.print("agent_state_1: {}", new_state.agent.agent_state_1.pos_base)
-        jax.debug.print("agent_state_2: {}", new_state.agent.agent_state_2.pos_base)
+
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,

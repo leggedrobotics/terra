@@ -110,11 +110,11 @@ def main():
                     action2_to_step = None
 
                     if state == 1:
-                        action1_to_step = action
-                        action2_to_step =  action_type.do_nothing()
-                    elif state == 2:
                         action1_to_step = action_type.do_nothing()
                         action2_to_step = action
+                    elif state == 2:
+                        action1_to_step = action
+                        action2_to_step = action_type.do_nothing()
                     elif state == 3:
                         action1_to_step = action
                         action2_to_step = action
