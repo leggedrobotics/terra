@@ -154,17 +154,19 @@ timestep = env.step(timestep, action, step_key)
 Running the standard map generation will produce the following folder structure. This includes foundations and trenches, and additional curriculum maps that help with the training in case the sparse reward strategy is used.
 ```
 - data
+    - custom  <-- custom made maps for training special behaviour
     - openstreet
     - terra
         - foundations
-        - trenches 
+        - trenches
         - train  <- npy maps formatter for terra
-            - squares  <-- maps for curriculum early levels
-            - trenches  <-- trenches with 1 to 3 intersecting axes 
+            - trenches  <-- trenches with 1 to 3 intersecting axes
             - foundations  <-- building foundations from OpenStreetMap
                 - dumpability  <-- encodes where the agent can dump
                 - images  <-- encodes the target dig profile
                 - occupancy  <-- encodes the obstacles
+            - foundations_large  <-- same as foundations but bigger
+            - custom
 ```
 
 ### Training Configurations
@@ -176,16 +178,16 @@ class CurriculumGlobalConfig(NamedTuple):
     
     levels = [
         {
-            "maps_path": "foundations_20_50",
+            "maps_path": "terra/foundations",
             "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "foundations_20_50",
+            "maps_path": "terra/trenches/single",
             "max_steps_in_episode": 200,
             "rewards_type": RewardsType.SPARSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         }
     ]
 ```
