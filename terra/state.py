@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional, Tuple
 from typing import NamedTuple
 
 import jax
@@ -70,14 +70,26 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        custom_pos: Optional[Tuple[int, int]] = None,
+        custom_angle: Optional[int] = None,
     ) -> "State":
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
 
+        # agent, key = Agent.new(
+        #     key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
+        # )
         agent, key = Agent.new(
-            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
+            key,
+            env_cfg,
+            world.max_traversable_x,
+            world.max_traversable_y,
+            padding_mask,
+            custom_pos=custom_pos,
+            custom_angle=custom_angle,
         )
+
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
@@ -98,6 +110,8 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        custom_pos: Optional[Tuple[int, int]] = None,
+        custom_angle: Optional[int] = None,
     ) -> "State":
         """
         Resets the already-existing State
@@ -111,6 +125,8 @@ class State(NamedTuple):
             trench_axes=trench_axes,
             trench_type=trench_type,
             dumpability_mask_init=dumpability_mask_init,
+            custom_pos=custom_pos,
+            custom_angle=custom_angle,
         )
 
     def _step(self, action: Action) -> "State":

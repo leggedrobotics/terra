@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from functools import partial
 from typing import NamedTuple
+from typing import Any, Optional, Tuple
+
 
 import jax
 import jax.numpy as jnp
@@ -83,6 +85,8 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         env_cfg: EnvConfig,
+        custom_pos: Optional[Tuple[int, int]] = None,
+        custom_angle: Optional[int] = None,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
@@ -95,6 +99,8 @@ class TerraEnv(NamedTuple):
             trench_axes,
             trench_type,
             dumpability_mask_init,
+            custom_pos=custom_pos,
+            custom_angle=custom_angle
         )
         state = self.wrap_state(state)
 
@@ -356,8 +362,11 @@ class TerraEnvBatch:
     def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
 
-    @partial(jax.jit, static_argnums=(0,))
-    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+    @partial(jax.jit, static_argnums=(0,3,4))
+    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey, 
+          custom_pos: Optional[Tuple[int, int]] = None, 
+          custom_angle: Optional[int] = None) -> State:
+        
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
         env_cfgs = self.update_env_cfgs(env_cfgs)
         (
@@ -368,15 +377,23 @@ class TerraEnvBatch:
             dumpability_mask_init,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
-        timestep = jax.vmap(self.terra_env.reset)(
-            rng_key,
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            dumpability_mask_init,
-            env_cfgs,
-        )
+        #jax.debug.print("custom_pos: {}, custom_angle: {}", custom_pos, custom_angle)
+
+        timestep = jax.vmap(
+            self.terra_env.reset,
+            in_axes=(0,0,0,0,0,0,0,None,None)
+            )(
+                rng_key,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                dumpability_mask_init,
+                env_cfgs,
+                custom_pos,
+                custom_angle,
+            )
+
         return timestep
 
     @partial(jax.jit, static_argnums=(0,))

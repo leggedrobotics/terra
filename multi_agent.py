@@ -120,7 +120,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     rng = jax.random.PRNGKey(seed)
     rng, _rng = jax.random.split(rng)
     rng_reset = jax.random.split(_rng, config.num_test_rollouts)
-    timestep = env.reset(env_cfgs, rng_reset)
+    custom_pos = (32, 32)
+    custom_angle = 3
+    print(f"Custom position: {custom_pos}, Custom angle: {custom_angle}")
+    timestep = env.reset(env_cfgs, rng_reset, custom_pos, custom_angle)
 
 
     # Initialize the LLM agent
