@@ -187,51 +187,58 @@ class CurriculumGlobalConfig(NamedTuple):
     # ]
 
     # NOTE: all maps need to have the same size
+    # levels = [
+    #     {
+    #         "maps_path": "trenches/single",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "foundations",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    #     {
+    #         "maps_path": "trenches/double",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "trenches/double_diagonal",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "foundations",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    #     {
+    #         "maps_path": "trenches/triple_diagonal",
+    #         "max_steps_in_episode": 400,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": True,
+    #     },
+    #     {
+    #         "maps_path": "foundations_large",
+    #         "max_steps_in_episode": 500,
+    #         "rewards_type": RewardsType.DENSE,
+    #         "apply_trench_rewards": False,
+    #     },
+    # ]
     levels = [
         {
-            "maps_path": "trenches/single",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "trenches/double",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "trenches/double_diagonal",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "trenches/triple_diagonal",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "foundations_large",
-            "max_steps_in_episode": 500,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
         },
     ]
-
 
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]

@@ -1,0 +1,95 @@
+    # class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+    #     def __init__(self, *args, **kwargs):
+    #         super().__init__(*args, **kwargs)
+    #         self._target_map_override = None
+    #         self._padding_mask_override = None
+    #         self._traversability_mask_override = None
+    #         self._dumpability_mask_override = None
+    #         self._override_active = False
+
+    #     def reset(self, env_cfgs, keys, custom_pos=None, custom_angle=None, 
+    #             target_map_override=None, padding_mask_override=None, 
+    #             traversability_mask_override=None, dumpability_mask_override=None):
+    #         """
+    #         Extended reset method that can accept map overrides.
+    #         """
+    #         # Store the original env_cfgs
+    #         self._original_env_cfgs = env_cfgs
+        
+    #         # If overrides are provided, create modified environment configs
+    #         if any(x is not None for x in [target_map_override, padding_mask_override, 
+    #                                   traversability_mask_override, dumpability_mask_override]):
+    #             print("Creating modified environment configs with overrides")
+    #             self._override_active = True
+            
+    #             # Make a deep copy of the environment configs to avoid modifying the originals
+    #             env_cfgs_with_overrides = jax.tree_map(lambda x: x, env_cfgs)
+            
+    #             # Apply overrides to the env_cfgs for every environment in the batch
+    #             num_envs = len(jax.tree_leaves(env_cfgs)[0])
+            
+    #             # Debug prints for shapes
+    #             if target_map_override is not None:
+    #                 print(f"Target map override shape: {target_map_override.shape}")
+            
+    #             # For each environment in the batch, apply the overrides
+    #             for env_idx in range(num_envs):
+    #                 # Update env_cfg at index with overrides
+    #                 if target_map_override is not None:
+    #                     # Ensure target_map is properly batched (has batch dimension)
+    #                     if len(target_map_override.shape) == 2:  # If it's a single map without batch dim
+    #                         target_map_batched = target_map_override[None, ...]
+    #                     else:
+    #                         target_map_batched = target_map_override
+                    
+    #                     # Update the target_map for this env
+    #                     print(f"Setting target_map_override for env {env_idx}")
+    #                     env_cfgs_with_overrides = jax.tree_map(
+    #                         lambda x, i=env_idx: x.at[i].set(target_map_batched[0]) 
+    #                         if hasattr(x, 'shape') and i < x.shape[0] and x.shape[1:] == target_map_batched.shape[1:] 
+    #                         else x,
+    #                         env_cfgs_with_overrides
+    #                     )
+                
+    #                 # Similarly for other overrides
+    #                 # ...
+                
+    #             # Use the modified env_cfgs for the reset
+    #             print("Using modified env_cfgs for reset")
+    #             return super().reset(env_cfgs_with_overrides, keys, custom_pos, custom_angle)
+        
+    #         else:
+    #             # No overrides, use original reset
+    #             self._override_active = False
+    #             return super().reset(env_cfgs, keys, custom_pos, custom_angle)
+
+    #     def _reset_env(self, env_cfg, key, custom_pos=None, custom_angle=None):
+    #         """
+    #         Make sure overrides are properly applied at the individual environment level too.
+    #         """
+    #         key, subkey = jax.random.split(key)
+        
+    #         print(f"In _reset_env, override_active: {self._override_active}")
+        
+    #         if self._override_active:
+    #             print("Using overridden env_cfg directly - should already have overrides applied")
+    #             # In this case, env_cfg should already have the overrides applied
+        
+    #         # Continue with normal reset_env process using the (potentially) modified env_cfg
+    #         state = State.new(
+    #             key=subkey,
+    #             env_cfg=env_cfg,
+    #             target_map=getattr(env_cfg, 'target_map', None),
+    #             traversability_mask=getattr(env_cfg, 'traversability_mask', None),
+    #             padding_mask=getattr(env_cfg, 'padding_mask', None),
+    #             trench_axes=getattr(env_cfg, 'trench_axes', None),
+    #             trench_type=getattr(env_cfg, 'trench_type', None),
+    #             dumpability_mask_init=getattr(env_cfg, 'dumpability_mask_init', None),
+    #             custom_pos=custom_pos,
+    #             custom_angle=custom_angle,
+    #         )
+        
+    #         observation = self._get_observation(state)
+    #         info = self._get_info(state)
+        
+    #         return state, observation, info

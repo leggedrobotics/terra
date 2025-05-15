@@ -52,7 +52,7 @@ from pygame.locals import (
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -426,22 +426,12 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         else:
             print("Master Agent stop.")
-            #playing = False
-            # if llm_decision != "delegate_to_rl" or llm_decision != "delegate_to_llm":
-
                 
             #     # TODO PASS LLM response to a function that parses the action
             action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
             action_list.append(action)
             count_stop += 1
-            # else:
-            #     # This case means delegation was intended but RL agent wasn't loaded properly
-            #     print("Error: Delegation requested, but RL agent is not available. Using do nothing action.")
-            #     action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
-            #     action_list.append(action)
-            #     llm_decision = "fallback"
-                #last_llm_decision = llm_decision # Update last decision
-        ### End Delegation ###
+   
         ###delete messages if too many###
 
         if len(llm_query.messages) > 3:
