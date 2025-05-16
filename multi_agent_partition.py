@@ -56,6 +56,8 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
+USE_MANUAL_PARTITIONING = True      # Use manual partitioning for LLM (Master Agent)
+NUM_PARTITIONS = 2          # Number of partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
@@ -66,12 +68,24 @@ SESSION_ID = "session_001"      # Session ID for ADK
 class TerraEnvBatchWithMapOverride(TerraEnvBatch):
     def reset_with_map_override(self, env_cfgs, keys, custom_pos=None, custom_angle=None,
                                target_map_override=None, padding_mask_override=None,
-                               traversability_mask_override=None, dumpability_mask_override=None, action_map_override=None):
+                               traversability_mask_override=None, dumpability_mask_override=None, 
+                               dumpability_mask_init_override=None, action_map_override=None):
         """
         Custom reset that first does a normal reset, then manually overrides the maps in the state.
         """
         # Do a normal reset first
         timestep = super().reset(env_cfgs, keys, custom_pos, custom_angle)
+        if padding_mask_override is not None:
+            print(f"Directly overriding padding_mask, shape: {padding_mask_override.shape}")
+            state = timestep.state
+            updated_world = state.world._replace(
+                padding_mask=state.world.padding_mask._replace(
+                    map=jnp.array([padding_mask_override])  # Assuming batch size of 1
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+            print("Padding mask directly overridden")
         
         # Now manually override the maps in the state
         if target_map_override is not None:
@@ -119,18 +133,6 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
             timestep = timestep._replace(state=updated_state)
             print("Traversability mask directly overridden")
         
-        if padding_mask_override is not None:
-            print(f"Directly overriding padding_mask, shape: {padding_mask_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                padding_mask=state.world.padding_mask._replace(
-                    map=jnp.array([padding_mask_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Padding mask directly overridden")
-        
         if dumpability_mask_override is not None:
             print(f"Directly overriding dumpability_mask, shape: {dumpability_mask_override.shape}")
             state = timestep.state
@@ -142,6 +144,18 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
             updated_state = state._replace(world=updated_world)
             timestep = timestep._replace(state=updated_state)
             print("Dumpability mask directly overridden")
+        
+        if dumpability_mask_init_override is not None:
+            print(f"Directly overriding dumpability_mask, shape: {dumpability_mask_init_override.shape}")
+            state = timestep.state
+            updated_world = state.world._replace(
+                dumpability_mask_init=state.world.dumpability_mask_init._replace(
+                    map=jnp.array([dumpability_mask_init_override])  # Assuming batch size of 1
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+            print("Dumpability mask init directly overridden")
         
         return timestep
 
@@ -217,11 +231,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     timestep = env.step(timestep, repeat_action(action_type.do_nothing()), rng_reset_initial)
     env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
 
-
-
-    global_target_map_data = timestep.state.world.target_map.map[0].copy() # Get the first (and only) env's map
-    global_action_map_data = timestep.state.world.action_map.map[0].copy() # Get the first (and only) env's ma
+    global_target_map_data = timestep.state.world.target_map.map[0].copy() 
+    global_action_map_data = timestep.state.world.action_map.map[0].copy() 
     global_dumpability_mask_data = timestep.state.world.dumpability_mask.map[0].copy()
+    global_dumpability_mask_init_data = timestep.state.world.dumpability_mask_init.map[0].copy()
     global_padding_mask_data = timestep.state.world.padding_mask.map[0].copy()
     global_traversability_mask_data = timestep.state.world.traversability_mask.map[0].copy()
 
@@ -229,18 +242,29 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     prev_actions_rl = jnp.zeros((1,config.num_prev_actions), dtype=jnp.int32)
 
     
-    print("Starting the game loop with map partitioning...")
-
 
     step = 0
     playing = True
 
-    sub_tasks = [
-        {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
-        {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
-        {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
-        {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
-    ]
+    if USE_MANUAL_PARTITIONING:
+        if NUM_PARTITIONS == 1:
+            sub_tasks = [
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+            ]
+        elif NUM_PARTITIONS == 2:
+            sub_tasks = [
+                {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+            ]
+        elif NUM_PARTITIONS == 4:
+            sub_tasks = [
+                {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
+                {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
+                {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
+            ]
+        else:
+            raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
 
     current_sub_task_idx = -1
 
@@ -248,6 +272,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     frames = []
 
     rng = jax.random.PRNGKey(seed)
+
+    print("Starting the game loop with map partitioning...")
 
     while playing and step < num_timesteps:
         print(f"Step {step} / {num_timesteps}")
@@ -258,7 +284,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         #current_sub_task_idx = step
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
-        if current_sub_task_idx == -1 or (sub_tasks[current_sub_task_idx]['status'] == 'completed'):
+        if current_sub_task_idx == -1 or (sub_tasks[current_sub_task_idx]['status'] == 'completed') or step%100==0:
         #if current_sub_task_idx is not None:
             current_sub_task_idx += 1
 
@@ -289,6 +315,12 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             )
             print(f"Sub-task dumbability mask shape: {sub_task_dumpability_mask_data.shape}")
 
+            sub_task_dumpability_init_mask_data = create_sub_task_dumpability_mask(
+                global_dumpability_mask_init_data, 
+                active_task['region_coords']
+            )
+            print(f"Sub-task dumbability init mask shape: {sub_task_dumpability_init_mask_data.shape}")
+
             sub_task_padding_mask_data = create_sub_task_padding_mask(
                 global_padding_mask_data, 
                 active_task['region_coords']
@@ -301,8 +333,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             )
             print(f"Sub-task traversability mask shape: {sub_task_traversability_mask_data.shape}")
 
-            # rng, _rng_reset_subtask = jax.random.split(rng)
-            # rng_reset_subtask = jax.random.split(_rng_reset_subtask, 1)
             rng, reset_key = jax.random.split(rng)
 
             
@@ -312,7 +342,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
             timestep = env.reset_with_map_override(
                 original_env_cfgs_full_map, 
-                #rng_reset_subtask,
                 jax.random.split(reset_key, 1),
                 custom_pos=custom_pos,
                 custom_angle=custom_angle,
@@ -320,12 +349,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 traversability_mask_override=sub_task_traversability_mask_data,
                 padding_mask_override=sub_task_padding_mask_data,
                 dumpability_mask_override=sub_task_dumpability_mask_data,
+                dumpability_mask_init_override=sub_task_dumpability_init_mask_data,
                 action_map_override=sub_task_action_map_data
             )
             current_target_map = timestep.state.world.target_map.map[0]
             current_traversability_mask = timestep.state.world.traversability_mask.map[0]
             current_padding_mask = timestep.state.world.padding_mask.map[0]
             current_dumpability_mask = timestep.state.world.dumpability_mask.map[0]
+            current_dumpability_mask_init = timestep.state.world.dumpability_mask_init.map[0]
             current_action_map = timestep.state.world.action_map.map[0]
 
             # Check if they match what we passed in
@@ -333,54 +364,44 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             traversability_match = np.array_equal(current_traversability_mask, sub_task_traversability_mask_data)
             padding_match = np.array_equal(current_padding_mask, sub_task_padding_mask_data)
             dumpability_match = np.array_equal(current_dumpability_mask, sub_task_dumpability_mask_data)
+            dumpability_match_init = np.array_equal(current_dumpability_mask_init, sub_task_dumpability_init_mask_data)
             action_match = np.array_equal(current_action_map, sub_task_action_map_data)
 
             print(f"Target map properly overridden: {target_match}")
             print(f"Traversability mask properly overridden: {traversability_match}")
             print(f"Padding mask properly overridden: {padding_match}")
             print(f"Dumpability mask properly overridden: {dumpability_match}")
+            print(f"Dumpability mask init properly overridden: {dumpability_match_init}")
             print(f"Action map properly overridden: {action_match}")
 
-            if not target_match or not traversability_match or not padding_match or not dumpability_match or not action_match:
+            if not target_match or not traversability_match or not padding_match or not dumpability_match or not dumpability_match_init or not action_match:
                 print("WARNING: Maps were not properly overridden!")
-
             
             active_task['status'] = 'active'
             # Reset metrics for the new sub-task
             prev_actions_rl = jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
 
 
-            # # Render the observation using the terra environment's renderer
-            # env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
-            
-
-
-        #rng, rng_act, rng_step = jax.random.split(rng, 3)
         rng, action_key, step_key = jax.random.split(rng, 3)
 
 
         active_task = sub_tasks[current_sub_task_idx]
         current_observation = timestep.observation # This obs is from the sub-task's 64x64 map
-        
 
         obs = obs_to_model_input(current_observation, prev_actions_rl, config)
         _, logits_pi = model.apply(model_params, obs)
         pi = tfp.distributions.Categorical(logits=logits_pi)
-        #action_rl = pi.sample(seed=rng_act)
         action_rl = pi.sample(seed=action_key)
 
         prev_actions_rl = jnp.roll(prev_actions_rl, shift=1, axis=1)
         prev_actions_rl = prev_actions_rl.at[:, 0].set(action_rl)
 
-        #_rng_step_subtask = jax.random.split(rng_step, 1)
         timestep = env.step(
             timestep, 
             wrap_action(action_rl, action_type), 
-            #rng_step=step_key
             jax.random.split(step_key, 1)
         )
 
-        print(timestep.info)
         if timestep.info.get("task_done", jnp.array([False]))[0]:
             print(f"--- Sub-Task {active_task['id']} COMPLETED by RL agent! ---")
             active_task['status'] = 'completed'
@@ -411,7 +432,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             global_padding_mask_data = global_padding_mask_data.at[region_slice].set(
                 timestep.state.world.padding_mask.map[0][region_slice]
             )
-
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         step += 1
 
@@ -427,7 +447,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     os.makedirs(output_dir, exist_ok=True)
 
     # Save actions and cumulative rewards to a CSV file
-#
+    # TODO
     # Save the gameplay video
     video_path = os.path.join(output_dir, "gameplay.mp4")
     save_video(frames, video_path)
@@ -506,10 +526,10 @@ if __name__ == "__main__":
         # help="new-maps-different-order.pkl (12 cabin and 12 base rotations)",
         # default="/home/gioelemo/Documents/terra/gioele.pkl",
         # help="gioele.pkl (8 cabin and 4 base rotations)",
-        default="/home/gioelemo/Documents/terra/gioele_new.pkl",
-        help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
-        #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
-        #help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
+        # default="/home/gioelemo/Documents/terra/gioele_new.pkl",
+        # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
+        default="/home/gioelemo/Documents/terra/new-penalties.pkl",
+        help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 
     args = parser.parse_args()

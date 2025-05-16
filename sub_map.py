@@ -50,38 +50,34 @@ from pygame.locals import (
     K_q,
     QUIT,
 )
+
 def create_sub_task_target_map(global_target_map_data: jnp.ndarray,
-                               region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+                              region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
     """
     Creates a 64x64 target map for an RL agent's sub-task.
-
-    Only retains `-1` values (dig targets) from the specified region in the global map.
-    Everything else is set to 0 (free).
-
+    
+    Retains both `-1` values (dig targets) and `1` values (dump targets) from 
+    the specified region in the global map. Everything outside the region is set to 0 (free).
+    
     Args:
         global_target_map_data: Full 64x64 target map (1: dump, 0: free, -1: dig).
         region_coords: (y_start, x_start, y_end, x_end), inclusive bounds.
-
+    
     Returns:
-        A new 64x64 map with `-1`s from the region; everything else is 0.
+        A new 64x64 map with `-1`s and `1`s from the region; everything else is 0.
     """
     y_start, x_start, y_end, x_end = region_coords
-
+    
     # Initialize a 64x64 map with all zeros (free space)
     sub_task_map = jnp.zeros_like(global_target_map_data)
-
+    
     # Define slice object for region
     region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
-
-    # Extract region from global map
-    region_data = global_target_map_data[region_slice]
-
-    # Only keep -1 (dig targets), set everything else to 0
-    dig_targets_only = jnp.where(region_data == -1, -1, 0)
-
-    # Set dig targets into the sub_task map at correct location
-    sub_task_map = sub_task_map.at[region_slice].set(dig_targets_only)
-
+    
+    # Extract region from global map and place it directly into the sub_task map
+    # This preserves both -1 (dig) and 1 (dump) values within the region
+    sub_task_map = sub_task_map.at[region_slice].set(global_target_map_data[region_slice])
+    
     return sub_task_map
 
 def create_sub_task_action_map(action_map_data: jnp.ndarray,
