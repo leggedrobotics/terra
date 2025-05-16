@@ -792,8 +792,8 @@ class State(NamedTuple):
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         new_dumpability_mask = self.world.dumpability_mask_init.map
-        action_mask = (action_map < 0).astype(jnp.float16)
-        kernel = jnp.ones((3, 3), dtype=jnp.float16)
+        action_mask = (action_map < 0).astype(IntMap)
+        kernel = jnp.ones((5, 5), dtype=IntMap)
         action_mask_contoured = jax.scipy.signal.convolve2d(
             action_mask,
             kernel,
@@ -801,31 +801,11 @@ class State(NamedTuple):
             boundary="fill",
             fillvalue=0,
         )
-        return new_dumpability_mask * (action_mask_contoured == 0)
-
-    def _update_dumpability_mask_after_dig(self, dig_map: Array, action_map: Array, dumpability_mask: Array) -> Array:
-        """
-        Updates the dumpability mask so that any tile adjacent to a newly dug tile
-        becomes non-dumpable (0), unless it already was non-dumpable or is a to-dig tile in the target map.
-        """
-        # 1. Find newly dug tiles
-        newly_dug_mask = (dig_map < action_map).astype(IntMap)
-
-        # 2. Convolve with a 3x3 kernel to find bordering tiles
-        kernel = jnp.ones((3, 3), dtype=IntMap)
-        bordering = jax.scipy.signal.convolve2d(newly_dug_mask, kernel, mode="same", boundary="fill", fillvalue=0)
-
-        # 3. Bordering tiles are those where bordering > 0, but not newly dug themselves
-        bordering_mask = (bordering > 0) & (newly_dug_mask == 0)
-
-        # 4. Exclude tiles that are to-dig in the target map
+        # Exclude to-dig tiles from being masked out
         to_dig_mask = self.world.target_map.map < 0
-        bordering_mask = bordering_mask & (~to_dig_mask)
-
-        # 5. Update dumpability mask: set bordering tiles to 0, but keep existing 0s
-        new_dumpability_mask = jnp.where(bordering_mask, 0, dumpability_mask)
-
-        return new_dumpability_mask.astype(IntMap)
+        # Only mask out if not a to-dig tile
+        mask = (action_mask_contoured == 0) | to_dig_mask
+        return new_dumpability_mask * mask
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
@@ -847,10 +827,8 @@ class State(NamedTuple):
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
-            new_dumpability_mask = self._update_dumpability_mask_after_dig(
+            new_dumpability_mask = self._get_new_dumpability_mask(
                 new_map_global_coords,
-                self.world.action_map.map,
-                self.world.dumpability_mask.map
             )
 
             return self._replace(
@@ -859,7 +837,7 @@ class State(NamedTuple):
                         map=IntLowDim(new_map_global_coords)
                     ),
                     dumpability_mask=self.world.dumpability_mask._replace(
-                        map=IntLowDim(new_dumpability_mask)
+                        map=jnp.bool_(new_dumpability_mask)
                     )
                 ),
                 agent=self.agent._replace(
@@ -886,10 +864,6 @@ class State(NamedTuple):
         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
-        # dump_volume_per_tile = jnp.rint(
-        #     self.agent.agent_state.loaded / (dump_volume + 1e-6)
-        # ).astype(IntLowDim)
-
         remaining_volume = self.agent.agent_state.loaded % dump_volume
         even_volume_per_tile = (
             self.agent.agent_state.loaded - remaining_volume
@@ -908,10 +882,6 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
-            )
-
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
@@ -919,10 +889,7 @@ class State(NamedTuple):
                     ),
                     dig_map=self.world.dig_map._replace(
                         map=IntLowDim(new_map_global_coords)
-                    ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
-                    ),
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
