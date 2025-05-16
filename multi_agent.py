@@ -21,7 +21,7 @@ from terra.config import BatchConfig
 
 from terra.viz.llms_utils import *
 from multi_agent_utils import *
-from multi_agent_map import *
+#from multi_agent_map import *
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
 from terra.actions import (
@@ -52,7 +52,7 @@ from pygame.locals import (
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = False    # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -700,10 +700,10 @@ if __name__ == "__main__":
         # help="new-maps-different-order.pkl (12 cabin and 12 base rotations)",
         # default="/home/gioelemo/Documents/terra/gioele.pkl",
         # help="gioele.pkl (8 cabin and 4 base rotations)",
-        default="/home/gioelemo/Documents/terra/gioele_new.pkl",
-        help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
-        #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
-        #help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
+        # default="/home/gioelemo/Documents/terra/gioele_new.pkl",
+        # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
+        default="/home/gioelemo/Documents/terra/new-penalties.pkl",
+        help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 
     args = parser.parse_args()

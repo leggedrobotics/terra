@@ -21,7 +21,6 @@ from terra.config import BatchConfig
 
 from terra.viz.llms_utils import *
 from multi_agent_utils import *
-from multi_agent_map import *
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
 from terra.actions import (
@@ -50,115 +49,20 @@ from pygame.locals import (
     K_q,
     QUIT,
 )
-from sub_map import *
+#from sub_map import *
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True    # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
-LLM_CALL_FREQUENCY = 15          # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True      # Use manual partitioning for LLM (Master Agent)
-NUM_PARTITIONS = 2          # Number of partitions for LLM (Master Agent)
+LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
+USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+NUM_PARTITIONS = 2              # Number of partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
 APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
-
-class TerraEnvBatchWithMapOverride(TerraEnvBatch):
-    def reset_with_map_override(self, env_cfgs, keys, custom_pos=None, custom_angle=None,
-                               target_map_override=None, padding_mask_override=None,
-                               traversability_mask_override=None, dumpability_mask_override=None, 
-                               dumpability_mask_init_override=None, action_map_override=None):
-        """
-        Custom reset that first does a normal reset, then manually overrides the maps in the state.
-        """
-        # Do a normal reset first
-        timestep = super().reset(env_cfgs, keys, custom_pos, custom_angle)
-        if padding_mask_override is not None:
-            print(f"Directly overriding padding_mask, shape: {padding_mask_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                padding_mask=state.world.padding_mask._replace(
-                    map=jnp.array([padding_mask_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Padding mask directly overridden")
-        
-        # Now manually override the maps in the state
-        if target_map_override is not None:
-            print(f"Directly overriding target_map, shape: {target_map_override.shape}")
-            # Get a mutable copy of the state (since JAX objects are immutable)
-            state = timestep.state
-            
-            # Create an updated world with the overridden target map
-            updated_world = state.world._replace(
-                target_map=state.world.target_map._replace(
-                    map=jnp.array([target_map_override])  # Assuming batch size of 1
-                )
-            )
-            
-            # Create an updated state with the new world
-            updated_state = state._replace(world=updated_world)
-            
-            # Update the timestep with the new state
-            timestep = timestep._replace(state=updated_state)
-            
-            print("Target map directly overridden")
-
-        if action_map_override is not None:
-            print(f"Directly overriding action_map, shape: {action_map_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                action_map=state.world.action_map._replace(
-                    map=jnp.array([action_map_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Action map directly overridden")
-        
-        # Similarly for other map types...
-        if traversability_mask_override is not None:
-            print(f"Directly overriding traversability_mask, shape: {traversability_mask_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                traversability_mask=state.world.traversability_mask._replace(
-                    map=jnp.array([traversability_mask_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Traversability mask directly overridden")
-        
-        if dumpability_mask_override is not None:
-            print(f"Directly overriding dumpability_mask, shape: {dumpability_mask_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                dumpability_mask=state.world.dumpability_mask._replace(
-                    map=jnp.array([dumpability_mask_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Dumpability mask directly overridden")
-        
-        if dumpability_mask_init_override is not None:
-            print(f"Directly overriding dumpability_mask, shape: {dumpability_mask_init_override.shape}")
-            state = timestep.state
-            updated_world = state.world._replace(
-                dumpability_mask_init=state.world.dumpability_mask_init._replace(
-                    map=jnp.array([dumpability_mask_init_override])  # Assuming batch size of 1
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
-            print("Dumpability mask init directly overridden")
-        
-        return timestep
-
 
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_envs_y, seed, progressive_gif, run):
     """

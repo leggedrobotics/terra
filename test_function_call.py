@@ -1,56 +1,111 @@
-from openai import OpenAI
+from google.genai import types
+import time
 
-file = open("OPENAI_API_KEY.txt", "r")
-api_key = file.read()
-
-client = OpenAI(api_key=api_key)
-
-def get_weather(location):
-    # Mock implementation of the function
-    return {"temperature": "20°C", "condition": "Sunny"}
-
-
-tools = [{
-    "type": "function",
-    "name": "get_weather",
-    "description": "Get current temperature for a given location.",
+# Define a function that the model can call to control smart lights
+set_light_values_declaration = {
+    "name": "set_light_values",
+    "description": "Sets the brightness and color temperature of a light.",
     "parameters": {
         "type": "object",
         "properties": {
-            "location": {
+            "brightness": {
+                "type": "integer",
+                "description": "Light level from 0 to 100. Zero is off and 100 is full brightness",
+            },
+            "color_temp": {
                 "type": "string",
-                "description": "City and country e.g. Bogotá, Colombia"
-            }
+                "enum": ["daylight", "cool", "warm"],
+                "description": "Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.",
+            },
         },
-        "required": [
-            "location"
-        ],
-        "additionalProperties": False
-    }
-}]
+        "required": ["brightness", "color_temp"],
+    },
+}
 
-# response = client.responses.create(
-#     model="gpt-4o",
-#     input=[{"role": "system", "content": "What is the weather like in Paris today?"}],
-#     tools=tools
-# )
+# This is the actual function that would be called based on the model's suggestion
+def set_light_values(brightness: int, color_temp: str) -> dict[str, int | str]:
+    """Set the brightness and color temperature of a room light. (mock API).
 
-response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {"role": "user", "content": "What is the weather like in Paris today?"}
-    ],
-    functions=tools,
-    function_call={"name": "get_weather"},
-)
+    Args:
+        brightness: Light level from 0 to 100. Zero is off and 100 is full brightness
+        color_temp: Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.
 
-# response2 = client.chat.completions.create(
-#     model="gpt-4o",
-#     messages=[
-#         {"role": "user", "content": "What is the weather like in Paris today?"}
-#     ],
-#     tools=tools,
-#     function_call={"name": "get_weather"},
-# )
-print(response.choices[0].message)
-# print(response2.choices[0].message)
+    Returns:
+        A dictionary containing the set brightness and color temperature.
+    """
+    return {"brightness": brightness, "colorTemperature": color_temp}
+
+from google import genai
+
+# Generation Config with Function Declaration
+tools = types.Tool(function_declarations=[set_light_values_declaration])
+config = types.GenerateContentConfig(tools=[tools])
+
+# Configure the client
+file = open("GOOGLE_API_KEY_FREE.txt", "r")
+api_key = file.read()
+client = genai.Client(api_key=api_key)
+
+# Define user prompt
+contents = [
+    types.Content(
+        role="user", parts=[types.Part(text="Turn the lights down to a romantic level")]
+    )
+]
+
+model_0 = "gemini-2.0-flash"
+#model_1 = "gemini-2.5-pro-exp-03-25"
+model_1 = "gemini-2.0-flash-lite"
+#model_2 = "gemini-2.5-pro-preview-03-25"
+model_2 = "gemini-2.5-pro-preview-05-06"
+model_3 = "gemini-2.5-flash-preview-04-17"
+
+list_0 = []
+for i in range(10):
+    response_0 = client.models.generate_content(
+        model=model_0, config=config, contents=contents
+    )
+    list_0.append(response_0.candidates[0].content.parts[0].function_call)
+    time.sleep(0.1)
+
+
+print(f"Response for {model_0}:")
+print(list_0, sep="\n")
+
+
+list_1 = []
+for i in range(10):
+    response_1 = client.models.generate_content(
+        model=model_1, config=config, contents=contents
+    )
+    list_1.append(response_1.candidates[0].content.parts[0].function_call)
+    time.sleep(0.1)
+
+print("_________________________________________________________________________________________________________________________________________")
+print(f"Response for {model_1}:")
+print(list_1, sep="\n")
+
+list_2 = []
+for i in range(10):
+    response_2 = client.models.generate_content(
+        model=model_2, config=config, contents=contents
+    )
+    list_2.append(response_2.candidates[0].content.parts[0].function_call)
+    time.sleep(0.1)
+
+print("_________________________________________________________________________________________________________________________________________")
+print(f"Response for {model_2}:")
+print(list_2, sep="\n")
+
+
+list_3 = []
+for i in range(10):
+    response_3 = client.models.generate_content(
+        model=model_3, config=config, contents=contents
+    )
+    list_3.append(response_3.candidates[0].content.parts[0].function_call)
+    time.sleep(0.1)
+
+print("_________________________________________________________________________________________________________________________________________")
+print(f"Response for {model_3}:")
+print(list_3, sep="\n")

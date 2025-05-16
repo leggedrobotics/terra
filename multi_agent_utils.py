@@ -15,6 +15,8 @@ import csv
 
 from utils.models import get_model_ready
 import json
+from terra.env import TerraEnvBatch
+import jax.numpy as jnp
 
 def print_stats(
     stats,
@@ -339,3 +341,225 @@ def extract_first_row(input_dict):
 
     
     return result
+
+
+class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+    def reset_with_map_override(self, env_cfgs, keys, custom_pos=None, custom_angle=None,
+                               target_map_override=None, padding_mask_override=None,
+                               traversability_mask_override=None, dumpability_mask_override=None, 
+                               dumpability_mask_init_override=None, action_map_override=None):
+        """
+        Custom reset that first does a normal reset, then manually overrides the maps in the state.
+        """
+        # Do a normal reset first
+        timestep = super().reset(env_cfgs, keys, custom_pos, custom_angle)
+
+        # Now manually override the maps in the state
+        if padding_mask_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                padding_mask=state.world.padding_mask._replace(
+                    map=jnp.array([padding_mask_override])
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+        
+        if target_map_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                target_map=state.world.target_map._replace(
+                    map=jnp.array([target_map_override])  
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+
+        if action_map_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                action_map=state.world.action_map._replace(
+                    map=jnp.array([action_map_override])
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+        
+        if traversability_mask_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                traversability_mask=state.world.traversability_mask._replace(
+                    map=jnp.array([traversability_mask_override])
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+        
+        if dumpability_mask_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                dumpability_mask=state.world.dumpability_mask._replace(
+                    map=jnp.array([dumpability_mask_override])
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+        
+        if dumpability_mask_init_override is not None:
+            state = timestep.state
+            updated_world = state.world._replace(
+                dumpability_mask_init=state.world.dumpability_mask_init._replace(
+                    map=jnp.array([dumpability_mask_init_override]) 
+                )
+            )
+            updated_state = state._replace(world=updated_world)
+            timestep = timestep._replace(state=updated_state)
+        
+        return timestep
+
+def create_sub_task_target_map(global_target_map_data: jnp.ndarray,
+                              region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 target map for an RL agent's sub-task.
+    
+    Retains both `-1` values (dig targets) and `1` values (dump targets) from 
+    the specified region in the global map. Everything outside the region is set to 0 (free).
+    
+    Args:
+        global_target_map_data: Full 64x64 target map (1: dump, 0: free, -1: dig).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive bounds.
+    
+    Returns:
+        A new 64x64 map with `-1`s and `1`s from the region; everything else is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+    
+    # Initialize a 64x64 map with all zeros (free space)
+    sub_task_map = jnp.zeros_like(global_target_map_data)
+    
+    # Define slice object for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+    
+    # Extract region from global map and place it directly into the sub_task map
+    # This preserves both -1 (dig) and 1 (dump) values within the region
+    sub_task_map = sub_task_map.at[region_slice].set(global_target_map_data[region_slice])
+    
+    return sub_task_map
+
+def create_sub_task_action_map(action_map_data: jnp.ndarray,
+                               region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 action map for a sub-task, preserving only actions that occurred
+    inside the specified region. Outside the region, all values are reset to 0 (free).
+
+    Args:
+        action_map_data: Full 64x64 action map 
+                         (-1: dug, 0: free, >0: dumped).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A new 64x64 map with only the region's actions preserved, all else is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize output map with zeros (free)
+    sub_task_action_map = jnp.zeros_like(action_map_data)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract region from input map
+    region_data = action_map_data[region_slice]
+
+    # Set region into the new map
+    sub_task_action_map = sub_task_action_map.at[region_slice].set(region_data)
+
+    return sub_task_action_map
+
+def create_sub_task_padding_mask(padding_mask_data: jnp.ndarray,
+                                 region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 padding mask for a sub-task.
+
+    Inside the region: preserves original traversability (0 or 1).
+    Outside the region: sets everything to 1 (non-traversable).
+
+    Args:
+        padding_mask_data: Full 64x64 mask (0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64x64 mask with only the region preserved; the rest is 1.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize everything as non-traversable (1)
+    sub_task_mask = jnp.ones_like(padding_mask_data)
+
+    # Define slice for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Copy the original values only inside the region
+    region_data = padding_mask_data[region_slice]
+    sub_task_mask = sub_task_mask.at[region_slice].set(region_data)
+
+    return sub_task_mask
+
+def create_sub_task_traversability_mask(traversability_mask_data: jnp.ndarray,
+                                        region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 traversability mask for a sub-task.
+
+    Inside the region: preserves original values (-1: agent, 0: traversable, 1: non-traversable).
+    Outside the region: sets everything to 1 (non-traversable).
+
+    Args:
+        traversability_mask_data: Full 64x64 mask 
+                                  (-1: agent, 0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64x64 mask with only the region preserved; the rest is 1.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Start with a mask where everything is non-traversable (1)
+    sub_task_mask = jnp.ones_like(traversability_mask_data)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Copy the original values from the region (can include -1, 0, 1)
+    region_data = traversability_mask_data[region_slice]
+    sub_task_mask = sub_task_mask.at[region_slice].set(region_data)
+
+    return sub_task_mask
+
+def create_sub_task_dumpability_mask(dumpability_mask_data: jnp.ndarray,
+                                     region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64×64 dumpability mask for a sub-task.
+
+    Inside the region: preserves original values (1: can dump, 0: can't dump).
+    Outside the region: sets everything to 0 (can't dump).
+
+    Args:
+        dumpability_mask_data: Full 64×64 mask (1: can dump, 0: can't).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64×64 mask with only the region preserved; the rest is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize as all 0 (can't dump)
+    sub_task_mask = jnp.zeros_like(dumpability_mask_data)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Copy over the original dumpability values inside the region
+    region_data = dumpability_mask_data[region_slice]
+    sub_task_mask = sub_task_mask.at[region_slice].set(region_data)
+
+    return sub_task_mask
