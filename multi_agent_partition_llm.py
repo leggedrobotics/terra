@@ -53,7 +53,7 @@ from pygame.locals import (
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = True   # Force delegation to LLM agent for testing
+FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 50         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 2              # Number of partitions for LLM (Master Agent)
@@ -258,7 +258,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 print(f"Error during ADK agent communication: {adk_err}")
                 print("Defaulting to fallback action due to ADK error.")
                 llm_decision = "fallback"
-                last_llm_decision = llm_decision
 
         #current_sub_task_idx = step
 
@@ -361,6 +360,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
         traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
+        game_state_image = capture_screen(screen)
+
 
         if step % LLM_CALL_FREQUENCY == 0:
             print("Calling LLM agent for decision...")
@@ -397,11 +398,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                     
                     if "delegate_to_rl" in llm_response_text.lower():
                         llm_decision = "delegate_to_rl"
-                        last_llm_decision = llm_decision # Update last decision
                         print("Delegating to RL agent based on LLM response.")
                     elif "delegate_to_llm" in llm_response_text.lower():
                         llm_decision = "delegate_to_llm"
-                        last_llm_decision = llm_decision
                         print("Delegating to LLM agent based on LLM response.")
                     else:
                         llm_decision = "STOP"                    
@@ -410,11 +409,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                     print(f"Error during ADK agent communication: {adk_err}")
                     print("Defaulting to fallback action due to ADK error.")
                     llm_decision = "fallback" # Indicate fallback needed
-                    last_llm_decision = llm_decision # Update last decision
             else:
                 print("Forcing delegation to RL agent for testing.")
                 llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
-                last_llm_decision = llm_decision # Update last decision
 
 
         if FORCE_DELEGATE_TO_LLM:
@@ -441,7 +438,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
                 action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
                 action_list.append(action)
                 llm_decision = "fallback" # Mark as fallback
-                last_llm_decision = llm_decision # Update last decision
         elif llm_decision == "delegate_to_llm":
             print("Delegate to LLM excavator...")
 
@@ -501,10 +497,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         else:
             print("Master Agent stop.")
                 
-            #     # TODO PASS LLM response to a function that parses the action
+            # TODO PASS LLM response to a function that parses the action
             action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
             action_list.append(action)
             count_stop += 1
+
+        if len(llm_query.messages) > 3:
+            llm_query.delete_messages()
 
         prev_actions_rl = jnp.roll(prev_actions_rl, shift=1, axis=1)
         prev_actions_rl = prev_actions_rl.at[:, 0].set(action)
@@ -550,7 +549,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             global_padding_mask_data = global_padding_mask_data.at[region_slice].set(
                 timestep.state.world.padding_mask.map[0][region_slice]
             )
-        if timestep.done:
+        if timestep.done[0]:
             print("Episode done.")
             playing = False
             break
@@ -558,8 +557,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         step += 1
 
-    print("Game loop ended.")
-    print(reward_seq)
+    print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
     numeric_reward_seq = [r[0] if hasattr(r, '__getitem__') and len(r) > 0 else r for r in reward_seq]
     cumulative_rewards = np.cumsum(numeric_reward_seq)
 
