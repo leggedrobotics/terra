@@ -563,3 +563,56 @@ def create_sub_task_dumpability_mask(dumpability_mask_data: jnp.ndarray,
     sub_task_mask = sub_task_mask.at[region_slice].set(region_data)
 
     return sub_task_mask
+
+def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversability_mask_data, 
+                         sub_task_padding_mask_data, sub_task_dumpability_mask_data,
+                         sub_task_dumpability_init_mask_data, sub_task_action_map_data):
+    """
+    Verifies if the maps in the timestep state match the expected data.
+    
+    Parameters:
+    - timestep: The timestep object containing state information
+    - sub_task_target_map_data: Expected target map data
+    - sub_task_traversability_mask_data: Expected traversability mask data
+    - sub_task_padding_mask_data: Expected padding mask data
+    - sub_task_dumpability_mask_data: Expected dumpability mask data
+    - sub_task_dumpability_init_mask_data: Expected initial dumpability mask data
+    - sub_task_action_map_data: Expected action map data
+    
+    Returns:
+    - bool: True if all maps match, False otherwise
+    """
+    import numpy as np
+    
+    # Extract current maps from timestep
+    current_target_map = timestep.state.world.target_map.map[0]
+    current_traversability_mask = timestep.state.world.traversability_mask.map[0]
+    current_padding_mask = timestep.state.world.padding_mask.map[0]
+    current_dumpability_mask = timestep.state.world.dumpability_mask.map[0]
+    current_dumpability_mask_init = timestep.state.world.dumpability_mask_init.map[0]
+    current_action_map = timestep.state.world.action_map.map[0]
+
+    # Check if they match what we passed in
+    target_match = np.array_equal(current_target_map, sub_task_target_map_data)
+    traversability_match = np.array_equal(current_traversability_mask, sub_task_traversability_mask_data)
+    padding_match = np.array_equal(current_padding_mask, sub_task_padding_mask_data)
+    dumpability_match = np.array_equal(current_dumpability_mask, sub_task_dumpability_mask_data)
+    dumpability_match_init = np.array_equal(current_dumpability_mask_init, sub_task_dumpability_init_mask_data)
+    action_match = np.array_equal(current_action_map, sub_task_action_map_data)
+
+    # Print verification results
+    # print(f"Target map properly overridden: {target_match}")
+    # print(f"Traversability mask properly overridden: {traversability_match}")
+    # print(f"Padding mask properly overridden: {padding_match}")
+    # print(f"Dumpability mask properly overridden: {dumpability_match}")
+    # print(f"Dumpability mask init properly overridden: {dumpability_match_init}")
+    # print(f"Action map properly overridden: {action_match}")
+
+    # Check if all maps match
+    all_match = (target_match and traversability_match and padding_match and 
+                dumpability_match and dumpability_match_init and action_match)
+    
+    if not all_match:
+        print("WARNING: Maps were not properly overridden!")
+    
+    return all_match

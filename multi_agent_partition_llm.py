@@ -56,7 +56,7 @@ FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
-NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
+NUM_PARTITIONS = 2              # Number of partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
@@ -172,12 +172,33 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
     current_sub_task_idx = -1
 
+    # Initialize the LLM agent
+    llm_query, runner, prev_actions, system_message_master = init_llms(llm_model_key, llm_model_name, USE_PATH, 
+                                                                       config, env, n_envs, 
+                                                                       APP_NAME, USER_ID, SESSION_ID)
+
+
     screen = pg.display.get_surface()
     frames = []
     t_counter = 0
     reward_seq = []
     obs_seq = []
     action_list = []
+
+    PROMPT_FILENAME = "usr_msg8.txt"
+    PROMPT_NO_PATH_FILENAME = "usr_msg7.txt" # New filename
+    try:
+        with open(PROMPT_FILENAME, 'r') as f:
+            prompt_template_string = f.read()
+        print(f"Successfully loaded prompt template from {PROMPT_FILENAME}")
+        # Read the second template
+        with open(PROMPT_NO_PATH_FILENAME, 'r') as f:
+            prompt_template_no_path_string = f.read()
+        print(f"Successfully loaded prompt template from {PROMPT_NO_PATH_FILENAME}")
+
+    except FileNotFoundError as e:
+        print(f"ERROR: Prompt template file not found: {e.filename}")
+        # Handle the error appropriately, e.g., exit or use a default prompt
 
 
     rng = jax.random.PRNGKey(seed)
