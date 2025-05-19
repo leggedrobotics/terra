@@ -793,7 +793,7 @@ class State(NamedTuple):
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         new_dumpability_mask = self.world.dumpability_mask_init.map
         action_mask = (action_map < 0).astype(jnp.float16)
-        kernel = jnp.ones((3, 3), dtype=jnp.float16)
+        kernel = jnp.ones((5, 5), dtype=jnp.float16)
         action_mask_contoured = jax.scipy.signal.convolve2d(
             action_mask,
             kernel,
