@@ -855,10 +855,6 @@ class State(NamedTuple):
         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
-        # dump_volume_per_tile = jnp.rint(
-        #     self.agent.agent_state.loaded / (dump_volume + 1e-6)
-        # ).astype(IntLowDim)
-
         remaining_volume = self.agent.agent_state.loaded % dump_volume
         even_volume_per_tile = (
             self.agent.agent_state.loaded - remaining_volume
