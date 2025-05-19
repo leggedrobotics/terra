@@ -17,6 +17,7 @@ from utils.models import get_model_ready
 import json
 from terra.env import TerraEnvBatch
 import jax.numpy as jnp
+import ast
 
 def print_stats(
     stats,
@@ -99,15 +100,45 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     
     print("Using model: ", llm_model_name_extended)
 
-    description_master = "You are a master agent controlling an excavator. Observe the state. " \
-    "Decide if you should delegate digging tasks to a " \
-    "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
-    "specialized LLM agent (respond with 'delegate_to_llm')."
+    # description_master = "You are a master agent controlling an excavator. Observe the state. " \
+    # "Decide if you should delegate digging tasks to a " \
+    # "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+    # "specialized LLM agent (respond with 'delegate_to_llm')."
 
-    system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
-    "Decide if you should delegate digging tasks to a " \
-    "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
-    "specialized LLM agent (respond with 'delegate_to_llm')."
+    # system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
+    # "Decide if you should delegate digging tasks to a " \
+    # "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+    # "specialized LLM agent (respond with 'delegate_to_llm')."
+    description_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
+
+
+    system_message_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
+    "IMPORTANT: All maps are 64x64 in size.\n\n" \
+    "GUIDELINES FOR PARTITIONING:\n" \
+    "1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements\n" \
+    "2. Create efficient partitions that maximize excavator productivity and minimize travel time\n" \
+    "3. Ensure each partition has adequate space for the excavator to maneuver\n" \
+    "4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient\n" \
+    "5. Position starting points strategically to minimize initial travel time\n" \
+    "6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions\n\n" \
+    "RESPONSE FORMAT:\n" \
+    "Respond with a JSON list of partition objects, each containing:\n" \
+    "- 'id': Unique numeric identifier for each partition (starting from 0)\n" \
+    "- 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)\n" \
+    "- 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (x, y)\n" \
+    "- 'start_angle': Always use 0 degrees for initial orientation\n" \
+    "- 'status': Set to 'pending' for all new partitions\n\n" \
+    "CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.\n\n" \
+    "CORRECT FORMAT (with tuples):\n" \
+    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (15, 15), 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "INCORRECT FORMAT (with arrays):\n" \
+    "[{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [15, 15], 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):\n" \
+    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (15, 15), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (47, 15), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (15, 47), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (47, 47), 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "NOTE: Always return a list of partitions even if only creating a single partition. Ensure each partition has sufficient space for both excavation and soil deposit operations. REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."
 
     description_excavator = "You are an excavator agent. You can control the excavator to dig and move."
 
@@ -616,3 +647,152 @@ def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversabi
         print("WARNING: Maps were not properly overridden!")
     
     return all_match
+
+def extract_python_format_data(llm_response_text):
+    """
+    Extracts Python-formatted data from LLM response, preserving tuples.
+    
+    Args:
+        llm_response_text (str): The raw text response from the LLM
+        
+    Returns:
+        list: The parsed Python list with tuples preserved
+        
+    Raises:
+        ValueError: If no valid Python data could be extracted
+    """
+    # First, check if we have a code block and extract its content
+    code_block_pattern = r'```(?:json|python)?\s*([\s\S]*?)\s*```'
+    code_match = re.search(code_block_pattern, llm_response_text, re.DOTALL)
+    
+    if code_match:
+        content = code_match.group(1)
+    else:
+        # If no code block, use the whole text
+        content = llm_response_text
+    
+    # Clean up the content to ensure it's valid Python syntax
+    # Replace double quotes with single quotes for keys (Python style)
+    content = re.sub(r'"([^"]+)":', r"'\1':", content)
+    
+    # Make sure status values are properly quoted
+    content = re.sub(r"'status':\s*([a-zA-Z_][a-zA-Z0-9_]*)", r"'status': '\1'", content)
+    
+    try:
+        # Use ast.literal_eval to parse the Python literals, which preserves tuples
+        return ast.literal_eval(content)
+    except (SyntaxError, ValueError) as e:
+        logger.warning(f"ast.literal_eval failed: {e}")
+        
+        # Try to extract and process each dict individually
+        results = []
+        dict_pattern = r'\{\s*\'id\':\s*(\d+)[\s\S]*?(?=\}\s*,|\}\s*$)'
+        
+        for match in re.finditer(dict_pattern, content, re.DOTALL):
+            try:
+                dict_str = match.group(0) + '}'
+                # Make sure all string values are properly quoted
+                dict_str = re.sub(r"'([^']+)':\s*([a-zA-Z_][a-zA-Z0-9_]*)", r"'\1': '\2'", dict_str)
+                obj = ast.literal_eval(dict_str)
+                results.append(obj)
+            except (SyntaxError, ValueError) as e:
+                logger.warning(f"Failed to parse dict: {e}")
+                continue
+        
+        if results:
+            return results
+    
+    # If we still couldn't parse it, try a more manual approach
+    try:
+        # Extract data manually using regex
+        result = []
+        id_pattern = r"'id':\s*(\d+)"
+        region_pattern = r"'region_coords':\s*\(([^)]+)\)"
+        pos_pattern = r"'start_pos':\s*\(([^)]+)\)"
+        angle_pattern = r"'start_angle':\s*(\d+)"
+        status_pattern = r"'status':\s*'([^']+)'"
+        
+        # Get all IDs
+        ids = re.findall(id_pattern, content)
+        region_coords = re.findall(region_pattern, content)
+        start_positions = re.findall(pos_pattern, content)
+        start_angles = re.findall(angle_pattern, content)
+        statuses = re.findall(status_pattern, content)
+        
+        # Ensure we have the same number of matches for each field
+        min_length = min(len(ids), len(region_coords), len(start_positions), 
+                         len(start_angles), len(statuses))
+        
+        for i in range(min_length):
+            # Parse tuple values
+            region_tuple = tuple(int(x.strip()) for x in region_coords[i].split(','))
+            start_pos_tuple = tuple(int(x.strip()) for x in start_positions[i].split(','))
+            
+            obj = {
+                'id': int(ids[i]),
+                'region_coords': region_tuple,
+                'start_pos': start_pos_tuple,
+                'start_angle': int(start_angles[i]),
+                'status': statuses[i]
+            }
+            result.append(obj)
+        
+        if result:
+            return result
+    except Exception as e:
+        logger.error(f"Manual extraction failed: {e}")
+    
+    raise ValueError("Could not extract valid Python data with tuples from LLM response")
+def is_valid_region_list(var):
+    """
+    Checks if the variable is a list of dictionaries with the required structure.
+    The structure should be a list containing at least one dictionary with the keys:
+    'id', 'region_coords', 'start_pos', 'start_angle', and 'status'.
+    
+    'region_coords' and 'start_pos' should be tuples.
+    
+    Example of valid structure:
+    [{'id': 0, 'region_coords': (15, 15, 50, 50), 'start_pos': (42, 36), 'start_angle': 0, 'status': 'pending'}]
+    
+    Args:
+        var: The variable to check
+        
+    Returns:
+        bool: True if the variable has the valid structure, False otherwise
+    """
+    # Check if var is a list
+    if not isinstance(var, list):
+        return False
+    
+    # Check if list has at least one element
+    if len(var) == 0:
+        return False
+    
+    # Check each element in the list
+    for item in var:
+        # Check if item is a dictionary
+        if not isinstance(item, dict):
+            return False
+        
+        # Check required keys
+        required_keys = {'id', 'region_coords', 'start_pos', 'start_angle', 'status'}
+        if set(item.keys()) != required_keys:
+            return False
+        
+        # Check types of specific fields
+        if not isinstance(item['id'], (int, float)):
+            return False
+        
+        if not isinstance(item['region_coords'], tuple) or len(item['region_coords']) != 4:
+            return False
+            
+        if not isinstance(item['start_pos'], tuple) or len(item['start_pos']) != 2:
+            return False
+            
+        if not isinstance(item['start_angle'], (int, float)):
+            return False
+            
+        if not isinstance(item['status'], str):
+            return False
+    
+    return True

@@ -55,7 +55,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 2              # Number of partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
@@ -150,25 +150,25 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     step = 0
     playing = True
 
-    if USE_MANUAL_PARTITIONING:
-        if NUM_PARTITIONS == 1:
-            sub_tasks = [
-                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-            ]
-        elif NUM_PARTITIONS == 2:
-            sub_tasks = [
-                {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
-                {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
-            ]
-        elif NUM_PARTITIONS == 4:
-            sub_tasks = [
-                {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
-                {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
-                {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
-                {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
-            ]
-        else:
-            raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+
+    if NUM_PARTITIONS == 1:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+        ]
+    elif NUM_PARTITIONS == 2:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+        ]
+    elif NUM_PARTITIONS == 4:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
+            {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
+            {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
+            {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
+        ]
+    else:
+        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
 
     current_sub_task_idx = -1
 
@@ -184,6 +184,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     reward_seq = []
     obs_seq = []
     action_list = []
+    sub_tasks = []
 
     PROMPT_FILENAME = "usr_msg8.txt"
     PROMPT_NO_PATH_FILENAME = "usr_msg7.txt" # New filename
@@ -213,16 +214,63 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
         current_observation = timestep.observation
         obs_seq.append(current_observation)
 
-
-        #current_sub_task_idx = step
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
+
+
+        if step == 0:
+            try:
+                obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+                observation_str = json.dumps(obs_dict)
+
+            except AttributeError:
+                # Handle the case where current_observation is not a dictionary
+                observation_str = str(current_observation)
+
+            if USE_IMAGE_PROMPT:
+                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
+            else:
+                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
+
+            llm_decision = "delegate_to_rl"
+            try:
+                if USE_IMAGE_PROMPT:
+                    response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, SESSION_ID))
+                else:
+                    response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
+    
+                llm_response_text = response
+                print(f"LLM response: {llm_response_text}")
+
+                # Use our tuple-preserving function
+                try:
+                    sub_tasks_llm = extract_python_format_data(llm_response_text)
+                    print("Successfully parsed LLM response with tuples preserved")
+                except ValueError as e:
+                    print(f"Extraction failed: {e}")
+                    sub_tasks_llm = sub_tasks_manual
+
+
+            except Exception as adk_err:
+                print(f"Error during ADK agent communication: {adk_err}")
+                print("Defaulting to fallback action due to ADK error.")
+                llm_decision = "fallback"
+                last_llm_decision = llm_decision
+
+        #current_sub_task_idx = step
 
         #if current_sub_task_idx == -1 or (sub_tasks[current_sub_task_idx]['status'] == 'completed') or step%100==0:
         if current_sub_task_idx == -1 or (sub_tasks[current_sub_task_idx]['status'] == 'completed'):
 
         #if current_sub_task_idx is not None:
             current_sub_task_idx += 1
+
+            if is_valid_region_list(sub_tasks_llm) and USE_MANUAL_PARTITIONING == False:
+                sub_tasks = sub_tasks_llm
+                print("Using LLM-generated sub-tasks.")
+            else:
+                sub_tasks = sub_tasks_manual
+                print("Using manually defined sub-tasks.")
 
             if current_sub_task_idx >= len(sub_tasks):
                 print("All sub-tasks completed.")
@@ -354,6 +402,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             global_padding_mask_data = global_padding_mask_data.at[region_slice].set(
                 timestep.state.world.padding_mask.map[0][region_slice]
             )
+
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         step += 1
 
