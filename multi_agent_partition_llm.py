@@ -52,9 +52,9 @@ from pygame.locals import (
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
-LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
+FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_LLM = True   # Force delegation to LLM agent for testing
+LLM_CALL_FREQUENCY = 50         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 2              # Number of partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -200,7 +200,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     except FileNotFoundError as e:
         print(f"ERROR: Prompt template file not found: {e.filename}")
         # Handle the error appropriately, e.g., exit or use a default prompt
-
+    current_map = timestep.state.world.target_map.map[0]  # Extract the target map
+    initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
+    print("Initial target number: ", initial_target_num)
 
     rng = jax.random.PRNGKey(seed)
 
@@ -219,6 +221,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
 
         if step == 0:
+            print("Calling LLM agent for partitioning decision...")
             try:
                 obs_dict = {k: v.tolist() for k, v in current_observation.items()}
                 observation_str = json.dumps(obs_dict)
@@ -348,27 +351,172 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         rng, action_key, step_key = jax.random.split(rng, 3)
 
+        state = timestep.state
+        
+        base_orientation = extract_base_orientation(state)
+        bucket_status = extract_bucket_status(state)  # Extract bucket status
+
+
+        traversability_map = state.world.traversability_mask.map[0]  # Extract the traversability map
+
+        traversability_map_np = np.array(traversability_map)  # Convert JAX array to NumPy
+        traversability_map_np = (traversability_map_np * 255).astype(np.uint8)
+
+        if step % LLM_CALL_FREQUENCY == 0:
+            print("Calling LLM agent for decision...")
+            try:
+                obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+                observation_str = json.dumps(obs_dict)
+
+            except AttributeError:
+                # Handle the case where current_observation is not a dictionary
+                observation_str = str(current_observation)
+            system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
+                "Decide if you should delegate digging tasks to a " \
+                "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+                "specialized LLM agent (respond with 'delegate_to_llm')."
+
+            if USE_IMAGE_PROMPT:
+                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
+            else:
+                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
+            #print(f"Prompt: {prompt}")
+
+            llm_decision = "act directly"  # Placeholder for the LLM decision
+            #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+
+            if not FORCE_DELEGATE_TO_RL:
+                try:
+                    if USE_IMAGE_PROMPT:
+                        response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, SESSION_ID))
+                    else:
+                        response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=SESSION_ID))
+                    
+                    llm_response_text = response
+                    print(f"LLM response: {llm_response_text}")
+                    
+                    if "delegate_to_rl" in llm_response_text.lower():
+                        llm_decision = "delegate_to_rl"
+                        last_llm_decision = llm_decision # Update last decision
+                        print("Delegating to RL agent based on LLM response.")
+                    elif "delegate_to_llm" in llm_response_text.lower():
+                        llm_decision = "delegate_to_llm"
+                        last_llm_decision = llm_decision
+                        print("Delegating to LLM agent based on LLM response.")
+                    else:
+                        llm_decision = "STOP"                    
+
+                except Exception as adk_err:
+                    print(f"Error during ADK agent communication: {adk_err}")
+                    print("Defaulting to fallback action due to ADK error.")
+                    llm_decision = "fallback" # Indicate fallback needed
+                    last_llm_decision = llm_decision # Update last decision
+            else:
+                print("Forcing delegation to RL agent for testing.")
+                llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+                last_llm_decision = llm_decision # Update last decision
+
+
+        if FORCE_DELEGATE_TO_LLM:
+            llm_decision= "delegate_to_llm" # For testing, force delegation to LLM agent
+
+
 
         active_task = sub_tasks[current_sub_task_idx]
         current_observation = timestep.observation # This obs is from the sub-task's 64x64 map
 
-        obs = obs_to_model_input(current_observation, prev_actions_rl, config)
-        _, logits_pi = model.apply(model_params, obs)
-        pi = tfp.distributions.Categorical(logits=logits_pi)
-        action_rl = pi.sample(seed=action_key)
-        action_list.append(action_rl)
+        if llm_decision == "delegate_to_rl":
+            print("Delegating to RL agent...")
+
+            try:
+                obs = obs_to_model_input(current_observation, prev_actions_rl, config)
+                _, logits_pi = model.apply(model_params, obs)
+                pi = tfp.distributions.Categorical(logits=logits_pi)
+                action = pi.sample(seed=action_key)
+                action_list.append(action)
+                print(f"RL agent action: {action}")
+            except:
+                print(f"Error during RL agent action generation: ")
+                print("Using fallback random action due to RL error.")
+                action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+                action_list.append(action)
+                llm_decision = "fallback" # Mark as fallback
+                last_llm_decision = llm_decision # Update last decision
+        elif llm_decision == "delegate_to_llm":
+            print("Delegate to LLM excavator...")
+
+
+            if USE_LOCAL_MAP:
+                local_map = generate_local_map(timestep)
+                local_map_image = local_map_to_image(local_map)
+
+                start, target_positions = extract_positions(timestep.state)
+                nearest_target = find_nearest_target(start, target_positions)
+
+                percentage_digging = calculate_digging_percentage(initial_target_num, timestep)
+                simple_action_list = [int(arr[0]) for arr in action_list]
+
+                print(f"Current direction: {base_orientation['direction']}")
+                print(f"Bucket status: {bucket_status}")
+                print(f"Current position: {start} (y,x)")
+                print(f"Nearest target position: {nearest_target} (y,x)")
+                print(f"Previous action list: {simple_action_list}")
+                print(f"Percentage of digging left: {percentage_digging:.2f}%")
+            
+                if USE_PATH:
+
+                    usr_msg8 = prompt_template_string.format(
+                        base_direction=base_orientation['direction'],
+                        bucket_status=bucket_status,
+                        current_pos=start,
+                        target_pos_list=target_positions,
+                        prev_actions=simple_action_list,
+                        #suggested_actions=actions,
+                        suggested_actions=[],
+
+                        dig_percentage=f"{percentage_digging:.2f}%"
+                    )
+
+                    llm_query.add_user_message(frame=game_state_image, user_msg=usr_msg8, local_map=local_map_image, traversability_map=traversability_map_np)
+
+                else:
+                    usr_msg7 = prompt_template_no_path_string.format(
+                        base_direction=base_orientation['direction'],
+                        bucket_status=bucket_status,
+                        current_pos=start,
+                        target_pos_list=target_positions,
+                        prev_actions=action_list
+                    )
+                
+                    llm_query.add_user_message(frame=game_state_image, user_msg=usr_msg7, local_map=None)
+
+            action_output, reasoning = llm_query.generate_response("./")
+
+            print(f"\n Action output: {action_output}, Reasoning: {reasoning}")
+            llm_query.add_assistant_message()
+
+            action = jnp.array([action_output], dtype=jnp.int32)  # Convert to JAX array
+            action_list.append(action)
+
+        else:
+            print("Master Agent stop.")
+                
+            #     # TODO PASS LLM response to a function that parses the action
+            action = jnp.array([-1], dtype=jnp.int32) # Use jnp.array
+            action_list.append(action)
+            count_stop += 1
 
         prev_actions_rl = jnp.roll(prev_actions_rl, shift=1, axis=1)
-        prev_actions_rl = prev_actions_rl.at[:, 0].set(action_rl)
+        prev_actions_rl = prev_actions_rl.at[:, 0].set(action)
 
         timestep = env.step(
             timestep, 
-            wrap_action(action_rl, action_type), 
+            wrap_action(action, action_type), 
             jax.random.split(step_key, 1)
         )
 
         reward_seq.append(timestep.reward)
-        print(t_counter, timestep.reward, action_rl, timestep.done)
+        print(t_counter, timestep.reward, action, timestep.done)
         print(10 * "=")
         t_counter += 1
 
@@ -402,6 +550,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
             global_padding_mask_data = global_padding_mask_data.at[region_slice].set(
                 timestep.state.world.padding_mask.map[0][region_slice]
             )
+        if timestep.done:
+            print("Episode done.")
+            playing = False
+            break
 
         env.terra_env.render_obs_pygame(timestep.observation, timestep.info)
         step += 1

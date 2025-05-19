@@ -241,7 +241,7 @@ class CurriculumGlobalConfig(NamedTuple):
     # ]
     levels = [
         {
-            "maps_path": "trenches/single",
+            "maps_path": "trenches/double",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,

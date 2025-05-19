@@ -121,26 +121,28 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     "4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient\n" \
     "5. Position starting points strategically to minimize initial travel time\n" \
     "6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions\n\n" \
+    "USE AT MOST 2 PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. " \
     "RESPONSE FORMAT:\n" \
     "Respond with a JSON list of partition objects, each containing:\n" \
     "- 'id': Unique numeric identifier for each partition (starting from 0)\n" \
     "- 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)\n" \
-    "- 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (x, y)\n" \
+    "- 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y, x)\n" \
     "- 'start_angle': Always use 0 degrees for initial orientation\n" \
     "- 'status': Set to 'pending' for all new partitions\n\n" \
     "CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.\n\n" \
     "CORRECT FORMAT (with tuples):\n" \
-    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (15, 15), 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}]\n\n" \
     "INCORRECT FORMAT (with arrays):\n" \
-    "[{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [15, 15], 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "[{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [16, 16], 'start_angle': 0, 'status': 'pending'}]\n\n" \
     "Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):\n" \
-    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (15, 15), 'start_angle': 0, 'status': 'pending'}, " \
-    "{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (47, 15), 'start_angle': 0, 'status': 'pending'}, " \
-    "{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (15, 47), 'start_angle': 0, 'status': 'pending'}, " \
-    "{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (47, 47), 'start_angle': 0, 'status': 'pending'}]\n\n" \
+    "[{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}, " \
+    "{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}]\n\n" \
     "NOTE: Always return a list of partitions even if only creating a single partition. Ensure each partition has sufficient space for both excavation and soil deposit operations. REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."
 
     description_excavator = "You are an excavator agent. You can control the excavator to dig and move."
+
 
     if USE_PATH:
         # Load the JSON configuration file
