@@ -998,7 +998,7 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent moved"""
         return ~jnp.allclose(
-            old_state.agent.agent_state_1.pos_base, new_state.agent.agent_state_1.pos_base
+            old_state.agent.agent_state_1.pos_base, new_state.agent.agent_state_2.pos_base
         )
 
     @staticmethod
@@ -1008,7 +1008,7 @@ class State(NamedTuple):
         """True if agent turned"""
         return ~jnp.allclose(
             old_state.agent.agent_state_1.angle_base,
-            new_state.agent.agent_state_1.angle_base,
+            new_state.agent.agent_state_2.angle_base,
         )
 
     def _handle_rewards_move(
@@ -1024,7 +1024,7 @@ class State(NamedTuple):
 
         # Move while loaded
         reward += jax.lax.cond(
-            jnp.all(self.agent.agent_state_1.loaded > 0),
+            jnp.all(self.agent.agent_state_2.loaded > 0),
             lambda: self.env_cfg.rewards.move_while_loaded,
             lambda: 0.0,
         )
@@ -1146,11 +1146,11 @@ class State(NamedTuple):
             self.world.dig_map.map,  # note dig_map here
             new_state.world.action_map.map,
             self.world.target_map.map,
-            self.agent.agent_state_1.loaded,
+            self.agent.agent_state_2.loaded,
         )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
+            self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
         )
 
         def dump_reward_fn() -> Float:
@@ -1182,7 +1182,7 @@ class State(NamedTuple):
         # Dig
         return jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state_2.loaded, new_state.agent.agent_state_1.loaded
+                self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
