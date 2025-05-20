@@ -128,12 +128,10 @@ class State(NamedTuple):
             self._handle_cabin_anticlock,
             self._handle_do,
             # Wheeled
-            self._handle_move_forward,
-            self._handle_move_backward,
-            self._handle_move_clock_forward,
-            self._handle_move_clock_backward,
-            self._handle_move_anticlock_forward,
-            self._handle_move_anticlock_backward,
+            self._handle_move_forward_wheeled,
+            self._handle_move_backward_wheeled,
+            self._handle_turn_wheels_left,
+            self._handle_turn_wheels_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
@@ -276,12 +274,12 @@ class State(NamedTuple):
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
-        
+
         # Compute candidate new position and immediately round it to discrete grid points.
         candidate_pos = self.agent.agent_state.pos_base + delta_xy
         candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
         candidate_pos = jnp.squeeze(candidate_pos, axis=0)
-        
+
         # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
             candidate_pos,
@@ -289,11 +287,11 @@ class State(NamedTuple):
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
-        
+
         # Check if the new position is valid.
         valid_move = self._is_valid_move(agent_corners_xy)
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-        
+
         # Choose between the old position and the new candidate position.
         old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
         new_pos_base = valid_move_mask @ old_new_pos
@@ -301,6 +299,84 @@ class State(NamedTuple):
         return self._replace(
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(pos_base=new_pos_base)
+            )
+        )
+
+    def _move_on_orientation_with_steering(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
+        return jax.lax.cond(
+            self.agent.agent_state.wheel_angle[0] == 0,
+            lambda: self._move_on_orientation(orientation_vector),
+            lambda: self._execute_curved_movement(angle_idx_to_rad(self.agent.agent_state.angle_base,
+                                                                   self.env_cfg.agent.angles_base),
+                                                                   is_forward),
+        )
+
+    def _execute_curved_movement(self, orientation_angle: float, is_forward: jnp.bool_) -> "State":
+        # Shift to different orientation coordinates
+        orientation_angle = orientation_angle + (jnp.pi / 2)
+
+        # For backward movement, reverse the wheel angle effect
+        wheel_angle = self.agent.agent_state.wheel_angle[0]
+        wheel_angle_rad = jnp.deg2rad(wheel_angle * self.env_cfg.agent.wheel_step)
+        # Use width as wheelbase for turning radius calculation
+        turn_radius = self.env_cfg.agent.width / (jnp.tan(wheel_angle_rad) + 1e-6)
+
+        # Calculate center of rotation (perpendicular to current orientation)
+        # Positive wheel angle means turn left, so center is to the left
+        center_offset = np.squeeze(jnp.array([
+            -jnp.sin(orientation_angle) * turn_radius,
+            jnp.cos(orientation_angle) * turn_radius
+        ]))
+        center_of_rotation = self.agent.agent_state.pos_base + center_offset
+
+        # Compute how far we move along the arc and new orientation
+        angle_change = self.env_cfg.agent.move_tiles / turn_radius
+        angle_change = jnp.where(is_forward, angle_change, -angle_change)
+        new_base_angle_rad = orientation_angle + angle_change
+
+        # Rotate the digger around the center of rotation
+        rotation_matrix = jnp.array([
+            [jnp.cos(angle_change), -jnp.sin(angle_change)],
+            [jnp.sin(angle_change), jnp.cos(angle_change)]
+        ])
+        relative_pos = self.agent.agent_state.pos_base - center_of_rotation
+        new_relative_pos = rotation_matrix @ relative_pos
+        candidate_pos = center_of_rotation + new_relative_pos
+
+        # Round to grid position
+        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
+
+        # Calculate new orientation angle in our discrete system
+        new_angle_base = jnp.round(
+            ((new_base_angle_rad - (jnp.pi / 2)) / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
+        ).astype(IntLowDim)
+        new_angle_base = new_angle_base % self.env_cfg.agent.angles_base
+
+        # Check if the new position and orientation are valid
+        agent_corners_xy = self._get_agent_corners(
+            candidate_pos,
+            base_orientation=new_angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+
+        valid_move = self._is_valid_move(agent_corners_xy)
+        valid_move_mask = self._valid_move_to_valid_mask(valid_move)
+
+        # Choose between old and new positions
+        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        new_pos_base = valid_move_mask @ old_new_pos
+
+        # Choose between old and new angles
+        old_new_angle = jnp.array([self.agent.agent_state.angle_base, new_angle_base])
+        new_angle_base = valid_move_mask @ old_new_angle
+
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    pos_base=new_pos_base,
+                    angle_base=new_angle_base
+                )
             )
         )
 
@@ -334,6 +410,32 @@ class State(NamedTuple):
 
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
+        )
+
+    def _handle_move_forward_wheeled(self) -> "State":
+        """
+        Moves the wheeled vehicle forward along an arc determined by wheel angle - if not loaded
+        """
+        def _move_forward_wheeled():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(True))
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward_wheeled
+        )
+
+    def _handle_move_backward_wheeled(self) -> "State":
+        """
+        Moves the wheeled vehicle backward along an arc determined by wheel angle - if not loaded
+        """
+        def _move_backward_wheeled():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward_wheeled
         )
 
     def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
@@ -426,61 +528,41 @@ class State(NamedTuple):
                 agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
             )
         )
-
-    def _handle_move_clock_forward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_clock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+    
+    def _handle_turn_wheels_left(self) -> "State":
+        old_wheel_angle = self.agent.agent_state.wheel_angle
+        new_wheel_angle = jnp.min(
+            jnp.array([
+                old_wheel_angle + 1,
+                jnp.full((1,), fill_value=self.env_cfg.agent.max_wheel_angle, dtype=IntLowDim),
+            ]),
+            axis=0,
         )
 
-    def _handle_move_clock_backward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_clock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    wheel_angle=new_wheel_angle
+                )
+            )
         )
 
-    def _handle_move_anticlock_forward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_anticlock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+    def _handle_turn_wheels_right(self) -> "State":
+        old_wheel_angle = self.agent.agent_state.wheel_angle
+        new_wheel_angle = jnp.max(
+            jnp.array([
+                old_wheel_angle - 1,
+                jnp.full((1,), fill_value=-self.env_cfg.agent.max_wheel_angle, dtype=IntLowDim),
+            ]),
+            axis=0,
         )
 
-    def _handle_move_anticlock_backward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_anticlock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    wheel_angle=new_wheel_angle
+                )
+            )
         )
 
     @staticmethod
@@ -964,10 +1046,30 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.base_turn
         return reward
 
+    def _handle_rewards_wheel_turn(
+        self, new_state: "State", action: WheeledActionType
+    ) -> Float:
+        reward = 0.0
+
+        # Check if wheels actually turned
+        wheel_not_turned = jnp.allclose(
+            self.agent.agent_state.wheel_angle,
+            new_state.agent.agent_state.wheel_angle
+        )
+
+        # Apply extra reward if wheels did not turn
+        reward += jax.lax.cond(
+            wheel_not_turned,
+            lambda: self.env_cfg.rewards.wheel_turn,
+            lambda: 0.0,
+        )
+
+        reward += self.env_cfg.rewards.wheel_turn
+        return reward
+
     def _handle_rewards_cabin_turn(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Cabin turn
         return self.env_cfg.rewards.cabin_turn
 
     @staticmethod
@@ -1204,12 +1306,9 @@ class State(NamedTuple):
         )
 
         reward += jax.lax.cond(
-            (action == WheeledActionType.CLOCK_FORWARD)
-            | (action == WheeledActionType.ANTICLOCK_FORWARD)
-            | (action == WheeledActionType.CLOCK_BACKWARD)
-            | (action == WheeledActionType.ANTICLOCK_BACKWARD),
-            lambda new_state, action: self._handle_rewards_base_turn(new_state, action)
-            + self._handle_rewards_move(new_state, action),
+            (action == WheeledActionType.WHEELS_LEFT)
+            | (action == WheeledActionType.WHEELS_RIGHT),
+            self._handle_rewards_wheel_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -1441,8 +1540,6 @@ class State(NamedTuple):
                 bool_cabin_clock,
                 bool_cabin_anticlock,
                 bool_do,
-                0,  # dummy
-                0,  # dummy
             ],
             dtype=jnp.bool_,
         )
@@ -1461,30 +1558,16 @@ class State(NamedTuple):
             new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
         )
 
-        # move clock forward
-        new_state = self._handle_move_clock_forward()
-        bool_move_clock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        # turn wheels left
+        new_state = self._handle_turn_wheels_left()
+        bool_turn_wheels_left = ~jnp.all(
+            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
         )
 
-        # move clock backward
-        new_state = self._handle_move_clock_backward()
-        bool_move_clock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
-        )
-
-        # move anticlock forward
-        new_state = self._handle_move_anticlock_forward()
-        bool_move_anticlock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
-        )
-
-        # move anticlock backward
-        new_state = self._handle_move_anticlock_backward()
-        bool_move_anticlock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+        # turn wheels right
+        new_state = self._handle_turn_wheels_right()
+        bool_turn_wheels_right = ~jnp.all(
+            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
         )
 
         # cabin clock
@@ -1511,10 +1594,8 @@ class State(NamedTuple):
             [
                 bool_forward,
                 bool_backward,
-                bool_move_clock_forward,
-                bool_move_clock_backward,
-                bool_move_anticlock_forward,
-                bool_move_anticlock_backward,
+                bool_turn_wheels_left,
+                bool_turn_wheels_right,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
                 bool_do,

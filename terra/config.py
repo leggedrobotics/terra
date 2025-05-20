@@ -40,9 +40,11 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 12
+    angles_base: int = 24
     angles_cabin: int = 12
-    num_state_obs: int = 5  # number of state observations (used to determine network input)
+    max_wheel_angle: int = 3
+    wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
+    num_state_obs: int = 6  # number of state observations (used to determine network input)
 
 
 class AgentConfig(NamedTuple):
@@ -50,6 +52,8 @@ class AgentConfig(NamedTuple):
 
     angles_base: int = ImmutableAgentConfig().angles_base
     angles_cabin: int = ImmutableAgentConfig().angles_cabin
+    max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
+    wheel_step: float = ImmutableAgentConfig().wheel_step
 
     move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
@@ -72,6 +76,7 @@ class Rewards(NamedTuple):
     base_turn: float
 
     cabin_turn: float
+    wheel_turn: float
 
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
@@ -92,19 +97,20 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.1,
-            collision_move=-0.1,
+            existence=0.0,
+            collision_move=-0.5,
             move_while_loaded=0.0,
-            move=-0.05,
+            move=-0.3,
             collision_turn=-0.1,
             base_turn=-0.1,
-            cabin_turn=-0.01,
-            dig_wrong=-0.3,
-            dump_wrong=-0.3,
+            cabin_turn=-0.2,
+            wheel_turn=-0.3,
+            dig_wrong=-1.0,
+            dump_wrong=0.0,
             dump_no_dump_area=-3.0,
-            dump_close_to_dug_area=-0.15,
-            dig_correct=3.0,
-            dump_correct=3.0,
+            dump_close_to_dug_area=-0.10,
+            dig_correct=1.0,
+            dump_correct=1.0,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
@@ -120,6 +126,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,
+            wheel_turn=-0.005,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
@@ -220,7 +227,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
+    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()

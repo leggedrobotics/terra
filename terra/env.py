@@ -164,7 +164,7 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [4]],
+            loaded=obs["agent_state"][..., [5]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
         )
@@ -236,6 +236,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
+                state.agent.agent_state.wheel_angle,
                 state.agent.agent_state.loaded,
             ]
         )
