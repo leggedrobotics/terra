@@ -122,6 +122,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     "5. Position starting points strategically to minimize initial travel time\n" \
     "6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions\n\n" \
     "USE AT MOST 2 PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. " \
+    "If you see multiple trenches, you should create a partition for each trench. " \
     "RESPONSE FORMAT:\n" \
     "Respond with a JSON list of partition objects, each containing:\n" \
     "- 'id': Unique numeric identifier for each partition (starting from 0)\n" \
@@ -139,7 +140,10 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     "{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}, " \
     "{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}, " \
     "{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}]\n\n" \
-    "NOTE: Always return a list of partitions even if only creating a single partition. Ensure each partition has sufficient space for both excavation and soil deposit operations. REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."
+    "NOTE: Always return a list of partitions even if only creating a single partition." \
+    "Very important. Ensure each partition has sufficient space for both excavation and soil deposit operations. " \
+    "Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck" \
+    "REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."
 
     description_excavator = "You are an excavator agent. You can control the excavator to dig and move."
 
@@ -290,90 +294,6 @@ def save_csv(output_file, action_list, cumulative_rewards):
             writer.writerow([action_value, reward_value])
 
     print(f"Results saved to {output_file}")
-
-def combine_maps_into_grid(obs):
-    """
-    Combine four maps from an observation dictionary into a 2x2 grid structure.
-    
-    Args:
-        obs: Dictionary containing maps of different types
-        
-    Returns:
-        Dictionary with the same keys but maps combined into larger 2x2 grids
-    """
-    result = {}
-    
-    # For each key in the observation dictionary
-    for key, maps in obs.items():
-        # Check if we have 4 maps as required for a 2x2 grid
-        if len(maps) != 4:
-            raise ValueError(f"Expected 4 maps for key {key}, but got {len(maps)}")
-        
-        #print(maps, key)
-        
-        if key == "agent_height" or key == "agent_state" or key == "agent_width" or key == "local_map_action_neg" or key == "local_map_action_pos" \
-        or key == "local_map_dumpability" or key == "local_map_obstacles" or key == "local_map_target_neg" or key == "local_map_target_pos":
-            #combined_map = np.zeros((1, maps[0].shape[0]), dtype=maps[0].dtype)
-            # Make sure to preserve the array structure by using np.array() explicitly
-            print(maps)
-            if key == "agent_height" or key == "agent_width":
-                combined_map = jnp.zeros((1,1), dtype=maps[0].dtype)
-                combined_map = combined_map.at[0].set(maps[0])
-            # print(key,type(combined_map))
-            
-            # Ensure special fields like agent_height maintain array structure with shape [9]
-
-            result[key] = combined_map
-            continue
-
-
-        # Get dimensions of each map
-        map_shape = maps[0].shape
-        #print("Map shape: ", map_shape)
-        
-        # Assuming all maps have the same dimensions
-        height, width = map_shape
-        
-        # Create a new array for the combined map
-        combined_map = jnp.zeros((1,2 * height, 2 * width), dtype=maps[0].dtype)
-        # print(key, type(combined_map))
-        
-        # Place the maps in a 2x2 grid
-        # Top-left
-        #ombined_map[0:height, 0:width] = maps[0]
-        combined_map = combined_map.at[0,0:height, 0:width].set(maps[0])
-        # Top-right
-        # combined_map[0:height, width:2*width] = maps[1]
-        combined_map = combined_map.at[0,0:height, width:2*width].set(maps[1])
-        # Bottom-left
-        # combined_map[height:2*height, 0:width] = maps[2]
-        combined_map = combined_map.at[0,height:2*height, 0:width].set(maps[2])
-        # Bottom-right
-        # combined_map[height:2*height, width:2*width] = maps[3]
-        combined_map = combined_map.at[0,height:2*height, width:2*width].set(maps[3])
-        
-        # Store the combined map in the result dictionary
-        result[key] = combined_map
-    
-    return result
-def extract_first_row(input_dict):
-    """
-    Extract only the first row/entry for each element in the dictionary.
-    
-    Args:
-        input_dict: Dictionary containing arrays with multiple rows
-        
-    Returns:
-        Dictionary with the same keys but only the first row of each array
-    """
-    result = {}
-    
-    for key, value in input_dict.items():
-
-                result[key] = value[0:1]  # Keep as 2D array with just one row
-
-    
-    return result
 
 
 class TerraEnvBatchWithMapOverride(TerraEnvBatch):
@@ -798,3 +718,24 @@ def is_valid_region_list(var):
             return False
     
     return True
+
+def compute_manual_subtasks(NUM_PARTITIONS):
+    if NUM_PARTITIONS == 1:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+        ]
+    elif NUM_PARTITIONS == 2:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+        ]
+    elif NUM_PARTITIONS == 4:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
+            {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
+            {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
+            {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
+        ]
+    else:
+        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+    return sub_tasks_manual

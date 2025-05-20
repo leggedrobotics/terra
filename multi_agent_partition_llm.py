@@ -103,7 +103,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     batch_cfg = BatchConfig()
     action_type = batch_cfg.action_type
 
-    suffle_maps = False
+    suffle_maps = True
     print(f"Using progressive_gif = {progressive_gif}, shuffle_maps = {suffle_maps}")
 
     env = TerraEnvBatchWithMapOverride(
@@ -150,25 +150,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
     step = 0
     playing = True
 
+    sub_tasks_manual = compute_manual_subtasks(NUM_PARTITIONS)
 
-    if NUM_PARTITIONS == 1:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-        ]
-    elif NUM_PARTITIONS == 2:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
-        ]
-    elif NUM_PARTITIONS == 4:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
-            {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
-            {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
-        ]
-    else:
-        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+
 
     current_sub_task_idx = -1
 
