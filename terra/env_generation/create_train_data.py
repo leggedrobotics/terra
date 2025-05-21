@@ -240,7 +240,7 @@ def create_foundations(config,
                 expansion_factor, 1
             )
             img_terra_pad = convert_terra_pad_to_color(img_terra_pad, color_dict)
-            dumping_image = initialize_image(size, size, color_dict)
+            dumping_image = initialize_image(size, size, color_dict["dumping"])
 
             # Create a mask where img_terra_pad is not equal to color_dict["digging"]
             mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
