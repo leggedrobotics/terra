@@ -1042,7 +1042,7 @@ class State(NamedTuple):
         reward += jax.lax.cond(
             self._check_agent_moved_on_move_action(self, new_state),
             lambda: self.env_cfg.rewards.collision_move,
-            lambda: 0.0,
+            lambda: self.env_cfg.rewards.collision_move,
         )
 
         # Move while loaded
