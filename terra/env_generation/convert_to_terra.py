@@ -245,6 +245,30 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             all_dumpable=all_dumpable,
         )
 
+def generate_relocations_terra(dataset_folder, size, n_imgs, all_dumpable):
+    print("Converting relocations...")
+    img_folder = Path(dataset_folder) / "relocations" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations"/ "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations" / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / "relocations"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=all_dumpable,
+        copy_metadata=True,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        # TODO: add the drt folder argument
+    )
+
 def generate_custom_terra(dataset_folder, size, n_imgs):
     print("Converting custom maps...")
     img_folder = Path(dataset_folder) / ".." / "custom" / "images"
@@ -277,5 +301,7 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
         dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
     )
     print("Trenches processed successfully.")
+    generate_relocations_terra(dataset_folder, size, n_imgs)
+    print("Custom maps processed successfully.")
     generate_custom_terra(dataset_folder, size, n_imgs)
     print("Custom maps processed successfully.")
