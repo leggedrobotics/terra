@@ -81,7 +81,6 @@ class Rewards(NamedTuple):
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same
     dump_no_dump_area: float  # given if dumps in an area that is not the dump area
-    dump_close_to_dug_area: float # given proportionaly if soil is dumped next to dug out area
 
     dig_correct: (
         float  # dig where the target map is negative, and not more than required
@@ -108,7 +107,6 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=-3.0,
-            dump_close_to_dug_area=-0.15,
             dig_correct=3.0,
             dump_correct=3.0,
             terminal_completed_tiles=0.0,
@@ -131,7 +129,6 @@ class Rewards(NamedTuple):
     #         dig_wrong=-1.0,
     #         dump_wrong=0.0,
     #         dump_no_dump_area=-3.0,
-    #         dump_close_to_dug_area=-0.10,
     #         dig_correct=1.0,
     #         dump_correct=1.0,
     #         terminal_completed_tiles=0.0,
@@ -153,7 +150,6 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=0.0,
-            dump_close_to_dug_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
