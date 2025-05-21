@@ -47,7 +47,7 @@ foundations:
 
 relocations:
   img_edge_min: 64
-  img_edge_max:64
+  img_edge_max: 64
   n_dump_min: 1
   n_dump_max: 3
   size_dump_min: 10
