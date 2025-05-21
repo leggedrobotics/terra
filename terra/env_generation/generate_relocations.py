@@ -61,8 +61,7 @@ def save_action_image(drt, save_folder, i):
         os.path.join(save_folder_action, "trench_" + str(i) + ".png"), drt
     )  # Added .png extension
 
-def generate_relocations(config):
-    n_imgs = config["n_imgs"]
+def create_relocations(config, n_imgs):
     img_edge_min = config["img_edge_min"]
     img_edge_max = config["img_edge_max"]
     n_dump_min = config["n_dump_min"]
