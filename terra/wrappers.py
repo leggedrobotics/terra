@@ -54,10 +54,12 @@ class TraversabilityMaskWrapper:
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
 
         return state._replace(
+            # increase number of steps as well
+            # env_steps=state.env_steps + 1,
             world=state.world._replace(
-                traversability_mask=state.world.traversability_mask._replace(
-                    map=tm.astype(IntLowDim)
-                )
+            traversability_mask=state.world.traversability_mask._replace(
+                map=tm.astype(IntLowDim)
+            )
             )
         )
 
