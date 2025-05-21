@@ -250,7 +250,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
+    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
