@@ -527,6 +527,7 @@ def add_non_dumpables(
             dmp[x : x + sizeox, y : y + sizeoy] = (
                 np.ones((3,)) * color_dict["nondumpable"]
             )
+            cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
             n_dmp_added += 1
 
     return dmp, cumulative_mask
