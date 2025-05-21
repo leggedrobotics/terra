@@ -49,12 +49,21 @@ class GridWorld(NamedTuple):
 
     # Dummies for wrappers
     traversability_mask: GridMap = GridMap.dummy_map()
+    
     local_map_target_pos: GridMap = GridMap.dummy_map()
     local_map_target_neg: GridMap = GridMap.dummy_map()
     local_map_action_pos: GridMap = GridMap.dummy_map()
     local_map_action_neg: GridMap = GridMap.dummy_map()
     local_map_dumpability: GridMap = GridMap.dummy_map()
     local_map_obstacles: GridMap = GridMap.dummy_map()
+    
+    # New fields for agent 2
+    local_map_target_pos_2: GridMap = GridMap.dummy_map()
+    local_map_target_neg_2: GridMap = GridMap.dummy_map()
+    local_map_action_pos_2: GridMap = GridMap.dummy_map()
+    local_map_action_neg_2: GridMap = GridMap.dummy_map()
+    local_map_dumpability_2: GridMap = GridMap.dummy_map()
+    local_map_obstacles_2: GridMap = GridMap.dummy_map()
 
     @property
     def width(self) -> int:

@@ -1008,7 +1008,7 @@ class State(NamedTuple):
         """True if agent turned"""
         return ~jnp.allclose(
             old_state.agent.agent_state_1.angle_base,
-            new_state.agent.agent_state_1.angle_base,
+            new_state.agent.agent_state_2.angle_base,
         )
 
     def _handle_rewards_move(
@@ -1150,7 +1150,7 @@ class State(NamedTuple):
         )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
+            self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
         )
 
         def dump_reward_fn() -> Float:
@@ -1182,7 +1182,7 @@ class State(NamedTuple):
         # Dig
         return jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state_2.loaded, new_state.agent.agent_state_1.loaded
+                self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
@@ -1440,45 +1440,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
+            new_state.agent.agent_state_2.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state.agent.agent_state_1.pos_base == self.agent.agent_state_1.pos_base
+            new_state.agent.agent_state_2.pos_base == self.agent.agent_state_1.pos_base
         )
 
         # clock
         new_state = self._handle_clock()
         bool_clock = ~jnp.all(
-            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
+            new_state.agent.agent_state_2.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # anticlock
         new_state = self._handle_anticlock()
         bool_anticlock = ~jnp.all(
-            new_state.agent.agent_state_1.angle_base == self.agent.agent_state_1.angle_base
+            new_state.agent.agent_state_2.angle_base == self.agent.agent_state_1.angle_base
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state.agent.agent_state_1.angle_cabin
+            new_state.agent.agent_state_2.angle_cabin
             == self.agent.agent_state_1.angle_cabin
         )
 
         # cabin clock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state.agent.agent_state_1.angle_cabin
+            new_state.agent.agent_state_2.angle_cabin
             == self.agent.agent_state_1.angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state.agent.agent_state_1.loaded == self.agent.agent_state_1.loaded
+            new_state.agent.agent_state_2.loaded == self.agent.agent_state_1.loaded
         )
 
         action_mask = jnp.array(

@@ -201,6 +201,7 @@ class TerraEnv(NamedTuple):
         )
         # for reward debug
         jax.debug.print("reward_1 : {reward_1}", reward_1=reward_1)
+        jax.debug.print("reward_2 : {reward_2}", reward_2=reward_2)
         #jax.debug.print("reward_2 : ",reward_2)
         #jax.debug.print(f"reward_2: {}",reward_2)
         def _reset_branch(s, o, cfg):
@@ -270,6 +271,12 @@ class TerraEnv(NamedTuple):
             "local_map_target_pos": state.world.local_map_target_pos.map,
             "local_map_dumpability": state.world.local_map_dumpability.map,
             "local_map_obstacles": state.world.local_map_obstacles.map,
+            "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
+            "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
+            "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
+            "local_map_target_pos_2": state.world.local_map_target_pos_2.map,
+            "local_map_dumpability_2": state.world.local_map_dumpability_2.map,
+            "local_map_obstacles_2": state.world.local_map_obstacles_2.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
