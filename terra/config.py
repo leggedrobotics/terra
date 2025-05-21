@@ -105,7 +105,7 @@ class Rewards(NamedTuple):
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,
-            wheel_turn=-0.02
+            wheel_turn=-0.02,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dump_no_dump_area=-3.0,
@@ -204,53 +204,53 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # NOTE: all maps need to have the same size
     levels = [
-        {
-            "maps_path": "terra/trenches/single",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "terra/trenches/double",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/trenches/double_diagonal",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "terra/trenches/single",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         {
             "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
-        {
-            "maps_path": "terra/trenches/triple_diagonal",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations_large",
-            "max_steps_in_episode": 500,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "terra/trenches/double",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/double_diagonal",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "terra/trenches/triple_diagonal",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "terra/foundations_large",
+        #     "max_steps_in_episode": 500,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
     ]
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
+    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
