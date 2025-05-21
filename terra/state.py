@@ -1025,6 +1025,13 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
+        # Moving with turned wheels
+        reward += jax.lax.cond(
+            jnp.any(self.agent.agent_state.wheel_angle != 0),
+            lambda: self.env_cfg.rewards.move_with_steering,
+            lambda: 0.0,
+        )
+
         # Move
         reward += self.env_cfg.rewards.move
 

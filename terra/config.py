@@ -71,6 +71,7 @@ class Rewards(NamedTuple):
     collision_move: float
     move_while_loaded: float
     move: float
+    move_with_turned_wheels: float
 
     collision_turn: float
     base_turn: float
@@ -100,6 +101,7 @@ class Rewards(NamedTuple):
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
+            move_with_turned_wheels=-0.1,
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,
@@ -122,6 +124,7 @@ class Rewards(NamedTuple):
     #         collision_move=-0.5,
     #         move_while_loaded=0.0,
     #         move=-0.2,
+    #         move_with_turned_wheels=-0.1,
     #         collision_turn=-0.1,
     #         base_turn=-0.1,
     #         cabin_turn=-0.2,
@@ -143,6 +146,7 @@ class Rewards(NamedTuple):
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
+            move_with_turned_wheels=-0.1,
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,
