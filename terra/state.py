@@ -1033,29 +1033,6 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.move
 
         return reward
-    
-    def _handle_rewards_move_opp(
-        self, new_state: "State", action: TrackedActionType
-    ) -> Float:
-        reward = -1.0
-        # Collision
-        reward += jax.lax.cond(
-            self._check_agent_moved_on_move_action(self, new_state),
-            lambda: 0.0,
-            lambda: 0.0,
-        )
-
-        # Move while loaded
-        reward += jax.lax.cond(
-            jnp.all(self.agent.agent_state_1.loaded > 0),
-            lambda: self.env_cfg.rewards.move_while_loaded,
-            lambda: 0.0,
-        )
-
-        # Move
-        #reward += self.env_cfg.rewards.move
-
-        return reward
 
     def _handle_rewards_base_turn(
         self, new_state: "State", action: TrackedActionType
@@ -1227,16 +1204,9 @@ class State(NamedTuple):
         action = action[0]
 
         reward += jax.lax.cond(
-            (action == TrackedActionType.FORWARD),
+            (action == TrackedActionType.FORWARD)
+            | (action == TrackedActionType.BACKWARD),
             self._handle_rewards_move,
-            lambda new_state, action: 0.0,
-            new_state,
-            action,
-        )
-
-        reward += jax.lax.cond(
-            (action == TrackedActionType.BACKWARD),
-            self._handle_rewards_move_opp,
             lambda new_state, action: 0.0,
             new_state,
             action,
