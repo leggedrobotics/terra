@@ -1174,7 +1174,7 @@ class State(NamedTuple):
             dump_reward_fn,
         )
 
-        return dig_reward + dump_reward
+        return  dump_reward
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
@@ -1185,7 +1185,7 @@ class State(NamedTuple):
                 self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
-            lambda: 0.0,
+            lambda: self.env_cfg.rewards.dig_correct
         )
 
     def _handle_rewards_do(
