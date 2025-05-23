@@ -128,8 +128,12 @@ def load_maps_from_disk(folder_path: str) -> Array:
     occupancies = []
     dumpability_masks_init = []
     trench_axes = []
+    actions = []
     n_loaded_metadata = 0
     trench_type = -1
+    # Check if the actions folder exists (only for relocations)
+    actions_folder = Path(folder_path) / "actions"
+    has_actions = actions_folder.exists()
     for i in tqdm(range(1, dataset_size + 1), desc="Data Loader"):
         map = np.load(f"{folder_path}/images/img_{i}.npy")
         map_sanity_check(map)
@@ -140,6 +144,11 @@ def load_maps_from_disk(folder_path: str) -> Array:
         maps.append(map)
         occupancies.append(occupancy)
         dumpability_masks_init.append(dumpability_mask_init)
+        # Generate an actions map if present, otherwise initialize an empty one
+        if has_actions:
+            actions.append(np.load(actions_folder / f"img_{i}.npy"))
+        else:
+            actions.append(np.zeros_like(map, dtype=IntMap))
 
         try:
             # Metadata needs to be loaded only for trenches (A, B, C coefficients)
@@ -183,6 +192,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
         jnp.array(trench_axes),
         trench_type,
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
+        jnp.array(actions, dtype=IntMap)
     )
 
 
@@ -291,6 +301,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
             trench_axes,
             trench_type,
             dumpability_masks_init,
+            actions,  # TODO: Use this!
         ) = load_maps_from_disk(folder_path)
         maps_from_disk.append(maps)
         occupancies_from_disk.append(occupancies)
