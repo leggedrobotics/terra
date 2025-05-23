@@ -46,10 +46,11 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
         # Randomly select a position for the dirt pile
         x = np.random.randint(0, w - sizeox)
         y = np.random.randint(0, h - sizeoy)
-        # Update the dumping zone layer
-        drt[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["dirt"])
-        cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
-        n_dirt += 1
+        # Check if the selected area overlaps with existing features
+        if not cumulative_mask[x : x + sizeox, y : y + sizeoy].any():
+            drt[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["dirt"])
+            cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
+            n_dirt += 1
 
     return drt, cumulative_mask
 
