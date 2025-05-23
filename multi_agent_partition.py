@@ -282,16 +282,22 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, n_envs_x, n_env
 
         active_task = sub_tasks[current_sub_task_idx]
         current_observation = timestep.observation # This obs is from the sub-task's 64x64 map
+        print("CURRENT OBSERVATION OKAY", current_observation)
 
         obs = obs_to_model_input(current_observation, prev_actions_rl, config)
         _, logits_pi = model.apply(model_params, obs)
         pi = tfp.distributions.Categorical(logits=logits_pi)
         action_rl = pi.sample(seed=action_key)
         action_list.append(action_rl)
+        print(f"Action RL: {action_rl}")
 
         prev_actions_rl = jnp.roll(prev_actions_rl, shift=1, axis=1)
         prev_actions_rl = prev_actions_rl.at[:, 0].set(action_rl)
+        print(f"Previous actions RL: {prev_actions_rl}")
 
+        print(wrap_action(action_rl, action_type))
+        print(            jax.random.split(step_key, 1)
+)
         timestep = env.step(
             timestep, 
             wrap_action(action_rl, action_type), 

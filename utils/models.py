@@ -10,16 +10,27 @@ from functools import partial
 
 def get_model_ready(rng, config, env: TerraEnvBatch, speed=False):
     """Instantiate a model according to obs shape of environment."""
-    num_embeddings_agent = jnp.max(
-        jnp.array(
-            [
-                env.batch_cfg.maps_dims.maps_edge_length,
-                env.batch_cfg.agent.angles_cabin,
-                env.batch_cfg.agent.angles_base,
-            ],
-            dtype=jnp.int16,
-        )
-    ).item()
+    # num_embeddings_agent = jnp.max(
+    #     jnp.array(
+    #         [
+    #             env.batch_cfg.maps_dims.maps_edge_length,
+    #             env.batch_cfg.agent.angles_cabin,
+    #             env.batch_cfg.agent.angles_base,
+    #         ],
+    #         dtype=jnp.int16,
+    #     )
+    # ).item()
+    num_embeddings_agent = 64
+    from terra.config import BatchConfig
+    batch_cfg = BatchConfig()  # Get default config
+        
+    # Override with small map dimensions
+    map_width = 64
+    map_height = 64
+    num_embeddings_agent = 64
+    action_type = batch_cfg.action_type
+    num_state_obs = batch_cfg.agent.num_state_obs
+    angles_cabin = batch_cfg.agent.angles_cabin
     jax.debug.print("num_embeddings_agent = {x}", x=num_embeddings_agent)
     map_min_max = (
         tuple(config["maps_net_normalization_bounds"])
@@ -33,20 +44,27 @@ def get_model_ready(rng, config, env: TerraEnvBatch, speed=False):
         map_min_max=map_min_max,
         local_map_min_max=tuple(config["local_map_normalization_bounds"]),
         loaded_max=config["loaded_max"],
-        action_type=env.batch_cfg.action_type,
+        action_type=action_type,
     )
 
-    map_width = env.batch_cfg.maps_dims.maps_edge_length
-    map_height = env.batch_cfg.maps_dims.maps_edge_length
+    # map_width = env.batch_cfg.maps_dims.maps_edge_length
+    # map_height = env.batch_cfg.maps_dims.maps_edge_length
+    map_width = 64
+    map_height = 64
+    print(f"Map size in get_model_ready: {map_width} x {map_height}")
+    print(f"num_state_obs in get_model_ready: {num_state_obs}")
+    print(f"angles_cabin in get_model_ready: {angles_cabin}")
+    print(f"num_embeddings_agent in get_model_ready: {num_embeddings_agent}")
+    print(f"num_prev_actions in get_model_ready: {config['num_prev_actions']}")
 
     obs = [
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.num_state_obs)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-        jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
+        jnp.zeros((config["num_envs"], num_state_obs)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
+        jnp.zeros((config["num_envs"], angles_cabin)),
         jnp.zeros((config["num_envs"], map_width, map_height)),
         jnp.zeros((config["num_envs"], map_width, map_height)),
         jnp.zeros((config["num_envs"], map_width, map_height)),

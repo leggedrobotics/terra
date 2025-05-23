@@ -73,9 +73,12 @@ class State(NamedTuple):
         custom_pos: Optional[Tuple[int, int]] = None,
         custom_angle: Optional[int] = None,
     ) -> "State":
+        #print("new world")
+        #print(target_map.shape, padding_mask.shape, dumpability_mask_init.shape)
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
         )
+        #print("new world done")
 
         # agent, key = Agent.new(
         #     key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
@@ -154,16 +157,33 @@ class State(NamedTuple):
             self._handle_cabin_anticlock,
             self._handle_do,
         ]
+        # print("action", action)
+        # print("action type", action.type)
+        # print("action type [0]", action.type[0])
         cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
         )
+        #print("offset_idx", offset_idx)
+        #print("action", action)
+        #print(action.action[0])
+
+        #print("handlers_list", handlers_list)
+        #print(action.action[0] == -1)
+        #print(type(action.action[0]==-1))
+
 
         state = jax.lax.cond(
             action.action[0] == -1,
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )
+
+        # state = jax.lax.cond(
+        #     pred,
+        #     self._do_nothing,
+        #     lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
+        # )
 
         return state._replace(env_steps=state.env_steps + 1)
 
@@ -331,11 +351,13 @@ class State(NamedTuple):
                 base_orientation
             )
             return self._move_on_orientation(orientation_vector)
-
+        #print("move forward", (self.agent.agent_state.loaded[0]>0))
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
         )
-
+        # return jax.lax.cond(
+        #     (self.agent.agent_state.loaded[0] > 0).item(), self._do_nothing, _move_forward
+        # )
     def _handle_move_backward(self) -> "State":
         """
         Moves the base backward - if not loaded
@@ -742,7 +764,10 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
+
         digged_mask_action_map = self.world.dig_map.map < 0
+        #print(dump_mask.shape)
+        #print(digged_mask_action_map.shape)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:

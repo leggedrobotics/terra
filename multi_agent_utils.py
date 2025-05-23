@@ -294,82 +294,1027 @@ def save_csv(output_file, action_list, cumulative_rewards):
             writer.writerow([action_value, reward_value])
 
     print(f"Results saved to {output_file}")
-
-
 class TerraEnvBatchWithMapOverride(TerraEnvBatch):
-    def reset_with_map_override(self, env_cfgs, keys, custom_pos=None, custom_angle=None,
-                               target_map_override=None, padding_mask_override=None,
-                               traversability_mask_override=None, dumpability_mask_override=None, 
-                               dumpability_mask_init_override=None, action_map_override=None):
+    """
+    Extended version of TerraEnvBatch that supports map overrides.
+    This class enables working with subsets of larger maps.
+    """
+    def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
+                                target_map_override=None, traversability_mask_override=None,
+                                padding_mask_override=None, dumpability_mask_override=None,
+                                dumpability_mask_init_override=None, action_map_override=None,
+                                dig_map_override=None):
         """
-        Custom reset that first does a normal reset, then manually overrides the maps in the state.
-        """
-        # Do a normal reset first
-        timestep = super().reset(env_cfgs, keys, custom_pos, custom_angle)
-
-        # Now manually override the maps in the state
-        if padding_mask_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                padding_mask=state.world.padding_mask._replace(
-                    map=jnp.array([padding_mask_override])
-                )
-            )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
+        Reset the environment with custom map overrides.
         
+        Args:
+            env_cfgs: Environment configurations
+            rngs: Random number generators
+            custom_pos: Custom initial position
+            custom_angle: Custom initial angle
+            target_map_override: Override for target map
+            traversability_mask_override: Override for traversability mask
+            padding_mask_override: Override for padding mask
+            dumpability_mask_override: Override for dumpability mask
+            dumpability_mask_init_override: Override for initial dumpability mask
+            action_map_override: Override for action map
+            dig_map_override: Override for dig map
+            
+        Returns:
+            Initial timestep
+        """
+        # Print the shape of the override maps for debugging
+        print("\nOverride Map Shapes:")
+        print(f"Target Map Override Shape: {target_map_override.shape if target_map_override is not None else None}")
+        print(f"Traversability Mask Override Shape: {traversability_mask_override.shape if traversability_mask_override is not None else None}")
+        print(f"Padding Mask Override Shape: {padding_mask_override.shape if padding_mask_override is not None else None}")
+        print(f"Dumpability Mask Override Shape: {dumpability_mask_override.shape if dumpability_mask_override is not None else None}")
+        print(f"Dumpability Init Mask Override Shape: {dumpability_mask_init_override.shape if dumpability_mask_init_override is not None else None}")
+        print(f"Action Map Override Shape: {action_map_override.shape if action_map_override is not None else None}")
+        print(f"Dig Map Override Shape: {dig_map_override.shape if dig_map_override is not None else None}")
+        
+        # Determine the new edge length based on overrides
+        new_edge_length = None
         if target_map_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                target_map=state.world.target_map._replace(
-                    map=jnp.array([target_map_override])  
-                )
+            if len(target_map_override.shape) == 2:
+                new_edge_length = target_map_override.shape[0]  # Use the first dimension
+            else:
+                new_edge_length = target_map_override.shape[1]  # Use the second dimension for batched maps
+        elif action_map_override is not None:
+            if len(action_map_override.shape) == 2:
+                new_edge_length = action_map_override.shape[0]
+            else:
+                new_edge_length = action_map_override.shape[1]
+    
+        # If we have a new edge length, update the env_cfg
+        original_env_cfgs = env_cfgs
+        if new_edge_length is not None:
+            print(f"Updating env_cfg edge_length_px from {env_cfgs.maps.edge_length_px} to {new_edge_length}")
+        
+            # Create updated maps config
+            updated_maps_config = env_cfgs.maps._replace(
+                edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
             )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
+        
+            # Update the env_cfgs with the new maps config
+            env_cfgs = env_cfgs._replace(maps=updated_maps_config)
+        
+            print(f"Updated env_cfgs.maps.edge_length_px to {env_cfgs.maps.edge_length_px}")
+        
+        # First reset with possibly updated env_cfgs
+        timestep = self.reset(env_cfgs, rngs, custom_pos, custom_angle)
+        
+        # Print the original shapes before override
+        print("\nOriginal Map Shapes:")
+        print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
+        print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
+        print(f"Environment Config: {timestep.state.env_cfg if hasattr(timestep.state, 'env_cfg') else 'No env_cfg in state'}")
 
-        if action_map_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                action_map=state.world.action_map._replace(
-                    map=jnp.array([action_map_override])
+        # Then override maps if provided - use completely new arrays
+        if target_map_override is not None:
+            # Add batch dimension if needed
+            if len(target_map_override.shape) == 2:
+                target_map_override = target_map_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        target_map=timestep.state.world.target_map._replace(
+                            map=target_map_override
+                        )
+                    )
                 )
             )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
         
         if traversability_mask_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                traversability_mask=state.world.traversability_mask._replace(
-                    map=jnp.array([traversability_mask_override])
+            if len(traversability_mask_override.shape) == 2:
+                traversability_mask_override = traversability_mask_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        traversability_mask=timestep.state.world.traversability_mask._replace(
+                            map=traversability_mask_override
+                        )
+                    )
                 )
             )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
+        
+        if padding_mask_override is not None:
+            if len(padding_mask_override.shape) == 2:
+                padding_mask_override = padding_mask_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        padding_mask=timestep.state.world.padding_mask._replace(
+                            map=padding_mask_override
+                        )
+                    )
+                )
+            )
         
         if dumpability_mask_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                dumpability_mask=state.world.dumpability_mask._replace(
-                    map=jnp.array([dumpability_mask_override])
+            if len(dumpability_mask_override.shape) == 2:
+                dumpability_mask_override = dumpability_mask_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        dumpability_mask=timestep.state.world.dumpability_mask._replace(
+                            map=dumpability_mask_override
+                        )
+                    )
                 )
             )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
         
         if dumpability_mask_init_override is not None:
-            state = timestep.state
-            updated_world = state.world._replace(
-                dumpability_mask_init=state.world.dumpability_mask_init._replace(
-                    map=jnp.array([dumpability_mask_init_override]) 
+            if len(dumpability_mask_init_override.shape) == 2:
+                dumpability_mask_init_override = dumpability_mask_init_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        dumpability_mask_init=timestep.state.world.dumpability_mask_init._replace(
+                            map=dumpability_mask_init_override
+                        )
+                    )
                 )
             )
-            updated_state = state._replace(world=updated_world)
-            timestep = timestep._replace(state=updated_state)
+        
+        if action_map_override is not None:
+            if len(action_map_override.shape) == 2:
+                action_map_override = action_map_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        action_map=timestep.state.world.action_map._replace(
+                            map=action_map_override
+                        )
+                    )
+                )
+            )
+
+        if dig_map_override is not None:
+            if len(dig_map_override.shape) == 2:
+                dig_map_override = dig_map_override[None, ...]
+            timestep = timestep._replace(
+                state=timestep.state._replace(
+                    world=timestep.state.world._replace(
+                        dig_map=timestep.state.world.dig_map._replace(
+                            map=dig_map_override
+                        )
+                    )
+                )
+            )
+        
+        # Print the new shapes after override
+        print("\nAfter Override Map Shapes:")
+        print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
+        print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
+        
+        # Update the env_cfg in the timestep state to ensure consistency
+        if new_edge_length is not None:
+            # Update the state's env_cfg if it exists
+            if hasattr(timestep.state, 'env_cfg'):
+                timestep = timestep._replace(
+                    state=timestep.state._replace(
+                        env_cfg=timestep.state.env_cfg._replace(
+                            maps=timestep.state.env_cfg.maps._replace(
+                                edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
+                            )
+                        )
+                    )
+                )
+                print(f"Updated timestep.state.env_cfg.maps.edge_length_px to {timestep.state.env_cfg.maps.edge_length_px}")
+        
+            # Update the timestep's env_cfg if it exists at the top level
+            if hasattr(timestep, 'env_cfg'):
+                timestep = timestep._replace(
+                    env_cfg=timestep.env_cfg._replace(
+                        maps=timestep.env_cfg.maps._replace(
+                            edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
+                        )
+                    )
+                )
+                print(f"Updated timestep.env_cfg.maps.edge_length_px to {timestep.env_cfg.maps.edge_length_px}")
+        
+        # We need to manually update the observation to match the new maps
+        updated_obs = dict(timestep.observation)
+
+
+        # Update all map-related observations
+        if target_map_override is not None and 'target_map' in updated_obs:
+            updated_obs['target_map'] = target_map_override
+        
+        if action_map_override is not None and 'action_map' in updated_obs:
+            updated_obs['action_map'] = action_map_override
+        
+        if dumpability_mask_override is not None and 'dumpability_mask' in updated_obs:
+            updated_obs['dumpability_mask'] = dumpability_mask_override
+        
+        if traversability_mask_override is not None and 'traversability_mask' in updated_obs:
+            updated_obs['traversability_mask'] = traversability_mask_override
+        
+        if padding_mask_override is not None and 'padding_mask' in updated_obs:
+            updated_obs['padding_mask'] = padding_mask_override
+            
+        if dumpability_mask_init_override is not None and 'dumpability_mask_init' in updated_obs:
+            updated_obs['dumpability_mask_init'] = dumpability_mask_init_override
+            
+        if dig_map_override is not None and 'dig_map' in updated_obs:
+            updated_obs['dig_map'] = dig_map_override
+        
+        # Force a reset of the environment to update the observation
+        # Note: We already did a reset earlier, this is just for completeness
+        rngs_new = jax.random.split(rngs[0], 1)
+        
+        # Return the timestep with the updated observation
+        timestep = timestep._replace(observation=updated_obs)
+        
+        print(f"\nFinal timestep map shapes:")
+        print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
+        print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
+        if hasattr(timestep.state, 'env_cfg'):
+            print(f"State env_cfg edge_length_px: {timestep.state.env_cfg.maps.edge_length_px}")
+        if hasattr(timestep, 'env_cfg'):
+            print(f"Timestep env_cfg edge_length_px: {timestep.env_cfg.maps.edge_length_px}")
+    
         
         return timestep
+    def verify_env_config(self, timestep):
+        """Verify that the environment configuration matches the actual map shapes."""
+        map_size = timestep.state.world.target_map.map.shape[1]  # Get the actual map size
+        
+        # Check if env_cfg exists in timestep
+        if hasattr(timestep, 'env_cfg') and hasattr(timestep.env_cfg, 'maps') and hasattr(timestep.env_cfg.maps, 'edge_length_px'):
+            config_size = timestep.env_cfg.maps.edge_length_px[0]
+            print(f"{timestep.env_cfg}")
+            
+            if map_size != config_size:
+                print(f"WARNING: Map size mismatch! Map is {map_size}x{map_size} but config says {config_size}x{config_size}")
+                return False
+        # Check if env_cfg exists in state
+        elif hasattr(timestep, 'state') and hasattr(timestep.state, 'env_cfg') and hasattr(timestep.state.env_cfg, 'maps') and hasattr(timestep.state.env_cfg.maps, 'edge_length_px'):
+            config_size = timestep.state.env_cfg.maps.edge_length_px[0]
+            print(f"{timestep.state.env_cfg}")
+            
+            if map_size != config_size:
+                print(f"WARNING: Map size mismatch! Map is {map_size}x{map_size} but config says {config_size}x{config_size}")
+                return False
+        else:
+            print("WARNING: Could not find env_cfg in timestep or state to verify configuration consistency")
+            return False
+            
+        return True
+    
+# def print_terra_env_details(map_manager):
+#     print("\n==== Terra Env Details ====")
+#     terra_env = map_manager.sub_env.terra_env
+#     print(f"Terra Env Object: {terra_env}")
+    
+#     # Print attributes
+#     print("\nAttributes:")
+#     for attr in dir(terra_env):
+#         if not attr.startswith('_'):  # Skip private attributes
+#             try:
+#                 value = getattr(terra_env, attr)
+#                 # Avoid printing large objects or functions
+#                 if callable(value):
+#                     print(f"  {attr}: <function>")
+#                 elif isinstance(value, (list, dict, tuple)) and len(str(value)) > 100:
+#                     print(f"  {attr}: <large collection>")
+#                 else:
+#                     print(f"  {attr}: {value}")
+#             except Exception as e:
+#                 print(f"  {attr}: <error accessing: {e}>")
+    
+#     # If it has state, print state information
+#     if hasattr(terra_env, 'state'):
+#         print("\nState Information:")
+#         try:
+#             print(f"  State: {terra_env.state}")
+#         except Exception as e:
+#             print(f"  Error accessing state: {e}")
+    
+#     print("==== End Terra Env Details ====\n")
 
+
+    
+
+# class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+#     """
+#     Extended version of TerraEnvBatch that supports map overrides.
+#     This class enables working with subsets of larger maps.
+#     """
+#     def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
+#                                 target_map_override=None, traversability_mask_override=None,
+#                                 padding_mask_override=None, dumpability_mask_override=None,
+#                                 dumpability_mask_init_override=None, action_map_override=None,
+#                                 dig_map_override=None):
+#         """
+#         Reset the environment with custom map overrides.
+        
+#         Args:
+#             env_cfgs: Environment configurations
+#             rngs: Random number generators
+#             custom_pos: Custom initial position
+#             custom_angle: Custom initial angle
+#             target_map_override: Override for target map
+#             traversability_mask_override: Override for traversability mask
+#             padding_mask_override: Override for padding mask
+#             dumpability_mask_override: Override for dumpability mask
+#             dumpability_mask_init_override: Override for initial dumpability mask
+#             action_map_override: Override for action map
+            
+#         Returns:
+#             Initial timestep
+#         """
+#         # Print the shape of the override maps for debugging
+#         print("\nOverride Map Shapes:")
+#         print(f"Target Map Override Shape: {target_map_override.shape if target_map_override is not None else None}")
+#         print(f"Traversability Mask Override Shape: {traversability_mask_override.shape if traversability_mask_override is not None else None}")
+#         print(f"Padding Mask Override Shape: {padding_mask_override.shape if padding_mask_override is not None else None}")
+#         print(f"Dumpability Mask Override Shape: {dumpability_mask_override.shape if dumpability_mask_override is not None else None}")
+#         print(f"Dumpability Init Mask Override Shape: {dumpability_mask_init_override.shape if dumpability_mask_init_override is not None else None}")
+#         print(f"Action Map Override Shape: {action_map_override.shape if action_map_override is not None else None}")
+#         print(f"Dig Map Override Shape: {dig_map_override.shape if dig_map_override is not None else None}")
+#         if hasattr(env_cfgs, 'maps') and hasattr(env_cfgs.maps, 'edge_length_px'):
+#             print(f"env_cfgs.maps.edge_length_px = {env_cfgs.maps.edge_length_px}")
+#         # First reset normally
+
+#         # Determine the new edge length based on overrides
+#         new_edge_length = None
+#         if target_map_override is not None:
+#             if len(target_map_override.shape) == 2:
+#                 new_edge_length = target_map_override.shape[0]  # Use the first dimension
+#             else:
+#                 new_edge_length = target_map_override.shape[1]  # Use the second dimension for batched maps
+    
+#         # If we have a new edge length, update the env_cfg
+#         if new_edge_length is not None:
+#             # Create updated maps config
+#             updated_maps_config = env_cfgs.maps._replace(
+#                 edge_length_px=jax.numpy.array([new_edge_length], dtype=jax.numpy.int32)
+#             )
+        
+#             # Update the env_cfgs with the new maps config
+#             env_cfgs = env_cfgs._replace(maps=updated_maps_config)
+        
+#         print(f"Updated env_cfgs.maps.edge_length_px to {env_cfgs.maps.edge_length_px}")
+#         timestep = self.reset(env_cfgs, rngs, custom_pos, custom_angle)
+        
+#         # Print the original shapes before override
+#         print("\nOriginal Map Shapes:")
+#         print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
+#         print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
+#         print(f"Environment Config: {timestep.state.env_cfg if hasattr(timestep.state, 'env_cfg') else 'No env_cfg in state'}")
+
+#         # Then override maps if provided - use completely new arrays
+#         if target_map_override is not None:
+#             # Add batch dimension if needed
+#             if len(target_map_override.shape) == 2:
+#                 target_map_override = target_map_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         target_map=timestep.state.world.target_map._replace(
+#                             map=target_map_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if traversability_mask_override is not None:
+#             if len(traversability_mask_override.shape) == 2:
+#                 traversability_mask_override = traversability_mask_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         traversability_mask=timestep.state.world.traversability_mask._replace(
+#                             map=traversability_mask_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if padding_mask_override is not None:
+#             if len(padding_mask_override.shape) == 2:
+#                 padding_mask_override = padding_mask_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         padding_mask=timestep.state.world.padding_mask._replace(
+#                             map=padding_mask_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if dumpability_mask_override is not None:
+#             if len(dumpability_mask_override.shape) == 2:
+#                 dumpability_mask_override = dumpability_mask_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         dumpability_mask=timestep.state.world.dumpability_mask._replace(
+#                             map=dumpability_mask_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if dumpability_mask_init_override is not None:
+#             if len(dumpability_mask_init_override.shape) == 2:
+#                 dumpability_mask_init_override = dumpability_mask_init_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         dumpability_mask_init=timestep.state.world.dumpability_mask_init._replace(
+#                             map=dumpability_mask_init_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if action_map_override is not None:
+#             if len(action_map_override.shape) == 2:
+#                 action_map_override = action_map_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         action_map=timestep.state.world.action_map._replace(
+#                             map=action_map_override
+#                         )
+#                     )
+#                 )
+#             )
+
+#         if dig_map_override is not None:
+#             if len(dig_map_override.shape) == 2:
+#                 dig_map_override = dig_map_override[None, ...]
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         dig_map=timestep.state.world.dig_map._replace(
+#                             map=dig_map_override
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         # Print the new shapes after override
+#         print("\nAfter Override Map Shapes:")
+#         print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
+#         print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
+        
+#         # Force a reset of the environment to update the observation
+#         rngs_new = jax.random.split(rngs[0], 1)
+        
+#         # We need to manually update the observation to match the new maps
+#         updated_obs = dict(timestep.observation)
+
+#         if target_map_override is not None:
+#             target_shape = target_map_override.shape
+#         elif timestep.state.world.target_map.map is not None:
+#             target_shape = timestep.state.world.target_map.map.shape
+#         else:
+#             # Default to 64x64 if no shape available
+#             target_shape = (1, 64, 64)
+        
+#         # Update all map-related observations
+#         if target_map_override is not None and 'target_map' in updated_obs:
+#             updated_obs['target_map'] = target_map_override
+        
+#         if action_map_override is not None and 'action_map' in updated_obs:
+#             updated_obs['action_map'] = action_map_override
+        
+#         if dumpability_mask_override is not None and 'dumpability_mask' in updated_obs:
+#             updated_obs['dumpability_mask'] = dumpability_mask_override
+        
+#         if traversability_mask_override is not None and 'traversability_mask' in updated_obs:
+#             updated_obs['traversability_mask'] = traversability_mask_override
+        
+#         if padding_mask_override is not None and 'padding_mask' in updated_obs:
+#             updated_obs['padding_mask'] = padding_mask_override
+#         if dumpability_mask_init_override is not None and 'dumpability_mask_init' in updated_obs:
+#             updated_obs['dumpability_mask_init'] = dumpability_mask_init_override
+#         if dig_map_override is not None and 'dig_map' in updated_obs:
+#             updated_obs['dig_map'] = dig_map_override
+
+#         if new_edge_length is not None:
+#             timestep = timestep._replace(
+#                 env_cfg=timestep.env_cfg._replace(
+#                     maps=timestep.env_cfg.maps._replace(
+#                         edge_length_px=jax.numpy.array([new_edge_length], dtype=jax.numpy.int32)
+#                     )
+#                 )
+#             )
+        
+            
+#         # Return the timestep with the updated observation
+#         return timestep._replace(observation=updated_obs)
+
+
+# class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+#     """
+#     Extended version of TerraEnvBatch that supports map overrides.
+#     This class enables working with subsets of larger maps.
+#     """
+#     def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
+#                                 target_map_override=None, traversability_mask_override=None,
+#                                 padding_mask_override=None, dumpability_mask_override=None,
+#                                 dumpability_mask_init_override=None, action_map_override=None):
+#         """
+#         Reset the environment with custom map overrides.
+        
+#         Args:
+#             env_cfgs: Environment configurations
+#             rngs: Random number generators
+#             custom_pos: Custom initial position
+#             custom_angle: Custom initial angle
+#             target_map_override: Override for target map
+#             traversability_mask_override: Override for traversability mask
+#             padding_mask_override: Override for padding mask
+#             dumpability_mask_override: Override for dumpability mask
+#             dumpability_mask_init_override: Override for initial dumpability mask
+#             action_map_override: Override for action map
+            
+#         Returns:
+#             Initial timestep
+#         """
+#         # First reset normally
+#         timestep = self.reset(env_cfgs, rngs, custom_pos, custom_angle)
+        
+#         # Then override maps if provided
+#         if target_map_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         target_map=timestep.state.world.target_map._replace(
+#                             map=timestep.state.world.target_map.map.at[0].set(target_map_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if traversability_mask_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         traversability_mask=timestep.state.world.traversability_mask._replace(
+#                             map=timestep.state.world.traversability_mask.map.at[0].set(traversability_mask_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if padding_mask_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         padding_mask=timestep.state.world.padding_mask._replace(
+#                             map=timestep.state.world.padding_mask.map.at[0].set(padding_mask_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if dumpability_mask_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         dumpability_mask=timestep.state.world.dumpability_mask._replace(
+#                             map=timestep.state.world.dumpability_mask.map.at[0].set(dumpability_mask_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if dumpability_mask_init_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         dumpability_mask_init=timestep.state.world.dumpability_mask_init._replace(
+#                             map=timestep.state.world.dumpability_mask_init.map.at[0].set(dumpability_mask_init_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         if action_map_override is not None:
+#             timestep = timestep._replace(
+#                 state=timestep.state._replace(
+#                     world=timestep.state.world._replace(
+#                         action_map=timestep.state.world.action_map._replace(
+#                             map=timestep.state.world.action_map.map.at[0].set(action_map_override)
+#                         )
+#                     )
+#                 )
+#             )
+        
+#         # Update observation to reflect map changes
+#         #updated_obs = self.terra_env.get_obs(timestep.state)
+#         # updated_obs = timestep.observation
+#         # timestep = timestep._replace(observation=updated_obs)
+        
+#         # return timestep
+    
+#             # Force a reset of the environment to update the observation
+#         # This is a workaround since TerraEnv doesn't have a get_obs method
+#         rngs_new = jax.random.split(rngs[0], 1)
+#         new_timestep = self.reset(env_cfgs, rngs_new, custom_pos, custom_angle)
+        
+#         # Return the timestep with the same state but updated observation
+#         return timestep._replace(observation=new_timestep.observation)
+
+
+# from functools import partial
+
+# class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+#     @partial(jax.jit, static_argnums=(0,3,4))
+#     def reset_with_map_override(self, env_cfgs, keys, 
+#                            custom_pos=None, custom_angle=None,
+#                            target_map_override=None, padding_mask_override=None,
+#                            traversability_mask_override=None, dumpability_mask_override=None, 
+#                            dumpability_mask_init_override=None, action_map_override=None,
+#                            digging_mask_override=None):
+#         """
+#         Custom reset that first does a normal reset, then manually overrides the maps in the state.
+#         """
+#         jax.debug.print("Starting reset_with_map_override")
+#         original_batch_cfg = getattr(self, 'batch_cfg', None)
+
+#         # Check if any map override is provided
+#         map_override_provided = any(x is not None for x in [
+#             target_map_override, padding_mask_override, 
+#             traversability_mask_override, dumpability_mask_override,
+#             dumpability_mask_init_override, action_map_override,
+#             digging_mask_override
+#         ])
+    
+#         # If any map override is provided, update the env_cfgs
+#         if map_override_provided:
+#             jax.debug.print("Map override provided, updating env_cfgs")
+#             map_size = 64  # The target size we want
+            
+#             # Create a copy of the environment configs with the updated map size
+#             updated_env_cfgs = env_cfgs._replace(
+#                 maps=env_cfgs.maps._replace(
+#                     edge_length_px=jnp.array([map_size], dtype=jnp.int32)
+#                 )
+#             )
+
+#             # Also update batch_cfg if it exists (before reset)
+#             if original_batch_cfg is not None and hasattr(original_batch_cfg, 'maps_dims'):
+#                 jax.debug.print("Updating batch_cfg")
+#                 # Create a deep copy of batch_cfg and update maps_edge_length
+#                 updated_maps_dims = original_batch_cfg.maps_dims._replace(
+#                     maps_edge_length=map_size  # Assuming this is an int, not an array
+#                 )
+#                 self.batch_cfg = original_batch_cfg._replace(
+#                     maps_dims=updated_maps_dims
+#                 )
+#         else:
+#             jax.debug.print("No map override provided, using original env_cfgs")
+#             updated_env_cfgs = env_cfgs
+    
+#         # Call the parent reset method with the properly aligned parameters
+#         # Note: TerraEnvBatch.reset expects (self, env_cfgs, rng_key, custom_pos, custom_angle)
+#         jax.debug.print("Calling super().reset")
+#         timestep = super().reset(updated_env_cfgs, keys, custom_pos, custom_angle)
+#         jax.debug.print("super().reset completed")
+
+#         # Now manually override the maps in the state
+#         state = timestep.state
+    
+#         # Store the target map size for use in observation updates
+#         target_map_size = 64
+    
+#         # Handle each override one by one
+#         if digging_mask_override is not None:
+#             jax.debug.print("Applying digging_mask_override")
+#             digging_override = jnp.array([digging_mask_override])
+#             jax.debug.print("dig_map shape: {}", digging_override.shape)
+#             updated_world = state.world._replace(
+#                 dig_map=state.world.dig_map._replace(
+#                     map=digging_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+            
+#         if padding_mask_override is not None:
+#             jax.debug.print("Applying padding_mask_override")
+#             padded_override = jnp.array([padding_mask_override])
+#             jax.debug.print("padding_mask shape: {}", padded_override.shape)
+#             updated_world = state.world._replace(
+#                 padding_mask=state.world.padding_mask._replace(
+#                     map=padded_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if target_map_override is not None:
+#             jax.debug.print("Applying target_map_override")
+#             padded_override = jnp.array([target_map_override])
+#             jax.debug.print("target_map shape: {}", padded_override.shape)
+#             updated_world = state.world._replace(
+#                 target_map=state.world.target_map._replace(
+#                     map=padded_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+
+#         if action_map_override is not None:
+#             jax.debug.print("Applying action_map_override")
+#             updated_world = state.world._replace(
+#                 action_map=state.world.action_map._replace(
+#                     map=jnp.array([action_map_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if traversability_mask_override is not None:
+#             jax.debug.print("Applying traversability_mask_override")
+#             updated_world = state.world._replace(
+#                 traversability_mask=state.world.traversability_mask._replace(
+#                     map=jnp.array([traversability_mask_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if dumpability_mask_override is not None:
+#             jax.debug.print("Applying dumpability_mask_override")
+#             updated_world = state.world._replace(
+#                 dumpability_mask=state.world.dumpability_mask._replace(
+#                     map=jnp.array([dumpability_mask_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if dumpability_mask_init_override is not None:
+#             jax.debug.print("Applying dumpability_mask_init_override")
+#             updated_world = state.world._replace(
+#                 dumpability_mask_init=state.world.dumpability_mask_init._replace(
+#                     map=jnp.array([dumpability_mask_init_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+
+#         # Update the edge_length_px in the state's env_cfg
+#         jax.debug.print("Updating edge_length_px in state.env_cfg")
+#         updated_env_cfg_in_state = state.env_cfg._replace(
+#             maps=state.env_cfg.maps._replace(
+#                 edge_length_px=jnp.array([target_map_size], dtype=jnp.int32)
+#             )
+#         )
+#         state = state._replace(env_cfg=updated_env_cfg_in_state)
+    
+#         # Update the edge_length_px in the TimeStep's env_cfg parameter
+#         jax.debug.print("Updating edge_length_px in timestep.env_cfg")
+#         updated_env_cfg_in_timestep = timestep.env_cfg._replace(
+#             maps=timestep.env_cfg.maps._replace(
+#                 edge_length_px=jnp.array([target_map_size], dtype=jnp.int32)
+#             )
+#         )
+    
+#         # Update the observation tensors to match the map size
+#         observation = timestep.observation
+#         updated_observation = dict(observation)
+        
+#         # Update maps_edge_length_px if it exists
+#         if 'maps_edge_length_px' in observation:
+#             jax.debug.print("Updating maps_edge_length_px in observation")
+#             updated_observation['maps_edge_length_px'] = jnp.array([target_map_size], dtype=jnp.int32)
+        
+#         # Update the observation map tensors to match the correct size
+#         map_keys = ['target_map', 'action_map', 'padding_mask', 'dig_map', 'traversability_mask', 'dumpability_mask', 'dumpability_mask_init']
+#         for key in map_keys:
+#             if key in updated_observation:
+#                 jax.debug.print(f"Resizing observation[{key}] to match target map size")
+#                 # Resize the observation map to the correct size
+#                 if target_map_override is not None:
+#                     # Use the same shape as our target map override
+#                     map_data = state.world.target_map.map
+#                     shape = map_data.shape
+#                     # Create a new map with the correct shape
+#                     if key == 'target_map':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         # Copy the data from state.world into the observation
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.target_map.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'action_map':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.action_map.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'padding_mask':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.padding_mask.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'dig_map':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.dig_map.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'traversability_mask':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.traversability_mask.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'dumpability_mask':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.dumpability_mask.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+#                     elif key == 'dumpability_mask_init':
+#                         updated_observation[key] = jnp.zeros((1, target_map_size, target_map_size))
+#                         updated_observation[key] = jnp.reshape(
+#                             state.world.dumpability_mask_init.map, 
+#                             (1, target_map_size, target_map_size)
+#                         )
+
+#         # Update any other observation fields that might depend on map size
+#         # Add more fields as needed based on your environment
+                        
+#         # Create the updated timestep
+#         timestep = timestep._replace(
+#             state=state,
+#             observation=updated_observation,
+#             env_cfg=updated_env_cfg_in_timestep
+#         )
+        
+#         # Log the final shapes to confirm the update
+#         jax.debug.print("Final observation shapes:")
+#         for key in map_keys:
+#             if key in updated_observation:
+#                 jax.debug.print(f"{key} shape: {{}}", updated_observation[key].shape)
+    
+#         jax.debug.print("reset_with_map_override completed")
+#         return timestep
+
+# class TerraEnvBatchWithMapOverride(TerraEnvBatch):
+#     @partial(jax.jit, static_argnums=(0,3,4))
+#     def reset_with_map_override(self, env_cfgs, keys, 
+#                            custom_pos=None, custom_angle=None,
+#                            target_map_override=None, padding_mask_override=None,
+#                            traversability_mask_override=None, dumpability_mask_override=None, 
+#                            dumpability_mask_init_override=None, action_map_override=None,
+#                            digging_mask_override=None):
+#         """
+#         Custom reset that first does a normal reset, then manually overrides the maps in the state.
+#         """
+#         jax.debug.print("Starting reset_with_map_override")
+#         original_batch_cfg = getattr(self, 'batch_cfg', None)
+
+#         # Check if any map override is provided
+#         map_override_provided = any(x is not None for x in [
+#             target_map_override, padding_mask_override, 
+#             traversability_mask_override, dumpability_mask_override,
+#             dumpability_mask_init_override, action_map_override,
+#             digging_mask_override
+#         ])
+    
+#         # If any map override is provided, update the env_cfgs
+#         if map_override_provided:
+#             jax.debug.print("Map override provided, updating env_cfgs")
+#             # Create a copy of the environment configs with the updated map size
+#             updated_env_cfgs = env_cfgs._replace(
+#                 maps=env_cfgs.maps._replace(
+#                     edge_length_px=jnp.array([64], dtype=jnp.int32)
+#                 )
+#             )
+
+#             # Also update batch_cfg if it exists (before reset)
+#             if original_batch_cfg is not None and hasattr(original_batch_cfg, 'maps_dims'):
+#                 jax.debug.print("Updating batch_cfg")
+#                 # Create a deep copy of batch_cfg and update maps_edge_length
+#                 updated_maps_dims = original_batch_cfg.maps_dims._replace(
+#                     maps_edge_length=64  # Assuming this is an int, not an array
+#                 )
+#                 self.batch_cfg = original_batch_cfg._replace(
+#                     maps_dims=updated_maps_dims
+#                 )
+#         else:
+#             jax.debug.print("No map override provided, using original env_cfgs")
+#             updated_env_cfgs = env_cfgs
+    
+#         # Call the parent reset method with the properly aligned parameters
+#         # Note: TerraEnvBatch.reset expects (self, env_cfgs, rng_key, custom_pos, custom_angle)
+#         jax.debug.print("Calling super().reset")
+#         timestep = super().reset(updated_env_cfgs, keys, custom_pos, custom_angle)
+#         jax.debug.print("super().reset completed")
+
+#         # Now manually override the maps in the state
+#         state = timestep.state
+    
+#         # Handle each override one by one
+#         if digging_mask_override is not None:
+#             jax.debug.print("Applying digging_mask_override")
+#             digging_override = jnp.array([digging_mask_override])
+#             jax.debug.print("dig_map shape: {}", digging_override.shape)
+#             updated_world = state.world._replace(
+#                 dig_map=state.world.dig_map._replace(
+#                     map=digging_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+#         if padding_mask_override is not None:
+#             jax.debug.print("Applying padding_mask_override")
+#             padded_override = jnp.array([padding_mask_override])
+#             jax.debug.print("padding_mask shape: {}", padded_override.shape)
+#             updated_world = state.world._replace(
+#                 padding_mask=state.world.padding_mask._replace(
+#                     map=padded_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if target_map_override is not None:
+#             jax.debug.print("Applying target_map_override")
+#             padded_override = jnp.array([target_map_override])
+#             jax.debug.print("target_map shape: {}", padded_override.shape)
+#             updated_world = state.world._replace(
+#                 target_map=state.world.target_map._replace(
+#                     map=padded_override
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+
+#         if action_map_override is not None:
+#             jax.debug.print("Applying action_map_override")
+#             updated_world = state.world._replace(
+#                 action_map=state.world.action_map._replace(
+#                     map=jnp.array([action_map_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if traversability_mask_override is not None:
+#             jax.debug.print("Applying traversability_mask_override")
+#             updated_world = state.world._replace(
+#                 traversability_mask=state.world.traversability_mask._replace(
+#                     map=jnp.array([traversability_mask_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if dumpability_mask_override is not None:
+#             jax.debug.print("Applying dumpability_mask_override")
+#             updated_world = state.world._replace(
+#                 dumpability_mask=state.world.dumpability_mask._replace(
+#                     map=jnp.array([dumpability_mask_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+    
+#         if dumpability_mask_init_override is not None:
+#             jax.debug.print("Applying dumpability_mask_init_override")
+#             updated_world = state.world._replace(
+#                 dumpability_mask_init=state.world.dumpability_mask_init._replace(
+#                     map=jnp.array([dumpability_mask_init_override])
+#                 )
+#             )
+#             state = state._replace(world=updated_world)
+
+#         # Update the edge_length_px in the state's env_cfg
+#         jax.debug.print("Updating edge_length_px in state.env_cfg")
+#         updated_env_cfg_in_state = state.env_cfg._replace(
+#             maps=state.env_cfg.maps._replace(
+#                 edge_length_px=jnp.array([64], dtype=jnp.int32)
+#             )
+#         )
+#         state = state._replace(env_cfg=updated_env_cfg_in_state)
+    
+#         # Update the edge_length_px in the TimeStep's env_cfg parameter
+#         jax.debug.print("Updating edge_length_px in timestep.env_cfg")
+#         updated_env_cfg_in_timestep = timestep.env_cfg._replace(
+#             maps=timestep.env_cfg.maps._replace(
+#                 edge_length_px=jnp.array([64], dtype=jnp.int32)
+#             )
+#         )
+    
+#         # Update observation's edge_length_px if it exists
+#         observation = timestep.observation
+#         if 'maps_edge_length_px' in observation:
+#             jax.debug.print("Updating maps_edge_length_px in observation")
+#             updated_observation = dict(observation)
+#             updated_observation['maps_edge_length_px'] = jnp.array([64], dtype=jnp.int32)
+#         else:
+#             updated_observation = observation
+    
+#         # Create the updated timestep
+#         timestep = timestep._replace(
+#             state=state,
+#             observation=updated_observation,
+#             env_cfg=updated_env_cfg_in_timestep
+#         )
+    
+#         jax.debug.print("reset_with_map_override completed")
+#         return timestep
 def create_sub_task_target_map(global_target_map_data: jnp.ndarray,
                               region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
     """
@@ -516,6 +1461,124 @@ def create_sub_task_dumpability_mask(dumpability_mask_data: jnp.ndarray,
     sub_task_mask = sub_task_mask.at[region_slice].set(region_data)
 
     return sub_task_mask
+
+def extract_sub_task_target_map(global_target_map_data: jnp.ndarray,
+                               region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Extracts a target map for an RL agent's sub-task without padding.
+    
+    Retains both `-1` values (dig targets) and `1` values (dump targets) from 
+    the specified region in the global map.
+    
+    Args:
+        global_target_map_data: Full 64x64 target map (1: dump, 0: free, -1: dig).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive bounds.
+    
+    Returns:
+        A map of shape (y_end-y_start+1, x_end-x_start+1) with `-1`s and `1`s from the region.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+    
+    # Define slice object for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+    
+    # Extract region from global map
+    sub_task_map = global_target_map_data[region_slice]
+    
+    return sub_task_map
+
+def extract_sub_task_action_map(action_map_data: jnp.ndarray,
+                                region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Extracts an action map for a sub-task without padding, preserving only actions that occurred
+    inside the specified region.
+
+    Args:
+        action_map_data: Full 64x64 action map 
+                         (-1: dug, 0: free, >0: dumped).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A map of shape (y_end-y_start+1, x_end-x_start+1) with the region's actions.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract region from input map
+    sub_task_action_map = action_map_data[region_slice]
+
+    return sub_task_action_map
+
+def extract_sub_task_padding_mask(padding_mask_data: jnp.ndarray,
+                                  region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Extracts a padding mask for a sub-task without padding.
+
+    Args:
+        padding_mask_data: Full 64x64 mask (0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A mask of shape (y_end-y_start+1, x_end-x_start+1) with the original region values.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Define slice for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original values from the region
+    sub_task_mask = padding_mask_data[region_slice]
+
+    return sub_task_mask
+
+def extract_sub_task_traversability_mask(traversability_mask_data: jnp.ndarray,
+                                         region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Extracts a traversability mask for a sub-task without padding.
+
+    Args:
+        traversability_mask_data: Full 64x64 mask 
+                                  (-1: agent, 0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A mask of shape (y_end-y_start+1, x_end-x_start+1) with the original region values.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original values from the region
+    sub_task_mask = traversability_mask_data[region_slice]
+
+    return sub_task_mask
+
+def extract_sub_task_dumpability_mask(dumpability_mask_data: jnp.ndarray,
+                                      region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Extracts a dumpability mask for a sub-task without padding.
+
+    Args:
+        dumpability_mask_data: Full 64×64 mask (1: can dump, 0: can't).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A mask of shape (y_end-y_start+1, x_end-x_start+1) with the original region values.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original dumpability values from the region
+    sub_task_mask = dumpability_mask_data[region_slice]
+
+    return sub_task_mask
+
+
 
 def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversability_mask_data, 
                          sub_task_padding_mask_data, sub_task_dumpability_mask_data,

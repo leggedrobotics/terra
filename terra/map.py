@@ -83,7 +83,7 @@ class GridWorld(NamedTuple):
     ) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
         dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
-
+        #print("target_map", target_map.shape)
         target_map = GridMap.new(IntLowDim(target_map))
 
         padding_mask = GridMap.new(IntLowDim(padding_mask))

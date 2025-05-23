@@ -91,6 +91,13 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
+        # print("terra_env.reset")
+        # print(target_map.shape)
+        # print(padding_mask.shape)
+        # print(trench_axes.shape)
+        # print(trench_type.shape)
+        # print(dumpability_mask_init.shape)
+        # print("finished printing shapes")
         state = State.new(
             key,
             env_cfg,
@@ -231,6 +238,250 @@ class TerraEnv(NamedTuple):
             info=infos,
             env_cfg=env_cfg,   # now the right, possibly flipped `apply_trench_rewards`
         )
+    # @partial(jax.jit, static_argnums=(0,))
+    # def step(
+    #     self,
+    #     state: State,
+    #     action: Action,
+    #     target_map: Array,
+    #     padding_mask: Array,
+    #     trench_axes: Array,
+    #     trench_type: Array,
+    #     dumpability_mask_init: Array,
+    #     env_cfg: EnvConfig,
+    # ) -> TimeStep:
+    #     # Ensure all maps are padded to 128x128 at the beginning
+    #     state = self._ensure_padded_state(state, target_size=(128, 128))
+    
+    #     new_state = state._step(action)
+    #     reward = state._get_reward(new_state, action)
+    #     new_state = self.wrap_state(new_state)
+    #     obs = self._state_to_obs_dict(new_state)
+    
+    #     done, task_done = state._is_done(
+    #         new_state.world.action_map.map,
+    #         new_state.world.target_map.map,
+    #         new_state.agent.agent_state.loaded,
+    #     )
+    
+    #     # Now both branches will work with 128x128 maps
+    #     def _reset_branch(s, o, cfg):
+    #         # Ensure target_map and other inputs are also 128x128
+    #         padded_target_map = self._ensure_padded_map(target_map, (128, 128))
+    #         padded_padding_mask = self._ensure_padded_map(padding_mask, (128, 128))
+    #         padded_dumpability_mask_init = self._ensure_padded_map(dumpability_mask_init, (128, 128))
+        
+    #         s_reset, o_reset = self._reset_existent(
+    #             s,
+    #             padded_target_map,
+    #             padded_padding_mask,
+    #             trench_axes,
+    #             trench_type,
+    #             padded_dumpability_mask_init,
+    #             cfg,
+    #         )
+    #         return s_reset, o_reset, cfg
+    
+    #     def _nominal_branch(s, o, cfg):
+    #         return s, o, cfg
+    
+    #     new_state, obs, env_cfg = jax.lax.cond(
+    #         done,
+    #         _reset_branch,
+    #         _nominal_branch,
+    #         new_state,
+    #         obs,
+    #         env_cfg,
+    #     )
+    
+    #     infos = new_state._get_infos(action, task_done)
+    #     return TimeStep(
+    #         state=new_state,
+    #         observation=obs,
+    #         reward=reward,
+    #         done=done,
+    #         info=infos,
+    #         env_cfg=env_cfg,
+    #     )
+
+    # def _ensure_padded_state(self, state, target_size):
+    #     """Ensure that all maps in the state are padded to target_size."""
+    #     # Create a function to pad each map
+    #     def pad_map(map_array, target_size):
+    #         current_shape = map_array.shape
+    #         if current_shape == target_size:
+    #             return map_array
+        
+    #         # Calculate padding needed
+    #         padding_height = max(0, target_size[0] - current_shape[0])
+    #         padding_width = max(0, target_size[1] - current_shape[1])
+        
+    #         # Pad the map (centered)
+    #         padding = [
+    #             (padding_height//2, padding_height - padding_height//2),
+    #             (padding_width//2, padding_width - padding_width//2)
+    #         ]
+        
+    #         # Use jax.numpy.pad instead of tf.pad
+    #         return jnp.pad(map_array, padding, mode='constant', constant_values=0)
+    
+    #     # Apply padding to all maps in the world
+    #     padded_world = state.world._replace(
+    #         target_map=state.world.target_map._replace(
+    #             map=pad_map(state.world.target_map.map, target_size)
+    #         ),
+    #         action_map=state.world.action_map._replace(
+    #             map=pad_map(state.world.action_map.map, target_size)
+    #         ),
+    #         padding_mask=state.world.padding_mask._replace(
+    #             map=pad_map(state.world.padding_mask.map, target_size)
+    #         ),
+    #         dig_map=state.world.dig_map._replace(
+    #             map=pad_map(state.world.dig_map.map, target_size)
+    #         ),
+    #         dumpability_mask=state.world.dumpability_mask._replace(
+    #             map=pad_map(state.world.dumpability_mask.map, target_size)
+    #         ),
+    #         dumpability_mask_init=state.world.dumpability_mask_init._replace(
+    #             map=pad_map(state.world.dumpability_mask_init.map, target_size)
+    #         ),
+    #         traversability_mask=state.world.traversability_mask._replace(
+    #             map=pad_map(state.world.traversability_mask.map, target_size)
+    #         ),
+    #     )
+    
+    #     return state._replace(world=padded_world)
+
+    # def _ensure_padded_map(self, map_array, target_size):
+    #     """Ensure that a map is padded to target_size."""
+    #     current_shape = map_array.shape
+    #     if current_shape == target_size:
+    #         return map_array
+    
+    #     padding_height = max(0, target_size[0] - current_shape[0])
+    #     padding_width = max(0, target_size[1] - current_shape[1])
+    
+    #     padding = [
+    #         (padding_height//2, padding_height - padding_height//2),
+    #         (padding_width//2, padding_width - padding_width//2)
+    #     ]
+    
+    #     return jnp.pad(map_array, padding, mode='constant', constant_values=0)
+    
+    # @partial(jax.jit, static_argnums=(0,))
+    # def step(
+    #     self,
+    #     state: State,
+    #     action: Action,
+    #     target_map: Array,
+    #     padding_mask: Array,
+    #     trench_axes: Array,
+    #     trench_type: Array,
+    #     dumpability_mask_init: Array,
+    #     env_cfg: EnvConfig,
+    # ) -> TimeStep:
+    #     # Original step logic - no changes to how the environment works internally
+    #     new_state = state._step(action)
+    #     reward = state._get_reward(new_state, action)
+    #     new_state = self.wrap_state(new_state)
+    #     obs = self._state_to_obs_dict(new_state)
+    
+    #     done, task_done = state._is_done(
+    #         new_state.world.action_map.map,
+    #         new_state.world.target_map.map,
+    #         new_state.agent.agent_state.loaded,
+    #     )
+    
+    #     # Original conditional logic
+    #     def _reset_branch(s, o, cfg):
+    #         s_reset, o_reset = self._reset_existent(
+    #             s,
+    #             target_map,
+    #             padding_mask,
+    #             trench_axes,
+    #             trench_type,
+    #             dumpability_mask_init,
+    #             cfg,
+    #         )
+    #         return s_reset, o_reset, cfg
+    
+    #     def _nominal_branch(s, o, cfg):
+    #         return s, o, cfg
+    
+    #     # Use a try-except to handle the shape mismatch
+    #     try:
+    #         new_state, obs, env_cfg = jax.lax.cond(
+    #             done,
+    #             _reset_branch,
+    #             _nominal_branch,
+    #             new_state,
+    #             obs,
+    #             env_cfg,
+    #         )
+    #     except TypeError as e:
+    #         # If we get a shape error, handle reset manually
+    #         if done:
+    #             new_state, obs = self._reset_existent(
+    #                 new_state,
+    #                 target_map,
+    #                 padding_mask,
+    #                 trench_axes,
+    #                 trench_type,
+    #                 dumpability_mask_init,
+    #                 env_cfg,
+    #             )
+    
+    #     infos = new_state._get_infos(action, task_done)
+    
+    #     # CRITICAL: Before returning observations to the agent, ensure they're consistently sized
+    #     # This is the key fix - resize all map observations to 64x64 before sending to the model
+    #     consistent_obs = self._resize_observations_to_64x64(obs)
+    
+    #     return TimeStep(
+    #         state=new_state,
+    #         observation=consistent_obs,  # Use the consistently sized observations
+    #         reward=reward,
+    #         done=done,
+    #         info=infos,
+    #         env_cfg=env_cfg,
+    #     )
+
+    def _resize_observations_to_64x64(self, obs):
+        """Resize all map observations to 64x64 for consistent model input."""
+        resized_obs = dict(obs)  # Create a copy of the observations
+    
+        # Resize each map observation to 64x64
+        map_keys = ['target_map', 'action_map', 'padding_mask', 'dig_map', 
+                'dumpability_mask', 'traversability_mask']
+    
+        for key in map_keys:
+            if key in resized_obs:
+                # Get the current map
+                current_map = resized_obs[key]
+            
+                # Check shape and resize if needed
+                if current_map.shape[-2:] != (64, 64):  # Check the H,W dimensions
+                    # Resize to 64x64 using JAX-compatible operations
+                    # If it's a batch of maps (e.g., shape [1, 128, 128])
+                    if len(current_map.shape) == 3:
+                        batch_size = current_map.shape[0]
+                        # Use JAX's image resize function 
+                        # Note: You may need to adapt this based on your available JAX functions
+                        resized = jax.image.resize(
+                            current_map, 
+                            shape=(batch_size, 64, 64), 
+                            method='nearest'
+                        )
+                    # If it's a single map (e.g., shape [128, 128])
+                    else:
+                        resized = jax.image.resize(
+                            current_map, 
+                            shape=(64, 64), 
+                            method='nearest'
+                        )
+                    resized_obs[key] = resized
+    
+        return resized_obs
 
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
@@ -368,6 +619,8 @@ class TerraEnvBatch:
           custom_angle: Optional[int] = None) -> State:
         
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
+        #print("terra_env batch.reset")
+        #print(env_cfgs)
         env_cfgs = self.update_env_cfgs(env_cfgs)
         (
             target_maps,
@@ -378,7 +631,9 @@ class TerraEnvBatch:
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
         #jax.debug.print("custom_pos: {}, custom_angle: {}", custom_pos, custom_angle)
-
+        #print(target_maps.shape)
+        #print(padding_masks.shape)
+        #print(trench_axes.shape)
         timestep = jax.vmap(
             self.terra_env.reset,
             in_axes=(0,0,0,0,0,0,0,None,None)
