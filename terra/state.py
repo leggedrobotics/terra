@@ -351,13 +351,11 @@ class State(NamedTuple):
                 base_orientation
             )
             return self._move_on_orientation(orientation_vector)
-        #print("move forward", (self.agent.agent_state.loaded[0]>0))
+        
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
         )
-        # return jax.lax.cond(
-        #     (self.agent.agent_state.loaded[0] > 0).item(), self._do_nothing, _move_forward
-        # )
+
     def _handle_move_backward(self) -> "State":
         """
         Moves the base backward - if not loaded
@@ -764,10 +762,7 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
-
         digged_mask_action_map = self.world.dig_map.map < 0
-        #print(dump_mask.shape)
-        #print(digged_mask_action_map.shape)
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:

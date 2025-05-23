@@ -71,44 +71,6 @@ SESSION_ID = "session_001"      # Session ID for ADK
 class LargeMapTerraEnv(TerraEnvBatch):
     """A version of TerraEnvBatch specifically for 128x128 maps"""
     
-
-    # @partial(jax.jit, static_argnums=(0,))
-    # def step(self, timestep, action, keys):
-
-    #     """Custom step function that fixes action dimensions"""
-    #     # Fix action dimensions before processing
-    #     #fixed_action = fix_action_dimensions(action)
-    
-    #     state = timestep.state
-    #     env_cfg = timestep.env_cfg if hasattr(timestep, 'env_cfg') else state.env_cfg
-    
-    #     # Perform step operations with fixed action
-    #     new_state = state._step(action)
-    #     reward = state._get_reward(new_state, action)
-    #     new_state = self.wrap_state(new_state)
-    #     obs = self._state_to_obs_dict(new_state)
-
-    #     done, task_done = state._is_done(
-    #         new_state.world.action_map.map,
-    #         new_state.world.target_map.map,
-    #         new_state.agent.agent_state.loaded,
-    #     )
-    
-    #     # Build infos
-    #     infos = new_state._get_infos(action, task_done)
-    
-    #     # Build the timestep result
-    #     result = TimeStep(
-    #         state=new_state,
-    #         observation=obs,
-    #         reward=reward,
-    #         done=done,
-    #         info=infos,
-    #         env_cfg=env_cfg
-    #     )
-    
-    #     return result
-
     def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
                            target_map_override=None, traversability_mask_override=None,
                            padding_mask_override=None, dumpability_mask_override=None,
@@ -116,7 +78,7 @@ class LargeMapTerraEnv(TerraEnvBatch):
                            dig_map_override=None):
         """Reset with 64x64 map overrides - ensures shapes are consistent"""
     
-        print("SmallMapTerraEnv: All map overrides validated for 64x64 size")
+        #print("SmallMapTerraEnv: All map overrides validated for 64x64 size")
     
         # Call the TerraEnvBatchWithMapOverride's reset_with_map_override method directly
         return TerraEnvBatchWithMapOverride.reset_with_map_override(
@@ -213,7 +175,7 @@ class DisjointMapEnvironments:
     def _create_clean_env_config(self):
         """Create a clean environment config for 64x64 maps without batch dimensions"""
         # Start with a minimal config
-        from terra.config import EnvConfig
+        #from terra.config import EnvConfig
     
         # If you have a reference to the original config structure, use it
         # Otherwise, create a minimal one
@@ -247,10 +209,10 @@ class DisjointMapEnvironments:
         custom_pos = partition['start_pos']
         custom_angle = partition['start_angle']
 
-        print(f"=== DIAGNOSTIC: Initializing partition {partition_idx} ===")
-        print(f"Region coords: {region_coords}")
-        print(f"Custom pos: {custom_pos}")
-        print(f"Custom angle: {custom_angle}")
+        # print(f"=== DIAGNOSTIC: Initializing partition {partition_idx} ===")
+        # print(f"Region coords: {region_coords}")
+        # print(f"Custom pos: {custom_pos}")
+        # print(f"Custom angle: {custom_angle}")
 
         # Extract sub-maps from global maps (64x64)
         sub_maps = {
@@ -265,29 +227,29 @@ class DisjointMapEnvironments:
             #'trench_type': self.global_maps['trench_type'],
         }
         # DIAGNOSTIC: Check sub-map validity
-        print(f"=== SUB-MAP DIAGNOSTICS ===")
-        for name, map_data in sub_maps.items():
-            print(f"{name}:")
-            print(f"  Shape: {map_data.shape}")
-            print(f"  Min/Max: {jnp.min(map_data):.3f} / {jnp.max(map_data):.3f}")
-            print(f"  Non-zero pixels: {jnp.sum(map_data != 0)}")
-            print(f"  NaN values: {jnp.sum(jnp.isnan(map_data))}")
-            print(f"  Inf values: {jnp.sum(jnp.isinf(map_data))}")
+        # print(f"=== SUB-MAP DIAGNOSTICS ===")
+        # for name, map_data in sub_maps.items():
+        #     print(f"{name}:")
+        #     print(f"  Shape: {map_data.shape}")
+            # print(f"  Min/Max: {jnp.min(map_data):.3f} / {jnp.max(map_data):.3f}")
+            # print(f"  Non-zero pixels: {jnp.sum(map_data != 0)}")
+            # print(f"  NaN values: {jnp.sum(jnp.isnan(map_data))}")
+            # print(f"  Inf values: {jnp.sum(jnp.isinf(map_data))}")
         
         target_areas = jnp.sum(sub_maps['target_map'] > 0)
-        print(f"Target areas to excavate: {target_areas}")
+        # print(f"Target areas to excavate: {target_areas}")
          # Check traversability at start position
         traversability = sub_maps['traversability_mask']
         pos_y, pos_x = custom_pos
-        print(f"Start position ({pos_y}, {pos_x}) traversability: {traversability[pos_y, pos_x]}")
+        # print(f"Start position ({pos_y}, {pos_x}) traversability: {traversability[pos_y, pos_x]}")
     
         # Check if start position has valid surrounding area
         y_min, y_max = max(0, pos_y-2), min(64, pos_y+3)
         x_min, x_max = max(0, pos_x-2), min(64, pos_x+3)
         local_area = traversability[y_min:y_max, x_min:x_max]
-        print(f"Local area around start ({y_min}:{y_max}, {x_min}:{x_max}):")
-        print(f"  Traversable pixels: {jnp.sum(local_area > 0)} / {local_area.size}")
-        print(f"  Min/Max traversability: {jnp.min(local_area)} / {jnp.max(local_area)}")
+        # print(f"Local area around start ({y_min}:{y_max}, {x_min}:{x_max}):")
+        # print(f"  Traversable pixels: {jnp.sum(local_area > 0)} / {local_area.size}")
+        # print(f"  Min/Max traversability: {jnp.min(local_area)} / {jnp.max(local_area)}")
 
         # Fix trench data shapes - remove batch dimension for single environment
         trench_axes = self.global_maps['trench_axes']
@@ -301,10 +263,10 @@ class DisjointMapEnvironments:
         trench_axes = trench_axes.astype(jnp.float32)
         trench_type = trench_type.astype(jnp.int32)
         
-        print(f"Trench axes shape: {trench_axes.shape}, type: {trench_axes.dtype}")
-        print(f"Trench type shape: {trench_type.shape}, type: {trench_type.dtype}")
-        print(f"Trench axes values:\n{trench_axes}")
-        print(f"Trench type value: {trench_type}")
+        # print(f"Trench axes shape: {trench_axes.shape}, type: {trench_axes.dtype}")
+        # print(f"Trench type shape: {trench_type.shape}, type: {trench_type.dtype}")
+        # print(f"Trench axes values:\n{trench_axes}")
+        # print(f"Trench type value: {trench_type}")
     
 
         # Reset the small environment using TerraEnv's interface (no batching)
@@ -330,14 +292,14 @@ class DisjointMapEnvironments:
             )
 
 
-            print("Small environment reset successfully.")
-            print(f"=== RESET SUCCESSFUL ===")
-            print(f"Initial reward: {small_timestep.reward}")
-            print(f"Initial done: {small_timestep.done}")
-            print(f"Agent state: {small_timestep.state.agent.agent_state}")
-            print(f"Agent position: {small_timestep.state.agent.agent_state.pos_base}")
-            print(f"Agent angle: {small_timestep.state.agent.agent_state.angle_base}")
-            print(f"Agent loaded: {small_timestep.state.agent.agent_state.loaded}")
+            # print("Small environment reset successfully.")
+            # print(f"=== RESET SUCCESSFUL ===")
+            # print(f"Initial reward: {small_timestep.reward}")
+            # print(f"Initial done: {small_timestep.done}")
+            # print(f"Agent state: {small_timestep.state.agent.agent_state}")
+            # print(f"Agent position: {small_timestep.state.agent.agent_state.pos_base}")
+            # print(f"Agent angle: {small_timestep.state.agent.agent_state.angle_base}")
+            # print(f"Agent loaded: {small_timestep.state.agent.agent_state.loaded}")
 
             # Store current small environment state
             self.small_env_timestep = small_timestep
@@ -356,51 +318,6 @@ class DisjointMapEnvironments:
             print(f"Error initializing small environment: {e}")
             print(traceback.format_exc())
             raise
-    def step_small_environment(self, action):
-        """
-        Step small environment using TerraEnv's simpler interface.
-        No need for batch dimension handling.
-        """
-        if self.small_env_timestep is None:
-            raise ValueError("Small environment not initialized")
-
-        self.rng, step_key = jax.random.split(self.rng)
-
-        print(f"Action for small env step: {action}")
-        
-        try:
-            # Use TerraEnv's step method - much simpler than batched version
-            self.small_env_timestep = self.small_env.step(
-                self.small_env_timestep.state,
-                action,
-                step_key
-            )
-            print("Small environment step successful")
-        except Exception as e:
-            print(f"Error stepping small environment: {e}")
-            raise
-
-        return self.small_env_timestep
-    def step_global_environment(self, action):
-        """
-        Step the global environment forward using the batched interface.
-        """
-        self.rng, step_key = jax.random.split(self.rng)
-        step_keys = jax.random.split(step_key, 1)  # Still need batch for global env
-        
-        print("Stepping global environment...")
-        try:
-            self.global_timestep = self.global_env.step(
-                self.global_timestep, 
-                action, 
-                step_keys
-            )
-            print("Global environment step successful")
-        except Exception as e:
-            print(f"Error stepping global environment: {e}")
-            raise
-        
-        return self.global_timestep
     
     def _derive_small_environment_config(self):
         """
@@ -479,54 +396,7 @@ class DisjointMapEnvironments:
         print("Global environment initialized successfully.")
         return self.global_timestep
     
-    def step_global_environment(self, action):
-        """
-        Step the global environment forward, independent of small environments.
-        
-        Args:
-            action: Action to take
-            
-        Returns:
-            Next timestep for the global environment
-        """
-        self.rng, step_key = jax.random.split(self.rng)
-        step_keys = jax.random.split(step_key, 1)
-        # DEBUG: Print environment context
-        print("=== GLOBAL ENVIRONMENT STEP DEBUG ===")
-        print(f"Global env timestep type: {type(self.global_timestep)}")
-        print(f"Global env state type: {type(self.global_timestep.state)}")
-        print(f"Agent state loaded: {self.global_timestep.state.agent.agent_state.loaded}")
-        print("=== END GLOBAL ENV DEBUG ===")
-        
-        # Step the global environment using our specialized class
-        print("Stepping global environment...")
-        try:
-            self.global_timestep = self.global_env.step(self.global_timestep, action, step_keys)
-            print("Global environment step successful")
-        except Exception as e:
-            print(f"Error stepping global environment: {e}")
-            raise
-        
-        return self.global_timestep
-    
-    # def switch_to_global_environment(self):
-    #     """
-    #     Switch display to show the global environment.
-    #     """
-    #     self.current_display_env = "global"
-    #     # Additional rendering logic may be needed here
-    
-    # def switch_to_small_environment(self):
-    #     """
-    #     Switch display to show the small environment.
-    #     """
-    #     if self.small_env_timestep is None:
-    #         raise ValueError("Small environment not initialized")
-    #     self.current_display_env = "small"
-    #     # Additional rendering logic may be needed here
-    
 
-    
     def update_global_maps_from_small_environment_incremental(self):
         """
         Update global maps incrementally after each small environment step.
@@ -567,14 +437,11 @@ class DisjointMapEnvironments:
             small_state.world.dig_map.map
         )
         
-        print(f"Updated global maps with changes from partition {self.current_partition_idx}")
+        #print(f"Updated global maps with changes from partition {self.current_partition_idx}")
         
         # Update the global environment display with the new maps
         self._update_global_environment_display()
         
-        # # Optionally update the global environment with the new maps
-        # self._update_global_environment_maps()
-
     def _update_global_environment_display(self):
         """
         Update the global environment display with the latest global maps.
@@ -596,14 +463,14 @@ class DisjointMapEnvironments:
                 small_pos = small_agent_state.pos_base
                 small_angle = small_agent_state.angle_base
                 # Debug info
-                print(f"Small position type: {type(small_pos)}")
-                if hasattr(small_pos, 'shape'):
-                    print(f"Small position shape: {small_pos.shape}")
-                print(f"Small position value: {small_pos}")
-                print(f"Small angle type: {type(small_angle)}")
-                if hasattr(small_angle, 'shape'):
-                    print(f"Small angle shape: {small_angle.shape}")
-                print(f"Small angle value: {small_angle}")
+                # print(f"Small position type: {type(small_pos)}")
+                # if hasattr(small_pos, 'shape'):
+                #     print(f"Small position shape: {small_pos.shape}")
+                # print(f"Small position value: {small_pos}")
+                # print(f"Small angle type: {type(small_angle)}")
+                # if hasattr(small_angle, 'shape'):
+                #     print(f"Small angle shape: {small_angle.shape}")
+                # print(f"Small angle value: {small_angle}")
                 
                 # Extract values from arrays with proper handling for different dimensions
                 # For position - handle both single array with 2 elements or tuple of 2 values
@@ -658,7 +525,7 @@ class DisjointMapEnvironments:
                 # Set custom position and angle for reset
                 custom_pos = global_pos
                 custom_angle = angle_val
-                print(f"Preserving excavator position: {global_pos} and angle: {small_angle}")
+                #print(f"Preserving excavator position: {global_pos} and angle: {small_angle}")
 
             
             # Reset global environment with updated maps
@@ -675,29 +542,11 @@ class DisjointMapEnvironments:
                 action_map_override=self.global_maps['action_map'],
                 dig_map_override=self.global_maps['dig_map']
             )
-            
-            # Update global environment's agent position to show current partition
-            # if self.current_partition_idx is not None:
-            #     partition = self.partitions[self.current_partition_idx]
-                # You might want to set the global agent position to the center of current partition
-                # This is optional - just for visual indication
                 
-            print("Global environment display updated.")
+            #print("Global environment display updated.")
         except Exception as e:
             print(f"Warning: Could not update global environment display: {e}")
-    # Utility function to safely convert JAX arrays to native Python types
-    def safe_convert_to_python_type(value):
-        """Convert JAX arrays and other types to Python native types safely."""
-        if hasattr(value, 'item'):  # JAX scalar array
-            return value.item()
-        elif hasattr(value, 'tolist'):  # JAX array
-            return value.tolist()
-        elif isinstance(value, (tuple, list)) and len(value) > 0 and hasattr(value[0], 'item'):
-            # Tuple or list containing JAX arrays
-            return tuple(v.item() if hasattr(v, 'item') else v for v in value)
-        else:
-        # Already a Python type
-            return value
+
     def render_global_environment_with_updates(self):
         """
         Update global maps from small environment and then render.
@@ -713,17 +562,7 @@ class DisjointMapEnvironments:
             self.global_env.terra_env.render_obs_pygame(obs, info)
         except Exception as e:
             print(f"Global rendering error: {e}")
-    def render_global_environment(self):
-        """
-        Render the global environment. This is the only rendering call needed.
-        """
-        try:
-            obs = self.global_timestep.observation
-            info = self.global_timestep.info
-            self.global_env.terra_env.render_obs_pygame(obs, info)
-        except Exception as e:
-            print(f"Global rendering error: {e}")
-    
+
     def is_small_task_completed(self):
         """Check if the current small environment task is completed."""
         if self.small_env_timestep is None:
@@ -741,107 +580,6 @@ class DisjointMapEnvironments:
         else:
             return bool(done_value)
     
-    # def is_small_task_completed(self):
-    #     """
-    #     Check if the current small environment task is completed.
-    
-    #     Map encoding:
-    #     - target_map: 1=dump, 0=free, -1=dig
-    #     - action_map: -1=dug, 0=free, >0=dumped
-    
-    #     Task is complete when:
-    #     1. All areas marked for excavation (target=-1) have been dug (action=-1)
-    #     2. All areas marked for dumping (target=1) have material dumped (action>0)
-    #     """
-    #     if self.small_env_timestep is None:
-    #         return False
-
-    #     # First check if environment failed (nan reward)
-    #     reward = self.small_env_timestep.reward
-    #     if isinstance(reward, jnp.ndarray):
-    #         if jnp.isnan(reward).any():
-    #             print(f"Partition {self.current_partition_idx} failed due to NaN reward")
-    #             return True  # Mark as "completed" to move on, but it's actually failed
-    #     elif jnp.isnan(reward):
-    #         print(f"Partition {self.current_partition_idx} failed due to NaN reward")
-    #         return True
-
-    #     # Get the current state
-    #     state = self.small_env_timestep.state
-
-    #     # Get current maps
-    #     target_map = state.world.target_map.map
-    #     action_map = state.world.action_map.map
-
-    #     # Check excavation completion
-    #     # Areas that need to be excavated (target_map == -1)
-    #     excavation_targets = (target_map == -1)
-    #     # Areas that have been excavated (action_map == -1)  
-    #     excavated_areas = (action_map == -1)
-    
-    #     # Check dump completion
-    #     # Areas that need dumping (target_map == 1)
-    #     dump_targets = (target_map == 1)
-    #     # Areas that have been dumped (action_map > 0)
-    #     dumped_areas = (action_map > 0)
-
-    #     # Calculate completion metrics
-    #     total_excavation_targets = jnp.sum(excavation_targets)
-    #     completed_excavation = jnp.sum(excavation_targets & excavated_areas)
-    
-    #     total_dump_targets = jnp.sum(dump_targets) 
-    #     completed_dumps = jnp.sum(dump_targets & dumped_areas)
-
-    #     # Calculate completion ratios
-    #     if total_excavation_targets > 0:
-    #         excavation_ratio = completed_excavation / total_excavation_targets
-    #     else:
-    #         excavation_ratio = 1.0  # No excavation needed
-        
-    #     if total_dump_targets > 0:
-    #         dump_ratio = completed_dumps / total_dump_targets
-    #     else:
-    #         dump_ratio = 1.0  # No dumping needed
-
-    #     print(f"Partition {self.current_partition_idx} progress:")
-    #     print(f"  Excavation: {completed_excavation}/{total_excavation_targets} ({excavation_ratio:.2%})")
-    #     print(f"  Dumping: {completed_dumps}/{total_dump_targets} ({dump_ratio:.2%})")
-
-    #     # Task is completed when both excavation and dumping are sufficiently complete
-    #     # Use 95% threshold to account for potential edge cases
-    #     excavation_complete = excavation_ratio >= 0.95
-    #     dumping_complete = dump_ratio >= 0.95
-    
-    #     task_completed = excavation_complete and dumping_complete
-
-    #     # Also check the environment's done flag as a fallback
-    #     env_done = False
-    #     done_value = self.small_env_timestep.done
-    #     if isinstance(done_value, jnp.ndarray):
-    #         if done_value.shape == ():
-    #             env_done = bool(done_value)
-    #         elif len(done_value.shape) > 0:
-    #             env_done = bool(done_value[0])
-    #         else:
-    #             env_done = bool(done_value)
-    #     else:
-    #         env_done = bool(done_value)
-
-    #     # If environment says it's done, trust it (could be success or failure)
-    #     if env_done:
-    #         print(f"Environment reports done for partition {self.current_partition_idx}")
-    #         return True
-
-    #     return bool(task_completed)
-    
-    def all_partitions_completed(self):
-        """
-        Check if all partitions have been completed.
-        
-        Returns:
-            Boolean indicating if all partitions are completed
-        """
-        return all(partition['status'] == 'completed' for partition in self.partitions)
     
     def get_next_pending_partition_idx(self):
         """
@@ -855,18 +593,6 @@ class DisjointMapEnvironments:
                 return i
         return None
     
-    def get_current_observation(self):
-        """
-        Get the observation from the currently active environment.
-        
-        Returns:
-            Observation from the active environment
-        """
-        if self.current_display_env == "global":
-            return self.global_timestep.observation
-        else:
-            return self.small_env_timestep.observation
-    # Add this debugging function to help identify the action format issue
  
 def wrap_action2(action_rl, action_type):
     """
@@ -891,9 +617,9 @@ def wrap_action2(action_rl, action_type):
         action=jnp.array([action_val], dtype=jnp.int8)  # Shape: [1]
     )
     
-    print(f"Wrapped action: {wrapped_action}")
-    print(f"Action type shape: {wrapped_action.type.shape}")
-    print(f"Action value shape: {wrapped_action.action.shape}")
+    # print(f"Wrapped action: {wrapped_action}")
+    # print(f"Action type shape: {wrapped_action.type.shape}")
+    # print(f"Action value shape: {wrapped_action.action.shape}")
     
     return wrapped_action
 
