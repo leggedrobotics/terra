@@ -228,6 +228,7 @@ def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
             downsample=False,
             has_dumpability=True,
             center_padding=False,
+            actions_folder=None,
         )
 
 
@@ -253,6 +254,7 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             n_imgs,
             expansion_factor=expansion_factor,
             all_dumpable=all_dumpable,
+            actions_folder=None,
         )
 
 def generate_relocations_terra(dataset_folder, size, n_imgs):
@@ -301,6 +303,7 @@ def generate_custom_terra(dataset_folder, size, n_imgs):
         downsample=False,
         has_dumpability=True,
         center_padding=False,
+        actions_folder=None,
     )
 
 
