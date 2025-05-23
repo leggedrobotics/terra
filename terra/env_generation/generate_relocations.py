@@ -36,7 +36,6 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
     w, h = img.shape[:2]
     n_dirt = 0
     n_dirt_todo = np.random.randint(n_dirt_min, n_dirt_max + 1)
-    cumulative_mask = np.zeros_like(img[..., 0], dtype=bool)
     drt = np.ones_like(img) * 255
 
     while n_dirt < n_dirt_todo:
