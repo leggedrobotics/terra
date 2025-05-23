@@ -46,6 +46,7 @@ class Agent(NamedTuple):
         max_traversable_x: int,
         max_traversable_y: int,
         padding_mask: Array,
+        action_map: Array,
     ) -> tuple["Agent", jax.random.PRNGKey]:
         pos_base, angle_base, key = jax.lax.cond(
             env_cfg.agent.random_init_state,
@@ -55,6 +56,7 @@ class Agent(NamedTuple):
                 max_traversable_x,
                 max_traversable_y,
                 padding_mask,
+                action_map,
                 env_cfg.agent.width,
                 env_cfg.agent.height,
             ),
@@ -93,6 +95,7 @@ def _get_random_init_state(
     max_traversable_x: int,
     max_traversable_y: int,
     padding_mask: Array,
+    action_map: Array,
     agent_width: int,
     agent_height: int,
 ):
@@ -146,7 +149,8 @@ def _get_random_init_state(
             )
 
             obstacle_inside = jnp.any(jnp.logical_and(polygon_mask, padding_mask == 1))
-            return obstacle_inside
+            action_illegal = jnp.any(jnp.logical_and(polygon_mask, action_map != 0))
+            return obstacle_inside | action_illegal
 
         keep_searching = jax.lax.cond(
             jnp.any(pos_base < 0) | jnp.any(angle_base < 0),

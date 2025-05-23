@@ -77,7 +77,7 @@ class State(NamedTuple):
         )
 
         agent, key = Agent.new(
-            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
