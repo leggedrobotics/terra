@@ -70,9 +70,10 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
     ) -> "State":
         world = GridWorld.new(
-            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
         )
 
         agent, key = Agent.new(
@@ -98,6 +99,7 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
     ) -> "State":
         """
         Resets the already-existing State
@@ -111,6 +113,7 @@ class State(NamedTuple):
             trench_axes=trench_axes,
             trench_type=trench_type,
             dumpability_mask_init=dumpability_mask_init,
+            action_map=action_map,
         )
 
     def _step(self, action: Action) -> "State":
