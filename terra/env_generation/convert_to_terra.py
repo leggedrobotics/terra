@@ -50,7 +50,7 @@ def _convert_dumpability_to_terra(img):
 def _convert_actions_to_terra(img):
     img = img.astype(np.int16)
     mask = _get_img_mask(img, np.array(color_dict["dirt"]))
-    img = np.where(mask, 0, 1)
+    img = np.where(mask, 1, 0)
     return img.astype(np.int8)
 
 
