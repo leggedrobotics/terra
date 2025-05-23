@@ -405,7 +405,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
         trench_axes=trench_axes_list,
         trench_types=trench_types,
         dumpability_masks_init=dumpability_masks_init_from_disk,
-        actions=actions_from_disk_padded,
+        action_maps=actions_from_disk_padded,
     )
     # Update batch config with the actual map dimensions
     maps_width = maps_from_disk_padded.shape[2]
