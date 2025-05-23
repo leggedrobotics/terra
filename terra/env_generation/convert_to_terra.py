@@ -255,7 +255,7 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             all_dumpable=all_dumpable,
         )
 
-def generate_relocations_terra(dataset_folder, size, n_imgs, all_dumpable):
+def generate_relocations_terra(dataset_folder, size, n_imgs):
     print("Converting relocations...")
     img_folder = Path(dataset_folder) / "relocations" / "images"
     metadata_folder = Path(dataset_folder) / "relocations" / "metadata"
@@ -272,7 +272,7 @@ def generate_relocations_terra(dataset_folder, size, n_imgs, all_dumpable):
         destination_folder,
         size,
         n_imgs,
-        all_dumpable=all_dumpable,
+        all_dumpable=False,
         copy_metadata=False,
         downsample=False,
         has_dumpability=True,
