@@ -81,7 +81,7 @@ class MapsBuffer(NamedTuple):
             trench_axes,
             trench_type,
             dumpability_mask_init,
-            action_map
+            action_map,
             key,
         ) = self._get_map_from_disk(key, env_cfg)
         # Ensure consistent dtypes for all return values

@@ -82,10 +82,10 @@ class GridWorld(NamedTuple):
         dumpability_mask_init: Array,
         action_map: Array,
     ) -> "GridWorld":
+        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
         action_map = GridMap.new(IntLowDim(action_map))
         target_map = GridMap.new(IntLowDim(target_map))
         padding_mask = GridMap.new(IntLowDim(padding_mask))
-        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
 
