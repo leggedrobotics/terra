@@ -37,6 +37,7 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
     n_dirt = 0
     n_dirt_todo = np.random.randint(n_dirt_min, n_dirt_max + 1)
     cumulative_mask = np.zeros_like(img[..., 0], dtype=bool)
+    drt = np.ones_like(img) * 255
 
     while n_dirt < n_dirt_todo:
         # Randomly determine the size of the dirt pile
@@ -46,11 +47,11 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
         x = np.random.randint(0, w - sizeox)
         y = np.random.randint(0, h - sizeoy)
         # Update the dumping zone layer
-        img[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["dirt"])
+        drt[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["dirt"])
         cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
         n_dirt += 1
 
-    return img, cumulative_mask
+    return drt, cumulative_mask
 
 def save_action_image(drt, save_folder, i):
     # make dir if does not exist
