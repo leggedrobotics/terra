@@ -55,7 +55,7 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
 def save_action_image(drt, save_folder, i):
     # make dir if does not exist
     os.makedirs(save_folder, exist_ok=True)
-    save_folder_action = Path(save_folder) / "action"
+    save_folder_action = Path(save_folder) / "actions"
     save_folder_action.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(
         os.path.join(save_folder_action, "trench_" + str(i) + ".png"), drt
