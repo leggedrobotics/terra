@@ -16,7 +16,7 @@ color_dict = {
     "dumping": [90, 191, 20],  # Green
     "nondumpable": [255, 0, 0],  # Red
     "obstacle": [0, 0, 255],  # Blue
-    "dirt": [139, 69, 19],  # Brown
+    "dirt": [19, 69, 139],  # Brown
 }
 
 
