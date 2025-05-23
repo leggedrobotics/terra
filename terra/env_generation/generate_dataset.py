@@ -64,8 +64,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
 
     print("Step 2: Creating procedural trenches and processing training data...")
     # Create procedural trenches
-    main_folder = "data/terra"
-    create_procedural_trenches(main_folder, config)
+    create_procedural_trenches(config)
 
     # Process foundation maps for training
     create_train_foundations(config)

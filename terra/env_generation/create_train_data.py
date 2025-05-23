@@ -27,7 +27,7 @@ import yaml
 # Define package directory at module level
 PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def create_procedural_trenches(main_folder, config):
+def create_procedural_trenches(config):
     # Load configurations from YAML
     resolution = config["resolution"]
     trenches_config = config["trenches"]
@@ -50,7 +50,7 @@ def create_procedural_trenches(main_folder, config):
     size_nodump_max = trenches_config["size_nodump_max"]
 
     for level, n_trenches in zip(difficulty_levels, corrected_trenches_per_level):
-        save_folder = os.path.join(main_folder, "trenches", level)
+        save_folder = os.path.join("data/terra", "trenches", level)
         os.makedirs(save_folder, exist_ok=True)
 
         # Updated to use new configuration structure

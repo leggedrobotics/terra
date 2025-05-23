@@ -82,7 +82,7 @@ def create_relocations(config, n_imgs):
     size_dirt_max = config["size_dirt_max"]
 
     package_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    save_folder = os.path.join(package_dir, "data", "terra", "foundations")
+    save_folder = os.path.join(package_dir, "data", "terra", "relocations")
 
     i = 0
     while i < n_imgs:
