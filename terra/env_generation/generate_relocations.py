@@ -10,7 +10,7 @@ from terra.env_generation.procedural_data import (
     save_or_display_image
 )
 
-from terra.env_generation.utils import color_dict
+from terra.env_generation.utils import color_dict, _get_img_mask
 
 def add_dump_zones(img, n_dump_min, n_dump_max, size_dump_min, size_dump_max):
     w, h = img.shape[:2]
@@ -32,11 +32,14 @@ def add_dump_zones(img, n_dump_min, n_dump_max, size_dump_min, size_dump_max):
 
     return img, cumulative_mask
 
-def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, size_dirt_max):
+def add_dirt_tiles(img, occ, dmp, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, size_dirt_max):
     w, h = img.shape[:2]
     n_dirt = 0
     n_dirt_todo = np.random.randint(n_dirt_min, n_dirt_max + 1)
     drt = np.ones_like(img) * 255
+
+    mask_occ = _get_img_mask(occ, color_dict["obstacle"])
+    mask_dmp = _get_img_mask(occ, color_dict["nondumpable"])
 
     while n_dirt < n_dirt_todo:
         # Randomly determine the size of the dirt pile
@@ -46,7 +49,9 @@ def add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, 
         x = np.random.randint(0, w - sizeox)
         y = np.random.randint(0, h - sizeoy)
         # Check if the selected area overlaps with existing features
-        if not cumulative_mask[x : x + sizeox, y : y + sizeoy].any():
+        if np.all(cumulative_mask[x : x + sizeox, y : y + sizeoy] == 0) and np.all(
+            mask_occ[x : x + sizeox, y : y + sizeoy] == 0
+        ) and np.all(mask_dmp[x : x + sizeox, y : y + sizeoy] == 0):
             drt[x : x + sizeox, y : y + sizeoy] = np.array(color_dict["dirt"])
             cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
             n_dirt += 1
@@ -91,8 +96,7 @@ def create_relocations(config, n_imgs):
         img, cumulative_mask = add_dump_zones(img, n_dump_min, n_dump_max, size_dump_min, size_dump_max)
         occ, cumulative_mask = add_obstacles(img, cumulative_mask, n_obs_min, n_obs_max, size_obstacle_min, size_obstacle_max)
         dmp, cumulative_mask = add_non_dumpables(img, occ, cumulative_mask, n_nodump_min, n_nodump_max, size_nodump_min, size_nodump_max)
-        print(f'cum_mask nr {i}: {np.sum(cumulative_mask)}')
-        drt, cumulative_mask = add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, size_dirt_max)
+        drt, cumulative_mask = add_dirt_tiles(img, occ, dmp, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, size_dirt_max)
         save_or_display_image(img, occ, dmp, {}, save_folder, i)
         save_action_image(drt, save_folder, i)
         i += 1
