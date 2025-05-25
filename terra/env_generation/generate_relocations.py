@@ -91,6 +91,7 @@ def create_relocations(config, n_imgs):
         img, cumulative_mask = add_dump_zones(img, n_dump_min, n_dump_max, size_dump_min, size_dump_max)
         occ, cumulative_mask = add_obstacles(img, cumulative_mask, n_obs_min, n_obs_max, size_obstacle_min, size_obstacle_max)
         dmp, cumulative_mask = add_non_dumpables(img, occ, cumulative_mask, n_nodump_min, n_nodump_max, size_nodump_min, size_nodump_max)
+        print(f'cum_mask nr {i}: {np.sum(cumulative_mask)}')
         drt, cumulative_mask = add_dirt_tiles(img, cumulative_mask, n_dirt_min, n_dirt_max, size_dirt_min, size_dirt_max)
         save_or_display_image(img, occ, dmp, {}, save_folder, i)
         save_action_image(drt, save_folder, i)
