@@ -2,11 +2,11 @@ import base64
 import cv2
 import numpy as np
 import jax
-from google.adk.agents import Agent
-from google.adk.models.lite_llm import LiteLlm
-from google.adk.sessions import InMemorySessionService
-from google.adk.runners import Runner
-from google.genai import types
+# from google.adk.agents import Agent
+# from google.adk.models.lite_llm import LiteLlm
+# from google.adk.sessions import InMemorySessionService
+# from google.adk.runners import Runner
+# from google.genai import types
 import jax.numpy as jnp
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
@@ -303,7 +303,7 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
                                 target_map_override=None, traversability_mask_override=None,
                                 padding_mask_override=None, dumpability_mask_override=None,
                                 dumpability_mask_init_override=None, action_map_override=None,
-                                dig_map_override=None):
+                                dig_map_override=None, agent_config_override=None):
         """
         Reset the environment with custom map overrides.
         
@@ -347,19 +347,31 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
                 new_edge_length = action_map_override.shape[1]
     
         # If we have a new edge length, update the env_cfg
-        #original_env_cfgs = env_cfgs
-        if new_edge_length is not None:
-            #print(f"Updating env_cfg edge_length_px from {env_cfgs.maps.edge_length_px} to {new_edge_length}")
+        # Update the env_cfg with new map size and agent config if provided
+        if new_edge_length is not None or agent_config_override is not None:
+            
+            # Update maps config if new edge length is provided
+            if new_edge_length is not None:
+                updated_maps_config = env_cfgs.maps._replace(
+                    edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
+                )
+            else:
+                updated_maps_config = env_cfgs.maps
+            
+            # Update agent config if override is provided
+            if agent_config_override is not None:
+                print(f"Overriding agent config: {agent_config_override}")
+                updated_agent_config = env_cfgs.agent._replace(**agent_config_override)
+            else:
+                updated_agent_config = env_cfgs.agent
         
-            # Create updated maps config
-            updated_maps_config = env_cfgs.maps._replace(
-                edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
+            # Update the env_cfgs with the new configurations
+            env_cfgs = env_cfgs._replace(
+                maps=updated_maps_config,
+                agent=updated_agent_config
             )
         
-            # Update the env_cfgs with the new maps config
-            env_cfgs = env_cfgs._replace(maps=updated_maps_config)
-        
-            #print(f"Updated env_cfgs.maps.edge_length_px to {env_cfgs.maps.edge_length_px}")
+            print(f"Updated env_cfgs - edge_length_px: {env_cfgs.maps.edge_length_px}, agent height: {env_cfgs.agent.height}, agent width: {env_cfgs.agent.width}")
         
         # First reset with possibly updated env_cfgs
         timestep = self.reset(env_cfgs, rngs, custom_pos, custom_angle)
@@ -468,32 +480,44 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
         # print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
         # print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
         
+      
         # Update the env_cfg in the timestep state to ensure consistency
-        if new_edge_length is not None:
+        if new_edge_length is not None or agent_config_override is not None:
             # Update the state's env_cfg if it exists
             if hasattr(timestep.state, 'env_cfg'):
-                timestep = timestep._replace(
-                    state=timestep.state._replace(
-                        env_cfg=timestep.state.env_cfg._replace(
-                            maps=timestep.state.env_cfg.maps._replace(
-                                edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
-                            )
-                        )
-                    )
-                )
-                # print(f"Updated timestep.state.env_cfg.maps.edge_length_px to {timestep.state.env_cfg.maps.edge_length_px}")
-        
-            # Update the timestep's env_cfg if it exists at the top level
-            if hasattr(timestep, 'env_cfg'):
-                timestep = timestep._replace(
-                    env_cfg=timestep.env_cfg._replace(
-                        maps=timestep.env_cfg.maps._replace(
+                state_env_cfg = timestep.state.env_cfg
+                
+                if new_edge_length is not None:
+                    state_env_cfg = state_env_cfg._replace(
+                        maps=state_env_cfg.maps._replace(
                             edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
                         )
                     )
+                
+                if agent_config_override is not None:
+                    state_env_cfg = state_env_cfg._replace(
+                        agent=state_env_cfg.agent._replace(**agent_config_override)
+                    )
+                
+                timestep = timestep._replace(
+                    state=timestep.state._replace(env_cfg=state_env_cfg)
                 )
-                # print(f"Updated timestep.env_cfg.maps.edge_length_px to {timestep.env_cfg.maps.edge_length_px}")
         
+            # Update the timestep's env_cfg if it exists at the top level
+            if hasattr(timestep, 'env_cfg'):
+                timestep_env_cfg = timestep.env_cfg
+                
+                if new_edge_length is not None:
+                    timestep_env_cfg = timestep_env_cfg._replace(
+                        maps=timestep_env_cfg.maps._replace(
+                            edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
+                        )
+                    )
+                
+                if agent_config_override is not None:
+                    timestep_env_cfg = timestep_env_cfg._replace(
+                        agent=timestep_env_cfg.agent._replace(**agent_config_override)
+                    )
         # We need to manually update the observation to match the new maps
         updated_obs = dict(timestep.observation)
 
@@ -535,7 +559,7 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
         # if hasattr(timestep, 'env_cfg'):
         #     print(f"Timestep env_cfg edge_length_px: {timestep.env_cfg.maps.edge_length_px}")
     
-        
+       #print(timestep.state.env_cfg)
         return timestep
 
 def create_sub_task_target_map(global_target_map_data: jnp.ndarray,

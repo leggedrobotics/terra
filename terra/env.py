@@ -166,8 +166,10 @@ class TerraEnv(NamedTuple):
         """
         if info is not None:
             target_tiles = info["target_tiles"]
+            additional_agents = info.get("additional_agents", None)
         else:
             target_tiles = None
+            additional_agents = None
 
         self.rendering_engine.run(
             active_grid=obs["action_map"],
@@ -179,6 +181,7 @@ class TerraEnv(NamedTuple):
             cabin_dir=obs["agent_state"][..., [3]],
             loaded=obs["agent_state"][..., [4]],
             target_tiles=target_tiles,
+            additional_agents=additional_agents,
             generate_gif=generate_gif,
         )
 
