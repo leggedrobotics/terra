@@ -68,14 +68,14 @@ USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
 
     
-class LargeMapTerraEnv(TerraEnvBatch):
+class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
     """A version of TerraEnvBatch specifically for 128x128 maps"""
     
     def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
                            target_map_override=None, traversability_mask_override=None,
                            padding_mask_override=None, dumpability_mask_override=None,
                            dumpability_mask_init_override=None, action_map_override=None,
-                           dig_map_override=None):
+                           dig_map_override=None, agent_config_override=None):
         """Reset with 64x64 map overrides - ensures shapes are consistent"""
     
         #print("SmallMapTerraEnv: All map overrides validated for 64x64 size")
@@ -86,7 +86,7 @@ class LargeMapTerraEnv(TerraEnvBatch):
             target_map_override, traversability_mask_override,
             padding_mask_override, dumpability_mask_override,
             dumpability_mask_init_override, action_map_override,
-            dig_map_override
+            dig_map_override, agent_config_override
         )
 
 class DisjointMapEnvironments:
@@ -171,6 +171,19 @@ class DisjointMapEnvironments:
         self.small_env_timestep = None
         self.current_partition_idx = None
 
+        # Agent size configurations
+        self.small_agent_config = {
+            'height': jnp.array([9], dtype=jnp.int32), 
+            'width': jnp.array([5], dtype=jnp.int32)
+        }
+        self.big_agent_config = {
+            'height': jnp.array([19], dtype=jnp.int32), 
+            'width': jnp.array([11], dtype=jnp.int32)
+        }
+        
+        print(f"Agent configs - Small: {self.small_agent_config}, Big: {self.big_agent_config}")
+
+      
 
     def _create_clean_env_config(self):
         """Create a clean environment config for 64x64 maps without batch dimensions"""
@@ -310,7 +323,7 @@ class DisjointMapEnvironments:
             
             # Switch display to small environment
             self.current_display_env = "small"
-            
+            #rint(self.small_env_timestep)
             return small_timestep
             
         except Exception as e:
@@ -397,171 +410,75 @@ class DisjointMapEnvironments:
         return self.global_timestep
     
 
-    def update_global_maps_from_small_environment_incremental(self):
-        """
-        Update global maps incrementally after each small environment step.
-        This allows us to see progress in real-time on the global display.
-        """
-        if self.small_env_timestep is None or self.current_partition_idx is None:
-            return
-        
-        partition = self.partitions[self.current_partition_idx]
-        y_start, x_start, y_end, x_end = partition['region_coords']
-        region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
-        
-        # Get current state from small environment
-        small_state = self.small_env_timestep.state
-        
-        # Update the global maps with current small environment state
-        self.global_maps['dumpability_mask'] = self.global_maps['dumpability_mask'].at[region_slice].set(
-            small_state.world.dumpability_mask.map
-        )
-        
-        self.global_maps['target_map'] = self.global_maps['target_map'].at[region_slice].set(
-            small_state.world.target_map.map
-        )
-        
-        self.global_maps['action_map'] = self.global_maps['action_map'].at[region_slice].set(
-            small_state.world.action_map.map
-        )
-        
-        self.global_maps['traversability_mask'] = self.global_maps['traversability_mask'].at[region_slice].set(
-            small_state.world.traversability_mask.map
-        )
-        
-        self.global_maps['padding_mask'] = self.global_maps['padding_mask'].at[region_slice].set(
-            small_state.world.padding_mask.map
-        )
-        
-        self.global_maps['dig_map'] = self.global_maps['dig_map'].at[region_slice].set(
-            small_state.world.dig_map.map
-        )
-        
-        #print(f"Updated global maps with changes from partition {self.current_partition_idx}")
-        
-        # Update the global environment display with the new maps
-        self._update_global_environment_display()
-        
-    def _update_global_environment_display(self):
-        """
-        Update the global environment display with the latest global maps.
-        This creates a new timestep for the global environment with updated maps.
-        """
-        try:
-            self.rng, reset_key = jax.random.split(self.rng)
-            reset_keys = jax.random.split(reset_key, 1)
 
-            custom_pos = None
-            custom_angle = None
 
-            if self.current_partition_idx is not None and self.small_env_timestep is not None:
-                small_agent_state = self.small_env_timestep.state.agent.agent_state
-                partition = self.partitions[self.current_partition_idx]
-                region_coords = partition['region_coords']
-                y_start, x_start, y_end, x_end = region_coords
-
-                small_pos = small_agent_state.pos_base
-                small_angle = small_agent_state.angle_base
-                # Debug info
-                # print(f"Small position type: {type(small_pos)}")
-                # if hasattr(small_pos, 'shape'):
-                #     print(f"Small position shape: {small_pos.shape}")
-                # print(f"Small position value: {small_pos}")
-                # print(f"Small angle type: {type(small_angle)}")
-                # if hasattr(small_angle, 'shape'):
-                #     print(f"Small angle shape: {small_angle.shape}")
-                # print(f"Small angle value: {small_angle}")
-                
-                # Extract values from arrays with proper handling for different dimensions
-                # For position - handle both single array with 2 elements or tuple of 2 values
-                if hasattr(small_pos, 'shape'):
-                    if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
-                        # Array with shape (2,) - common case
-                        small_pos_y = int(small_pos[0])
-                        small_pos_x = int(small_pos[1])
-                    elif len(small_pos.shape) > 1:
-                        # Multi-dimensional array - extract first elements
-                        small_pos_y = int(small_pos.flatten()[0])
-                        small_pos_x = int(small_pos.flatten()[1])
-                    else:
-                        # Single element array - unlikely but handle it
-                        small_pos_y = int(small_pos[0])
-                        small_pos_x = int(small_pos[0])  # Use same value as fallback
-                else:
-                    # Python tuple or list
-                    small_pos_y = int(small_pos[0])
-                    small_pos_x = int(small_pos[1])
-                
-                # For angle - handle scalar or array
-                if hasattr(small_angle, 'shape'):
-                    if small_angle.shape == ():  # Scalar array
-                        angle_val = float(small_angle)
-                    elif len(small_angle.shape) >= 1:  # Array with dimensions
-                        angle_val = float(small_angle.flatten()[0])  # Take first element
-                    else:
-                        angle_val = 0.0  # Fallback
-                else:
-                    angle_val = float(small_angle)
-                
-                # Convert region coordinates to Python types
-                if hasattr(y_start, 'item'):
-                    # Try item() method for scalar arrays
-                    try:
-                        y_start_val = int(y_start.item())
-                        x_start_val = int(x_start.item())
-                    except:
-                        # Fallback to direct conversion
-                        y_start_val = int(y_start)
-                        x_start_val = int(x_start)
-                else:
-                    y_start_val = int(y_start)
-                    x_start_val = int(x_start)
-                
-                # Calculate global position using Python native types
-                global_pos_y = int(small_pos_y + y_start_val)
-                global_pos_x = int(small_pos_x + x_start_val)
-                global_pos = (global_pos_y, global_pos_x)
-                
-                # Set custom position and angle for reset
-                custom_pos = global_pos
-                custom_angle = angle_val
-                #print(f"Preserving excavator position: {global_pos} and angle: {small_angle}")
-
+    # def map_position_small_to_global(self, small_pos, region_coords):
+    #     """
+    #     Map agent position from small map coordinates to global map coordinates.
+    #     Simple addition of region offset - no scaling needed with agent config override.
+        
+    #     Args:
+    #         small_pos: Agent position in small map (y, x)
+    #         region_coords: Region coordinates (y_start, x_start, y_end, x_end)
             
-            # Reset global environment with updated maps
-            self.global_timestep = self.global_env.reset_with_map_override(
-                self.global_env_config,
-                reset_keys,
-                custom_pos=custom_pos,
-                custom_angle=custom_angle,
-                target_map_override=self.global_maps['target_map'],
-                traversability_mask_override=self.global_maps['traversability_mask'],
-                padding_mask_override=self.global_maps['padding_mask'],
-                dumpability_mask_override=self.global_maps['dumpability_mask'],
-                dumpability_mask_init_override=self.global_maps['dumpability_mask_init'],
-                action_map_override=self.global_maps['action_map'],
-                dig_map_override=self.global_maps['dig_map']
-            )
-                
-            #print("Global environment display updated.")
-        except Exception as e:
-            print(f"Warning: Could not update global environment display: {e}")
-
-    def render_global_environment_with_updates(self):
-        """
-        Update global maps from small environment and then render.
-        This ensures the global view shows the latest progress.
-        """
-        # First update the global maps with current small environment state
-        self.update_global_maps_from_small_environment_incremental()
+    #     Returns:
+    #         Global position for big map rendering
+    #     """
+    #     y_start, x_start, y_end, x_end = region_coords
         
-        # Then render the updated global environment
-        try:
-            obs = self.global_timestep.observation
-            info = self.global_timestep.info
-            self.global_env.terra_env.render_obs_pygame(obs, info)
-        except Exception as e:
-            print(f"Global rendering error: {e}")
+    #     # Extract position values
+    #     if hasattr(small_pos, 'shape'):
+    #         if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
+    #             small_pos_y = float(small_pos[0])
+    #             small_pos_x = float(small_pos[1])
+    #         else:
+    #             small_pos_y = float(small_pos.flatten()[0])
+    #             small_pos_x = float(small_pos.flatten()[1])
+    #     else:
+    #         small_pos_y = float(small_pos[0])
+    #         small_pos_x = float(small_pos[1])
+        
+    #     # Simple mapping: just add the region offset
+    #     global_pos_y = small_pos_y + y_start
+    #     global_pos_x = small_pos_x + x_start
+        
+    #     # Ensure position is within valid bounds
+    #     global_pos_y = max(0, min(127, global_pos_y))  # Assuming 128x128 global map
+    #     global_pos_x = max(0, min(127, global_pos_x))
+        
+    #     return (int(global_pos_y), int(global_pos_x))
+    
+    def map_position_small_to_global(self, small_pos, region_coords):
+        """
+        Map agent position from small map coordinates to global map coordinates.
+        Returns position in (x, y) format for rendering.
+     """
+        y_start, x_start, y_end, x_end = region_coords
+    
+        # Extract position values
+        if hasattr(small_pos, 'shape'):
+            if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
+                small_pos_y = float(small_pos[0])
+                small_pos_x = float(small_pos[1])
+            else:
+                small_pos_y = float(small_pos.flatten()[0])
+                small_pos_x = float(small_pos.flatten()[1])
+        else:
+            small_pos_y = float(small_pos[0])
+            small_pos_x = float(small_pos[1])
+    
+        # Simple mapping: just add the region offset
+        global_pos_y = small_pos_y + y_start
+        global_pos_x = small_pos_x + x_start
+    
+        # Ensure position is within valid bounds
+        global_pos_y = max(0, min(127, global_pos_y))
+        global_pos_x = max(0, min(127, global_pos_x))
+    
+        # Return as (x, y) for rendering instead of (y, x)
+        return (int(global_pos_x), int(global_pos_y))
+
+
 
     def is_small_task_completed(self):
         """Check if the current small environment task is completed."""
@@ -592,6 +509,179 @@ class DisjointMapEnvironments:
             if partition['status'] == 'pending':
                 return i
         return None
+
+    def _update_global_environment_display_with_all_agents(self, partition_states):
+        """
+        Update the global environment display with ALL active agents.
+        """
+        try:
+            self.rng, reset_key = jax.random.split(self.rng)
+            reset_keys = jax.random.split(reset_key, 1)
+
+            # Collect all active agent positions and angles
+            all_agent_positions = []
+            all_agent_angles_base = []
+            all_agent_angles_cabin = []
+            all_agent_loaded = []
+        
+            for partition_idx, partition_state in partition_states.items():
+                if partition_state['status'] == 'active' and partition_state['timestep'] is not None:
+                    # Get agent state from this partition
+                    small_agent_state = partition_state['timestep'].state.agent.agent_state
+                    partition = self.partitions[partition_idx]
+                    region_coords = partition['region_coords']
+
+                    small_pos = small_agent_state.pos_base
+                    #small_angle = small_agent_state.angle_base
+                    small_angle_base = small_agent_state.angle_base
+                    small_angle_cabin = small_agent_state.angle_cabin
+                    small_loaded = small_agent_state.loaded
+                
+                    # Map position to global coordinates
+                    global_pos = self.map_position_small_to_global(small_pos, region_coords)
+                
+                    # Handle angle extraction
+                    if hasattr(small_angle_base, 'shape'):
+                        if small_angle_base.shape == ():
+                            angle_base_val = int(small_angle_base)
+                        elif len(small_angle_base.shape) >= 1:
+                            angle_base_val = int(small_angle_base.flatten()[0])
+                        else:
+                            angle_base_val = 0.0
+                    else:
+                        angle_base_val = int(small_angle_base)
+
+                    if hasattr(small_angle_cabin, 'shape'):
+                        if small_angle_cabin.shape == ():
+                            angle_cabin_val = int(small_angle_cabin)
+                        elif len(small_angle_cabin.shape) >= 1:
+                            angle_cabin_val = int(small_angle_cabin.flatten()[0])
+                        else:
+                            angle_cabin_val = 0.0
+                    else:
+                        angle_cabin_val = int(small_angle_cabin)
+                    
+                    if hasattr(small_loaded, 'shape'):
+                        if small_loaded.shape == ():
+                            small_loaded = int(small_loaded)
+                        elif len(small_loaded.shape) >= 1:
+                            small_loaded = int(small_loaded.flatten()[0])
+                        else:
+                            small_loaded = False
+                    else:
+                        small_loaded = int(small_loaded)
+                
+                    all_agent_positions.append(global_pos)
+                    all_agent_angles_base.append(angle_base_val)
+                    all_agent_angles_cabin.append(angle_cabin_val)
+                    all_agent_loaded.append(small_loaded)
+                
+                    print(f"Agent {partition_idx} at global position: {global_pos}, angle base: {angle_base_val}, angle cabin: {angle_cabin_val}, loaded: {small_loaded}")
+
+            # Update global maps from small environments incrementally
+            self.update_global_maps_from_all_small_environments(partition_states)
+
+            # Use first agent for reset position (others will be added during rendering)
+            custom_pos = all_agent_positions[0] if all_agent_positions else None
+            #custom_angle = all_agent_angles[0] if all_agent_angles else None
+            custom_angle = all_agent_angles_base[0] if all_agent_angles_base else None
+
+
+            # Reset global environment with updated maps
+            self.global_timestep = self.global_env.reset_with_map_override(
+                self.global_env_config,
+                reset_keys,
+                custom_pos=custom_pos,
+                custom_angle=custom_angle,
+                target_map_override=self.global_maps['target_map'],
+                traversability_mask_override=self.global_maps['traversability_mask'],
+                padding_mask_override=self.global_maps['padding_mask'],
+                dumpability_mask_override=self.global_maps['dumpability_mask'],
+                dumpability_mask_init_override=self.global_maps['dumpability_mask_init'],
+                action_map_override=self.global_maps['action_map'],
+                dig_map_override=self.global_maps['dig_map'],
+                agent_config_override=self.small_agent_config
+            )
+        
+            # Store all agent positions for rendering
+            self.global_env.all_agent_positions = all_agent_positions
+            self.global_env.all_agent_angles_base = all_agent_angles_base
+            self.global_env.all_agent_angles_cabin = all_agent_angles_cabin
+            self.global_env.all_agent_loaded = all_agent_loaded
+
+            
+            print(f"Global environment updated with {len(all_agent_positions)} active agents.")
+        
+        except Exception as e:
+            print(f"Warning: Could not update global environment display: {e}")
+            import traceback
+            traceback.print_exc()
+
+
+    def update_global_maps_from_all_small_environments(self, partition_states):
+        """
+        Update global maps with changes from ALL active small environments.
+        """
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] == 'active' and partition_state['timestep'] is not None:
+                partition = self.partitions[partition_idx]
+                y_start, x_start, y_end, x_end = partition['region_coords']
+                region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+            
+                # Get current state from small environment
+                small_state = partition_state['timestep'].state
+            
+                # Update the global maps with current small environment state
+                self.global_maps['dumpability_mask'] = self.global_maps['dumpability_mask'].at[region_slice].set(
+                    small_state.world.dumpability_mask.map
+                )
+                self.global_maps['target_map'] = self.global_maps['target_map'].at[region_slice].set(
+                    small_state.world.target_map.map
+                )
+                self.global_maps['action_map'] = self.global_maps['action_map'].at[region_slice].set(
+                    small_state.world.action_map.map
+                )
+                self.global_maps['traversability_mask'] = self.global_maps['traversability_mask'].at[region_slice].set(
+                    small_state.world.traversability_mask.map
+                )
+                self.global_maps['padding_mask'] = self.global_maps['padding_mask'].at[region_slice].set(
+                    small_state.world.padding_mask.map
+                )
+                self.global_maps['dig_map'] = self.global_maps['dig_map'].at[region_slice].set(
+                    small_state.world.dig_map.map
+                )
+
+
+    def render_global_environment_with_multiple_agents(self, partition_states):
+        """
+        Update and render global environment showing ALL active excavators.
+        """
+        # First update with all agents
+        self._update_global_environment_display_with_all_agents(partition_states)
+    
+        # Then render with multiple agents
+        try:
+            obs = self.global_timestep.observation
+            info = self.global_timestep.info
+        
+            # Pass additional agent positions to the rendering system
+            if hasattr(self.global_env, 'all_agent_positions') and hasattr(self.global_env, 'all_agent_angles_base') \
+                and hasattr(self.global_env, 'all_agent_angles_cabin') and hasattr(self.global_env, 'all_agent_loaded'):
+                # Add all agent positions to the info for rendering
+                info['additional_agents'] = {
+                    'positions': self.global_env.all_agent_positions,
+                    'angles base': self.global_env.all_agent_angles_base,
+                    'angles cabin': self.global_env.all_agent_angles_cabin,
+                    'loaded': self.global_env.all_agent_loaded
+                }
+            print(f"Passing {len(self.global_env.all_agent_positions)} agents to renderer")
+
+            print(info)
+
+            self.global_env.terra_env.render_obs_pygame(obs, info)
+        
+        except Exception as e:
+            print(f"Global rendering error: {e}")
     
  
 def wrap_action2(action_rl, action_type):
@@ -628,15 +718,7 @@ def run_experiment_with_disjoint_environments(
     progressive_gif, run, small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
-    
-    Args:
-        llm_model_name: Name of the LLM model
-        llm_model_key: Key for the LLM model
-        num_timesteps: Number of timesteps to run
-        seed: Random seed
-        progressive_gif: Whether to generate a progressive GIF
-        run: Path to the checkpoint file
-        small_env_config: Optional custom config for small environments
+    Modified to display all excavators simultaneously on the global map.
     """
     agent_checkpoint_path = run
     model = None
@@ -658,7 +740,6 @@ def run_experiment_with_disjoint_environments(
     config.num_devices = 1
     config.num_embeddings_agent_min = 60
 
-
     # Set the number of partitions
     num_partitions = NUM_PARTITIONS
     
@@ -667,7 +748,7 @@ def run_experiment_with_disjoint_environments(
     env_manager = DisjointMapEnvironments(
         seed=seed,
         global_env_config=global_env_config,
-        small_env_config=small_env_config,  # Can be None to auto-derive
+        small_env_config=small_env_config,
         num_partitions=num_partitions,
         progressive_gif=progressive_gif,
         shuffle_maps=False
@@ -688,16 +769,13 @@ def run_experiment_with_disjoint_environments(
     def repeat_action(action, n_times=1):
         return action_type.new(action.action[None].repeat(n_times, 0))
     
-    # # Trigger the JIT compilation
+    # Trigger the JIT compilation
     env_manager.global_env.timestep = env_manager.global_env.step(env_manager.global_env.timestep, repeat_action(action_type.do_nothing()), rng_reset_initial)
     env_manager.global_env.terra_env.render_obs_pygame(env_manager.global_env.timestep.observation, env_manager.global_env.timestep.info)
-
     
     # Initialize variables for tracking progress
     step = 0
     playing = True
-    prev_actions_rl = jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
-    model_initialized = False
     
     # For visualization and metrics
     screen = pg.display.get_surface()
@@ -711,182 +789,271 @@ def run_experiment_with_disjoint_environments(
     print(f"Starting the game loop with {num_partitions} map partitions and disjoint environments...")
 
     # Initialize with global environment first
-    current_partition_idx = -1
-    partition_step_count = 0
-    max_steps_per_partition = 200
+    partition_states = {}  # Store state for each partition
+    partition_models = {}  # Store models for each partition if needed
+    active_partitions = []  # List of partitions that are still active
+    current_partition_cycle_idx = 0  # Index in the cycling order
+    max_steps_per_partition = 400
 
+    # Initialize all partitions
+    for partition_idx in range(num_partitions):
+        try:
+            print(f"Initializing partition {partition_idx}...")
+            
+            # Initialize the small environment for this partition
+            small_env_timestep = env_manager.initialize_small_environment(partition_idx)
+            
+            # Store partition state
+            partition_states[partition_idx] = {
+                'timestep': small_env_timestep,
+                'prev_actions_rl': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32),
+                'step_count': 0,
+                'status': 'active',
+                'rewards': [],
+                'actions': []
+            }
+            
+            active_partitions.append(partition_idx)
+            
+            # Initialize model for each partition
+            partition_models[partition_idx] = {
+                'model': load_neural_network(config, env_manager.small_env),
+                'params': model_params.copy(),
+                'prev_actions': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
+            }
+                    
+        except Exception as e:
+            print(f"Failed to initialize partition {partition_idx}: {e}")
+            # Mark partition as failed
+            env_manager.partitions[partition_idx]['status'] = 'failed'
+
+    if not active_partitions:
+        print("No partitions could be initialized!")
+        return
+
+    print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
+
+    #    # Initialize SINGLE shared model instead of per-partition models
+    # print("Initializing shared model...")
+    # shared_model = None
+    # shared_model_params = None
+    
+    # # Initialize all partitions but WITHOUT individual models
+    # partition_states = {}
+    # active_partitions = []
+    # max_steps_per_partition = 200
+
+    # for partition_idx in range(num_partitions):
+    #     try:
+    #         print(f"Initializing partition {partition_idx}...")
+            
+    #         # Initialize the small environment for this partition
+    #         small_env_timestep = env_manager.initialize_small_environment(partition_idx)
+            
+    #         # Store partition state WITHOUT individual model
+    #         partition_states[partition_idx] = {
+    #             'timestep': small_env_timestep,
+    #             'prev_actions_rl': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32),
+    #             'step_count': 0,
+    #             'status': 'active',
+    #             'rewards': [],
+    #             'actions': []
+    #         }
+            
+    #         active_partitions.append(partition_idx)
+            
+    #         # Initialize shared model only once
+    #         if shared_model is None:
+    #             print("Loading shared neural network model...")
+    #             shared_model = load_neural_network(config, env_manager.small_env)
+    #             shared_model_params = model_params.copy()
+    #             print("Shared model initialized successfully!")
+                    
+    #     except Exception as e:
+    #         print(f"Failed to initialize partition {partition_idx}: {e}")
+    #         env_manager.partitions[partition_idx]['status'] = 'failed'
+    #         # Don't add to active_partitions if failed
+
+    # if not active_partitions:
+    #     print("No partitions could be initialized!")
+    #     return
+    
+    # if shared_model is None:
+    #     print("Failed to initialize shared model!")
+    #     return
+
+    # print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
+
+    # MAIN GAME LOOP - MODIFIED FOR MULTI-AGENT DISPLAY
     while playing and step < num_timesteps:
         # Handle quit events
         for event in pg.event.get():
             if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
                 playing = False
-    
-        # Check if we need to initialize or switch partitions
-        need_new_partition = False
-    
-        if current_partition_idx == -1:
-            # No current partition - need to start first one
-            need_new_partition = True
-            print("Starting first partition...")
-        elif env_manager.is_small_task_completed():
-            # Current partition is completed
-            print(f"Partition {current_partition_idx} completed after {partition_step_count} steps!")
-            env_manager.partitions[current_partition_idx]['status'] = 'completed'
-            need_new_partition = True
-        elif partition_step_count >= max_steps_per_partition:
-            # Current partition timed out
-            print(f"Partition {current_partition_idx} timed out after {max_steps_per_partition} steps")
-            env_manager.partitions[current_partition_idx]['status'] = 'failed'
-            need_new_partition = True
-    
-        # Handle NaN rewards (mark as failed and move on)
-        if current_partition_idx != -1:
-            current_reward = env_manager.small_env_timestep.reward
-            if jnp.isnan(current_reward):
-                print(f"Partition {current_partition_idx} failed due to NaN reward")
-                env_manager.partitions[current_partition_idx]['status'] = 'failed'
-                need_new_partition = True
-    
-        if need_new_partition:
-            # Get next partition to work on
-            next_partition = env_manager.get_next_pending_partition_idx()
-            if next_partition is None:
-                print("All partitions completed!")
-                playing = False
-                break
+
+        # Check if we have any active partitions
+        if not active_partitions:
+            print("No more active partitions. Ending simulation.")
+            break
         
-            print(f"\n--- Moving to Partition {next_partition} ---")
-            current_partition_idx = next_partition
-            partition_step_count = 0
-        
-            # Initialize the small environment for the new partition
-            try:
-                env_manager.small_env_timestep = env_manager.initialize_small_environment(current_partition_idx)
-            except Exception as e:
-                print(f"Failed to initialize partition {current_partition_idx}: {e}")
-                # Mark as failed and continue to next
-                env_manager.partitions[current_partition_idx]['status'] = 'failed'
-                current_partition_idx = -1  # Force selection of next partition
-                continue
-        
-            # Reset RL agent's history for new partition
-            prev_actions_rl = jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
-        
-            if not model_initialized:
-                print("Initializing model with the first partition's data...")
-                try:
-                    model = load_neural_network(config, env_manager.small_env)
-                    model_initialized = True
-                    print("Model successfully initialized!")
-                except Exception as e:
-                    print(f"Failed to initialize model: {e}")
-                    playing = False
-                    break
-    
-        print(f"\n--- Step {step} in Partition {current_partition_idx} (partition step {partition_step_count}) ---")
+        print(f"\n--- Step {step} - Stepping ALL {len(active_partitions)} active partitions synchronously ---")
 
         # Capture screen state
         game_state_image = capture_screen(screen)
         frames.append(game_state_image)
 
-        # Get the current observation from the small environment
-        current_observation = env_manager.small_env_timestep.observation
-        obs_seq.append(current_observation)
-        def add_batch_dimension_to_observation(obs):
-            """
-            Add batch dimension to all observation components.
-            Transforms TerraEnv observation to TerraEnvBatch-like observation.
-            """
-            batched_obs = {}
-            for key, value in obs.items():
-                if isinstance(value, jnp.ndarray):
-                    # Add batch dimension as first axis
-                    batched_obs[key] = jnp.expand_dims(value, axis=0)
-                else:
-                    # Handle scalar values
-                    batched_obs[key] = jnp.array([value])
-            return batched_obs
-
-        # Convert single observation to batch format for the RL model
-        batched_observation = add_batch_dimension_to_observation(current_observation)
-        obs = obs_to_model_input(batched_observation, prev_actions_rl, config)
-
-        # Get action from model
-        _, logits_pi = model.apply(model_params, obs)
-        pi = tfp.distributions.Categorical(logits=logits_pi)
+        # Step all active partitions simultaneously
+        partitions_to_remove = []
     
-        # Sample an action
-        rng = jax.random.PRNGKey(seed + step)
-        rng, action_key, step_key = jax.random.split(rng, 3)
-        action_rl = pi.sample(seed=action_key)
-        action_list.append(action_rl)
+        for partition_idx in active_partitions:
+            partition_state = partition_states[partition_idx]
+        
+            print(f"Processing partition {partition_idx} (partition step {partition_state['step_count']})")
 
-        # Update action history
-        prev_actions_rl = jnp.roll(prev_actions_rl, shift=1, axis=1)
-        prev_actions_rl = prev_actions_rl.at[:, 0].set(action_rl)
+            try:
+                # Set the small environment to the current partition's state
+                env_manager.small_env_timestep = partition_state['timestep']
+                env_manager.current_partition_idx = partition_idx
 
-        # Apply the action to the small environment
-        batch_cfg = BatchConfig()
-        action_type = batch_cfg.action_type
-        wrapped_action = wrap_action2(action_rl, action_type)
+                # Get the current observation from the small environment
+                current_observation = env_manager.small_env_timestep.observation
+                obs_seq.append(current_observation)
 
-        # Step the small environment
-        current_state = env_manager.small_env_timestep.state
-        current_env_cfg = env_manager.small_env_timestep.env_cfg
+                def add_batch_dimension_to_observation(obs):
+                    """Add batch dimension to all observation components."""
+                    batched_obs = {}
+                    for key, value in obs.items():
+                        if isinstance(value, jnp.ndarray):
+                            batched_obs[key] = jnp.expand_dims(value, axis=0)
+                        else:
+                            batched_obs[key] = jnp.array([value])
+                    return batched_obs
 
-        # Extract the map data needed for step method
-        current_target_map = current_state.world.target_map.map
-        current_padding_mask = current_state.world.padding_mask.map
-        current_dumpability_mask_init = current_state.world.dumpability_mask_init.map
-        current_trench_axes = current_state.world.trench_axes
-        current_trench_type = current_state.world.trench_type
+                # Convert single observation to batch format for the RL model
+                batched_observation = add_batch_dimension_to_observation(current_observation)
+                obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
 
-        try:
-            env_manager.small_env_timestep = env_manager.small_env.step(
-                state=current_state,
-                action=wrapped_action,
-                target_map=current_target_map,
-                padding_mask=current_padding_mask,
-                trench_axes=current_trench_axes,
-                trench_type=current_trench_type,
-                dumpability_mask_init=current_dumpability_mask_init,
-                env_cfg=current_env_cfg
-            )
-        except Exception as e:
-            print(f"Error stepping partition {current_partition_idx}: {e}")
-            # Mark partition as failed and move to next
-            env_manager.partitions[current_partition_idx]['status'] = 'failed'
-            current_partition_idx = -1
-            continue
+                # Get action from model
+                current_model = partition_models[partition_idx]
+                _, logits_pi = current_model['model'].apply(current_model['params'], obs)
 
-        # Get the reward from the small environment
-        reward = env_manager.small_env_timestep.reward
-        reward_seq.append(reward)
+                pi = tfp.distributions.Categorical(logits=logits_pi)
 
-        print(f"t_counter: {t_counter}, reward: {reward}, action: {action_rl}, done: {env_manager.small_env_timestep.done}")
-        print("=" * 10)
+                # Sample an action (use partition-specific seed for reproducibility)
+                rng = jax.random.PRNGKey(seed + step * num_partitions + partition_idx)
+                rng, action_key, step_key = jax.random.split(rng, 3)
+                action_rl = pi.sample(seed=action_key)
+            
+                # Store action for this partition
+                partition_state['actions'].append(action_rl)
+                action_list.append(action_rl)
 
+                # Update action history for this partition
+                partition_state['prev_actions_rl'] = jnp.roll(partition_state['prev_actions_rl'], shift=1, axis=1)
+                partition_state['prev_actions_rl'] = partition_state['prev_actions_rl'].at[:, 0].set(action_rl)
+
+                # Apply the action to the small environment
+                wrapped_action = wrap_action2(action_rl, action_type)
+
+                # Step the small environment
+                current_state = env_manager.small_env_timestep.state
+                current_env_cfg = env_manager.small_env_timestep.env_cfg
+
+                # Extract the map data needed for step method
+                current_target_map = current_state.world.target_map.map
+                current_padding_mask = current_state.world.padding_mask.map
+                current_dumpability_mask_init = current_state.world.dumpability_mask_init.map
+                current_trench_axes = current_state.world.trench_axes
+                current_trench_type = current_state.world.trench_type
+
+                # Step the environment
+                new_timestep = env_manager.small_env.step(
+                    state=current_state,
+                    action=wrapped_action,
+                    target_map=current_target_map,
+                    padding_mask=current_padding_mask,
+                    trench_axes=current_trench_axes,
+                    trench_type=current_trench_type,
+                    dumpability_mask_init=current_dumpability_mask_init,
+                    env_cfg=current_env_cfg
+                )
+            
+                # Update partition state
+                partition_state['timestep'] = new_timestep
+                partition_state['step_count'] += 1
+            
+                # Get the reward
+                reward = new_timestep.reward
+                partition_state['rewards'].append(reward)
+                reward_seq.append(reward)
+
+                print(f"  Partition {partition_idx} - reward: {reward}, action: {action_rl}, done: {new_timestep.done}")
+
+                # Check if partition is completed or failed
+                partition_completed = False
+            
+                # Check for completion
+                if env_manager.is_small_task_completed():
+                    print(f"  Partition {partition_idx} COMPLETED after {partition_state['step_count']} steps!")
+                    env_manager.partitions[partition_idx]['status'] = 'completed'
+                    partition_state['status'] = 'completed'
+                    partition_completed = True
+            
+                 # Check for timeout
+                elif partition_state['step_count'] >= max_steps_per_partition:
+                    print(f"  Partition {partition_idx} TIMED OUT after {max_steps_per_partition} steps")
+                    env_manager.partitions[partition_idx]['status'] = 'failed'
+                    partition_state['status'] = 'failed'
+                    partition_completed = True
+            
+                # Check for NaN rewards
+                elif jnp.isnan(reward):
+                    print(f"  Partition {partition_idx} FAILED due to NaN reward")
+                    env_manager.partitions[partition_idx]['status'] = 'failed'
+                    partition_state['status'] = 'failed'
+                    partition_completed = True
+            
+                # Mark partition for removal if completed
+                if partition_completed:
+                    partitions_to_remove.append(partition_idx)
+
+            except Exception as e:
+                print(f"  ERROR stepping partition {partition_idx}: {e}")
+                # Mark partition as failed
+                env_manager.partitions[partition_idx]['status'] = 'failed'
+                partition_state['status'] = 'failed'
+                partitions_to_remove.append(partition_idx)
+
+        # Remove completed/failed partitions from active list
+        for partition_idx in partitions_to_remove:
+            if partition_idx in active_partitions:
+                active_partitions.remove(partition_idx)
+                print(f"Removed partition {partition_idx} from active list")
+
+        print(f"Remaining active partitions: {active_partitions}")
+
+        # ====== MULTI-AGENT DISPLAY UPDATE ======
+        # Render ALL agents simultaneously after stepping all partitions
+        env_manager.render_global_environment_with_multiple_agents(partition_states)
+    
         t_counter += 1
-        partition_step_count += 1
-    
-        # Update global environment display with progress
-        env_manager.render_global_environment_with_updates()
         step += 1
     
+    print(f"=== End of synchronous step {step} - {len(active_partitions)} partitions still active ===")
+    print("=" * 80)
+    
     print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
-
 
     # Generate a timestamp
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     # Create a unique output directory for the model and timestamp
-    # Use a safe version of the model name for the directory
-    safe_model_name = llm_model_name.replace('/', '_') # Replace slashes if any
+    safe_model_name = llm_model_name.replace('/', '_')
     output_dir = os.path.join("experiments", f"{safe_model_name}_{current_time}")
     os.makedirs(output_dir, exist_ok=True)
     video_path = os.path.join(output_dir, "gameplay.mp4")
     save_video(frames, video_path)
-        
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run an LLM-based simulation experiment with RL agents.")

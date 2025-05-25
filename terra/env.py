@@ -155,6 +155,7 @@ class TerraEnv(NamedTuple):
         observations = self._state_to_obs_dict(state)
         return state, observations
 
+
     def render_obs_pygame(
         self,
         obs: dict[str, Array],
@@ -165,11 +166,9 @@ class TerraEnv(NamedTuple):
         Renders the environment at a given observation.
         """
         if info is not None:
-            target_tiles = info["target_tiles"]
-            additional_agents = info.get("additional_agents", None)
+            target_tiles = info.get("target_tiles", None)
         else:
             target_tiles = None
-            additional_agents = None
 
         self.rendering_engine.run(
             active_grid=obs["action_map"],
@@ -181,8 +180,8 @@ class TerraEnv(NamedTuple):
             cabin_dir=obs["agent_state"][..., [3]],
             loaded=obs["agent_state"][..., [4]],
             target_tiles=target_tiles,
-            additional_agents=additional_agents,
             generate_gif=generate_gif,
+            info=info,  # Pass the entire info object
         )
 
     @partial(jax.jit, static_argnums=(0,))
