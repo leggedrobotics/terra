@@ -360,18 +360,18 @@ class DisjointMapEnvironments:
         Define partitions of the global map.
         """
         if self.num_partitions == 4:  # 2x2 grid for a 128x128 map
-            # self.partitions = [
-            #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-            #     {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
-            #     {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
-            #     {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
-            # ]
             self.partitions = [
-            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (20, 20), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (20, 44), 'start_angle': 0, 'status': 'pending'},
-            {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (44, 20), 'start_angle': 0, 'status': 'pending'},
-            {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (44, 44), 'start_angle': 0, 'status': 'pending'}
-        ]
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
+                {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
+            ]
+        #     self.partitions = [
+        #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (20, 20), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (20, 44), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (44, 20), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (44, 44), 'start_angle': 0, 'status': 'pending'}
+        # ]
         elif self.num_partitions == 2:  # 1x2 grid
             self.partitions = [
                 {'id': 0, 'region_coords': (0, 0, 63, 127), 'start_pos': (32, 64), 'start_angle': 0, 'status': 'pending'},
@@ -410,44 +410,6 @@ class DisjointMapEnvironments:
         return self.global_timestep
     
 
-
-
-    # def map_position_small_to_global(self, small_pos, region_coords):
-    #     """
-    #     Map agent position from small map coordinates to global map coordinates.
-    #     Simple addition of region offset - no scaling needed with agent config override.
-        
-    #     Args:
-    #         small_pos: Agent position in small map (y, x)
-    #         region_coords: Region coordinates (y_start, x_start, y_end, x_end)
-            
-    #     Returns:
-    #         Global position for big map rendering
-    #     """
-    #     y_start, x_start, y_end, x_end = region_coords
-        
-    #     # Extract position values
-    #     if hasattr(small_pos, 'shape'):
-    #         if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
-    #             small_pos_y = float(small_pos[0])
-    #             small_pos_x = float(small_pos[1])
-    #         else:
-    #             small_pos_y = float(small_pos.flatten()[0])
-    #             small_pos_x = float(small_pos.flatten()[1])
-    #     else:
-    #         small_pos_y = float(small_pos[0])
-    #         small_pos_x = float(small_pos[1])
-        
-    #     # Simple mapping: just add the region offset
-    #     global_pos_y = small_pos_y + y_start
-    #     global_pos_x = small_pos_x + x_start
-        
-    #     # Ensure position is within valid bounds
-    #     global_pos_y = max(0, min(127, global_pos_y))  # Assuming 128x128 global map
-    #     global_pos_x = max(0, min(127, global_pos_x))
-        
-    #     return (int(global_pos_y), int(global_pos_x))
-    
     def map_position_small_to_global(self, small_pos, region_coords):
         """
         Map agent position from small map coordinates to global map coordinates.
@@ -498,18 +460,6 @@ class DisjointMapEnvironments:
             return bool(done_value)
     
     
-    def get_next_pending_partition_idx(self):
-        """
-        Get the index of the next pending partition.
-        
-        Returns:
-            Index of the next pending partition, or None if all are completed
-        """
-        for i, partition in enumerate(self.partitions):
-            if partition['status'] == 'pending':
-                return i
-        return None
-
     def _update_global_environment_display_with_all_agents(self, partition_states):
         """
         Update the global environment display with ALL active agents.
@@ -676,8 +626,6 @@ class DisjointMapEnvironments:
                 }
             print(f"Passing {len(self.global_env.all_agent_positions)} agents to renderer")
 
-            print(info)
-
             self.global_env.terra_env.render_obs_pygame(obs, info)
         
         except Exception as e:
@@ -783,6 +731,7 @@ def run_experiment_with_disjoint_environments(
     t_counter = 0
 
     reward_seq = []
+    global_step_rewards = []
     obs_seq = []
     action_list = []
     
@@ -792,8 +741,7 @@ def run_experiment_with_disjoint_environments(
     partition_states = {}  # Store state for each partition
     partition_models = {}  # Store models for each partition if needed
     active_partitions = []  # List of partitions that are still active
-    current_partition_cycle_idx = 0  # Index in the cycling order
-    max_steps_per_partition = 400
+    max_steps_per_partition = num_timesteps
 
     # Initialize all partitions
     for partition_idx in range(num_partitions):
@@ -810,7 +758,8 @@ def run_experiment_with_disjoint_environments(
                 'step_count': 0,
                 'status': 'active',
                 'rewards': [],
-                'actions': []
+                'actions': [],
+                'total_reward': 0.0,
             }
             
             active_partitions.append(partition_idx)
@@ -833,57 +782,6 @@ def run_experiment_with_disjoint_environments(
 
     print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
 
-    #    # Initialize SINGLE shared model instead of per-partition models
-    # print("Initializing shared model...")
-    # shared_model = None
-    # shared_model_params = None
-    
-    # # Initialize all partitions but WITHOUT individual models
-    # partition_states = {}
-    # active_partitions = []
-    # max_steps_per_partition = 200
-
-    # for partition_idx in range(num_partitions):
-    #     try:
-    #         print(f"Initializing partition {partition_idx}...")
-            
-    #         # Initialize the small environment for this partition
-    #         small_env_timestep = env_manager.initialize_small_environment(partition_idx)
-            
-    #         # Store partition state WITHOUT individual model
-    #         partition_states[partition_idx] = {
-    #             'timestep': small_env_timestep,
-    #             'prev_actions_rl': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32),
-    #             'step_count': 0,
-    #             'status': 'active',
-    #             'rewards': [],
-    #             'actions': []
-    #         }
-            
-    #         active_partitions.append(partition_idx)
-            
-    #         # Initialize shared model only once
-    #         if shared_model is None:
-    #             print("Loading shared neural network model...")
-    #             shared_model = load_neural_network(config, env_manager.small_env)
-    #             shared_model_params = model_params.copy()
-    #             print("Shared model initialized successfully!")
-                    
-    #     except Exception as e:
-    #         print(f"Failed to initialize partition {partition_idx}: {e}")
-    #         env_manager.partitions[partition_idx]['status'] = 'failed'
-    #         # Don't add to active_partitions if failed
-
-    # if not active_partitions:
-    #     print("No partitions could be initialized!")
-    #     return
-    
-    # if shared_model is None:
-    #     print("Failed to initialize shared model!")
-    #     return
-
-    # print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
-
     # MAIN GAME LOOP - MODIFIED FOR MULTI-AGENT DISPLAY
     while playing and step < num_timesteps:
         # Handle quit events
@@ -904,6 +802,8 @@ def run_experiment_with_disjoint_environments(
 
         # Step all active partitions simultaneously
         partitions_to_remove = []
+        current_step_reward = 0.0  # Track reward sum for this step across all partitions
+
     
         for partition_idx in active_partitions:
             partition_state = partition_states[partition_idx]
@@ -984,8 +884,29 @@ def run_experiment_with_disjoint_environments(
             
                 # Get the reward
                 reward = new_timestep.reward
-                partition_state['rewards'].append(reward)
-                reward_seq.append(reward)
+                # Extract scalar reward value safely
+               # Extract scalar reward value safely
+                if isinstance(reward, jnp.ndarray):
+                    if reward.shape == ():
+                        reward_val = float(reward)
+                    elif len(reward.shape) > 0:
+                        reward_val = float(reward.flatten()[0])
+                    else:
+                        reward_val = float(reward)
+                else:
+                    reward_val = float(reward)
+                
+                # Only store valid rewards
+                if not (jnp.isnan(reward_val) or jnp.isinf(reward_val)):
+                    partition_state['rewards'].append(reward_val)
+                    partition_state['total_reward'] += reward_val
+                    reward_seq.append(reward_val)  # Only add valid rewards to global sequence
+                    current_step_reward += reward_val  # Add to current step's total
+                    print(f"  Partition {partition_idx} - reward: {reward_val:.4f}, action: {action_rl}, done: {new_timestep.done}")
+                else:
+                    print(f"  Partition {partition_idx} - INVALID reward: {reward_val}, action: {action_rl}, done: {new_timestep.done}")
+                    # Don't add invalid rewards to any sequence
+
 
                 print(f"  Partition {partition_idx} - reward: {reward}, action: {action_rl}, done: {new_timestep.done}")
 
@@ -995,6 +916,7 @@ def run_experiment_with_disjoint_environments(
                 # Check for completion
                 if env_manager.is_small_task_completed():
                     print(f"  Partition {partition_idx} COMPLETED after {partition_state['step_count']} steps!")
+                    print(f"  Total reward for partition {partition_idx}: {partition_state['total_reward']:.4f}")
                     env_manager.partitions[partition_idx]['status'] = 'completed'
                     partition_state['status'] = 'completed'
                     partition_completed = True
@@ -1002,6 +924,8 @@ def run_experiment_with_disjoint_environments(
                  # Check for timeout
                 elif partition_state['step_count'] >= max_steps_per_partition:
                     print(f"  Partition {partition_idx} TIMED OUT after {max_steps_per_partition} steps")
+                    print(f"  Total reward for partition {partition_idx}: {partition_state['total_reward']:.4f}")
+
                     env_manager.partitions[partition_idx]['status'] = 'failed'
                     partition_state['status'] = 'failed'
                     partition_completed = True
@@ -1031,8 +955,9 @@ def run_experiment_with_disjoint_environments(
                 print(f"Removed partition {partition_idx} from active list")
 
         print(f"Remaining active partitions: {active_partitions}")
+        global_step_rewards.append(current_step_reward)
+        print(f"Global step {step} reward (sum across all partitions): {current_step_reward:.4f}")
 
-        # ====== MULTI-AGENT DISPLAY UPDATE ======
         # Render ALL agents simultaneously after stepping all partitions
         env_manager.render_global_environment_with_multiple_agents(partition_states)
     
@@ -1042,7 +967,25 @@ def run_experiment_with_disjoint_environments(
     print(f"=== End of synchronous step {step} - {len(active_partitions)} partitions still active ===")
     print("=" * 80)
     
-    print(f"Terra - Steps: {t_counter}, Return: {np.sum(reward_seq)}")
+    total_return = np.sum(reward_seq) if len(reward_seq) > 0 else 0.0
+    global_total_return = np.sum(global_step_rewards) if len(global_step_rewards) > 0 else 0.0
+    valid_rewards_count = len(reward_seq)
+    
+    # Print per-partition statistics
+    print(f"\n=== FINAL STATISTICS ===")
+    for partition_idx, partition_state in partition_states.items():
+        status = partition_state['status']
+        total_reward = partition_state['total_reward']
+        steps = partition_state['step_count']
+        valid_rewards = len(partition_state['rewards'])
+        print(f"Partition {partition_idx}: {status.upper()} - Total Reward: {total_reward:.4f}, Steps: {steps}, Valid Rewards: {valid_rewards}")
+    
+    print(f"\nOverall Statistics:")
+    print(f"Terra - Steps: {t_counter}, Individual Rewards Sum: {total_return:.4f}")
+    print(f"Terra - Steps: {t_counter}, Global Step-wise Return: {global_total_return:.4f}")
+    print(f"Valid rewards collected: {valid_rewards_count}")
+    print(f"Average reward per step (global): {global_total_return/max(1, t_counter):.4f}")
+    print(f"Average reward per individual action: {total_return/max(1, valid_rewards_count):.4f}")
 
     # Generate a timestamp
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
