@@ -2,11 +2,11 @@ import base64
 import cv2
 import numpy as np
 import jax
-# from google.adk.agents import Agent
-# from google.adk.models.lite_llm import LiteLlm
-# from google.adk.sessions import InMemorySessionService
-# from google.adk.runners import Runner
-# from google.genai import types
+from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.sessions import InMemorySessionService
+from google.adk.runners import Runner
+from google.genai import types
 import jax.numpy as jnp
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
@@ -90,7 +90,7 @@ def load_neural_network(config, env):
     model, _ = get_model_ready(rng, config, env)
     return model
 
-def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_NAME, USER_ID, SESSION_ID):
+def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, APP_NAME, USER_ID, SESSION_ID):
     if llm_model_key == "gpt":
         llm_model_name_extended = "openai/{}".format(llm_model_name)
     elif llm_model_key == "claude":
@@ -113,7 +113,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
 
 
     system_message_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
-    "IMPORTANT: All maps are 64x64 in size.\n\n" \
+    "IMPORTANT: You will receive a 128x128 map as input\n\n" \
     "GUIDELINES FOR PARTITIONING:\n" \
     "1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements\n" \
     "2. Create efficient partitions that maximize excavator productivity and minimize travel time\n" \
@@ -122,7 +122,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
     "5. Position starting points strategically to minimize initial travel time\n" \
     "6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions\n\n" \
     "USE AT MOST 2 PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. " \
-    "If you see multiple trenches, you should create a partition for each trench. " \
+    "IMPORTANT: If you see multiple trenches, you should create a partition for each trench. " \
     "RESPONSE FORMAT:\n" \
     "Respond with a JSON list of partition objects, each containing:\n" \
     "- 'id': Unique numeric identifier for each partition (starting from 0)\n" \
@@ -243,7 +243,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, env, n_envs, APP_
         model_name=llm_model_name_extended,
         model=llm_model_key,
         system_message=system_message_excavator,
-        env=env,
+        action_size=action_size,
         session_id=SESSION_ID_2,
         runner=runner_2,
         user_id=USER_ID_2,
@@ -824,7 +824,189 @@ def extract_sub_task_dumpability_mask(dumpability_mask_data: jnp.ndarray,
     sub_task_mask = dumpability_mask_data[region_slice]
 
     return sub_task_mask
+def create_sub_task_target_map_64x64(global_target_map_data: jnp.ndarray,
+                                     region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 target map for an RL agent's sub-task from any input size.
+    
+    Retains both `-1` values (dig targets) and `1` values (dump targets) from 
+    the specified region in the global map. Everything outside the region is set to 0 (free).
+    
+    Args:
+        global_target_map_data: Target map of any size (1: dump, 0: free, -1: dig).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive bounds.
+    
+    Returns:
+        A new 64x64 map with `-1`s and `1`s from the region; everything else is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+    
+    # Initialize a 64x64 map with all zeros (free space)
+    sub_task_map = jnp.zeros((64, 64), dtype=global_target_map_data.dtype)
+    
+    # Define slice object for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+    
+    # Extract region from global map
+    region_data = global_target_map_data[region_slice]
+    
+    # Calculate region dimensions
+    region_height, region_width = region_data.shape
+    
+    # Place region data into the 64x64 map, ensuring it fits
+    end_y = min(64, region_height)
+    end_x = min(64, region_width)
+    
+    sub_task_map = sub_task_map.at[:end_y, :end_x].set(region_data[:end_y, :end_x])
+    
+    return sub_task_map
 
+def create_sub_task_action_map_64x64(action_map_data: jnp.ndarray,
+                                    region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 action map for a sub-task from any input size, preserving only actions 
+    that occurred inside the specified region. Outside the region, all values are reset to 0 (free).
+
+    Args:
+        action_map_data: Action map of any size (-1: dug, 0: free, >0: dumped).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A new 64x64 map with only the region's actions preserved, all else is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize output map with zeros (free)
+    sub_task_action_map = jnp.zeros((64, 64), dtype=action_map_data.dtype)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract region from input map
+    region_data = action_map_data[region_slice]
+    
+    # Calculate region dimensions
+    region_height, region_width = region_data.shape
+    
+    # Place region data into the 64x64 map, ensuring it fits
+    end_y = min(64, region_height)
+    end_x = min(64, region_width)
+    
+    sub_task_action_map = sub_task_action_map.at[:end_y, :end_x].set(region_data[:end_y, :end_x])
+
+    return sub_task_action_map
+
+def create_sub_task_padding_mask_64x64(padding_mask_data: jnp.ndarray,
+                                      region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 padding mask for a sub-task from any input size.
+
+    Inside the region: preserves original traversability (0 or 1).
+    Outside the region: sets everything to 1 (non-traversable).
+
+    Args:
+        padding_mask_data: Mask of any size (0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64x64 mask with only the region preserved; the rest is 1.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize everything as non-traversable (1)
+    sub_task_mask = jnp.ones((64, 64), dtype=padding_mask_data.dtype)
+
+    # Define slice for region
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original values from the region
+    region_data = padding_mask_data[region_slice]
+    
+    # Calculate region dimensions
+    region_height, region_width = region_data.shape
+    
+    # Place region data into the 64x64 map, ensuring it fits
+    end_y = min(64, region_height)
+    end_x = min(64, region_width)
+    
+    sub_task_mask = sub_task_mask.at[:end_y, :end_x].set(region_data[:end_y, :end_x])
+
+    return sub_task_mask
+
+def create_sub_task_traversability_mask_64x64(traversability_mask_data: jnp.ndarray,
+                                             region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64x64 traversability mask for a sub-task from any input size.
+
+    Inside the region: preserves original values (-1: agent, 0: traversable, 1: non-traversable).
+    Outside the region: sets everything to 1 (non-traversable).
+
+    Args:
+        traversability_mask_data: Mask of any size 
+                                  (-1: agent, 0: traversable, 1: non-traversable).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64x64 mask with only the region preserved; the rest is 1.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Start with a mask where everything is non-traversable (1)
+    sub_task_mask = jnp.ones((64, 64), dtype=traversability_mask_data.dtype)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original values from the region (can include -1, 0, 1)
+    region_data = traversability_mask_data[region_slice]
+    
+    # Calculate region dimensions
+    region_height, region_width = region_data.shape
+    
+    # Place region data into the 64x64 map, ensuring it fits
+    end_y = min(64, region_height)
+    end_x = min(64, region_width)
+    
+    sub_task_mask = sub_task_mask.at[:end_y, :end_x].set(region_data[:end_y, :end_x])
+
+    return sub_task_mask
+
+def create_sub_task_dumpability_mask_64x64(dumpability_mask_data: jnp.ndarray,
+                                          region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
+    """
+    Creates a 64×64 dumpability mask for a sub-task from any input size.
+
+    Inside the region: preserves original values (1: can dump, 0: can't dump).
+    Outside the region: sets everything to 0 (can't dump).
+
+    Args:
+        dumpability_mask_data: Mask of any size (1: can dump, 0: can't).
+        region_coords: (y_start, x_start, y_end, x_end), inclusive.
+
+    Returns:
+        A 64×64 mask with only the region preserved; the rest is 0.
+    """
+    y_start, x_start, y_end, x_end = region_coords
+
+    # Initialize as all 0 (can't dump)
+    sub_task_mask = jnp.zeros((64, 64), dtype=dumpability_mask_data.dtype)
+
+    # Define region slice
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+
+    # Extract the original dumpability values from the region
+    region_data = dumpability_mask_data[region_slice]
+    
+    # Calculate region dimensions
+    region_height, region_width = region_data.shape
+    
+    # Place region data into the 64x64 map, ensuring it fits
+    end_y = min(64, region_height)
+    end_x = min(64, region_width)
+    
+    sub_task_mask = sub_task_mask.at[:end_y, :end_x].set(region_data[:end_y, :end_x])
+
+    return sub_task_mask
 
 
 def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversability_mask_data, 

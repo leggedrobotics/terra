@@ -15,7 +15,7 @@ logger = logging.getLogger("AutonomousExcavatorADK.llms")
 
 
 class LLM_query: 
-    def __init__(self, model_name=None, model=None, system_message=None, env=None, runner=None, user_id=None, session_id=None): 
+    def __init__(self, model_name=None, model=None, system_message=None, action_size=None, runner=None, user_id=None, session_id=None): 
         """
         Initialize the Agent with the specified model and environment.
         
@@ -33,9 +33,9 @@ class LLM_query:
 
         self.messages = [] 
         self.system_message = system_message 
-        self.env = env 
+        self.action_size = action_size 
         #self.action_space = self.env.action_space.n
-        self.action_space = self.env.actions_size  # Updated line
+        self.action_space = action_size
         self.reset_count = 0 
         self.runner = runner
         self.user_id = user_id
@@ -195,7 +195,7 @@ class LLM_query:
                         if -1 <= action < self.action_space:
                             return action
                         else:
-                            logger.warning(f"Invalid action value: {action}. Must be between -1 and {self.env.actions_size-1}")
+                            logger.warning(f"Invalid action value: {action}. Must be between -1 and {self.action_size-1}")
                     except (ValueError, TypeError) as e:
                         logger.error(f"Error converting action to integer: {str(e)}")
                 else:
@@ -204,7 +204,7 @@ class LLM_query:
                 logger.warning(f"Response is not a dictionary: {type(response_text)}")
             
             # If we get here, the action was invalid
-            error_message = f'Your action value is invalid. Please provide a valid action between -1 and {self.env.actions_size-1}.'
+            error_message = f'Your action value is invalid. Please provide a valid action between -1 and {self.actions_size-1}.'
             self.add_user_message(user_msg=error_message)
             
             try:
