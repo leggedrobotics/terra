@@ -60,6 +60,7 @@ FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
+VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
 USE_PATH = True                 # Use path for LLM (Excavator Agent)
@@ -692,6 +693,10 @@ class DisjointMapEnvironments:
                     'angles cabin': [],
                     'loaded': []
                 }
+            # ADD THIS: Simple partition info
+            if VISUALIZE_PARTITIONS:
+                info['show_partitions'] = True
+                info['partitions'] = self.partitions  # Just pass the whole partition list
 
             self.global_env.terra_env.render_obs_pygame(obs, info)
     
@@ -815,16 +820,16 @@ def run_experiment_with_disjoint_environments(
 
 
     action_size = 7
-    # sub_tasks_manual = [
-    #             {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-    #             {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
-    #             {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
-    #             {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
-    #         ]
     sub_tasks_manual = [
-        {'id': 0, 'region_coords': (0, 0, 49, 39), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        {'id': 1, 'region_coords': (50, 0, 99, 39), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
-    ]
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
+                {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
+            ]
+    # sub_tasks_manual = [
+    #     {'id': 0, 'region_coords': (0, 0, 49, 39), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+    #     {'id': 1, 'region_coords': (50, 0, 99, 39), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
+    # ]
     sub_tasks_llm = []
     # Initialize the LLM agent
     llm_query, runner, prev_actions, system_message_master = init_llms(llm_model_key, llm_model_name, USE_PATH, 

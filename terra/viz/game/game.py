@@ -340,7 +340,6 @@ class Game:
         self.surface.fill("#F0F0F0")
         all_agent_surfaces = []
         all_agent_positions = []
-        print(self.maps_size_px)
         for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
@@ -370,6 +369,11 @@ class Game:
                     #     flat_idx = y * world.grid_length_x + x
                     #     if flat_idx < len(world.target_tiles) and world.target_tiles[flat_idx]:
                     #         pg.draw.rect(self.surface, "#FF3300", rect, 2)
+             # NEW: Draw partition boundaries and labels
+            # ADD THIS: Draw partition rectangles (only for the first environment)
+            if info and info.get('show_partitions', False) and i == 0:
+                partitions = info.get('partitions', [])
+                self._draw_partition_rectangles(partitions, total_offset_x, total_offset_y)
 
             # Render all agents for this environment
             env_agent_surfaces, env_agent_positions = self._render_agents_for_env(
@@ -394,3 +398,35 @@ class Game:
 
         if self.display:
             pg.display.flip()
+
+    def _draw_partition_rectangles(self, partitions, total_offset_x, total_offset_y):
+        """Draw simple rectangles around each partition."""
+        import pygame as pg
+        
+        for i, partition in enumerate(partitions):
+            y_start, x_start, y_end, x_end = partition['region_coords']
+            status = partition['status']
+            
+            # Convert to screen coordinates
+            rect_x = x_start * self.tile_size + total_offset_x
+            rect_y = y_start * self.tile_size + total_offset_y
+            rect_width = (x_end - x_start + 1) * self.tile_size
+            rect_height = (y_end - y_start + 1) * self.tile_size
+            
+            # Choose color based on status
+            if status == 'active':
+                color = (0, 255, 0)  # Green
+                width = 3
+            elif status == 'completed':
+                color = (0, 0, 255)  # Blue  
+                width = 2
+            elif status == 'failed':
+                color = (255, 0, 0)  # Red
+                width = 2
+            else:  # pending
+                color = (255, 255, 0)  # Yellow
+                width = 1
+                
+            # Draw the rectangle
+            pg.draw.rect(self.surface, color, 
+                        (rect_x, rect_y, rect_width, rect_height), width)
