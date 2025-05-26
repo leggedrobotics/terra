@@ -911,7 +911,10 @@ class State(NamedTuple):
                 world=self.world._replace(
                     dig_map=self.world.dig_map._replace(
                         map=IntLowDim(new_map_global_coords)
-                    )
+                    ),
+                    action_map=self.world.action_map._replace(
+                        map=IntLowDim(new_map_global_coords)
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state_1=self.agent.agent_state_1._replace(
