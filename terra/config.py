@@ -107,8 +107,8 @@ class Rewards(NamedTuple):
             wheel_turn=-0.02,
             dig_wrong=-3.0,
             dump_wrong=-3.0,
-            dig_correct=0.4,
-            dump_correct=0.05,
+            dig_correct=0.3,
+            dump_correct=0.2,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
@@ -176,8 +176,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.1
-    distance_coefficient: float = -0.05
+    alignment_coefficient: float = -0.08
+    distance_coefficient: float = -0.04
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
