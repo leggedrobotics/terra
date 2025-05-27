@@ -906,12 +906,18 @@ class State(NamedTuple):
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
 
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
-                    )
+                    ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -955,17 +961,10 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
-            )
-
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
-                    ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
                     ),
                 ),
                 agent=self.agent._replace(
