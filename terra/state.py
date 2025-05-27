@@ -808,7 +808,7 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
-        digged_mask_action_map = self.world.dig_map.map < 0
+        digged_mask_action_map = self.world.action_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -821,26 +821,26 @@ class State(NamedTuple):
         """Applies traversability mask to the dump mask"""
         return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
 
-    def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
-        """
-        Removes the possibility of moving some dump tiles in the same spot.
+    # def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+    #     """
+    #     Removes the possibility of moving some dump tiles in the same spot.
 
-        Also, removes the possibility of moving the tiles within the same workspace,
-        even if not all tiles are occupied.
-        """
-        cone_mask = self._build_dig_dump_cone()
-        dig_map_mask = jax.lax.cond(
-            (
-                (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
-                * (self.world.action_map.map.reshape(-1) > 0)
-                * cone_mask
-            ).sum()
-            > 0,
-            lambda: ~cone_mask,
-            lambda: jnp.ones_like(dump_mask),
-        )
+    #     Also, removes the possibility of moving the tiles within the same workspace,
+    #     even if not all tiles are occupied.
+    #     """
+    #     cone_mask = self._build_dig_dump_cone()
+    #     dig_map_mask = jax.lax.cond(
+    #         (
+    #             (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
+    #             * (self.world.action_map.map.reshape(-1) > 0)
+    #             * cone_mask
+    #         ).sum()
+    #         > 0,
+    #         lambda: ~cone_mask,
+    #         lambda: jnp.ones_like(dump_mask),
+    #     )
 
-        return dump_mask * dig_map_mask
+    #     return dump_mask * dig_map_mask
 
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
@@ -909,7 +909,7 @@ class State(NamedTuple):
 
             return self._replace(
                 world=self.world._replace(
-                    dig_map=self.world.dig_map._replace(
+                    action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     )
                 ),
@@ -934,7 +934,7 @@ class State(NamedTuple):
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
-        dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
+        # dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask) TODO: bring this back bro
         dump_volume = dump_mask.sum()
 
         remaining_volume = self.agent.agent_state.loaded % dump_volume
@@ -943,9 +943,9 @@ class State(NamedTuple):
         ) / dump_volume
 
         def _apply_dump():
-            flattened_dig_map = self.world.dig_map.map.reshape(-1)
+            flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_dig_map,
+                flattened_action_map,
                 dump_mask,
                 even_volume_per_tile,
                 remaining_volume,
@@ -962,9 +962,6 @@ class State(NamedTuple):
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
-                        map=IntLowDim(new_map_global_coords)
-                    ),
-                    dig_map=self.world.dig_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     ),
                     dumpability_mask=self.world.dumpability_mask._replace(
@@ -1143,7 +1140,7 @@ class State(NamedTuple):
 
         # Dump
         action_map_positive_progress = self._get_action_map_positive_progress(
-            self.world.dig_map.map,  # note dig_map here
+            self.world.action_map.map,
             new_state.world.action_map.map,
             self.world.target_map.map,
         )
@@ -1172,6 +1169,8 @@ class State(NamedTuple):
             lambda: self.env_cfg.rewards.dump_wrong,
             dump_reward_fn,
         )
+
+        jax.debug.print("Dump reward: {}", dump_reward)
 
         return dig_reward + dump_reward
 
