@@ -831,7 +831,7 @@ class State(NamedTuple):
         cone_mask = self._build_dig_dump_cone()
         dig_map_mask = jax.lax.cond(
             (
-                self.world.last_dig_mask.reshape(-1)
+                self.world.last_dig_mask.map.reshape(-1)
                 * (self.world.action_map.map.reshape(-1) > 0)
                 * cone_mask
             ).sum()
@@ -919,7 +919,7 @@ class State(NamedTuple):
                         map=jnp.bool_(new_dumpability_mask),
                     ),
                     last_dig_mask=self.world.last_dig_mask._replace(
-                        map=jnp.bool_(dig_mask),
+                        map=jnp.bool_(dig_mask.reshape(self.world.target_map.map.shape)),
                     )
                 ),
                 agent=self.agent._replace(
