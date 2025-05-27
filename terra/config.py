@@ -80,13 +80,12 @@ class Rewards(NamedTuple):
     wheel_turn: float
 
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float  # given if loaded stayed the same
-    dump_no_dump_area: float  # given if dumps in an area that is not the dump area
+    dump_wrong: float  # given if loaded stayed the same or tried to dump in non-dumpable tile
 
     dig_correct: (
         float  # dig where the target map is negative, and not more than required
     )
-    dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
+    dump_correct: float  # dump where the target map is positive
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
@@ -106,11 +105,10 @@ class Rewards(NamedTuple):
             base_turn=-0.1,
             cabin_turn=-0.01,
             wheel_turn=-0.02,
-            dig_wrong=-0.3,
-            dump_wrong=-0.3,
-            dump_no_dump_area=-3.0,
-            dig_correct=3.0,
-            dump_correct=3.0,
+            dig_wrong=-3.0,
+            dump_wrong=-3.0,
+            dig_correct=0.4,
+            dump_correct=0.05,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
@@ -131,7 +129,6 @@ class Rewards(NamedTuple):
     #         wheel_turn=-0.2,
     #         dig_wrong=-1.0,
     #         dump_wrong=0.0,
-    #         dump_no_dump_area=-3.0,
     #         dig_correct=1.0,
     #         dump_correct=1.0,
     #         terminal_completed_tiles=0.0,
@@ -153,7 +150,6 @@ class Rewards(NamedTuple):
             wheel_turn=-0.005,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
