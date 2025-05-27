@@ -821,26 +821,26 @@ class State(NamedTuple):
         """Applies traversability mask to the dump mask"""
         return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
 
-    # def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
-    #     """
-    #     Removes the possibility of moving some dump tiles in the same spot.
+    def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+        """
+        Removes the possibility of moving some dump tiles in the same spot.
 
-    #     Also, removes the possibility of moving the tiles within the same workspace,
-    #     even if not all tiles are occupied.
-    #     """
-    #     cone_mask = self._build_dig_dump_cone()
-    #     dig_map_mask = jax.lax.cond(
-    #         (
-    #             (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
-    #             * (self.world.action_map.map.reshape(-1) > 0)
-    #             * cone_mask
-    #         ).sum()
-    #         > 0,
-    #         lambda: ~cone_mask,
-    #         lambda: jnp.ones_like(dump_mask),
-    #     )
+        Also, removes the possibility of moving the tiles within the same workspace,
+        even if not all tiles are occupied.
+        """
+        cone_mask = self._build_dig_dump_cone()
+        dig_map_mask = jax.lax.cond(
+            (
+                self.world.last_dig_mask.reshape(-1)
+                * (self.world.action_map.map.reshape(-1) > 0)
+                * cone_mask
+            ).sum()
+            > 0,
+            lambda: ~cone_mask,
+            lambda: jnp.ones_like(dump_mask),
+        )
 
-    #     return dump_mask * dig_map_mask
+        return dump_mask * dig_map_mask
 
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
@@ -944,7 +944,7 @@ class State(NamedTuple):
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
-        # dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask) TODO: bring this back bro
+        dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
         remaining_volume = self.agent.agent_state.loaded % dump_volume
@@ -965,6 +965,7 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
+            # TODO: reset the last_dig_mask and moving_dumped_dirt
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
@@ -1128,6 +1129,7 @@ class State(NamedTuple):
         This includes both the dump part and the realization
         of the previously digged terrain.
         """
+        # TODO: differentiate between dumping fresh dirt and moving dumped dirt - rewards should be different!
         # Dump
         action_map_positive_progress = self._get_action_map_positive_progress(
             self.world.action_map.map,
