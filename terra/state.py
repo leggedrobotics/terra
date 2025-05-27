@@ -965,17 +965,20 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            # TODO: reset the last_dig_mask and moving_dumped_dirt
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     ),
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
                         loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
-                    )
+                    ),
+                    moving_dumped_dirt=jnp.bool_(False),
                 ),
             )
 
@@ -1129,8 +1132,6 @@ class State(NamedTuple):
         This includes both the dump part and the realization
         of the previously digged terrain.
         """
-        # TODO: differentiate between dumping fresh dirt and moving dumped dirt - rewards should be different!
-        # Dump
         action_map_positive_progress = self._get_action_map_positive_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
@@ -1142,15 +1143,21 @@ class State(NamedTuple):
         )
 
         def dump_reward_fn() -> Float:
+            def reward_when_progress_positive():
+                return jax.lax.cond(
+                    self.agent.moving_dumped_dirt,
+                    lambda: 0.2 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                )
             return jax.lax.cond(
                 action_map_positive_progress < 0,
                 lambda: self.env_cfg.rewards.dump_wrong,
                 lambda: jax.lax.cond(
                     action_map_positive_progress > 0,
-                    lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    reward_when_progress_positive,
                     lambda: 0.0,
-                    ),
-                )
+                ),
+            )
 
         dump_reward = jax.lax.cond(
             dump_reward_condition,
@@ -1163,7 +1170,6 @@ class State(NamedTuple):
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dig
         action_map_negative_progress = self._get_action_map_negative_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
