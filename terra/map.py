@@ -18,7 +18,6 @@ class GridWorld(NamedTuple):
         - -1: dug here during the episode
         - 0: free
         - greater than 0: dumped here
-    - dig map (same as action map but updated on the dig action & before the dump action is complete)
     - dumpability mask
         - 1: can dump
         - 0: can't dump
@@ -29,6 +28,9 @@ class GridWorld(NamedTuple):
         - -1: agent occupancy
         - 0: traversable
         - 1: non traversable
+    - last dig mask
+        - 1: dug here during previous dig action
+        - 0: not dug here during previous dig action
     - local map target positive (contains the sum of all the positive target map tiles in a given workspace)
     - local map target negative (contains the sum of all the negative target map tiles in a given workspace)
     - local map action positive (contains the sum of all the positive action map tiles in a given workspace)
@@ -42,6 +44,7 @@ class GridWorld(NamedTuple):
     padding_mask: GridMap
     dumpability_mask: GridMap
     dumpability_mask_init: GridMap
+    last_dig_mask: GridMap
 
     trench_axes: Array
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
@@ -85,6 +88,7 @@ class GridWorld(NamedTuple):
         padding_mask = GridMap.new(IntLowDim(padding_mask))
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+        last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
 
         world = cls(
             target_map=target_map,
@@ -94,6 +98,7 @@ class GridWorld(NamedTuple):
             trench_type=trench_type,
             dumpability_mask=dumpability_mask,
             dumpability_mask_init=dumpability_mask_init_gm,
+            last_dig_mask=last_dig_mask,
         )
 
         return world
