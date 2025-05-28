@@ -1146,7 +1146,7 @@ class State(NamedTuple):
             def reward_when_progress_positive():
                 return jax.lax.cond(
                     self.agent.moving_dumped_dirt,
-                    lambda: 0.1 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    lambda: 0.0 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
                     lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
                 )
             return jax.lax.cond(
