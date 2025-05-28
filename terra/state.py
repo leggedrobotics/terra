@@ -1102,7 +1102,7 @@ class State(NamedTuple):
             (action_map_clip_new - action_map_clip_old) * target_map_dump_mask
         ).sum()
 
-        return action_map_progress.astype(jnp.float32) / 100.0
+        return action_map_progress.astype(jnp.float32)
 
     @staticmethod
     def _get_action_map_negative_progress(
@@ -1122,7 +1122,7 @@ class State(NamedTuple):
             (action_map_clip_old - action_map_clip_new) * target_map_mask
         ).sum()
 
-        return action_map_progress
+        return action_map_progress.astype(jnp.float32)
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
