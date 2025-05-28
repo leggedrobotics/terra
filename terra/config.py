@@ -105,7 +105,7 @@ class Rewards(NamedTuple):
             base_turn=-0.1,
             cabin_turn=-0.01,
             wheel_turn=-0.02,
-            dig_wrong=-2.0,
+            dig_wrong=-0.2,
             dump_wrong=-2.0,
             dig_correct=0.15,
             dump_correct=0.05,
