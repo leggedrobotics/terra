@@ -105,10 +105,10 @@ class Rewards(NamedTuple):
             base_turn=-0.1,
             cabin_turn=-0.01,
             wheel_turn=-0.02,
-            dig_wrong=-3.0,
-            dump_wrong=-3.0,
-            dig_correct=0.1,
-            dump_correct=0.04,
+            dig_wrong=-2.0,
+            dump_wrong=-2.0,
+            dig_correct=0.15,
+            dump_correct=0.05,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
@@ -176,8 +176,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.08
-    distance_coefficient: float = -0.04
+    alignment_coefficient: float = -0.06
+    distance_coefficient: float = -0.03
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -194,7 +194,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 10
+    increase_level_threshold: int = 20
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
