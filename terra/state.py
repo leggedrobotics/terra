@@ -169,7 +169,8 @@ class State(NamedTuple):
 
         # jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
         # jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
-
+        # jax.debug.print("agent 1 loaded_dumped: {}", state.agent.agent_state_1.loaded_dumped)
+        # jax.debug.print("agent 2 loaded_dumped: {}", state.agent.agent_state_2.loaded_dumped)
         return state._replace(env_steps=state.env_steps + 1)
 
     def _do_nothing(self):
@@ -808,7 +809,7 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
-        digged_mask_action_map = self.world.dig_map.map < 0
+        digged_mask_action_map = self.world.action_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -831,7 +832,7 @@ class State(NamedTuple):
         cone_mask = self._build_dig_dump_cone()
         dig_map_mask = jax.lax.cond(
             (
-                (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
+                (self.world.dig_map.map).reshape(-1)
                 * (self.world.action_map.map.reshape(-1) > 0)
                 * cone_mask
             ).sum()
@@ -906,19 +907,26 @@ class State(NamedTuple):
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
 
             return self._replace(
                 world=self.world._replace(
-                    dig_map=self.world.dig_map._replace(
-                        map=IntLowDim(new_map_global_coords)
-                    ),
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
+                    ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    ),
+                    dig_map=self.world.dig_map._replace(
+                        map=jnp.bool_(dig_mask.reshape(self.world.target_map.map.shape))
                     ),
                 ),
                 agent=self.agent._replace(
                     agent_state_1=self.agent.agent_state_1._replace(
-                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
+                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim),
+                        loaded_dumped = jnp.bool_(moving_dumped_dirt)
                     )
                 ),
             )
@@ -950,9 +958,9 @@ class State(NamedTuple):
         ) / dump_volume
 
         def _apply_dump():
-            flattened_dig_map = self.world.dig_map.map.reshape(-1)
+            flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_dig_map,
+                flattened_action_map,
                 dump_mask,
                 even_volume_per_tile,
                 remaining_volume,
@@ -962,9 +970,7 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
-            )
+            
 
             return self._replace(
                 world=self.world._replace(
@@ -972,15 +978,14 @@ class State(NamedTuple):
                         map=IntLowDim(new_map_global_coords)
                     ),
                     dig_map=self.world.dig_map._replace(
-                        map=IntLowDim(new_map_global_coords)
+                        map=jnp.zeros_like(self.world.dig_map.map, dtype=jnp.bool_)
                     ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
-                    ),
+                    
                 ),
                 agent=self.agent._replace(
                     agent_state_1=self.agent.agent_state_1._replace(
-                        loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+                        loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim),
+                        loaded_dumped=jnp.bool_(False),
                     )
                 ),
             )
@@ -1118,56 +1123,37 @@ class State(NamedTuple):
         ).sum()
         return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
-    def _handle_rewards_dump(
-        self, new_state: "State", action: TrackedActionType
+    def _handle_rewards_dump(self, new_state: "State", action: ActionType
     ) -> Float:
         """
         Handles reward assignment at dump time.
         This includes both the dump part and the realization
         of the previously digged terrain.
         """
-
-        # Dig
-        action_map_negative_progress = self._get_action_map_negative_progress(
+        action_map_positive_progress = self._get_action_map_positive_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
             self.world.target_map.map,
         )
-        dig_reward = jax.lax.cond(
-            action_map_negative_progress > 0,
-            lambda: self.env_cfg.rewards.dig_correct,
-            lambda: 0.0,
-        )
-
-        # Dump
-        action_map_positive_progress = self._get_action_map_positive_progress(
-            self.world.dig_map.map,  # note dig_map here
-            new_state.world.action_map.map,
-            self.world.target_map.map,
-        )
-        spread_out_rate = self._get_action_map_spread_out_rate(
-            self.world.dig_map.map,  # note dig_map here
-            new_state.world.action_map.map,
-            self.world.target_map.map,
-            self.agent.agent_state_1.loaded,
-        )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
+            self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
         )
 
         def dump_reward_fn() -> Float:
+            def reward_when_progress_positive():
+                return jax.lax.cond(
+                    self.agent.agent_state_1.loaded_dumped,
+                    lambda: 0.15 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                )
             return jax.lax.cond(
                 action_map_positive_progress < 0,
-                lambda: self.env_cfg.rewards.dump_no_dump_area,
+                lambda: self.env_cfg.rewards.dump_wrong,
                 lambda: jax.lax.cond(
-                    action_map_negative_progress == 0,
+                    action_map_positive_progress > 0,
+                    reward_when_progress_positive,
                     lambda: 0.0,
-                    lambda: jax.lax.cond(
-                        action_map_positive_progress > 0,
-                        lambda: spread_out_rate * self.env_cfg.rewards.dump_correct,
-                        lambda: 0.0,
-                    ),
                 ),
             )
 
@@ -1177,7 +1163,9 @@ class State(NamedTuple):
             dump_reward_fn,
         )
 
-        return  dump_reward
+        return dump_reward
+
+
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType

@@ -201,8 +201,8 @@ class TerraEnv(NamedTuple):
         )
         # for reward debug
         #jax.debug.print("step : {steps}", steps=new_state.env_steps)
-        #jax.debug.print("reward_1 : {reward_1}", reward_1=reward_1)
-        #jax.debug.print("reward_2 : {reward_2}", reward_2=reward_2)
+        jax.debug.print("reward_1 : {reward_1}", reward_1=reward_1)
+        jax.debug.print("reward_2 : {reward_2}", reward_2=reward_2)
         #jax.debug.print("reward_2 : ",reward_2)
         #jax.debug.print(f"reward_2: {}",reward_2)
         def _reset_branch(s, o, cfg):
@@ -284,7 +284,6 @@ class TerraEnv(NamedTuple):
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
-            "dig_map": state.world.dig_map.map,
             "dumpability_mask": state.world.dumpability_mask.map,
         }
 

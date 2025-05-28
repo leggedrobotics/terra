@@ -26,6 +26,7 @@ class AgentState(NamedTuple):
     angle_base: IntLowDim
     angle_cabin: IntLowDim
     loaded: IntLowDim
+    loaded_dumped: bool
 
 
 class Agent(NamedTuple):
@@ -87,6 +88,7 @@ class Agent(NamedTuple):
             angle_base=angle_base_1,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded_dumped=False,  # Initialize loaded_dumped to False
         )
         
         agent_state_2 = AgentState(
@@ -94,6 +96,7 @@ class Agent(NamedTuple):
             angle_base=angle_base_2,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded_dumped=False,  # Initialize loaded_dumped to False
         )
 
         width = env_cfg.agent.width

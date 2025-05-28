@@ -72,14 +72,13 @@ class Rewards(NamedTuple):
     base_turn: float
 
     cabin_turn: float
-
-    dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float  # given if loaded stayed the same
-    dump_no_dump_area: float  # given if dumps in an area that is not the dump area
-
+    
     dig_correct: (
         float  # dig where the target map is negative, and not more than required
     )
+    dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
+    dump_wrong: float  # given if loaded stayed the same
+    dump_no_dump_area: float  # given if dumps in an area that is not the dump area
     dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
@@ -88,18 +87,19 @@ class Rewards(NamedTuple):
 
     normalizer: float  # constant scaling factor for all rewards
 
+
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.1,
-            collision_move=-0.1,
+            existence=-0.0,
+            collision_move=-0.0,
             move_while_loaded=0.0,
-            move=-0.05,
-            collision_turn=-0.1,
-            base_turn=-0.1,
-            cabin_turn=-0.02,
-            dig_wrong=-0.3,
-            dump_wrong=-0.3,
+            move=-0.00,
+            collision_turn=-0.0,
+            base_turn=-0.0,
+            cabin_turn=-0.00,
+            dig_wrong=-3.0,
+            dump_wrong=-3.0,
             dump_no_dump_area=-3.0,
             dig_correct=3.0,
             dump_correct=3.0,
@@ -216,36 +216,36 @@ class CurriculumGlobalConfig(NamedTuple):
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
         },
-        {
-            "maps_path": "trenches/easy",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "trenches/medium",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "trenches/hard",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        {
-            "maps_path": "trenches/hard",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "trenches/easy",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "trenches/medium",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "trenches/hard",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "trenches/hard",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         
     ]
 
