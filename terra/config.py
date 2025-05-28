@@ -40,10 +40,10 @@ class ImmutableAgentConfig(NamedTuple):
     """
 
     dimensions: ExcavatorDims = ExcavatorDims()
-    angles_base: int = 24
+    angles_base: int = 12
     angles_cabin: int = 12
-    max_wheel_angle: int = 3
-    wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
+    max_wheel_angle: int = 2
+    wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
     num_state_obs: int = 6  # number of state observations (used to determine network input)
 
 
@@ -180,8 +180,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.1
-    distance_coefficient: float = -0.05
+    alignment_coefficient: float = -0.06
+    distance_coefficient: float = -0.03
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -198,7 +198,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 10
+    increase_level_threshold: int = 20
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
