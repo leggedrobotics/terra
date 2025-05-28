@@ -122,7 +122,10 @@ class State(NamedTuple):
                 agent_state_2=self.agent.agent_state_1
             )
         )
-
+    def _terminal(self, swap_agent:bool) -> "State":
+        state = self._swap() if swap_agent else self
+        return state._replace(env_steps=self.env_steps + 1)
+    
     def _step(self, action: Action, turn:bool = True) -> "State":
         """
         TrackedAction type --> 0
@@ -171,7 +174,7 @@ class State(NamedTuple):
         # jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
         # jax.debug.print("agent 1 loaded_dumped: {}", state.agent.agent_state_1.loaded_dumped)
         # jax.debug.print("agent 2 loaded_dumped: {}", state.agent.agent_state_2.loaded_dumped)
-        return state._replace(env_steps=state.env_steps + 1)
+        return state
 
     def _do_nothing(self):
         return self
@@ -1137,18 +1140,18 @@ class State(NamedTuple):
         )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state_1.loaded, new_state.agent.agent_state_1.loaded
+            self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
         )
 
         def dump_reward_fn() -> Float:
             def reward_when_progress_positive():
                 return jax.lax.cond(
                     self.agent.agent_state_1.loaded_dumped,
-                    lambda: 0.15 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    lambda: 0.0 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
                     lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
                 )
             return jax.lax.cond(
-                action_map_positive_progress < 0,
+                action_map_positive_progress <= 0,
                 lambda: self.env_cfg.rewards.dump_wrong,
                 lambda: jax.lax.cond(
                     action_map_positive_progress > 0,
@@ -1176,7 +1179,11 @@ class State(NamedTuple):
                 self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
-            lambda: self.env_cfg.rewards.dig_correct
+            lambda: jax.lax.cond(
+                new_state.agent.agent_state_2.loaded_dumped,
+                lambda: 0.0,
+                lambda: self.env_cfg.rewards.dig_correct,
+            )
         )
 
     def _handle_rewards_do(
