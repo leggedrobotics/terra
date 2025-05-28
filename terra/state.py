@@ -1138,7 +1138,10 @@ class State(NamedTuple):
             new_state.world.action_map.map,
             self.world.target_map.map,
         )
-
+        # jax.debug.print(
+        #     "action_map_positive_progress: {action_map_positive_progress}",
+        #     action_map_positive_progress=action_map_positive_progress,
+        # )
         dump_reward_condition = jnp.allclose(
             self.agent.agent_state_1.loaded, new_state.agent.agent_state_2.loaded
         )
@@ -1587,7 +1590,7 @@ class State(NamedTuple):
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
-            "target_tiles": self._build_dig_dump_cone(),
+            "target_tiles": ~(~self._build_dig_dump_cone()*~self._build_dig_dump_cone_2()),
             # Include termination_type directly without done_task
             "task_done": task_done,
         }
