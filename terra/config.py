@@ -42,8 +42,8 @@ class ImmutableAgentConfig(NamedTuple):
     dimensions: ExcavatorDims = ExcavatorDims()
     angles_base: int = 12
     angles_cabin: int = 12
-    max_wheel_angle: int = 3
-    wheel_step: float = 10.0  # difference between next angles in discretization (in degrees)
+    max_wheel_angle: int = 2
+    wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
     num_state_obs: int = 6  # number of state observations (used to determine network input)
 
 
@@ -118,21 +118,21 @@ class Rewards(NamedTuple):
     # @staticmethod
     # def dense():
     #     return Rewards(
-    #         existence=0.0,
-    #         collision_move=-0.5,
+    #         existence=-0.05,
+    #         collision_move=-0.1,
     #         move_while_loaded=0.0,
-    #         move=-0.2,
-    #         move_with_turned_wheels=-0.15,
+    #         move=-0.1,
+    #         move_with_turned_wheels=-0.2,
     #         collision_turn=-0.1,
     #         base_turn=-0.1,
-    #         cabin_turn=-0.2,
+    #         cabin_turn=-0.1,
     #         wheel_turn=-0.2,
     #         dig_wrong=-1.0,
     #         dump_wrong=0.0,
     #         dig_correct=1.0,
-    #         dump_correct=1.0,
+    #         dump_correct=3.0,
     #         terminal_completed_tiles=0.0,
-    #         terminal=10.0,
+    #         terminal=25.0,
     #         normalizer=100.0,
     #     )
 
