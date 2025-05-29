@@ -39,6 +39,8 @@ class Agent(NamedTuple):
     width: int
     height: int
 
+    moving_dumped_dirt: bool
+
     @staticmethod
     def new(
         key: jax.random.PRNGKey,
@@ -73,7 +75,9 @@ class Agent(NamedTuple):
         width = env_cfg.agent.width
         height = env_cfg.agent.height
 
-        return Agent(agent_state=agent_state, width=width, height=height), key
+        moving_dumped_dirt = False
+
+        return Agent(agent_state=agent_state, width=width, height=height, moving_dumped_dirt=moving_dumped_dirt), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):

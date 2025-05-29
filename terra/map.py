@@ -18,7 +18,6 @@ class GridWorld(NamedTuple):
         - -1: dug here during the episode
         - 0: free
         - greater than 0: dumped here
-    - dig map (same as action map but updated on the dig action & before the dump action is complete)
     - dumpability mask
         - 1: can dump
         - 0: can't dump
@@ -29,6 +28,9 @@ class GridWorld(NamedTuple):
         - -1: agent occupancy
         - 0: traversable
         - 1: non traversable
+    - last dig mask
+        - 1: dug here during previous dig action
+        - 0: not dug here during previous dig action
     - local map target positive (contains the sum of all the positive target map tiles in a given workspace)
     - local map target negative (contains the sum of all the negative target map tiles in a given workspace)
     - local map action positive (contains the sum of all the positive action map tiles in a given workspace)
@@ -40,9 +42,9 @@ class GridWorld(NamedTuple):
     target_map: GridMap
     action_map: GridMap
     padding_mask: GridMap
-    dig_map: GridMap  # map where the dig action is applied before being applied to the action map (at dump time).
     dumpability_mask: GridMap
     dumpability_mask_init: GridMap
+    last_dig_mask: GridMap
 
     trench_axes: Array
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
@@ -82,24 +84,21 @@ class GridWorld(NamedTuple):
         dumpability_mask_init: Array,
     ) -> "GridWorld":
         action_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
-        dig_map = GridMap.new(jnp.zeros_like(target_map, dtype=IntLowDim))
-
         target_map = GridMap.new(IntLowDim(target_map))
-
         padding_mask = GridMap.new(IntLowDim(padding_mask))
-
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+        last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
 
         world = cls(
             target_map=target_map,
             action_map=action_map,
             padding_mask=padding_mask,
-            dig_map=dig_map,
             trench_axes=trench_axes,
             trench_type=trench_type,
             dumpability_mask=dumpability_mask,
             dumpability_mask_init=dumpability_mask_init_gm,
+            last_dig_mask=last_dig_mask,
         )
 
         return world
