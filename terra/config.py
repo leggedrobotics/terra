@@ -80,13 +80,12 @@ class Rewards(NamedTuple):
     wheel_turn: float
 
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
-    dump_wrong: float  # given if loaded stayed the same
-    dump_no_dump_area: float  # given if dumps in an area that is not the dump area
+    dump_wrong: float  # given if loaded stayed the same or tried to dump in non-dumpable tile
 
     dig_correct: (
         float  # dig where the target map is negative, and not more than required
     )
-    dump_correct: float  # dump where the target map is positive, only if digged and not moved soil around
+    dump_correct: float  # dump where the target map is positive
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
@@ -101,43 +100,19 @@ class Rewards(NamedTuple):
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
-            move_with_turned_wheels=-0.15,
+            move_with_turned_wheels=-0.1,
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,
             wheel_turn=-0.02,
-            dig_wrong=-0.3,
-            dump_wrong=-0.3,
-            dump_no_dump_area=-3.0,
-            dig_correct=3.0,
-            dump_correct=3.0,
+            dig_wrong=-0.5,
+            dump_wrong=-1.0,
+            dig_correct=0.2,
+            dump_correct=0.1,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
         )
-
-    # Better rewards for wheeled agent
-    # @staticmethod
-    # def dense():
-    #     return Rewards(
-    #         existence=-0.05,
-    #         collision_move=-0.1,
-    #         move_while_loaded=0.0,
-    #         move=-0.1,
-    #         move_with_turned_wheels=-0.2,
-    #         collision_turn=-0.1,
-    #         base_turn=-0.1,
-    #         cabin_turn=-0.1,
-    #         wheel_turn=-0.2,
-    #         dig_wrong=-0.5,
-    #         dump_wrong=-0.5,
-    #         dump_no_dump_area=-3.0,
-    #         dig_correct=1.0,
-    #         dump_correct=3.0,
-    #         terminal_completed_tiles=0.0,
-    #         terminal=25.0,
-    #         normalizer=100.0,
-    #     )
 
     @staticmethod
     def sparse():
@@ -153,7 +128,6 @@ class Rewards(NamedTuple):
             wheel_turn=-0.005,
             dig_wrong=-0.3,
             dump_wrong=-0.3,
-            dump_no_dump_area=0.0,
             dig_correct=0.0,
             dump_correct=0.0,
             terminal_completed_tiles=0.0,
@@ -180,8 +154,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.06
-    distance_coefficient: float = -0.03
+    alignment_coefficient: float = -0.08
+    distance_coefficient: float = -0.04
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -198,7 +172,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20
+    increase_level_threshold: int = 15
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
