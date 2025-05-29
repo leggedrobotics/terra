@@ -176,8 +176,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.06
-    distance_coefficient: float = -0.03
+    alignment_coefficient: float = -0.08
+    distance_coefficient: float = -0.04
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -194,23 +194,23 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20
+    increase_level_threshold: int = 15
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     levels = [
         {
-            "maps_path": "terra/trenches/single",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
-        {
             "maps_path": "terra/foundations",
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "terra/trenches/single",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
         },
         {
             "maps_path": "terra/trenches/double",
