@@ -114,28 +114,6 @@ class Rewards(NamedTuple):
             normalizer=100.0,
         )
 
-    # Better rewards for wheeled agent
-    # @staticmethod
-    # def dense():
-    #     return Rewards(
-    #         existence=-0.05,
-    #         collision_move=-0.1,
-    #         move_while_loaded=0.0,
-    #         move=-0.1,
-    #         move_with_turned_wheels=-0.2,
-    #         collision_turn=-0.1,
-    #         base_turn=-0.1,
-    #         cabin_turn=-0.1,
-    #         wheel_turn=-0.2,
-    #         dig_wrong=-1.0,
-    #         dump_wrong=0.0,
-    #         dig_correct=1.0,
-    #         dump_correct=3.0,
-    #         terminal_completed_tiles=0.0,
-    #         terminal=25.0,
-    #         normalizer=100.0,
-    #     )
-
     @staticmethod
     def sparse():
         return Rewards(
