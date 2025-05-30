@@ -97,7 +97,7 @@ class Rewards(NamedTuple):
     def dense():
         return Rewards(
             existence=-0.1,
-            collision_move=-0.1,
+            collision_move=-0.2,
             move_while_loaded=0.0,
             move=-0.1,
             move_with_turned_wheels=-0.1,
@@ -107,8 +107,8 @@ class Rewards(NamedTuple):
             wheel_turn=-0.05,
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=0.18,
-            dump_correct=0.12,
+            dig_correct=0.2,
+            dump_correct=0.15,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
