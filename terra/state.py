@@ -1087,14 +1087,13 @@ class State(NamedTuple):
         return self.env_cfg.rewards.cabin_turn
 
     @staticmethod
-    def _get_action_map_positive_progress(
+    def _get_action_map_dump_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
         Returns
-        > 0 if there was progress on the dump tiles
-        < 0 if there was -progress on the dump tiles
-        = 0 if there was no progress on the dump tiles
+        > 0 if there was progress on the dump tiles after the action
+        = 0 if there was no progress on the dump tiles after the action
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=0)
@@ -1108,24 +1107,44 @@ class State(NamedTuple):
         return action_map_progress.astype(jnp.float32)
 
     @staticmethod
-    def _get_action_map_negative_progress(
+    def _get_action_map_dig_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
         Returns
-        > 0 if there was progress on the dig tiles
-        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
-        = 0 if there was no progress on the dig tiles
+        > 0 if there was progress on the dig tiles after the action
+        = 0 if there was no progress on the dig tiles after the action
         """
-        action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
-        action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
+        action_map_clip_old = jnp.clip(action_map_old, a_max=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_max=0)
 
-        target_map_mask = target_map < 0
+        target_map_dump_mask = target_map < 0
+
         action_map_progress = (
-            (action_map_clip_old - action_map_clip_new) * target_map_mask
+            (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
         ).sum()
 
         return action_map_progress.astype(jnp.float32)
+
+    @staticmethod
+    def _get_action_map_dump_regress(
+        action_map_old: Array, action_map_new: Array, target_map: Array
+    ) -> IntMap:
+        """
+        Returns
+        > 0 if there was regress on the dig tiles after the action
+        = 0 if there was no regress on the dig tiles after the action
+        """
+        action_map_clip_old = jnp.clip(action_map_old, a_min=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=0)
+
+        target_map_dump_mask = target_map > 0
+
+        action_map_regress = (
+            (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
+        ).sum()
+
+        return action_map_regress.astype(jnp.float32)
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
@@ -1135,7 +1154,7 @@ class State(NamedTuple):
         This includes both the dump part and the realization
         of the previously digged terrain.
         """
-        action_map_positive_progress = self._get_action_map_positive_progress(
+        action_map_dump_progress = self._get_action_map_dump_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
             self.world.target_map.map,
@@ -1145,27 +1164,10 @@ class State(NamedTuple):
             self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
         )
 
-        def dump_reward_fn() -> Float:
-            def reward_when_progress_positive():
-                return jax.lax.cond(
-                    self.agent.moving_dumped_dirt,
-                    lambda: 0.0 * action_map_positive_progress * self.env_cfg.rewards.dump_correct, # TODO: Value should not be 0.0!
-                    lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
-                )
-            return jax.lax.cond(
-                action_map_positive_progress < 0,
-                lambda: self.env_cfg.rewards.dump_wrong,
-                lambda: jax.lax.cond(
-                    action_map_positive_progress > 0,
-                    reward_when_progress_positive,
-                    lambda: 0.0,
-                ),
-            )
-
         dump_reward = jax.lax.cond(
             dump_reward_condition,
             lambda: self.env_cfg.rewards.dump_wrong,
-            dump_reward_fn,
+            lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
         )
 
         return dump_reward
@@ -1173,16 +1175,31 @@ class State(NamedTuple):
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        action_map_negative_progress = self._get_action_map_negative_progress(
+        action_map_dig_progress = self._get_action_map_dig_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
             self.world.target_map.map,
         )
+
+        action_map_dig_regress = self._get_action_map_dump_regress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+
         dig_reward = jax.lax.cond(
-            action_map_negative_progress > 0,
-            lambda: action_map_negative_progress * self.env_cfg.rewards.dig_correct,
+            action_map_dig_progress > 0,
+            lambda: action_map_dig_progress * self.env_cfg.rewards.dig_correct,
             lambda: 0.0,
         )
+
+        # Make penalty bigger than dumping reward
+        dig_on_dump_penalty = jax.lax.cond(
+            action_map_dig_regress > 0,
+            lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
+            lambda: 0.0,
+        )
+
         dig_wrong_reward = jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
@@ -1191,7 +1208,7 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
-        return dig_reward + dig_wrong_reward
+        return dig_reward + dig_on_dump_penalty + dig_wrong_reward
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
