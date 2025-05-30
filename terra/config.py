@@ -105,7 +105,7 @@ class Rewards(NamedTuple):
             base_turn=-0.1,
             cabin_turn=-0.01,
             wheel_turn=-0.02,
-            dig_wrong=-0.5,
+            dig_wrong=-0.4,
             dump_wrong=-1.0,
             dig_correct=0.15,
             dump_correct=0.1,
@@ -172,7 +172,7 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 15
+    increase_level_threshold: int = 5
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
