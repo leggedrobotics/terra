@@ -108,7 +108,7 @@ class Rewards(NamedTuple):
             dig_wrong=-0.5,
             dump_wrong=-1.0,
             dig_correct=0.15,
-            dump_correct=0.8,
+            dump_correct=0.1,
             terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
