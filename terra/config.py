@@ -105,7 +105,7 @@ class Rewards(NamedTuple):
             base_turn=-0.1,
             cabin_turn=-0.05,
             wheel_turn=-0.05,
-            dig_wrong=-0.4,
+            dig_wrong=-0.25,
             dump_wrong=-1.0,
             dig_correct=0.18,
             dump_correct=0.12,
@@ -172,12 +172,18 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 5
+    increase_level_threshold: int = 20
     decrease_level_threshold: int = 50
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     levels = [
+        {
+            "maps_path": "terra/foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         {
             "maps_path": "terra/trenches/single",
             "max_steps_in_episode": 400,
@@ -189,12 +195,6 @@ class CurriculumGlobalConfig(NamedTuple):
             "max_steps_in_episode": 400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": True,
-        },
-        {
-            "maps_path": "terra/foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
         },
         {
             "maps_path": "terra/trenches/double_diagonal",
