@@ -1141,8 +1141,6 @@ class State(NamedTuple):
             (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
         ).sum()
 
-        jax.debug.print("Action map dump regress: {}", action_map_regress)
-
         return action_map_regress.astype(jnp.float32)
 
     def _handle_rewards_dump(
