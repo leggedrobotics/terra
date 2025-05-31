@@ -47,6 +47,13 @@ def _convert_dumpability_to_terra(img):
     return img.astype(np.bool_)
 
 
+def _convert_actions_to_terra(img):
+    img = img.astype(np.int16)
+    mask = _get_img_mask(img, np.array(color_dict["dirt"]))
+    img = np.where(mask, 1, 0)
+    return img.astype(np.int8)
+
+
 def _convert_all_imgs_to_terra(
     img_folder,
     metadata_folder,
@@ -61,6 +68,7 @@ def _convert_all_imgs_to_terra(
     downsample=True,
     has_dumpability=True,
     center_padding=False,
+    actions_folder=None,
 ):
     max_size = size[1]
     print("max size: ", max_size)
@@ -83,8 +91,6 @@ def _convert_all_imgs_to_terra(
         if has_dumpability:
             dumpability_path = dumpability_folder / filename
             dumpability = cv2.imread(str(dumpability_path))
-            # plt.imshow(dumpability)
-            # plt.show()
 
         if downsample:
             with open(
@@ -112,10 +118,7 @@ def _convert_all_imgs_to_terra(
                     cval=0,
                 )
                 dumpability = dumpability_downsampled
-                # plt.imshow(dumpability)
-                # plt.show()
 
-        # assert img_downsampled.shape[:-1] == occupancy_downsampled.shape
         img_terra = _convert_img_to_terra(img, all_dumpable)
         # Pad to max size
         if center_padding:
@@ -159,8 +162,8 @@ def _convert_all_imgs_to_terra(
                 img_terra_dumpability = _convert_dumpability_to_terra(dumpability)
 
         destination_folder_images = destination_folder / "images"
-        destination_folder_occupancy = destination_folder / "occupancy"
         destination_folder_images.mkdir(parents=True, exist_ok=True)
+        destination_folder_occupancy = destination_folder / "occupancy"
         destination_folder_occupancy.mkdir(parents=True, exist_ok=True)
         destination_folder_dumpability = destination_folder / "dumpability"
         destination_folder_dumpability.mkdir(parents=True, exist_ok=True)
@@ -190,9 +193,16 @@ def _convert_all_imgs_to_terra(
                 destination_folder_dumpability / f"img_{i + 1}",
                 np.ones_like(img_terra_pad),
             )
+        if actions_folder is not None:
+            actions_path = actions_folder / filename
+            actions = cv2.imread(str(actions_path))
+            actions_terra = _convert_actions_to_terra(actions)
+            actions_terra = actions_terra.repeat(expansion_factor, axis=0).repeat(expansion_factor, axis=1)
+            destination_folder_actions = destination_folder / "actions"
+            destination_folder_actions.mkdir(parents=True, exist_ok=True)
+            np.save(destination_folder_actions / f"img_{i + 1}", actions_terra)
     if copy_metadata:
         utils.copy_and_increment_filenames(str(metadata_folder), str(destination_folder_metadata))
-        # we increase the index by 1 for consistency
 
 
 def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
@@ -218,6 +228,7 @@ def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
             downsample=False,
             has_dumpability=True,
             center_padding=False,
+            actions_folder=None,
         )
 
 
@@ -243,7 +254,33 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
             n_imgs,
             expansion_factor=expansion_factor,
             all_dumpable=all_dumpable,
+            actions_folder=None,
         )
+
+def generate_relocations_terra(dataset_folder, size, n_imgs):
+    print("Converting relocations...")
+    img_folder = Path(dataset_folder) / "relocations" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations"/ "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations" / "dumpability"
+    actions_folder = Path(dataset_folder) / "relocations" / "actions"
+    destination_folder = Path(dataset_folder) / "train" / "relocations"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=actions_folder
+    )
 
 def generate_custom_terra(dataset_folder, size, n_imgs):
     print("Converting custom maps...")
@@ -266,6 +303,7 @@ def generate_custom_terra(dataset_folder, size, n_imgs):
         downsample=False,
         has_dumpability=True,
         center_padding=False,
+        actions_folder=None,
     )
 
 
@@ -277,5 +315,7 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
         dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
     )
     print("Trenches processed successfully.")
+    generate_relocations_terra(dataset_folder, size, n_imgs)
+    print("Custom maps processed successfully.")
     generate_custom_terra(dataset_folder, size, n_imgs)
     print("Custom maps processed successfully.")

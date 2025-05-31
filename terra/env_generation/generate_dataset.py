@@ -7,6 +7,7 @@ from terra.env_generation.create_train_data import (
     create_procedural_trenches, 
     create_foundations as create_train_foundations
 )
+from terra.env_generation.generate_relocations import create_relocations
 import terra.env_generation.convert_to_terra as convert_to_terra
 
 def generate_complete_dataset(config_path="config/env_generation/config.yml"):
@@ -29,6 +30,8 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
     os.makedirs("data/", exist_ok=True)
     os.makedirs("data/terra/", exist_ok=True)
     os.makedirs("data/openstreet/", exist_ok=True)
+
+    n_imgs = config["n_imgs"]
 
     print("Step 1: Downloading and processing foundation maps...")
     # Download foundations
@@ -61,17 +64,19 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml"):
 
     print("Step 2: Creating procedural trenches and processing training data...")
     # Create procedural trenches
-    main_folder = "data/terra"
-    create_procedural_trenches(main_folder, config)
+    create_procedural_trenches(config)
 
     # Process foundation maps for training
     create_train_foundations(config)
+
+    # Create relocations maps
+    relocations_config = config.get("relocations", {})
+    create_relocations(relocations_config, n_imgs)
 
     # Generate Terra format datasets
     print("Step 3: Converting data to Terra format...")
     sizes = [(size, size) for size in config["sizes"]]
     npy_dataset_folder = package_dir + "/data/terra"
-    n_imgs = config["n_imgs"]
     for size in sizes:
         convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs)
 

@@ -44,3 +44,23 @@ foundations:
   min_size: 8
   max_size: 64
   max_buildings: 3000
+
+relocations:
+  img_edge_min: 64
+  img_edge_max: 64
+  n_dump_min: 1
+  n_dump_max: 3
+  size_dump_min: 10
+  size_dump_max: 16
+  n_obs_min: 1
+  n_obs_max: 3
+  size_obstacle_min: 5
+  size_obstacle_max: 9
+  n_nodump_min: 1
+  n_nodump_max: 2
+  size_nodump_min: 7
+  size_nodump_max: 10
+  n_dirt_min: 1
+  n_dirt_max: 3
+  size_dirt_min: 6
+  size_dirt_max: 10
