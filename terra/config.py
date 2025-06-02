@@ -89,8 +89,6 @@ class Rewards(NamedTuple):
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
-    terminal_completed_tiles: float  # gets linearly scaled by ratio of completed tiles
-
     normalizer: float  # constant scaling factor for all rewards
 
     @staticmethod
@@ -109,7 +107,6 @@ class Rewards(NamedTuple):
             dump_wrong=-1.0,
             dig_correct=0.2,
             dump_correct=0.15,
-            terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
         )
@@ -130,10 +127,10 @@ class Rewards(NamedTuple):
             dump_wrong=-0.3,
             dig_correct=0.0,
             dump_correct=0.0,
-            terminal_completed_tiles=0.0,
             terminal=100.0,
             normalizer=100.0,
         )
+
 
 class CurriculumConfig(NamedTuple):
     """State of the curriculum. This config should not be changed."""
