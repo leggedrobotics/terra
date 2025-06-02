@@ -330,6 +330,8 @@ class Game:
                             # pos is already in pixel coordinates based on your example
                             screen_x = pos[0] * self.tile_size + total_offset_x + offset[0]
                             screen_y = pos[1] * self.tile_size + total_offset_y + offset[1]
+                            # screen_x = pos[0] * self.tile_size + total_offset_x
+                            # screen_y = pos[1] * self.tile_size + total_offset_y
                             
                             agent_surfaces.append(additional_surface)
                             agent_positions.append((screen_x, screen_y))
