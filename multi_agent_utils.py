@@ -114,6 +114,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
 
     system_message_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
     "IMPORTANT: You will receive a 128x128 map as input\n\n" \
+    "IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions\n\n" \
     "GUIDELINES FOR PARTITIONING:\n" \
     "1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements\n" \
     "2. Create efficient partitions that maximize excavator productivity and minimize travel time\n" \
@@ -1157,6 +1158,61 @@ def extract_python_format_data(llm_response_text):
         logger.error(f"Manual extraction failed: {e}")
     
     raise ValueError("Could not extract valid Python data with tuples from LLM response")
+# def is_valid_region_list(var):
+#     """
+#     Checks if the variable is a list of dictionaries with the required structure.
+#     The structure should be a list containing at least one dictionary with the keys:
+#     'id', 'region_coords', 'start_pos', 'start_angle', and 'status'.
+    
+#     'region_coords' and 'start_pos' should be tuples.
+    
+#     Example of valid structure:
+#     [{'id': 0, 'region_coords': (15, 15, 50, 50), 'start_pos': (42, 36), 'start_angle': 0, 'status': 'pending'}]
+    
+#     Args:
+#         var: The variable to check
+        
+#     Returns:
+#         bool: True if the variable has the valid structure, False otherwise
+#     """
+#     # Check if var is a list
+#     if not isinstance(var, list):
+#         return False
+    
+#     # Check if list has at least one element
+#     if len(var) == 0:
+#         return False
+    
+#     # Check each element in the list
+#     for item in var:
+#         # Check if item is a dictionary
+#         if not isinstance(item, dict):
+#             return False
+        
+#         # Check required keys
+#         required_keys = {'id', 'region_coords', 'start_pos', 'start_angle', 'status'}
+#         if set(item.keys()) != required_keys:
+#             return False
+        
+#         # Check types of specific fields
+#         if not isinstance(item['id'], (int, float)):
+#             return False
+        
+#         if not isinstance(item['region_coords'], tuple) or len(item['region_coords']) != 4:
+#             return False
+            
+#         if not isinstance(item['start_pos'], tuple) or len(item['start_pos']) != 2:
+#             return False
+            
+#         if not isinstance(item['start_angle'], (int, float)):
+#             return False
+            
+#         if not isinstance(item['status'], str):
+#             return False
+    
+#     return True
+
+
 def is_valid_region_list(var):
     """
     Checks if the variable is a list of dictionaries with the required structure.
@@ -1164,6 +1220,7 @@ def is_valid_region_list(var):
     'id', 'region_coords', 'start_pos', 'start_angle', and 'status'.
     
     'region_coords' and 'start_pos' should be tuples.
+    Each region must be maximum 64x64 in size.
     
     Example of valid structure:
     [{'id': 0, 'region_coords': (15, 15, 50, 50), 'start_pos': (42, 36), 'start_angle': 0, 'status': 'pending'}]
@@ -1181,6 +1238,9 @@ def is_valid_region_list(var):
     # Check if list has at least one element
     if len(var) == 0:
         return False
+    
+    # Maximum allowed partition size
+    MAX_PARTITION_SIZE = 64
     
     # Check each element in the list
     for item in var:
@@ -1207,6 +1267,20 @@ def is_valid_region_list(var):
             return False
             
         if not isinstance(item['status'], str):
+            return False
+        
+        # Check partition size (region_coords format: (y_start, x_start, y_end, x_end))
+        y_start, x_start, y_end, x_end = item['region_coords']
+        if not all(isinstance(coord, (int, float)) for coord in item['region_coords']):
+            return False
+        
+        # Calculate width and height from coordinates
+        width = x_end - x_start
+        height = y_end - y_start
+
+        print(f"Checking partition: {item['id']} with width {width} and height {height}")
+        
+        if width > MAX_PARTITION_SIZE or height > MAX_PARTITION_SIZE:
             return False
     
     return True

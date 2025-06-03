@@ -57,7 +57,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -66,7 +66,7 @@ USE_PATH = True                 # Use path for LLM (Excavator Agent)
 APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
-GRID_RENDERING = True
+GRID_RENDERING = False
 
     
 class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
@@ -658,7 +658,8 @@ class DisjointMapEnvironments:
             return self.global_env_config
     def initialize_small_environment(self, partition_idx):
         """
-        Initialize small environment with the partition's region (which may overlap with others).
+        Initialize the small environment with map data from a specific global map partition.
+        Uses TerraEnv (non-batched) for better performance and simpler interface.
         """
         if partition_idx < 0 or partition_idx >= len(self.partitions):
             raise ValueError(f"Invalid partition index: {partition_idx}")
@@ -668,40 +669,88 @@ class DisjointMapEnvironments:
         custom_pos = partition['start_pos']
         custom_angle = partition['start_angle']
 
-        # print(f"=== Initializing partition {partition_idx} ===")
-        # print(f"Region coords: {region_coords}")
-        # print(f"Custom pos: {custom_pos}")
+        print(f"=== DIAGNOSTIC: Initializing partition {partition_idx} ===")
+        print(f"Region coords: {region_coords}")
+        print(f"Custom pos: {custom_pos}")
+        print(f"Custom angle: {custom_angle}")
 
-        # Extract submaps for this partition's region
-        sub_maps = self._extract_partition_submaps(region_coords)
+        # Extract sub-maps from global maps (64x64)
+        # sub_maps = {
+        #     'target_map': extract_sub_task_target_map(self.global_maps['target_map'], region_coords),
+        #     'action_map': extract_sub_task_action_map(self.global_maps['action_map'], region_coords),
+        #     'dumpability_mask': extract_sub_task_dumpability_mask(self.global_maps['dumpability_mask'], region_coords),
+        #     'dumpability_mask_init': extract_sub_task_dumpability_mask(self.global_maps['dumpability_mask_init'], region_coords),
+        #     'padding_mask': extract_sub_task_padding_mask(self.global_maps['padding_mask'], region_coords),
+        #     'traversability_mask': extract_sub_task_traversability_mask(self.global_maps['traversability_mask'], region_coords),
+        #     'dig_map': extract_sub_task_action_map(self.global_maps['dig_map'], region_coords),
+        #     #'trench_axes': self.global_maps['trench_axes'],
+        #     #'trench_type': self.global_maps['trench_type'],
+        # }
 
-        # Validate submaps
-        # print(f"=== SUB-MAP DIAGNOSTICS ===")
-        # for name, map_data in sub_maps.items():
-        #     print(f"{name}: Shape: {map_data.shape}")
-            
+        sub_maps = {
+            'target_map': create_sub_task_target_map_64x64(self.global_maps['target_map'], region_coords),
+            'action_map': create_sub_task_action_map_64x64(self.global_maps['action_map'], region_coords),
+            'dumpability_mask': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask'], region_coords),
+            'dumpability_mask_init': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask_init'], region_coords),
+            'padding_mask': create_sub_task_padding_mask_64x64(self.global_maps['padding_mask'], region_coords),
+            'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
+            'dig_map': create_sub_task_action_map_64x64(self.global_maps['dig_map'], region_coords),
+            #'trench_axes': self.global_maps['trench_axes'],
+            #'trench_type': self.global_maps['trench_type'],
+        }
+        #DIAGNOSTIC: Check sub-map validity
+        print(f"=== SUB-MAP DIAGNOSTICS ===")
+        for name, map_data in sub_maps.items():
+            print(f"{name}:")
+            print(f"  Shape: {map_data.shape}")
+            # print(f"  Min/Max: {jnp.min(map_data):.3f} / {jnp.max(map_data):.3f}")
+            # print(f"  Non-zero pixels: {jnp.sum(map_data != 0)}")
+            # print(f"  NaN values: {jnp.sum(jnp.isnan(map_data))}")
+            # print(f"  Inf values: {jnp.sum(jnp.isinf(map_data))}")
+        
         target_areas = jnp.sum(sub_maps['target_map'] > 0)
-        #print(f"Target areas to excavate: {target_areas}")
+        # print(f"Target areas to excavate: {target_areas}")
+         # Check traversability at start position
+        traversability = sub_maps['traversability_mask']
+        pos_y, pos_x = custom_pos
+        # print(f"Start position ({pos_y}, {pos_x}) traversability: {traversability[pos_y, pos_x]}")
+    
+        # Check if start position has valid surrounding area
+        y_min, y_max = max(0, pos_y-2), min(64, pos_y+3)
+        x_min, x_max = max(0, pos_x-2), min(64, pos_x+3)
+        local_area = traversability[y_min:y_max, x_min:x_max]
+        # print(f"Local area around start ({y_min}:{y_max}, {x_min}:{x_max}):")
+        # print(f"  Traversable pixels: {jnp.sum(local_area > 0)} / {local_area.size}")
+        # print(f"  Min/Max traversability: {jnp.min(local_area)} / {jnp.max(local_area)}")
 
-        # Handle trench data
+        # Fix trench data shapes - remove batch dimension for single environment
         trench_axes = self.global_maps['trench_axes']
         trench_type = self.global_maps['trench_type']
-        
+    
+        # Remove batch dimension if present
         if trench_axes.shape[0] == 1:
-            trench_axes = trench_axes[0]
+            trench_axes = trench_axes[0]  # Shape: (3, 3) instead of (1, 3, 3)
         if trench_type.shape[0] == 1:
-            trench_type = trench_type[0]
-        
+            trench_type = trench_type[0]  # Shape: () instead of (1,)
         trench_axes = trench_axes.astype(jnp.float32)
         trench_type = trench_type.astype(jnp.int32)
+        
+        # print(f"Trench axes shape: {trench_axes.shape}, type: {trench_axes.dtype}")
+        # print(f"Trench type shape: {trench_type.shape}, type: {trench_type.dtype}")
+        # print(f"Trench axes values:\n{trench_axes}")
+        # print(f"Trench type value: {trench_type}")
+    
 
-        # Reset the small environment
+        # Reset the small environment using TerraEnv's interface (no batching)
         clean_env_cfg = self._create_clean_env_config()
+        print(f"Environment config created")
+
         self.rng, reset_key = jax.random.split(self.rng)
 
         try:
-            #print("Resetting small environment with custom map data...")
+            print("Resetting small environment with custom map data...")
             
+            # Use TerraEnv's reset method directly - much cleaner interface
             small_timestep = self.small_env.reset(
                 key=reset_key,
                 target_map=sub_maps['target_map'],
@@ -714,17 +763,102 @@ class DisjointMapEnvironments:
                 custom_angle=custom_angle
             )
 
+
+            # print("Small environment reset successfully.")
+            # print(f"=== RESET SUCCESSFUL ===")
+            # print(f"Initial reward: {small_timestep.reward}")
+            # print(f"Initial done: {small_timestep.done}")
+            # print(f"Agent state: {small_timestep.state.agent.agent_state}")
+            # print(f"Agent position: {small_timestep.state.agent.agent_state.pos_base}")
+            # print(f"Agent angle: {small_timestep.state.agent.agent_state.angle_base}")
+            # print(f"Agent loaded: {small_timestep.state.agent.agent_state.loaded}")
+
+            # Store current small environment state
             self.small_env_timestep = small_timestep
             self.current_partition_idx = partition_idx
+            
+            # Set partition status to active
             self.partitions[partition_idx]['status'] = 'active'
             
+            # Switch display to small environment
+            self.current_display_env = "small"
+            #rint(self.small_env_timestep)
             return small_timestep
             
         except Exception as e:
-            #print(f"Error initializing small environment: {e}")
             import traceback
-            traceback.print_exc()
+            print(f"Error initializing small environment: {e}")
+            print(traceback.format_exc())
             raise
+    # def initialize_small_environment(self, partition_idx):
+    #     """
+    #     Initialize small environment with the partition's region (which may overlap with others).
+    #     """
+    #     if partition_idx < 0 or partition_idx >= len(self.partitions):
+    #         raise ValueError(f"Invalid partition index: {partition_idx}")
+
+    #     partition = self.partitions[partition_idx]
+    #     region_coords = partition['region_coords']
+    #     custom_pos = partition['start_pos']
+    #     custom_angle = partition['start_angle']
+
+    #     # print(f"=== Initializing partition {partition_idx} ===")
+    #     # print(f"Region coords: {region_coords}")
+    #     # print(f"Custom pos: {custom_pos}")
+
+    #     # Extract submaps for this partition's region
+    #     sub_maps = self._extract_partition_submaps(region_coords)
+
+    #     # Validate submaps
+    #     # print(f"=== SUB-MAP DIAGNOSTICS ===")
+    #     # for name, map_data in sub_maps.items():
+    #     #     print(f"{name}: Shape: {map_data.shape}")
+            
+    #     target_areas = jnp.sum(sub_maps['target_map'] > 0)
+    #     #print(f"Target areas to excavate: {target_areas}")
+
+    #     # Handle trench data
+    #     trench_axes = self.global_maps['trench_axes']
+    #     trench_type = self.global_maps['trench_type']
+        
+    #     if trench_axes.shape[0] == 1:
+    #         trench_axes = trench_axes[0]
+    #     if trench_type.shape[0] == 1:
+    #         trench_type = trench_type[0]
+        
+    #     trench_axes = trench_axes.astype(jnp.float32)
+    #     trench_type = trench_type.astype(jnp.int32)
+
+    #     # Reset the small environment
+    #     clean_env_cfg = self._create_clean_env_config()
+    #     self.rng, reset_key = jax.random.split(self.rng)
+
+    #     try:
+    #         #print("Resetting small environment with custom map data...")
+            
+    #         small_timestep = self.small_env.reset(
+    #             key=reset_key,
+    #             target_map=sub_maps['target_map'],
+    #             padding_mask=sub_maps['padding_mask'],
+    #             trench_axes=trench_axes,
+    #             trench_type=trench_type,
+    #             dumpability_mask_init=sub_maps['dumpability_mask_init'],
+    #             env_cfg=clean_env_cfg,
+    #             custom_pos=custom_pos,
+    #             custom_angle=custom_angle
+    #         )
+
+    #         self.small_env_timestep = small_timestep
+    #         self.current_partition_idx = partition_idx
+    #         self.partitions[partition_idx]['status'] = 'active'
+            
+    #         return small_timestep
+            
+    #     except Exception as e:
+    #         #print(f"Error initializing small environment: {e}")
+    #         import traceback
+    #         traceback.print_exc()
+    #         raise
 
     def _extract_partition_submaps(self, region_coords):
         """Extract submaps for a partition's region."""
@@ -1394,7 +1528,6 @@ def run_experiment_with_disjoint_environments(
     ]
 
     #env_manager.set_partitions = sub_tasks_manual  # Initialize partitions with manual definition
-    env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
 
     sub_tasks_llm = []
     # Initialize the LLM agent
@@ -1420,7 +1553,6 @@ def run_experiment_with_disjoint_environments(
         else:
             prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
 
-        llm_decision = "delegate_to_rl"
         try:
             if USE_IMAGE_PROMPT:
                 response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, SESSION_ID))
@@ -1440,19 +1572,24 @@ def run_experiment_with_disjoint_environments(
 
 
         except Exception as adk_err:
-                print(f"Error during ADK agent communication: {adk_err}")
-                print("Defaulting to fallback action due to ADK error.")
-                llm_decision = "fallback"
+                print(f"Error during ADK agent partitioning: {adk_err}")
+
 
     print(f"sub-tasks from manual definition: {sub_tasks_manual}")
     print(f"Sub-tasks from LLM: {sub_tasks_llm}")
 
-    if is_valid_region_list(sub_tasks_llm) and USE_MANUAL_PARTITIONING == False:
-        env_manager.partitions= sub_tasks_llm
+    partition_validation = is_valid_region_list(sub_tasks_llm)
+
+    if partition_validation and USE_MANUAL_PARTITIONING == False:
+        #env_manager.partitions= sub_tasks_llm
         print("Using LLM-generated sub-tasks.")
+        env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
+
     else:
-        env_manager.partitions = sub_tasks_manual
+        #env_manager.partitions = sub_tasks_manual
         print("Using manually defined sub-tasks.")
+        env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
+
 
     num_partitions = len(env_manager.partitions)
     print(f"Number of partitions: {num_partitions}")
