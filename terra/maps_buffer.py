@@ -167,7 +167,7 @@ def load_single_map(map_path: str) -> Array:
         actions_map = np.load(actions_file)
         actions_sanity_check(actions_map)
     else:
-        actions_map = np.zeros_like(map, dtype=IntMap)
+        actions_map = np.zeros_like(image, dtype=IntMap)
 
     # Try to load metadata
     trench_axes = -97.0 * np.ones((3, 3))  # Default values
