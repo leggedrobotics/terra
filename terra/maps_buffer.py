@@ -129,6 +129,83 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
         raise RuntimeError("Loaded metadata is not valid.")
 
 
+def load_single_map(map_path: str) -> Array:
+    """
+    Load a single map and its associated files from the specified path.
+    Requires different layout than load_maps_from_disk!
+    Point to a directory containing the following files:
+    - image.npy: The map image
+    - occupancy.npy: The occupancy map
+    - dumpability.npy: The dumpability mask
+    - actions.npy: The actions map (optional)
+    - metadata.json: Metadata file containing trench axes (optional)
+
+    Args: map_path: Path to the map files
+    Returns: Tuple containing map data in the same format as load_maps_from_disk
+    """
+    # Assuming map_path points to a .npy file in an images directory
+    map_path = Path(map_path)
+
+    # Load map
+    image_file = map_path / "image.npy"
+    image = np.load(image_file)
+    map_sanity_check(image)
+
+    # Load occupancy
+    occupancy_file = map_path / "occupancy.npy"
+    occupancy = np.load(occupancy_file)
+    occupancy_sanity_check(occupancy)
+
+    # Load dumpability mask
+    dumpability_file = map_path / "dumpability.npy"
+    dumpability_mask_init = np.load(dumpability_file)
+    dumpability_sanity_check(dumpability_mask_init)
+
+    # Check if actions folder exists
+    actions_file = map_path / "actions.npy"
+    if actions_file.exists():
+        actions_map = np.load(actions_file)
+        actions_sanity_check(actions_map)
+    else:
+        actions_map = np.zeros_like(image, dtype=IntMap)
+
+    # Try to load metadata
+    trench_axes = -97.0 * np.ones((3, 3))  # Default values
+    trench_type = -1
+    try:
+        metadata_file = map_path / "metadata.json"
+        with open(metadata_file) as f:
+            trench_ax = json.load(f)["axes_ABC"]
+        metadata_sanity_check(trench_ax[0])
+        trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
+        trench_type = len(trench_ax)
+
+        # Fill in with dummies to reach standard shape
+        max_trench_type = 3
+        while len(trench_ax) < max_trench_type:
+            trench_ax.append([-97, -97, -97])
+
+        trench_axes = np.array(trench_ax)
+    except:
+        print(f"No metadata found for given map: {map_path}.")
+
+    # Convert to single-element arrays
+    maps = jnp.array([image], dtype=IntMap)
+    occupancies = jnp.array([occupancy], dtype=IntMap)
+    trench_axes = jnp.array([trench_axes])
+    dumpability_masks_init = jnp.array([dumpability_mask_init], dtype=jnp.bool_)
+    actions = jnp.array([actions_map], dtype=IntMap)
+
+    return (
+        maps,
+        occupancies,
+        trench_axes,
+        trench_type,
+        dumpability_masks_init,
+        actions
+    )
+
+
 def load_maps_from_disk(folder_path: str) -> Array:
     # Set the max number of branches the trench has
     max_trench_type = 3
@@ -303,19 +380,17 @@ def _check_maps(maps: list[Array]) -> tuple[int, int]:
     return maps_width, maps_height
 
 
-def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
-    if os.getenv("DATASET_PATH", "") == "":
-        raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
-    maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
-    folder_paths = [str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths]
-    print(f"Loading maps from {folder_paths}.")
-    maps_from_disk = []
-    occupancies_from_disk = []
-    dumpability_masks_init_from_disk = []
-    trench_axes_list = []
-    trench_types = []
-    actions_from_disk = []
-    for folder_path in folder_paths:
+def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path: str = None):
+    if single_map_path is not None:
+        print(f"Loading single map from {single_map_path}")
+        maps_from_disk = []
+        occupancies_from_disk = []
+        dumpability_masks_init_from_disk = []
+        trench_axes_list = []
+        trench_types = []
+        actions_from_disk = []
+
+        # Load the single map
         (
             maps,
             occupancies,
@@ -323,13 +398,43 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool):
             trench_type,
             dumpability_masks_init,
             actions,
-        ) = load_maps_from_disk(folder_path)
-        maps_from_disk.append(maps)
-        occupancies_from_disk.append(occupancies)
-        dumpability_masks_init_from_disk.append(dumpability_masks_init)
-        trench_axes_list.append(trench_axes)
-        trench_types.append(trench_type)
-        actions_from_disk.append(actions)
+        ) = load_single_map(single_map_path)
+
+        # Repeat the map for each curriculum level
+        num_levels = len(batch_cfg.curriculum_global.levels)
+        maps_from_disk = [maps] * num_levels
+        occupancies_from_disk = [occupancies] * num_levels
+        dumpability_masks_init_from_disk = [dumpability_masks_init] * num_levels
+        trench_axes_list = [trench_axes] * num_levels
+        trench_types = [trench_type] * num_levels
+        actions_from_disk = [actions] * num_levels
+    else:
+        if os.getenv("DATASET_PATH", "") == "":
+            raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
+        maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
+        folder_paths = [str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths]
+        print(f"Loading maps from {folder_paths}.")
+        maps_from_disk = []
+        occupancies_from_disk = []
+        dumpability_masks_init_from_disk = []
+        trench_axes_list = []
+        trench_types = []
+        actions_from_disk = []
+        for folder_path in folder_paths:
+            (
+                maps,
+                occupancies,
+                trench_axes,
+                trench_type,
+                dumpability_masks_init,
+                actions,
+            ) = load_maps_from_disk(folder_path)
+            maps_from_disk.append(maps)
+            occupancies_from_disk.append(occupancies)
+            dumpability_masks_init_from_disk.append(dumpability_masks_init)
+            trench_axes_list.append(trench_axes)
+            trench_types.append(trench_type)
+            actions_from_disk.append(actions)
     maps_width, maps_height = _check_maps(maps_from_disk)
     maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk_padded, actions_from_disk_padded = _pad_maps(
         maps_from_disk,

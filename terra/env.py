@@ -39,7 +39,6 @@ class TerraEnv(NamedTuple):
         n_envs_x: int = 1,
         n_envs_y: int = 1,
         display: bool = False,
-        progressive_gif: bool = False,
     ) -> "TerraEnv":
         re = None
         tile_size_rendering = MAP_TILES // maps_size_px
@@ -69,7 +68,6 @@ class TerraEnv(NamedTuple):
                 n_envs_x=n_envs_x,
                 n_envs_y=n_envs_y,
                 display=display,
-                progressive_gif=progressive_gif,
             )
         return TerraEnv(rendering_engine=re)
 
@@ -277,17 +275,16 @@ class TerraEnvBatch:
         n_envs_x_rendering: int = 1,
         n_envs_y_rendering: int = 1,
         display: bool = False,
-        progressive_gif: bool = False,
         shuffle_maps: bool = False,
+        single_map_path: str = None,
     ) -> None:
-        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
+        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps, single_map_path)
         self.terra_env = TerraEnv.new(
             maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,
             rendering=rendering,
             n_envs_x=n_envs_x_rendering,
             n_envs_y=n_envs_y_rendering,
             display=display,
-            progressive_gif=progressive_gif,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
