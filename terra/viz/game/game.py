@@ -23,6 +23,19 @@ def get_agent_dims(agent_w_m, agent_h_m, tile_size_m):
     )
     return agent_width, agent_height
 
+def apply_rotation_offset_to_index(original_index, offset_steps, total_steps=12):
+    """
+    Apply rotation offset to discrete rotation index.
+        
+    Args:
+        original_index: Current rotation index (0-11)
+        offset_steps: Number of steps to rotate (e.g., 3 for 90° if 12 steps = 360°)
+        total_steps: Total number of discrete rotation steps (default 12)
+        
+    Returns:
+        New rotation index after applying offset
+    """
+    return (original_index + offset_steps) % total_steps
 
 class Game:
     def __init__(
@@ -52,6 +65,7 @@ class Game:
         tile_size_m = ImmutableMapsConfig().edge_length_m / maps_size_px
         self.maps_size_px = maps_size_px
         tile_size = MAP_TILES // maps_size_px
+        self.rotation_offset_steps = 3  # Adjust this value: 3=90°, 6=180°, 9=270°
         self.tile_size = tile_size
         excavator_dims = ExcavatorDims()
         # HARDCODED FIX: Use smaller agent dimensions for multi-agent rendering
@@ -195,6 +209,15 @@ class Game:
         """Create a temporary agent with specific angles and return its surface."""
         # Create a temporary agent instance with the same dimensions
         # Use the correct attribute names from the Agent class
+        # Apply rotation offset to discrete indices
+        corrected_base_dir = apply_rotation_offset_to_index(
+            base_dir, self.rotation_offset_steps, agent.angles_base
+        )
+        corrected_cabin_dir = apply_rotation_offset_to_index(
+            cabin_dir, -self.rotation_offset_steps, agent.angles_cabin
+        )
+        #corrected_cabin_dir = cabin_dir
+
         temp_agent = Agent(
             agent.width if hasattr(agent, 'width') else agent.w, 
             agent.height if hasattr(agent, 'height') else agent.h, 
@@ -202,9 +225,11 @@ class Game:
             agent.angles_base, 
             agent.angles_cabin
         )
+        print("base_dir:", base_dir, "cabin_dir:", cabin_dir)
+        print("corrected_base_dir:", corrected_base_dir, "corrected_cabin_dir:", corrected_cabin_dir)
         
         # Update it with the specific position and angles
-        temp_agent.update([0, 0], base_dir, cabin_dir, loaded)  # Position doesn't matter for surface creation
+        temp_agent.update([0, 0], corrected_base_dir, corrected_cabin_dir, loaded)  # Position doesn't matter for surface creation
         
         # Get vertices for the body and cabin
         body_vertices = temp_agent.agent["body"]["vertices"]

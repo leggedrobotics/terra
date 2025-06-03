@@ -194,7 +194,7 @@ class DisjointMapEnvironments:
         y1_start, x1_start, y1_end, x1_end = p1_coords
         y2_start, x2_start, y2_end, x2_end = p2_coords
         
-        print(f"Checking overlap between partition {i}: ({y1_start}, {x1_start}, {y1_end}, {x1_end}) and partition {j}: ({y2_start}, {x2_start}, {y2_end}, {x2_end})")
+        # print(f"Checking overlap between partition {i}: ({y1_start}, {x1_start}, {y1_end}, {x1_end}) and partition {j}: ({y2_start}, {x2_start}, {y2_end}, {x2_end})")
         
         # Check for overlap - rectangles overlap if they overlap in BOTH dimensions
         y_overlap = (y1_start <= y2_end) and (y2_start <= y1_end)
@@ -202,9 +202,9 @@ class DisjointMapEnvironments:
         
         overlap_exists = y_overlap and x_overlap
         
-        print(f"  Y overlap: {y_overlap} (y1: {y1_start}-{y1_end}, y2: {y2_start}-{y2_end})")
-        print(f"  X overlap: {x_overlap} (x1: {x1_start}-{x1_end}, x2: {x2_start}-{x2_end})")
-        print(f"  Overall overlap: {overlap_exists}")
+        # print(f"  Y overlap: {y_overlap} (y1: {y1_start}-{y1_end}, y2: {y2_start}-{y2_end})")
+        # print(f"  X overlap: {x_overlap} (x1: {x1_start}-{x1_end}, x2: {x2_start}-{x2_end})")
+        # print(f"  Overall overlap: {overlap_exists}")
         
         return overlap_exists
 
@@ -220,9 +220,9 @@ class DisjointMapEnvironments:
             y1_start, x1_start, y1_end, x1_end = p1_coords
             y2_start, x2_start, y2_end, x2_end = p2_coords
             
-            print(f"Calculating overlap region between partition {partition_i} and {partition_j}")
-            print(f"  Partition {partition_i}: ({y1_start}, {x1_start}) to ({y1_end}, {x1_end})")
-            print(f"  Partition {partition_j}: ({y2_start}, {x2_start}) to ({y2_end}, {x2_end})")
+            # print(f"Calculating overlap region between partition {partition_i} and {partition_j}")
+            # print(f"  Partition {partition_i}: ({y1_start}, {x1_start}) to ({y1_end}, {x1_end})")
+            # print(f"  Partition {partition_j}: ({y2_start}, {x2_start}) to ({y2_end}, {x2_end})")
             
             # Find intersection in global coordinates
             overlap_y_start = max(y1_start, y2_start)
@@ -230,7 +230,7 @@ class DisjointMapEnvironments:
             overlap_y_end = min(y1_end, y2_end)
             overlap_x_end = min(x1_end, x2_end)
             
-            print(f"  Global overlap region: ({overlap_y_start}, {overlap_x_start}) to ({overlap_y_end}, {overlap_x_end})")
+            # print(f"  Global overlap region: ({overlap_y_start}, {overlap_x_start}) to ({overlap_y_end}, {overlap_x_end})")
             
             # Check if there's actual overlap
             if overlap_y_start > overlap_y_end or overlap_x_start > overlap_x_end:
@@ -248,8 +248,8 @@ class DisjointMapEnvironments:
             local_j_y_end = overlap_y_end - y2_start
             local_j_x_end = overlap_x_end - x2_start
             
-            print(f"  Partition {partition_i} local overlap: ({local_i_y_start}, {local_i_x_start}) to ({local_i_y_end}, {local_i_x_end})")
-            print(f"  Partition {partition_j} local overlap: ({local_j_y_start}, {local_j_x_start}) to ({local_j_y_end}, {local_j_x_end})")
+            # print(f"  Partition {partition_i} local overlap: ({local_i_y_start}, {local_i_x_start}) to ({local_i_y_end}, {local_i_x_end})")
+            # print(f"  Partition {partition_j} local overlap: ({local_j_y_start}, {local_j_x_start}) to ({local_j_y_end}, {local_j_x_end})")
             
             return {
                 'global_slice': (slice(overlap_y_start, overlap_y_end + 1), 
@@ -338,29 +338,29 @@ class DisjointMapEnvironments:
         Initialize partitions with fixed overlap detection.
         Call this instead of set_partitions.
         """
-        print(f"\n=== INITIALIZING WITH FIXED OVERLAPS ===")
+        #print(f"\n=== INITIALIZING WITH FIXED OVERLAPS ===")
         
         # Set partitions using the fixed method
         self.set_partitions_fixed(partitions)
         
         # Debug the setup
-        self.debug_partition_setup()
+        #self.debug_partition_setup()
         
         # Verify overlaps were detected
         total_overlaps = len(self.overlap_regions)
-        print(f"\nTotal overlap regions detected: {total_overlaps}")
+        #print(f"\nTotal overlap regions detected: {total_overlaps}")
         
-        if total_overlaps == 0:
-            print("WARNING: No overlaps detected! This may be incorrect.")
-        else:
-            print("✓ Overlaps detected successfully")
+        # if total_overlaps == 0:
+        #     #print("WARNING: No overlaps detected! This may be incorrect.")
+        # else:
+        #     #print("✓ Overlaps detected successfully")
 
 
     def sync_terrain_between_overlapping_partitions(self, partition_states):
         """
         Now that overlap detection works, implement actual terrain synchronization.
         """
-        print(f"\n=== SYNCHRONIZING TERRAIN BETWEEN OVERLAPPING PARTITIONS ===")
+        #print(f"\n=== SYNCHRONIZING TERRAIN BETWEEN OVERLAPPING PARTITIONS ===")
         
         if not self.overlap_regions:
             print("No overlap regions found!")
@@ -382,7 +382,7 @@ class DisjointMapEnvironments:
                 partition_states[j]['status'] != 'active'):
                 continue
             
-            print(f"\nSyncing terrain between partitions {i} and {j}")
+            #print(f"\nSyncing terrain between partitions {i} and {j}")
             
             # Get the overlap region info
             slice_i = overlap_info['partition_i_slice']
@@ -396,24 +396,24 @@ class DisjointMapEnvironments:
             trav_i = state_i.world.traversability_mask.map
             trav_j = state_j.world.traversability_mask.map
             
-            print(f"  Partition {i} map shape: {trav_i.shape}, overlap slice: {slice_i}")
-            print(f"  Partition {j} map shape: {trav_j.shape}, overlap slice: {slice_j}")
+            # print(f"  Partition {i} map shape: {trav_i.shape}, overlap slice: {slice_i}")
+            # print(f"  Partition {j} map shape: {trav_j.shape}, overlap slice: {slice_j}")
             
             # Extract overlap data
             overlap_data_i = trav_i[slice_i]
             overlap_data_j = trav_j[slice_j]
             
-            print(f"  Overlap data shapes: {overlap_data_i.shape} vs {overlap_data_j.shape}")
+            #print(f"  Overlap data shapes: {overlap_data_i.shape} vs {overlap_data_j.shape}")
             
             # Check if terrain differs (ignore agent positions -1)
             terrain_mask_i = (overlap_data_i > 0)  # Terrain obstacles
             terrain_mask_j = (overlap_data_j > 0)  # Terrain obstacles
             
             terrain_matches = jnp.array_equal(terrain_mask_i, terrain_mask_j)
-            print(f"  Terrain matches: {terrain_matches}")
+            #print(f"  Terrain matches: {terrain_matches}")
             
             if not terrain_matches:
-                print(f"  Synchronizing terrain...")
+                #print(f"  Synchronizing terrain...")
                 
                 # Create unified terrain (union of both)
                 unified_terrain = terrain_mask_i | terrain_mask_j
@@ -454,7 +454,7 @@ class DisjointMapEnvironments:
                 updated_timestep_j = partition_states[j]['timestep']._replace(state=updated_state_j)
                 partition_states[j]['timestep'] = updated_timestep_j
                 
-                print(f"  ✓ Terrain synchronized between partitions {i} and {j}")
+                #print(f"  ✓ Terrain synchronized between partitions {i} and {j}")
             
             # Also sync other environmental maps
             environmental_maps = ['action_map', 'dig_map', 'dumpability_mask', 'target_map']
@@ -468,7 +468,7 @@ class DisjointMapEnvironments:
                     overlap_map_j = map_j[slice_j]
                     
                     if not jnp.array_equal(overlap_map_i, overlap_map_j):
-                        print(f"  Syncing {map_name}...")
+                        #print(f"  Syncing {map_name}...")
                         
                         # For environmental maps, use the "more advanced" state
                         # (e.g., if one has been dug and the other hasn't, use the dug state)
@@ -499,7 +499,7 @@ class DisjointMapEnvironments:
                             updated_timestep = partition_states[target_partition]['timestep']._replace(state=updated_state)
                             partition_states[target_partition]['timestep'] = updated_timestep
                             
-                            print(f"    ✓ Synced {map_name} to partition {target_partition}")
+                            #print(f"    ✓ Synced {map_name} to partition {target_partition}")
 
 
     def add_agents_using_existing_representation(self, partition_states):
@@ -507,7 +507,7 @@ class DisjointMapEnvironments:
         Alternative approach: Extract agent representation from the other partition's traversability mask.
         This preserves the exact shape and orientation as calculated by the environment.
         """
-        print(f"\nAdding agents using existing representation...")
+        #print(f"\nAdding agents using existing representation...")
         
         for target_partition_idx, target_partition_state in partition_states.items():
             if target_partition_state['status'] != 'active':
@@ -535,7 +535,7 @@ class DisjointMapEnvironments:
                 agent_positions = jnp.where(agent_mask)
                 
                 if len(agent_positions[0]) > 0:
-                    print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
+                   # print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
                     
                     # Convert each agent cell to global coordinates, then to target local coordinates
                     other_partition = self.partitions[other_partition_idx]
@@ -568,7 +568,7 @@ class DisjointMapEnvironments:
                     
                     if cells_added > 0:
                         agents_added += 1
-                        print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
+                        #print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
             
             # Update the traversability mask if we added agents
             if agents_added > 0:
@@ -582,14 +582,14 @@ class DisjointMapEnvironments:
                 
                 partition_states[target_partition_idx]['timestep'] = updated_timestep
                 
-                print(f"  ✓ Added {agents_added} agents with exact representation to partition {target_partition_idx}")
+               # print(f"  ✓ Added {agents_added} agents with exact representation to partition {target_partition_idx}")
 
 
     def complete_synchronization_with_full_agents(self, partition_states):
         """
         Complete synchronization with full agent representation.
         """
-        print(f"\n=== COMPLETE SYNCHRONIZATION WITH FULL AGENTS ===")
+        #print(f"\n=== COMPLETE SYNCHRONIZATION WITH FULL AGENTS ===")
         
         # Step 1: Sync terrain and environmental maps between overlapping regions
         self.sync_terrain_between_overlapping_partitions(partition_states)
@@ -598,7 +598,7 @@ class DisjointMapEnvironments:
 
         self.add_agents_using_existing_representation(partition_states)
         
-        print("✓ Complete synchronization with full agents finished")
+        #print("✓ Complete synchronization with full agents finished")
 
     # Simple step function that doesn't do any sync
     def step_simple(self, partition_idx: int, action, partition_states: dict):
@@ -668,20 +668,20 @@ class DisjointMapEnvironments:
         custom_pos = partition['start_pos']
         custom_angle = partition['start_angle']
 
-        print(f"=== Initializing partition {partition_idx} ===")
-        print(f"Region coords: {region_coords}")
-        print(f"Custom pos: {custom_pos}")
+        # print(f"=== Initializing partition {partition_idx} ===")
+        # print(f"Region coords: {region_coords}")
+        # print(f"Custom pos: {custom_pos}")
 
         # Extract submaps for this partition's region
         sub_maps = self._extract_partition_submaps(region_coords)
 
         # Validate submaps
-        print(f"=== SUB-MAP DIAGNOSTICS ===")
-        for name, map_data in sub_maps.items():
-            print(f"{name}: Shape: {map_data.shape}")
+        # print(f"=== SUB-MAP DIAGNOSTICS ===")
+        # for name, map_data in sub_maps.items():
+        #     print(f"{name}: Shape: {map_data.shape}")
             
         target_areas = jnp.sum(sub_maps['target_map'] > 0)
-        print(f"Target areas to excavate: {target_areas}")
+        #print(f"Target areas to excavate: {target_areas}")
 
         # Handle trench data
         trench_axes = self.global_maps['trench_axes']
@@ -700,7 +700,7 @@ class DisjointMapEnvironments:
         self.rng, reset_key = jax.random.split(self.rng)
 
         try:
-            print("Resetting small environment with custom map data...")
+            #print("Resetting small environment with custom map data...")
             
             small_timestep = self.small_env.reset(
                 key=reset_key,
@@ -721,7 +721,7 @@ class DisjointMapEnvironments:
             return small_timestep
             
         except Exception as e:
-            print(f"Error initializing small environment: {e}")
+            #print(f"Error initializing small environment: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -995,7 +995,7 @@ class DisjointMapEnvironments:
             self.global_env.all_agent_angles_cabin = all_agent_angles_cabin
             self.global_env.all_agent_loaded = all_agent_loaded
 
-            print(f"Global environment updated with {len(all_agent_positions)} active agents.")
+            #print(f"Global environment updated with {len(all_agent_positions)} active agents.")
         
         except Exception as e:
             print(f"Warning: Could not update global environment display: {e}")
@@ -1017,8 +1017,8 @@ class DisjointMapEnvironments:
                 region_height = y_end - y_start + 1
                 region_width = x_end - x_start + 1
             
-                print(f"Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
-                print(f"Expected region size: {region_height} x {region_width}")
+                # print(f"Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
+                # print(f"Expected region size: {region_height} x {region_width}")
             
                 region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
         
@@ -1035,9 +1035,9 @@ class DisjointMapEnvironments:
                     'dig_map': small_state.world.dig_map.map,
                 }
             
-                print(f"Small environment map shapes:")
-                for name, map_data in small_maps.items():
-                    print(f"  {name}: {map_data.shape}")
+                # print(f"Small environment map shapes:")
+                # for name, map_data in small_maps.items():
+                #     print(f"  {name}: {map_data.shape}")
             
                 # Extract only the relevant portion from the 64x64 small maps
                 # that corresponds to the actual region size
@@ -1048,13 +1048,13 @@ class DisjointMapEnvironments:
                     # Extract the portion that matches the region size
                     extracted_region = small_map[:extract_height, :extract_width]
                 
-                    print(f"  Extracted {map_name}: {extracted_region.shape} -> Global region: {region_height}x{region_width}")
+                    #print(f"  Extracted {map_name}: {extracted_region.shape} -> Global region: {region_height}x{region_width}")
                 
                     # Update the global map with the extracted region
                     try:
                         self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
                     except ValueError as e:
-                        print(f"  WARNING: Shape mismatch for {map_name}: {e}")
+                        #print(f"  WARNING: Shape mismatch for {map_name}: {e}")
                         # Try to handle the mismatch by padding or cropping
                         if extracted_region.shape[0] != region_height or extracted_region.shape[1] != region_width:
                             # Pad or crop to match the region size
@@ -1067,7 +1067,7 @@ class DisjointMapEnvironments:
                                 # Crop to fit
                                 extracted_region = extracted_region[:region_height, :region_width]
                         
-                            print(f"  Adjusted {map_name}: {extracted_region.shape}")
+                            #print(f"  Adjusted {map_name}: {extracted_region.shape}")
                             self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
 
 
@@ -1097,9 +1097,9 @@ class DisjointMapEnvironments:
                     'angles cabin': self.global_env.all_agent_angles_cabin,
                     'loaded': self.global_env.all_agent_loaded
                 }
-                print(f"Passing {len(self.global_env.all_agent_positions)} agents to renderer")
+                #print(f"Passing {len(self.global_env.all_agent_positions)} agents to renderer")
             else:
-                print("Warning: Agent attributes not properly initialized for rendering")
+                #print("Warning: Agent attributes not properly initialized for rendering")
                 # Initialize empty lists to prevent further errors
                 info['additional_agents'] = {
                     'positions': [],
@@ -1308,7 +1308,7 @@ def run_experiment_with_disjoint_environments(
     log = load_pkl_object(agent_checkpoint_path)
     config = log["train_config"]
     model_params = log["model"]
-    print(f"Loaded configuration: {config}")
+    #print(f"Loaded configuration: {config}")
 
     # Create the original environment configs for the full map
     global_env_config = jax.tree_map(
@@ -1708,7 +1708,6 @@ def run_experiment_with_disjoint_environments(
             env_manager.render_all_partition_views_grid(partition_states)
         else:
             env_manager.render_global_environment_with_multiple_agents(partition_states)
-
 
     
         t_counter += 1
