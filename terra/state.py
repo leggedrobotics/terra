@@ -1151,7 +1151,7 @@ class State(NamedTuple):
                 return jax.lax.cond(
                     self.agent.agent_state_1.loaded_dumped,
                     lambda: 0.0 * action_map_positive_progress * self.env_cfg.rewards.dump_correct,
-                    lambda: action_map_positive_progress * self.env_cfg.rewards.dump_correct,
+                    lambda: self.env_cfg.rewards.dump_correct #action_map_positive_progress * self.env_cfg.rewards.dump_correct,
                 )
             return jax.lax.cond(
                 action_map_positive_progress <= 0,
