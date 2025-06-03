@@ -34,13 +34,11 @@ class Game:
         n_envs_x=1,
         n_envs_y=1,
         display=True,
-        progressive_gif=False,
     ):
         self.screen = screen
         self.surface = surface
         self.clock = clock
         self.display = display
-        self.progressive_gif = progressive_gif
         self.width, self.height = self.screen.get_size()
 
         self.n_envs_x = n_envs_x
@@ -230,8 +228,6 @@ class Game:
             agent_surfaces.append(
                 pg.Surface((surface_width, surface_height), pg.SRCALPHA)
             )
-            if self.progressive_gif:
-                agent_surfaces[-1].set_alpha(50)
             
             # Calculate surface position
             agent_x = min_x + total_offset_x
@@ -252,16 +248,8 @@ class Game:
 
         self.screen.blit(self.surface, (0, 0))
 
-        if self.progressive_gif:
-            if self.count % 5 == 0:
-                self.old_agents.append((agent_surfaces, agent_positions))
-            for s in self.old_agents:
-                for agent_surface, agent_position in zip(s[0], s[1]):
-                    self.screen.blit(agent_surface, agent_position)
-            self.count += 1
-        else:
-            for agent_surface, agent_position in zip(agent_surfaces, agent_positions):
-                self.screen.blit(agent_surface, agent_position)
+        for agent_surface, agent_position in zip(agent_surfaces, agent_positions):
+            self.screen.blit(agent_surface, agent_position)
 
         if self.display:
             pg.display.flip()
