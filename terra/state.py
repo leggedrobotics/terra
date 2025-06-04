@@ -289,8 +289,8 @@ class State(NamedTuple):
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
         )
-        traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
-        traversability_mask = jnp.where(dig_map_2, 1, traversability_mask)
+        #traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
+        #traversability_mask = jnp.where(dig_map_2, 1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         # Mask out the cells where the agent is located.
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
