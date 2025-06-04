@@ -285,6 +285,7 @@ class TerraEnv(NamedTuple):
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
+            "interaction_mask": state.world.interaction_mask.map,
         }
 
 
