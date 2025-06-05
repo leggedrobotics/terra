@@ -69,6 +69,364 @@ SESSION_ID = "session_001"      # Session ID for ADK
 GRID_RENDERING = False
 ORIGINAL_MAP_SIZE = 64
 
+from dataclasses import dataclass, asdict
+
+@dataclass
+class GlobalMapStats:
+    """Global statistics for entire maps using original eval formulas"""
+    map_id: int
+    total_steps: int
+    total_reward: float
+    completion_rate: float  # percentage based on episode_done_once
+    episode_length_mean: float
+    episode_length_min: float
+    episode_length_max: float
+    path_efficiency_mean: float
+    path_efficiency_std: float
+    workspaces_efficiency_mean: float
+    workspaces_efficiency_std: float
+    coverage_mean: float
+    coverage_std: float
+    
+@dataclass
+class GlobalExperimentStats:
+    """Overall experiment statistics"""
+    total_maps_processed: int
+    total_steps: int
+    total_reward: float
+    overall_completion_rate: float
+    overall_path_efficiency_mean: float
+    overall_workspaces_efficiency_mean: float
+    overall_coverage_mean: float
+    experiment_duration: float
+    avg_time_per_map: float
+
+class GlobalTerraEnvironmentBenchmarker:
+    """Simplified benchmarking system focusing on global statistics only"""
+    
+    def __init__(self, tile_size=16, move_tiles=1):
+        self.tile_size = tile_size
+        self.move_tiles = move_tiles
+        
+        # Stats tracking
+        self.map_stats = []
+        self.experiment_start_time = None
+        
+        # Action type mappings from original eval code
+        # Based on TrackedAction and WheeledAction types
+        self.move_actions = (0, 1)  # FORWARD, BACKWARD
+        self.rotate_actions = (2, 3)  # CLOCK, ANTICLOCK (for wheeled)
+        self.do_action = 6  # DO action
+        
+    def start_experiment(self):
+        """Initialize experiment timing"""
+        self.experiment_start_time = datetime.datetime.now()
+        
+    def check_task_completion(self, final_obs: Dict, partition_states=None) -> bool:
+        """
+        Check if the task is actually completed based on the final observation.
+        This should align with your actual completion criteria.
+        """
+        # If we have partition information, use that as the primary indicator
+        if isinstance(partition_states, dict):
+            completed_partitions = sum(1 for p in partition_states.values() 
+                                     if p.get('status') == 'completed')
+            total_partitions = len(partition_states)
+            # Consider task completed if majority of partitions completed
+            return completed_partitions > 0  # More lenient - any completion counts
+        
+        # Fallback: check target map
+        target_map = final_obs.get("target_map", np.zeros((128, 128)))
+        if len(target_map.shape) > 2:
+            target_map = target_map[0] if target_map.shape[0] == 1 else target_map
+            
+        # Check if significant progress was made (not necessarily 100% completion)
+        initial_targets = np.sum(target_map != 0)  # All non-zero areas
+        remaining_targets = np.sum(target_map == -1)  # Areas still to be dug
+        
+        if initial_targets == 0:
+            return True  # No targets to begin with
+            
+        # Consider completed if less than 10% of targets remain
+        completion_ratio = 1 - (remaining_targets / initial_targets)
+        return completion_ratio > 0.1  # More than 10% progress
+        
+    def calculate_global_map_statistics(self, map_id: int, all_observations: List[Dict], 
+                                      all_actions: List[int], all_rewards: List[float],
+                                      total_steps: int, partition_states: Dict) -> GlobalMapStats:
+        """
+        Calculate global map statistics using the exact formulas from original eval code
+        """
+        if not all_observations or not all_actions:
+            return self._create_empty_map_stats(map_id, total_steps, sum(all_rewards))
+        
+        # Get initial and final observations
+        initial_obs = all_observations[0]
+        final_obs = all_observations[-1]
+        
+        # Convert to numpy arrays for easier processing
+        def obs_to_numpy(obs_dict):
+            return {k: np.array(v) if hasattr(v, 'shape') else v for k, v in obs_dict.items()}
+        
+        initial_obs = obs_to_numpy(initial_obs)
+        final_obs = obs_to_numpy(final_obs)
+        
+        # Calculate areas (from original eval code)
+        target_map_initial = initial_obs.get("target_map", np.zeros((128, 128)))
+        if len(target_map_initial.shape) > 2:
+            target_map_initial = target_map_initial[0] if target_map_initial.shape[0] == 1 else target_map_initial
+        
+        areas = np.sum(target_map_initial == -1) * (self.tile_size ** 2)
+        dig_tiles_per_target_map_init = np.sum(target_map_initial == -1)
+        
+        # Calculate episode_done_once based on actual completion status (like original eval code)
+        num_envs = len(partition_states) if partition_states else 1
+        episode_done_once = np.zeros(num_envs, dtype=bool)
+        episode_length = np.zeros(num_envs, dtype=np.int32)
+        
+    def calculate_global_map_statistics(self, map_id: int, all_observations: List[Dict], 
+                                      all_actions: List[int], all_rewards: List[float],
+                                      total_steps: int, partition_states) -> GlobalMapStats:
+        """
+        Calculate global map statistics using the exact formulas from original eval code
+        """
+        if not all_observations or not all_actions:
+            return self._create_empty_map_stats(map_id, total_steps, sum(all_rewards))
+        
+        # Get initial and final observations
+        initial_obs = all_observations[0]
+        final_obs = all_observations[-1]
+        
+        # Convert to numpy arrays for easier processing
+        def obs_to_numpy(obs_dict):
+            return {k: np.array(v) if hasattr(v, 'shape') else v for k, v in obs_dict.items()}
+        
+        initial_obs = obs_to_numpy(initial_obs)
+        final_obs = obs_to_numpy(final_obs)
+        
+        # Calculate areas (from original eval code)
+        target_map_initial = initial_obs.get("target_map", np.zeros((128, 128)))
+        if len(target_map_initial.shape) > 2:
+            target_map_initial = target_map_initial[0] if target_map_initial.shape[0] == 1 else target_map_initial
+        
+        areas = np.sum(target_map_initial == -1) * (self.tile_size ** 2)
+        dig_tiles_per_target_map_init = np.sum(target_map_initial == -1)
+        
+        # Handle different types of partition_states input
+        episode_done_once = np.array([False])  # Default: not completed
+        episode_length = np.array([total_steps])
+        num_envs = 1
+        
+        # Check actual completion status based on task completion
+        task_actually_completed = self.check_task_completion(final_obs)
+        
+        if isinstance(partition_states, dict):
+            # partition_states is a dictionary {partition_idx: partition_data}
+            num_envs = len(partition_states)
+            episode_done_once = np.zeros(num_envs, dtype=bool)
+            episode_length = np.zeros(num_envs, dtype=np.int32)
+            
+            for i, (partition_idx, partition_state) in enumerate(partition_states.items()):
+                if i >= num_envs:
+                    break
+                # Mark as done only if partition completed AND the task is actually done
+                partition_completed = (partition_state.get('status') == 'completed')
+                episode_done_once[i] = partition_completed and task_actually_completed
+                episode_length[i] = partition_state.get('step_count', total_steps)
+                
+        elif isinstance(partition_states, list):
+            # partition_states is a list of partition indices or states
+            num_envs = len(partition_states) if partition_states else 1
+            episode_done_once = np.zeros(num_envs, dtype=bool)
+            episode_length = np.zeros(num_envs, dtype=np.int32)
+            
+            # If it's just a list of indices, we can only check task completion
+            for i in range(num_envs):
+                episode_done_once[i] = task_actually_completed
+                episode_length[i] = total_steps
+                
+        else:
+            # Fallback: single environment
+            episode_done_once = np.array([task_actually_completed])
+            episode_length = np.array([total_steps])
+            num_envs = 1
+        
+        # Calculate move cumulative sum (from original eval code)
+        move_cumsum = np.zeros(num_envs, dtype=np.int32)
+        do_cumsum = np.zeros(num_envs, dtype=np.int32)
+        
+        for i, action in enumerate(all_actions):
+            # Track movement actions
+            if action in self.move_actions:
+                move_distance = self.move_tiles * self.tile_size
+                move_cumsum += move_distance
+            elif action in self.rotate_actions:
+                # Rotation movement (from original eval code)
+                move_distance = 2 * self.move_tiles * self.tile_size
+                move_cumsum += move_distance
+            elif action == self.do_action:
+                do_cumsum += 1
+        
+        # Path efficiency calculation (from original eval code)
+        move_cumsum_filtered = move_cumsum * episode_done_once
+        if areas > 0:
+            path_efficiency = move_cumsum_filtered / np.sqrt(areas)
+        else:
+            path_efficiency = np.zeros_like(move_cumsum_filtered)
+        
+        path_efficiency_mean = float(np.mean(path_efficiency[episode_done_once]))
+        path_efficiency_std = float(np.std(path_efficiency[episode_done_once]))
+        
+        # Workspace efficiency calculation (from original eval code)
+        reference_workspace_area = 0.5 * np.pi * (8**2)
+        n_dig_actions = do_cumsum // 2
+        if areas > 0:
+            workspaces_efficiency = (reference_workspace_area * n_dig_actions * episode_done_once) / areas
+        else:
+            workspaces_efficiency = np.zeros_like(n_dig_actions)
+        
+        workspaces_efficiency_mean = float(np.mean(workspaces_efficiency[episode_done_once]))
+        workspaces_efficiency_std = float(np.std(workspaces_efficiency[episode_done_once]))
+        
+        # Coverage calculation (from original eval code)
+        final_action_map = final_obs.get("action_map", np.zeros_like(target_map_initial))
+        if len(final_action_map.shape) > 2:
+            final_action_map = final_action_map[0] if final_action_map.shape[0] == 1 else final_action_map
+            
+        dug_tiles_per_action_map = np.sum(final_action_map == -1)
+        if dig_tiles_per_target_map_init > 0:
+            coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
+        else:
+            coverage_ratios = 0.0
+            
+        coverage_scores = episode_done_once.astype(float) + (~episode_done_once).astype(float) * coverage_ratios
+        coverage_mean = float(np.mean(coverage_scores))
+        coverage_std = float(np.std(coverage_scores))
+        
+        # Completion rate (from original eval code)
+        completion_rate = 100 * np.sum(episode_done_once) / len(episode_done_once)
+        
+        return GlobalMapStats(
+            map_id=map_id,
+            total_steps=total_steps,
+            total_reward=sum(all_rewards),
+            completion_rate=completion_rate,
+            episode_length_mean=float(np.mean(episode_length)),
+            episode_length_min=float(np.min(episode_length)),
+            episode_length_max=float(np.max(episode_length)),
+            path_efficiency_mean=path_efficiency_mean,
+            path_efficiency_std=path_efficiency_std,
+            workspaces_efficiency_mean=workspaces_efficiency_mean,
+            workspaces_efficiency_std=workspaces_efficiency_std,
+            coverage_mean=coverage_mean,
+            coverage_std=coverage_std
+        )
+    
+    def _create_empty_map_stats(self, map_id: int, total_steps: int, total_reward: float) -> GlobalMapStats:
+        """Create empty stats for failed maps"""
+        return GlobalMapStats(
+            map_id=map_id,
+            total_steps=total_steps,
+            total_reward=total_reward,
+            completion_rate=0.0,
+            episode_length_mean=0.0,
+            episode_length_min=0.0,
+            episode_length_max=0.0,
+            path_efficiency_mean=0.0,
+            path_efficiency_std=0.0,
+            workspaces_efficiency_mean=0.0,
+            workspaces_efficiency_std=0.0,
+            coverage_mean=0.0,
+            coverage_std=0.0
+        )
+        
+    def calculate_experiment_statistics(self, map_statistics: List[GlobalMapStats]) -> GlobalExperimentStats:
+        """Calculate overall experiment statistics"""
+        if not map_statistics:
+            return None
+            
+        total_maps = len(map_statistics)
+        total_steps = sum(m.total_steps for m in map_statistics)
+        total_reward = sum(m.total_reward for m in map_statistics)
+        
+        # Calculate weighted averages (weighted by number of steps per map)
+        if total_steps > 0:
+            overall_completion_rate = np.mean([m.completion_rate for m in map_statistics])
+            overall_path_efficiency_mean = np.mean([m.path_efficiency_mean for m in map_statistics if m.completion_rate > 0])
+            overall_workspaces_efficiency_mean = np.mean([m.workspaces_efficiency_mean for m in map_statistics if m.completion_rate > 0])
+            overall_coverage_mean = np.mean([m.coverage_mean for m in map_statistics if m.completion_rate > 0])
+        else:
+            overall_completion_rate = 0.0
+            overall_path_efficiency_mean = 0.0
+            overall_workspaces_efficiency_mean = 0.0
+            overall_coverage_mean = 0.0
+        
+        # Timing statistics
+        experiment_duration = (datetime.datetime.now() - self.experiment_start_time).total_seconds()
+        
+        return GlobalExperimentStats(
+            total_maps_processed=total_maps,
+            total_steps=total_steps,
+            total_reward=total_reward,
+            overall_completion_rate=overall_completion_rate,
+            overall_path_efficiency_mean=overall_path_efficiency_mean,
+            overall_workspaces_efficiency_mean=overall_workspaces_efficiency_mean,
+            overall_coverage_mean=overall_coverage_mean,
+            experiment_duration=experiment_duration,
+            avg_time_per_map=experiment_duration / max(1, total_maps)
+        )
+        
+    def print_stats_like_original(self, stats: GlobalMapStats):
+        """Print stats in the same format as the original eval code"""
+        print(f"\nStats for Map {stats.map_id}:\n")
+        print(f"Completion: {stats.completion_rate:.2f}%")
+        print(f"Episode length average: {stats.episode_length_mean:.2f}")
+        print(f"Episode length min: {stats.episode_length_min:.0f}")
+        print(f"Episode length max: {stats.episode_length_max:.0f}")
+        print(f"Path efficiency: {stats.path_efficiency_mean:.2f} ({stats.path_efficiency_std:.2f})")
+        print(f"Workspaces efficiency: {stats.workspaces_efficiency_mean:.2f} ({stats.workspaces_efficiency_std:.2f})")
+        print(f"Coverage: {stats.coverage_mean:.2f} ({stats.coverage_std:.2f})")
+        
+    def print_experiment_summary(self, experiment_stats: GlobalExperimentStats):
+        """Print overall experiment summary"""
+        print(f"\n{'='*60}")
+        print(f"OVERALL EXPERIMENT SUMMARY")
+        print(f"{'='*60}")
+        print(f"Total Maps Processed: {experiment_stats.total_maps_processed}")
+        print(f"Total Steps: {experiment_stats.total_steps}")
+        print(f"Total Reward: {experiment_stats.total_reward:.4f}")
+        print(f"Experiment Duration: {experiment_stats.experiment_duration:.2f} seconds")
+        print(f"Average Time per Map: {experiment_stats.avg_time_per_map:.2f} seconds")
+        print(f"\nOverall Performance Metrics:")
+        print(f"Completion Rate: {experiment_stats.overall_completion_rate:.2f}%")
+        print(f"Path Efficiency: {experiment_stats.overall_path_efficiency_mean:.2f}")
+        print(f"Workspaces Efficiency: {experiment_stats.overall_workspaces_efficiency_mean:.2f}")
+        print(f"Coverage: {experiment_stats.overall_coverage_mean:.2f}")
+        
+    def save_statistics(self, output_dir: str, experiment_stats: GlobalExperimentStats, 
+                       map_statistics: List[GlobalMapStats]):
+        """Save all statistics to files"""
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save experiment-level stats
+        with open(os.path.join(output_dir, 'experiment_stats.json'), 'w') as f:
+            json.dump(asdict(experiment_stats), f, indent=2, default=str)
+            
+        # Save map-level stats
+        with open(os.path.join(output_dir, 'map_stats.json'), 'w') as f:
+            json.dump([asdict(m) for m in map_statistics], f, indent=2, default=str)
+            
+        # Save as CSV for easy analysis
+        csv_path = os.path.join(output_dir, 'map_stats.csv')
+        with open(csv_path, 'w', newline='') as f:
+            if map_statistics:
+                fieldnames = asdict(map_statistics[0]).keys()
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for map_stat in map_statistics:
+                    writer.writerow(asdict(map_stat))
+                    
+        print(f"Statistics saved to: {output_dir}")
     
 class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
     """A version of TerraEnvBatch specifically for 128x128 maps"""
@@ -1323,9 +1681,13 @@ def run_experiment_with_disjoint_environments(
         global_env_config=global_env_config,
         small_env_config=small_env_config,
         progressive_gif=progressive_gif,
-        shuffle_maps=True  # This will give us access to different maps
+        shuffle_maps=False  # This will give us access to different maps
     )
     print("Environment manager initialized.")
+
+    # ADD THIS LINE HERE - INITIALIZE BENCHMARKER
+    benchmarker = GlobalTerraEnvironmentBenchmarker()
+    benchmarker.start_experiment()
 
     # Initialize once with proper batching
     rng = jax.random.PRNGKey(seed)
@@ -1790,6 +2152,22 @@ def run_experiment_with_disjoint_environments(
         print(f"Partitions - Completed: {map_stats['partitions_completed']}, Failed: {map_stats['partitions_failed']}")
         print(f"Average reward per step: {map_stats['average_reward_per_step']:.4f}")
         print(f"Completion reason: {map_stats['completion_reason']}")
+
+        # ADD THIS BLOCK HERE - CALCULATE GLOBAL BENCHMARKING STATS FOR THIS MAP
+        try:
+            map_stat = benchmarker.calculate_global_map_statistics(
+                current_map_index, 
+                map_obs_seq, 
+                map_action_list, 
+                map_reward_seq, 
+                map_step, 
+                active_partitions
+            )
+            benchmarker.map_stats.append(map_stat)
+            benchmarker.print_stats_like_original(map_stat)
+        except Exception as e:
+            print(f"Warning: Could not calculate benchmarking stats for map {current_map_index}: {e}")
+        
         
         # Add map data to global collections
         all_frames.extend(map_frames)
@@ -1829,12 +2207,23 @@ def run_experiment_with_disjoint_environments(
               f"reward {stats['global_step_rewards_sum']:.2f}, "
               f"completed {stats['partitions_completed']}, "
               f"failed {stats['partitions_failed']}")
-
+        
     # Save results
     current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     safe_model_name = llm_model_name.replace('/', '_')
     output_dir = os.path.join("experiments", f"{safe_model_name}_{current_time}")
     os.makedirs(output_dir, exist_ok=True)
+        
+    try:
+        experiment_stats = benchmarker.calculate_experiment_statistics(benchmarker.map_stats)
+        if experiment_stats:
+            benchmarker.print_experiment_summary(experiment_stats)
+            benchmarker.save_statistics(output_dir, experiment_stats, benchmarker.map_stats)
+            print(f"Benchmarking statistics saved to: {output_dir}")
+    except Exception as e:
+        print(f"Warning: Could not calculate final experiment stats: {e}")
+
+
     
     # Save video
     video_path = os.path.join(output_dir, "gameplay_all_maps.mp4")
