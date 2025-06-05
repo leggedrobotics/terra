@@ -210,13 +210,19 @@ class Game:
         # Create a temporary agent instance with the same dimensions
         # Use the correct attribute names from the Agent class
         # Apply rotation offset to discrete indices
-        corrected_base_dir = apply_rotation_offset_to_index(
-            base_dir, self.rotation_offset_steps, agent.angles_base
-        )
-        corrected_cabin_dir = apply_rotation_offset_to_index(
-            cabin_dir, -self.rotation_offset_steps, agent.angles_cabin
-        )
-        #corrected_cabin_dir = cabin_dir
+
+        if self.maps_size_px >= 128:
+            corrected_base_dir = apply_rotation_offset_to_index(
+                base_dir, self.rotation_offset_steps, agent.angles_base
+            )
+            corrected_cabin_dir = apply_rotation_offset_to_index(
+                cabin_dir, -self.rotation_offset_steps, agent.angles_cabin
+            )
+        elif self.maps_size_px == 64:
+            corrected_cabin_dir = cabin_dir
+            corrected_base_dir = base_dir
+        else:
+            print("WARNING: Unknown maps_size_px, using base_dir and cabin_dir as is.")
 
         temp_agent = Agent(
             agent.width if hasattr(agent, 'width') else agent.w, 

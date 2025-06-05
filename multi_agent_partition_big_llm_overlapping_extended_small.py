@@ -66,7 +66,8 @@ USE_PATH = True                 # Use path for LLM (Excavator Agent)
 APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
-GRID_RENDERING = True
+GRID_RENDERING = False
+ORIGINAL_MAP_SIZE = 64
 
     
 class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
@@ -1380,10 +1381,27 @@ def run_experiment_with_disjoint_environments(
     #     {'id': 0, 'region_coords': (0, 0, 52, 60), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
     #     {'id': 1, 'region_coords': (53, 0, 115, 60), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
     # ]
-    sub_tasks_manual = [
-        {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        {'id': 1, 'region_coords': (40, 0, 103, 63), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
-    ]
+    # sub_tasks_manual = [
+    #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+    #     {'id': 1, 'region_coords': (40, 0, 103, 63), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
+    # ]
+
+    if ORIGINAL_MAP_SIZE == 64:
+        # For 64x64 maps, we can use the same manual partitioning
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+        ]
+    elif ORIGINAL_MAP_SIZE == 128:
+        # sub_tasks_manual = [
+        #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 1, 'region_coords': (40, 0, 103, 63), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
+        # ]
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            #{'id': 1, 'region_coords': (40, 0, 103, 63), 'start_pos': (75, 20), 'start_angle': 0, 'status': 'pending'}
+        ]
+    else:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}. Only 64 and 128 are supported.")
 
 
     sub_tasks_llm = []
@@ -1489,7 +1507,6 @@ def run_experiment_with_disjoint_environments(
 
     print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
 
-    print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
 
     current_map = env_manager.global_timestep.state.world.target_map.map[0]  # Extract the target map
     initial_target_num = jnp.sum(current_map < 0)  # Count the initial target pixels
