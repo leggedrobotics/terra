@@ -53,7 +53,7 @@ python extract_plan.py -policy path/to/policy.pkl -map path/to/map -o my_plan.pk
 
 4. Run the plan executor:
 ```bash
-ros2 launch terra_nav nav2_plan_executor.launch.py plan_path:=path/to/your/plan.pkl
+ros2 launch terra_nav nav2_plan_executor.launch.py plan_path:=path/to/your/plan.pkl frame_id:=map
 ```
 
 ## Parameters

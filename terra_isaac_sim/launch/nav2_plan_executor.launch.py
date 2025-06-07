@@ -12,19 +12,19 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     """Generate the launch description for nav2_plan_executor."""
-    
+
     # Declare launch arguments
     plan_path_arg = DeclareLaunchArgument(
         'plan_path',
         description='Path to the plan .pkl file'
     )
-    
+
     frame_id_arg = DeclareLaunchArgument(
         'frame_id',
         default_value='map',
         description='Frame ID for navigation goals'
     )
-    
+
     # Create the node
     nav2_plan_executor_node = Node(
         package='terra_nav',  # You might need to adjust this package name
@@ -39,7 +39,7 @@ def generate_launch_description():
             '--frame_id', LaunchConfiguration('frame_id')
         ]
     )
-    
+
     return LaunchDescription([
         plan_path_arg,
         frame_id_arg,
