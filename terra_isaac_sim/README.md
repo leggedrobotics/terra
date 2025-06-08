@@ -91,4 +91,3 @@ The plan file should be a pickle file containing a list of dictionaries with the
    - Waits for the goal to be reached
    - Proceeds to the next waypoint
 4. Logs progress and completion status
-
