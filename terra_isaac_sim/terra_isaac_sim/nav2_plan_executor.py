@@ -155,19 +155,12 @@ class Nav2PlanExecutor(Node):
             self.get_logger().info(
                 f"Goal {self.current_goal_index + 1} completed successfully!"
             )
-
-            # Move to next goal
-            self.current_goal_index += 1
-
-            # Wait a bit before sending next goal
-            self.create_timer(1.0, self.send_next_goal_delayed)
         else:
             self.get_logger().error(
                 f"Goal {self.current_goal_index + 1} failed!"
             )
-            # You might want to retry or abort here
-            self.current_goal_index += 1
-            self.create_timer(2.0, self.send_next_goal_delayed)
+        self.current_goal_index += 1
+        self.create_timer(1.0, self.send_next_goal_delayed)
 
     def send_next_goal_delayed(self):
         """Send the next goal after a delay (to be called by timer)."""
@@ -197,14 +190,6 @@ class Nav2PlanExecutor(Node):
             f"{current_pose.position.y:.2f}), "
             f"Distance remaining: {feedback.distance_remaining:.2f}m"
         )
-
-    def cancel_current_goal(self):
-        """Cancel the currently executing goal."""
-        if self.executing_goal:
-            self.get_logger().info("Cancelling current goal...")
-            # Implementation depends on keeping track of goal handle
-            # For now, just reset the flag
-            self.executing_goal = False
 
 
 def main():
