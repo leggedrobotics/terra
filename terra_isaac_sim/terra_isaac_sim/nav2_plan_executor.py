@@ -94,6 +94,7 @@ class Nav2PlanExecutor(Node):
         waypoint = self.plan[self.current_goal_index]
         agent_state = waypoint['agent_state']
 
+        # TODO: Convert Terra coordinates!
         # Create navigation goal
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = self.create_pose_stamped(
