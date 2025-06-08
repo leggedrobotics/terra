@@ -1,9 +1,3 @@
-"""
-ROS 2 Humble node to execute a plan extracted from extract_plan.py using Nav2.
-This node loads a plan from a .pkl file and sends navigation goals to Nav2
-in sequence, waiting for each goal to be reached before proceeding to the next.
-"""
-
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
