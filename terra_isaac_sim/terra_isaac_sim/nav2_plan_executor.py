@@ -53,16 +53,15 @@ class Nav2PlanExecutor(Node):
             with open(plan_path, 'rb') as f:
                 self.plan = pickle.load(f)
 
-            self.get_logger().info(f"Loaded plan with {len(self.plan)} waypoints from {plan_path}")
+            # Validate plan format
+            if not isinstance(self.plan, list):
+                raise ValueError(f"Expected plan to be a list, got {type(self.plan)}")
+            if len(self.plan) == 0:
+                raise ValueError("Plan is empty")
 
-            # Log plan summary
-            for i, entry in enumerate(self.plan):
-                pos = entry['agent_state']['pos_base']
-                angle = entry['agent_state']['angle_base']
-                self.get_logger().info(
-                    f"Waypoint {i}: pos=({pos[0]:.2f}, {pos[1]:.2f}), "
-                    f"angle={angle:.2f} rad, loaded={entry['agent_state']['loaded']}"
-                )
+            # Sort plan by timestep to ensure correct order
+            self.plan.sort(key=lambda x: x['step'])
+            self.get_logger().info(f"Loaded plan with {len(self.plan)} waypoints from {plan_path}")
 
         except Exception as e:
             self.get_logger().error(f"Failed to load plan from {plan_path}: {e}")
