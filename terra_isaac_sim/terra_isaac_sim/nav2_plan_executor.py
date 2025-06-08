@@ -7,12 +7,9 @@ in sequence, waiting for each goal to be reached before proceeding to the next.
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
-from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import MultiThreadedExecutor
 
 import pickle
 import argparse
-import numpy as np
 from pathlib import Path
 
 from geometry_msgs.msg import PoseStamped, Quaternion
@@ -35,15 +32,11 @@ class Nav2PlanExecutor(Node):
         # Load the plan
         self.load_plan(plan_path)
 
-        # Create callback group for action client
-        self.callback_group = ReentrantCallbackGroup()
-
         # Create Nav2 action client
         self.nav_client = ActionClient(
             self,
             NavigateToPose,
-            'navigate_to_pose',
-            callback_group=self.callback_group
+            'navigate_to_pose'
         )
 
         # Wait for Nav2 to be available
@@ -52,7 +45,7 @@ class Nav2PlanExecutor(Node):
         self.get_logger().info("Nav2 action server is available!")
 
         # Start executing the plan after a short delay
-        self.create_timer(2.0, self.start_plan_execution)
+        self.start_timer = self.create_timer(2.0, self.start_plan_execution)
 
     def load_plan(self, plan_path: str):
         """Load the plan from a pickle file."""
@@ -105,7 +98,7 @@ class Nav2PlanExecutor(Node):
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = self.create_pose_stamped(
             agent_state['pos_base'][0],
-            agent_state['pos_base'][1], 
+            agent_state['pos_base'][1],
             agent_state['angle_base']
         )
 
@@ -238,24 +231,11 @@ def main():
         print(f"Error: Plan file {plan_path} does not exist!")
         return 1
 
-    # Initialize ROS 2
     rclpy.init()
 
     try:
-        # Create and run the node
-        executor = MultiThreadedExecutor()
         node = Nav2PlanExecutor(str(plan_path), args.frame_id)
-
-        # Store timer reference to avoid garbage collection
-        node.start_timer = node.create_timer(2.0, node.start_plan_execution)
-
-        executor.add_node(node)
-
-        print(f"Starting Nav2 plan executor for plan: {plan_path}")
-        print("Press Ctrl+C to stop...")
-
-        executor.spin()
-
+        rclpy.spin(node)
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as e:
