@@ -164,11 +164,11 @@ class State(NamedTuple):
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )
 
-        state = jax.lax.cond(
-            turn, 
-            state._swap,
-            lambda: state
-        )
+        # state = jax.lax.cond(
+        #     turn, 
+        #     state._swap,
+        #     lambda: state
+        # )
 
         # jax.debug.print("pos1 : {}",state.agent.agent_state_1.pos_base)
         # jax.debug.print("pos2 : {}",state.agent.agent_state_2.pos_base)
