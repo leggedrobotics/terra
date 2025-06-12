@@ -10,6 +10,9 @@ from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_msgs.action import NavigateToPose
 from tf_transformations import quaternion_from_euler
 
+from terra.config import AgentConfig
+from terra.utils import angle_idx_to_rad
+
 
 class Nav2PlanExecutor(Node):
     """ROS 2 node that executes a plan using Nav2 navigation."""
@@ -22,6 +25,10 @@ class Nav2PlanExecutor(Node):
         self.current_goal_index = 0
         self.plan = []
         self.executing_goal = False
+
+        # Digger configuration
+        self.angles_base = AgentConfig().angles_base
+        self.angles_cabin = AgentConfig().angles_cabin
 
         # Load the plan
         self.load_plan(plan_path)
@@ -87,13 +94,17 @@ class Nav2PlanExecutor(Node):
         waypoint = self.plan[self.current_goal_index]
         agent_state = waypoint['agent_state']
 
-        # TODO: Convert Terra coordinates!
+        # TODO: Is there no transform between Terra and Isaac environments?
+        x_base = agent_state['pos_base'][0]
+        y_base = agent_state['pos_base'][1]
+        angle_base = angle_idx_to_rad(
+            agent_state['angle_base'],
+            self.angles_base
+        )
         # Create navigation goal
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = self.create_pose_stamped(
-            agent_state['pos_base'][0],
-            agent_state['pos_base'][1],
-            agent_state['angle_base']
+            x_base, y_base, angle_base
         )
 
         self.get_logger().info(
