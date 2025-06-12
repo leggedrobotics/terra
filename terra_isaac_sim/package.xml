@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>terra_isaac_sim</name>
+  <version>0.0.1</version>
+  <description>Package for deploying Terra plans in IsaacSim</description>
+
+  <maintainer email="spiasecki@ethz.ch">Stanislaw Piasecki</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf_transformations</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
