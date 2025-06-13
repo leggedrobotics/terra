@@ -51,25 +51,55 @@ class Agent(NamedTuple):
         padding_mask: Array,
         action_map: Array,
     ) -> tuple["Agent", jax.random.PRNGKey]:
-        pos_base, angle_base, key = jax.lax.cond(
-            env_cfg.agent.random_init_state,
-            lambda k: _get_random_init_state(
-                k,
-                env_cfg,
-                max_traversable_x,
-                max_traversable_y,
-                padding_mask,
-                action_map,
-                env_cfg.agent.width,
-                env_cfg.agent.height,
-            ),
-            lambda k: _get_top_left_init_state(k, env_cfg),
-            key,
+        # Split the key for the two agent initializations
+        key, key_agent1, key_agent2 = jax.random.split(key, 3)
+
+        # Initialize first agent
+        pos_base_1, angle_base_1, key_agent1 = _get_random_init_state(
+            key_agent1,
+            env_cfg,
+            max_traversable_x,
+            max_traversable_y,
+            padding_mask,
+            action_map,
+            env_cfg.agent.width,
+            env_cfg.agent.height,
         )
 
-        agent_state = AgentState(
-            pos_base=pos_base,
-            angle_base=angle_base,
+        # Create a temporary agent mask to prevent agent 2 spawning on agent 1
+        map_width, map_height = padding_mask.shape
+        agent1_corners = get_agent_corners(
+            pos_base_1, angle_base_1, env_cfg.agent.width, env_cfg.agent.height, 
+            env_cfg.agent.angles_base
+        )
+        agent1_mask = compute_polygon_mask(agent1_corners, map_width, map_height)
+        
+        # Combined mask including both padding and first agent location
+        combined_mask = jnp.logical_or(padding_mask == 1, agent1_mask)
+        
+        # Initialize second agent, avoiding both obstacles and first agent
+        pos_base_2, angle_base_2, key_agent2 = _get_random_init_state(
+            key_agent2,
+            env_cfg,
+            max_traversable_x,
+            max_traversable_y,
+            combined_mask,  # Use the combined mask to avoid agent 1
+            action_map,
+            env_cfg.agent.width,
+            env_cfg.agent.height,
+        )
+
+        agent_state_1 = AgentState(
+            pos_base=pos_base_1,
+            angle_base=angle_base_1,
+            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
+            loaded=jnp.full((1,), 0, dtype=IntLowDim),
+        )
+        
+        agent_state_2 = AgentState(
+            pos_base=pos_base_2,
+            angle_base=angle_base_2,
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
@@ -77,10 +107,15 @@ class Agent(NamedTuple):
 
         width = env_cfg.agent.width
         height = env_cfg.agent.height
-
         moving_dumped_dirt = False
 
-        return Agent(agent_state=agent_state, agent_state_2=agent_state, width=width, height=height, moving_dumped_dirt=moving_dumped_dirt), key
+        return Agent(
+            agent_state=agent_state_1, 
+            agent_state_2=agent_state_2, 
+            width=width, 
+            height=height, 
+            moving_dumped_dirt=moving_dumped_dirt
+        ), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
