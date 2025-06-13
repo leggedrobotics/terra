@@ -263,12 +263,23 @@ class State(NamedTuple):
 
         # Determine the occupancy mask for a grid of size map_width x map_height.
         polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+
+        agent_2_corners_xy = self._get_agent_corners(
+            self.agent.agent_state_2.pos_base,
+            base_orientation=self.agent.agent_state_2.angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+
+        polygon_mask_2 = compute_polygon_mask(agent_2_corners_xy, map_width, map_height)
+        #dig_map_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
+
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
         )
-        
+        traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         # Mask out the cells where the agent is located.
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
