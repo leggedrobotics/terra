@@ -35,6 +35,7 @@ class Agent(NamedTuple):
     """
 
     agent_state: AgentState
+    agent_state_2: AgentState
 
     width: int
     height: int
@@ -79,7 +80,7 @@ class Agent(NamedTuple):
 
         moving_dumped_dirt = False
 
-        return Agent(agent_state=agent_state, width=width, height=height, moving_dumped_dirt=moving_dumped_dirt), key
+        return Agent(agent_state=agent_state, agent_state_2=agent_state, width=width, height=height, moving_dumped_dirt=moving_dumped_dirt), key
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):

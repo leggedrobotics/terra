@@ -188,7 +188,33 @@ class TerraEnv(NamedTuple):
         reward = state._get_reward(new_state, action)
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
+        #print agent agentstate_2
+        # jax.debug.print(
+        #     "agent_state_2: {agent_state_2}",
+        #     agent_state_2=new_state.agent.agent_state_2,
+        # )
 
+        #print local maps of agent 1 and agent 2
+        jax.debug.print(
+            "Agent 1 - local_map_action_neg: {local_map_action_neg}, local_map_action_pos: {local_map_action_pos}\n "
+            "local_map_target_neg: {local_map_target_neg}, local_map_target_pos: {local_map_target_pos},\n "
+            "local_map_dumpability: {local_map_dumpability}, local_map_obstacles: {local_map_obstacles} \n "
+            "Agent 2 - local_map_action_neg: {local_map_action_neg_2}, local_map_action_pos: {local_map_action_pos_2},\n "
+            "local_map_target_neg: {local_map_target_neg_2}, local_map_target_pos: {local_map_target_pos_2},\n "
+            "local_map_dumpability: {local_map_dumpability_2}, local_map_obstacles: {local_map_obstacles_2}\n",
+            local_map_action_neg=new_state.world.local_map_action_neg.map,
+            local_map_action_pos=new_state.world.local_map_action_pos.map,
+            local_map_target_neg=new_state.world.local_map_target_neg.map,
+            local_map_target_pos=new_state.world.local_map_target_pos.map,
+            local_map_dumpability=new_state.world.local_map_dumpability.map,
+            local_map_obstacles=new_state.world.local_map_obstacles.map,
+            local_map_action_neg_2=new_state.world.local_map_action_neg_2.map,
+            local_map_action_pos_2=new_state.world.local_map_action_pos_2.map,
+            local_map_target_neg_2=new_state.world.local_map_target_neg_2.map,
+            local_map_target_pos_2=new_state.world.local_map_target_pos_2.map,
+            local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
+            local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
+        )
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
@@ -243,16 +269,35 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.wheel_angle,
                 state.agent.agent_state.loaded,
             ]
+        
+        )
+
+        agent_state_2 = jnp.hstack(
+            [
+                state.agent.agent_state_2.pos_base,  # pos_base is encoded in traversability_mask
+                state.agent.agent_state_2.angle_base,
+                state.agent.agent_state_2.angle_cabin,
+                state.agent.agent_state_2.wheel_angle,
+                state.agent.agent_state_2.loaded,
+            ]
+        
         )
         # Note: not all of those fields are used by the network for training!
         return {
             "agent_state": agent_state,
+            "agent_state_2": agent_state_2,
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,
             "local_map_target_pos": state.world.local_map_target_pos.map,
             "local_map_dumpability": state.world.local_map_dumpability.map,
             "local_map_obstacles": state.world.local_map_obstacles.map,
+            "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
+            "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
+            "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
+            "local_map_target_pos_2": state.world.local_map_target_pos_2.map,
+            "local_map_dumpability_2": state.world.local_map_dumpability_2.map,
+            "local_map_obstacles_2": state.world.local_map_obstacles_2.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,

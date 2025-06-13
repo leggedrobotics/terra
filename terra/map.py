@@ -58,6 +58,15 @@ class GridWorld(NamedTuple):
     local_map_dumpability: GridMap = GridMap.dummy_map()
     local_map_obstacles: GridMap = GridMap.dummy_map()
 
+    # Additional maps for second agent with "_2" suffix
+    traversability_mask_2: GridMap = GridMap.dummy_map()
+    local_map_target_pos_2: GridMap = GridMap.dummy_map()
+    local_map_target_neg_2: GridMap = GridMap.dummy_map()
+    local_map_action_pos_2: GridMap = GridMap.dummy_map()
+    local_map_action_neg_2: GridMap = GridMap.dummy_map()
+    local_map_dumpability_2: GridMap = GridMap.dummy_map()
+    local_map_obstacles_2: GridMap = GridMap.dummy_map()
+
     @property
     def width(self) -> int:
         return self.target_map.width

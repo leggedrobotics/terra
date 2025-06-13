@@ -151,8 +151,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.08
-    distance_coefficient: float = -0.04
+    alignment_coefficient: float = -0.0
+    distance_coefficient: float = -0.0
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -178,6 +178,12 @@ class CurriculumGlobalConfig(NamedTuple):
         {
             "maps_path": "foundations",
             "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "foundations",
+            "max_steps_in_episode": 300,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
