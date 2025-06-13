@@ -163,12 +163,16 @@ class TerraEnv(NamedTuple):
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
-            agent_pos=obs["agent_state"][..., [0, 1]],
-            base_dir=obs["agent_state"][..., [2]],
-            cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [5]],
-            target_tiles=target_tiles,
+            agent_pos_1=obs["agent_state"][..., [0, 1]],
+            base_dir_1=obs["agent_state"][..., [2]],
+            cabin_dir_1=obs["agent_state"][..., [3]],
+            loaded_1=obs["agent_state"][..., [5]],
+            agent_pos_2=obs["agent_state_2"][..., [0, 1]],
+            base_dir_2=obs["agent_state_2"][..., [2]],
+            cabin_dir_2=obs["agent_state_2"][..., [3]],
+            loaded_2=obs["agent_state_2"][..., [5]],
             generate_gif=generate_gif,
+            target_tiles=target_tiles,
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -195,26 +199,26 @@ class TerraEnv(NamedTuple):
         # )
 
         #print local maps of agent 1 and agent 2
-        jax.debug.print(
-            "Agent 1 - local_map_action_neg: {local_map_action_neg}, local_map_action_pos: {local_map_action_pos}\n "
-            "local_map_target_neg: {local_map_target_neg}, local_map_target_pos: {local_map_target_pos},\n "
-            "local_map_dumpability: {local_map_dumpability}, local_map_obstacles: {local_map_obstacles} \n "
-            "Agent 2 - local_map_action_neg: {local_map_action_neg_2}, local_map_action_pos: {local_map_action_pos_2},\n "
-            "local_map_target_neg: {local_map_target_neg_2}, local_map_target_pos: {local_map_target_pos_2},\n "
-            "local_map_dumpability: {local_map_dumpability_2}, local_map_obstacles: {local_map_obstacles_2}\n",
-            local_map_action_neg=new_state.world.local_map_action_neg.map,
-            local_map_action_pos=new_state.world.local_map_action_pos.map,
-            local_map_target_neg=new_state.world.local_map_target_neg.map,
-            local_map_target_pos=new_state.world.local_map_target_pos.map,
-            local_map_dumpability=new_state.world.local_map_dumpability.map,
-            local_map_obstacles=new_state.world.local_map_obstacles.map,
-            local_map_action_neg_2=new_state.world.local_map_action_neg_2.map,
-            local_map_action_pos_2=new_state.world.local_map_action_pos_2.map,
-            local_map_target_neg_2=new_state.world.local_map_target_neg_2.map,
-            local_map_target_pos_2=new_state.world.local_map_target_pos_2.map,
-            local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
-            local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
-        )
+        # jax.debug.print(
+        #     "Agent 1 - local_map_action_neg: {local_map_action_neg}, local_map_action_pos: {local_map_action_pos}\n "
+        #     "local_map_target_neg: {local_map_target_neg}, local_map_target_pos: {local_map_target_pos},\n "
+        #     "local_map_dumpability: {local_map_dumpability}, local_map_obstacles: {local_map_obstacles} \n "
+        #     "Agent 2 - local_map_action_neg: {local_map_action_neg_2}, local_map_action_pos: {local_map_action_pos_2},\n "
+        #     "local_map_target_neg: {local_map_target_neg_2}, local_map_target_pos: {local_map_target_pos_2},\n "
+        #     "local_map_dumpability: {local_map_dumpability_2}, local_map_obstacles: {local_map_obstacles_2}\n",
+        #     local_map_action_neg=new_state.world.local_map_action_neg.map,
+        #     local_map_action_pos=new_state.world.local_map_action_pos.map,
+        #     local_map_target_neg=new_state.world.local_map_target_neg.map,
+        #     local_map_target_pos=new_state.world.local_map_target_pos.map,
+        #     local_map_dumpability=new_state.world.local_map_dumpability.map,
+        #     local_map_obstacles=new_state.world.local_map_obstacles.map,
+        #     local_map_action_neg_2=new_state.world.local_map_action_neg_2.map,
+        #     local_map_action_pos_2=new_state.world.local_map_action_pos_2.map,
+        #     local_map_target_neg_2=new_state.world.local_map_target_neg_2.map,
+        #     local_map_target_pos_2=new_state.world.local_map_target_pos_2.map,
+        #     local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
+        #     local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
+        # )
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
