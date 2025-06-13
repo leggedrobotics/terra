@@ -1014,7 +1014,7 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent moved"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.pos_base, new_state.agent.agent_state.pos_base
+            old_state.agent.agent_state.pos_base, new_state.agent.agent_state_2.pos_base
         )
 
     @staticmethod
@@ -1024,7 +1024,7 @@ class State(NamedTuple):
         """True if agent turned"""
         return ~jnp.allclose(
             old_state.agent.agent_state.angle_base,
-            new_state.agent.agent_state.angle_base,
+            new_state.agent.agent_state_2.angle_base,
         )
 
     def _handle_rewards_move(
@@ -1081,7 +1081,7 @@ class State(NamedTuple):
         # Check if wheels actually turned
         wheel_not_turned = jnp.allclose(
             self.agent.agent_state.wheel_angle,
-            new_state.agent.agent_state.wheel_angle
+            new_state.agent.agent_state_2.wheel_angle
         )
 
         # Apply extra reward if wheels did not turn
@@ -1174,7 +1174,7 @@ class State(NamedTuple):
         )
 
         dump_reward_condition = jnp.allclose(
-            self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
+            self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
         )
 
         dump_reward = jax.lax.cond(
@@ -1392,7 +1392,7 @@ class State(NamedTuple):
             self._is_done_task(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
-                new_state.agent.agent_state.loaded,
+                new_state.agent.agent_state_2.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
             lambda: 0.0,
