@@ -116,7 +116,7 @@ class State(NamedTuple):
             action_map=action_map,
         )
 
-    def _step(self, action: Action) -> "State":
+    def _step(self, action: Action, turn:bool = True) -> "State":
         """
         TrackedAction type --> 0
         WheeledAction type --> 1
@@ -149,12 +149,25 @@ class State(NamedTuple):
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )
-
+        state = jax.lax.cond(
+            turn, 
+            state._swap,
+            lambda: state
+        )
         return state._replace(env_steps=state.env_steps + 1)
 
     def _do_nothing(self):
         return self
-
+    
+    def _swap(self):
+        """Swaps agent_state_1 and agent_state_2"""
+        #jax.debug.print("Swapping agent states")
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state_2,
+                agent_state_2=self.agent.agent_state
+            )
+        )
     def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
