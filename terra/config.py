@@ -95,7 +95,7 @@ class Rewards(NamedTuple):
     # def dense():
     #     return Rewards(
     #         existence=-0.0,
-    #         collision_move=-0.0,
+    #         collision_move=-1.0,
     #         move_while_loaded=0.0,
     #         move=-0.0,
     #         move_with_turned_wheels=-0.0,

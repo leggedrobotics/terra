@@ -179,7 +179,8 @@ class TerraEnv(NamedTuple):
     def step(
         self,
         state: State,
-        action: Action,
+        action1: Action,
+        action2: Action,
         target_map: Array,
         padding_mask: Array,
         trench_axes: Array,
@@ -188,10 +189,22 @@ class TerraEnv(NamedTuple):
         action_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
-        new_state = state._step(action)
-        reward = state._get_reward(new_state, action)
+        inter_state = state._step(action1)
+        reward_1 = state._get_reward(inter_state, action1)
+
+        new_state = inter_state._step(action2)
+        reward_2 = inter_state._get_reward(new_state, action2)
+
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
+        reward = reward_1 + reward_2 
+        # jax.debug.print("reward: {reward}", reward=reward)
+        # #reward 1 and 2
+        # jax.debug.print(
+        #     "reward_1: {reward_1}, reward_2: {reward_2}",
+        #     reward_1=reward_1,
+        #     reward_2=reward_2,
+        # )
         #print agent agentstate_2
         # jax.debug.print(
         #     "agent_state_2: {agent_state_2}",
@@ -250,7 +263,7 @@ class TerraEnv(NamedTuple):
             env_cfg,
         )
 
-        infos = new_state._get_infos(action, task_done)
+        infos = new_state._get_infos(action2, task_done)
         return TimeStep(
             state=new_state,
             observation=obs,
@@ -437,7 +450,8 @@ class TerraEnvBatch:
     def step(
         self,
         timestep: TimeStep,
-        actions: Action,
+        action1: Action,
+        action2: Action,
         maps_buffer_keys: jax.random.PRNGKey,
     ) -> tuple[State, tuple[dict, Array, Array, dict]]:
         # Update env_cfgs based on the curriculum, and get the new maps
@@ -454,7 +468,8 @@ class TerraEnvBatch:
         # Step the environment
         timestep = jax.vmap(self.terra_env.step)(
             timestep.state,
-            actions,
+            action1,
+            action2,
             target_maps,
             padding_masks,
             trench_axes,
