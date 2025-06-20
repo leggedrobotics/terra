@@ -166,8 +166,8 @@ class State(NamedTuple):
             agent=self.agent._replace(
                 # agent_state=self.agent.agent_state_2,
                 # agent_state_2=self.agent.agent_state,
-                agent_state=self.agent.agent_state,
-                agent_state_2=self.agent.agent_state_2
+                agent_state=self.agent.agent_state_2,
+                agent_state_2=self.agent.agent_state
             )
         )
     def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
