@@ -287,13 +287,13 @@ class State(NamedTuple):
         dig_mask = self._build_dig_dump_cone().reshape(map_width, map_height)
         dig_mask_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
 
-        traversability_mask = jnp.where(dig_mask_2, 1, traversability_mask)
+        #traversability_mask = jnp.where(dig_mask_2, 1, traversability_mask)
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
         #traversability_mask = jnp.where( dig_mask,1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         # Mask out the cells where the agent is located.
         # jnp.where(polygon_mask_2, 1 ,traversability_mask)
-        valid_traversability_2 = jnp.all(jnp.where(polygon_mask_2,dig_mask, 0) == 0)    
+        #valid_traversability_2 = jnp.all(jnp.where(polygon_mask_2,dig_mask, 0) == 0)    
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
         #jax.debug.print("Valid bounds: {valid_bounds}, Valid traversability: {valid_traversability}",valid_bounds=valid_bounds, valid_traversability=valid_traversability)
         return jnp.logical_and(jnp.logical_and(valid_bounds, valid_traversability),valid_traversability)
