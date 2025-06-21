@@ -52,7 +52,7 @@ class TraversabilityMaskWrapper:
 
         padding_mask = state.world.padding_mask.map
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
-
+        interaction_mask = ~(~state._build_dig_dump_cone().reshape(-1)*~state._build_dig_dump_cone_2()).reshape(map_width, map_height)
 
         return state._replace(
             # increase number of steps as well
@@ -60,6 +60,9 @@ class TraversabilityMaskWrapper:
             world=state.world._replace(
             traversability_mask=state.world.traversability_mask._replace(
                 map=tm.astype(IntLowDim)
+            ),
+            interaction_mask=state.world.interaction_mask._replace(
+                map=interaction_mask.astype(jnp.bool_)
             ),
             )
         )
