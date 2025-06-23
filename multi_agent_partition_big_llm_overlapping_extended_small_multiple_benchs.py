@@ -1287,7 +1287,8 @@ def check_overall_completion(partition_states, env_manager):
     high_completion_no_active = completion_rate >= 0.8 and len(active_partitions) == 0
     no_active_remaining = len(active_partitions) == 0
     
-    is_complete = all_completed or high_completion_no_active or no_active_remaining
+    #is_complete = all_completed or high_completion_no_active or no_active_remaining
+    is_complete = all_completed
     
     print(f"Completion check: {completed_partitions=}, {failed_partitions=}, {active_partitions=}")
     print(f"Completion rate: {completion_rate:.2%}, Overall complete: {is_complete}")
@@ -1610,12 +1611,13 @@ def run_experiment_with_disjoint_environments(
         raise (ValueError(f"{action_type=}"))
 
     obs = env_manager.global_env.timestep.observation
-
+    #obs = env_manager.global_maps
     areas = (obs["target_map"] == -1).sum(
         tuple([i for i in range(len(obs["target_map"].shape))][1:])
             ) * (tile_size**2)
     print(f"Areas: {areas}")
     target_maps_init = obs["target_map"].copy()
+    #target_maps_init = env_manager.global_maps['target_map'].copy()
     dig_tiles_per_target_map_init = (target_maps_init == -1).sum(
         tuple([i for i in range(len(target_maps_init.shape))][1:])
     )
@@ -1933,6 +1935,11 @@ def run_experiment_with_disjoint_environments(
             move_cumsum += move_cumsum_tmp
 
             do_cumsum += (action_rl == do_action) * (~episode_done_once)
+
+            # dug_tiles_per_action_map = (obs["action_map"] == -1).sum(
+            #     tuple([i for i in range(len(obs["action_map"].shape))][1:])
+            # )
+            dug_tiles_per_action_map = (env_manager.global_maps['action_map'] == -1).sum()
   
         # Add map data to global collections
         all_frames.extend(map_frames)
@@ -1967,7 +1974,18 @@ def run_experiment_with_disjoint_environments(
         
     print(f"\nResults saved to: {output_dir}")
     print(f"Video: {video_path}")
-    return episode_done_once, episode_length, move_cumsum, do_cumsum, areas
+
+    info = {
+        "episode_done_once": episode_done_once,
+        "episode_length": episode_length,
+        "move_cumsum": move_cumsum,
+        "do_cumsum": do_cumsum,
+        "areas": areas,
+        "dig_tiles_per_target_map_init": dig_tiles_per_target_map_init,
+        "dug_tiles_per_action_map": dug_tiles_per_action_map,
+    }
+
+    return info
 
 
 if __name__ == "__main__":
@@ -2052,7 +2070,7 @@ if __name__ == "__main__":
         help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 
-    NUM_ENVS = 2
+    NUM_ENVS = 5
 
     args = parser.parse_args()
     episode_done_once_list = []
@@ -2060,24 +2078,37 @@ if __name__ == "__main__":
     move_cumsum_list = []
     do_cumsum_list = []
     areas_list = []
+    dig_tiles_per_target_map_init_list = []
+    dug_tiles_per_action_map_list = []
 
     base_seed = args.seed
 
     for i in range(NUM_ENVS):
         print(f"Running experiment {i+1}/{NUM_ENVS} with args: {args}")
-        episode_done_once, episode_length, move_cumsum, do_cumsum, areas = run_experiment_with_disjoint_environments(args.model_name, 
+        info = run_experiment_with_disjoint_environments(args.model_name, 
                    args.model_key, 
                    args.num_timesteps, 
                    base_seed + i * 1000,  # Ensure different seeds
                    args.progressive_gif, 
                    args.run_name
                    )
-
+        #print(info)
+        # Collect results from this experiment
+        episode_done_once = info["episode_done_once"]
+        episode_length = info["episode_length"]
+        move_cumsum = info["move_cumsum"]
+        do_cumsum = info["do_cumsum"]
+        areas = info["areas"]
+        dig_tiles_per_target_map_init = info["dig_tiles_per_target_map_init"]
+        dug_tiles_per_action_map = info["dug_tiles_per_action_map"]
+        
         episode_done_once_list.append(episode_done_once.item())
         episode_length_list.append(episode_length.item())
         move_cumsum_list.append(move_cumsum.item())
         do_cumsum_list.append(do_cumsum.item())
         areas_list.append(areas.item())
+        dig_tiles_per_target_map_init_list.append(dig_tiles_per_target_map_init.item())
+        dug_tiles_per_action_map_list.append(dug_tiles_per_action_map.item())
 
     print("\nExperiment completed for all environments.")
 
@@ -2086,6 +2117,8 @@ if __name__ == "__main__":
     move_cumsum = jnp.array(move_cumsum_list)
     do_cumsum = jnp.array(do_cumsum_list)
     areas = jnp.array(areas_list)
+    dig_tiles_per_target_map_init = jnp.array(dig_tiles_per_target_map_init_list)
+    dug_tiles_per_action_map = jnp.array(dug_tiles_per_action_map_list)
 
     print("\nSummary of results across all environments:")
     print(f"Episode done once: {episode_done_once}")
@@ -2093,6 +2126,8 @@ if __name__ == "__main__":
     print(f"Move cumsum: {move_cumsum}")
     print(f"Do cumsum: {do_cumsum}")
     print(f"Areas: {areas}")
+    print(f"Dig tiles per target map init: {dig_tiles_per_target_map_init}")
+    print(f"Dug tiles per action map: {dug_tiles_per_action_map}")
     # print(type(episode_done_once))
     # print(type(episode_length))
     # print(type(move_cumsum))
@@ -2115,14 +2150,14 @@ if __name__ == "__main__":
     workspaces_efficiency_std = workspaces_efficiency.std()
 
 
-    # # Coverage scores
+    # Coverage scores
     # dug_tiles_per_action_map = (obs["action_map"] == -1).sum(
     #     tuple([i for i in range(len(obs["action_map"].shape))][1:])
     # )
-    # coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
-    # coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
-    # coverage_score_mean = coverage_scores.mean()
-    # coverage_score_std = coverage_scores.std()
+    coverage_ratios = dug_tiles_per_action_map / dig_tiles_per_target_map_init
+    coverage_scores = episode_done_once + (~episode_done_once) * coverage_ratios
+    coverage_score_mean = coverage_scores.mean()
+    coverage_score_std = coverage_scores.std()
 
     completion_rate = 100 * episode_done_once.sum() / len(episode_done_once)
 
@@ -2137,6 +2172,8 @@ if __name__ == "__main__":
     print(
         f"Workspaces efficiency: {workspaces_efficiency_mean:.2f} ({workspaces_efficiency_std:.2f})"
     )
+    print(f"Coverage: {coverage_score_mean:.2f} ({coverage_score_std:.2f})")
+
 
 # run_experiment_with_disjoint_environments(
 #     llm_model_name="gemini-pro",
