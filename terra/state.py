@@ -1596,6 +1596,7 @@ class State(NamedTuple):
                 new_state.world.action_map.map,
                 self.world.target_map.map,
                 new_state.agent.agent_state_2.loaded,
+                new_state.agent.agent_state.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
             lambda: 0.0,
@@ -1613,7 +1614,7 @@ class State(NamedTuple):
         return reward
 
     @staticmethod
-    def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array):
+    def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array):
         """
         Checks if the target map matches the action map,
         but only on the relevant tiles.
@@ -1641,13 +1642,14 @@ class State(NamedTuple):
 
         done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
         done_unload = agent_loaded[0] == 0
-        done_task = done_dump & done_dig & done_unload
+        done_unload2 = agent_laoded_2[0] == 0
+        done_task = done_dump & done_dig & done_unload  & done_unload2
         return done_task
 
     def _is_done(
-        self, action_map: Array, target_map: Array, agent_loaded: Array
+        self, action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
-        done_task = self._is_done_task(action_map, target_map, agent_loaded)
+        done_task = self._is_done_task(action_map, target_map, agent_loaded, agent_laoded_2)
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 

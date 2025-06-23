@@ -222,6 +222,7 @@ class TerraEnv(NamedTuple):
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
+            new_state.agent.agent_state_2.loaded,
             new_state.agent.agent_state.loaded,
         )
 
