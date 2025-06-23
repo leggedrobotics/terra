@@ -1305,3 +1305,121 @@ def compute_manual_subtasks(NUM_PARTITIONS):
     else:
         raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
     return sub_tasks_manual
+
+def check_overall_completion(partition_states, env_manager):
+    """
+    Check if the overall task is complete based on partition completion status.
+    Returns True if all partitions are completed or if sufficient progress has been made.
+    """
+    if not partition_states:
+        return False
+    
+    completed_partitions = []
+    failed_partitions = []
+    active_partitions = []
+    
+    for partition_idx, partition_state in partition_states.items():
+        status = partition_state.get('status', 'unknown')
+        if status == 'completed':
+            completed_partitions.append(partition_idx)
+        elif status == 'failed':
+            failed_partitions.append(partition_idx)
+        elif status == 'active':
+            active_partitions.append(partition_idx)
+    
+    total_partitions = len(partition_states)
+    completion_rate = len(completed_partitions) / total_partitions if total_partitions > 0 else 0
+    
+    # Consider task complete if:
+    # 1. All partitions are completed, OR
+    # 2. At least 80% of partitions are completed and no active partitions remain, OR
+    # 3. All partitions are either completed or failed (no active ones left)
+    
+    all_completed = len(completed_partitions) == total_partitions
+    high_completion_no_active = completion_rate >= 0.8 and len(active_partitions) == 0
+    no_active_remaining = len(active_partitions) == 0
+    
+    #is_complete = all_completed or high_completion_no_active or no_active_remaining
+    is_complete = all_completed
+    
+    print(f"Completion check: {completed_partitions=}, {failed_partitions=}, {active_partitions=}")
+    print(f"Completion rate: {completion_rate:.2%}, Overall complete: {is_complete}")
+    
+    return is_complete
+
+
+def calculate_map_completion_metrics(partition_states, env_manager):
+    """
+    Calculate completion metrics for the current map based on partition states.
+    """
+    if not partition_states:
+        return {
+            'done': False,
+            'completion_rate': 0.0,
+            'total_reward': 0.0,
+            'completed_partitions': 0,
+            'failed_partitions': 0,
+            'total_partitions': 0
+        }
+    
+    completed_count = 0
+    failed_count = 0
+    total_reward = 0.0
+    total_partitions = len(partition_states)
+    
+    for partition_idx, partition_state in partition_states.items():
+        status = partition_state.get('status', 'unknown')
+        partition_reward = partition_state.get('total_reward', 0.0)
+        total_reward += partition_reward
+        
+        if status == 'completed':
+            completed_count += 1
+        elif status == 'failed':
+            failed_count += 1
+    
+    completion_rate = completed_count / total_partitions if total_partitions > 0 else 0.0
+    is_done = check_overall_completion(partition_states, env_manager)
+    
+    return {
+        'done': is_done,
+        'completion_rate': completion_rate,
+        'total_reward': total_reward,
+        'completed_partitions': completed_count,
+        'failed_partitions': failed_count,
+        'total_partitions': total_partitions
+    }
+
+def wrap_action2(action_rl, action_type):
+    """
+    Wrap RL action for the environment.
+    Ensures correct shape for single environment (non-batched).
+    """
+    # Ensure action_rl is a single integer, not an array
+    if isinstance(action_rl, jnp.ndarray):
+        if action_rl.shape == (1,):
+            action_val = action_rl[0]  # Extract single value
+        elif action_rl.shape == ():
+            action_val = action_rl  # Already scalar
+        else:
+            raise ValueError(f"Unexpected action shape: {action_rl.shape}")
+    else:
+        action_val = action_rl
+    
+    # Convert to proper format for single environment
+    # Shape should be [1] not [1,1]
+    wrapped_action = action_type(
+        type=jnp.array([action_val], dtype=jnp.int8),  # Shape: [1]
+        action=jnp.array([action_val], dtype=jnp.int8)  # Shape: [1]
+    )
+
+    return wrapped_action
+
+def add_batch_dimension_to_observation(obs):
+    """Add batch dimension to all observation components."""
+    batched_obs = {}
+    for key, value in obs.items():
+        if isinstance(value, jnp.ndarray):
+            batched_obs[key] = jnp.expand_dims(value, axis=0)
+        else:
+            batched_obs[key] = jnp.array([value])
+    return batched_obs
