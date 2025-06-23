@@ -58,10 +58,10 @@ from map_environments import MapEnvironments
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -152,149 +152,7 @@ def run_experiment(
     all_obs_seq = []
     all_action_list = []
     
-    def reset_to_next_map(map_index):
-        """Reset the existing environment to the next map"""
-        print(f"\n{'='*60}")
-        print(f"RESETTING TO MAP {map_index}")
-        print(f"{'='*60}")
-        
-        # Create new seed for this map reset
-        map_seed = seed + map_index * 1000
-        map_rng = jax.random.PRNGKey(map_seed)
-        map_rng, reset_rng = jax.random.split(map_rng)
-        reset_keys = jax.random.split(reset_rng, 1)
-
-        # Reset the existing environment to get a new map
-        # The environment will internally cycle through its available maps
-        env_manager.global_env.timestep = env_manager.global_env.reset(
-            global_env_config, reset_keys, initial_custom_pos, initial_custom_angle
-        )
-        
-        # Update the global maps from the new reset
-        env_manager._initialize_global_environment()
-        
-        print(f"Environment reset to map {map_index}")
-        return map_rng
-
-    def setup_partitions_and_llm(map_index):
-        """Setup partitions and LLM for the current map"""
-        action_size = 7
-        
-        # Define partitions based on map size
-        if ORIGINAL_MAP_SIZE == 64:
-            sub_tasks_manual = [
-                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-            ]
-        elif ORIGINAL_MAP_SIZE == 128:
-            sub_tasks_manual = [
-                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-                # Add more partitions as needed
-            ]
-        else:
-            raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
-
-        # Initialize LLM agent (reuse if possible, or create new session)
-        llm_query, runner, prev_actions, system_message_master = init_llms(
-            llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
-            APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}"  # Unique session per map
-        )
-
-        sub_tasks_llm = []
-        
-        if not USE_MANUAL_PARTITIONING:
-            print("Calling LLM agent for partitioning decision...")
-            screen = pg.display.get_surface()
-            game_state_image = capture_screen(screen)
-            current_observation = env_manager.global_env.timestep.observation
-            
-            try:
-                obs_dict = {k: v.tolist() for k, v in current_observation.items()}
-                observation_str = json.dumps(obs_dict)
-            except AttributeError:
-                observation_str = str(current_observation)
-
-            if USE_IMAGE_PROMPT:
-                prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
-            else:
-                prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
-
-            try:
-                if USE_IMAGE_PROMPT:
-                    response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner, USER_ID, f"{SESSION_ID}_map_{map_index}"))
-                else:
-                    response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner, USER_ID=USER_ID, SESSION_ID=f"{SESSION_ID}_map_{map_index}"))
-        
-                llm_response_text = response
-                print(f"LLM response: {llm_response_text}")
-
-                try:
-                    sub_tasks_llm = extract_python_format_data(llm_response_text)
-                    print("Successfully parsed LLM response with tuples preserved")
-                except ValueError as e:
-                    print(f"Extraction failed: {e}")
-                    sub_tasks_llm = sub_tasks_manual
-
-            except Exception as adk_err:
-                print(f"Error during ADK agent partitioning: {adk_err}")
-                sub_tasks_llm = sub_tasks_manual
-
-        # Use appropriate partitions
-        partition_validation = is_valid_region_list(sub_tasks_llm)
-        
-        if partition_validation and USE_MANUAL_PARTITIONING == False:
-            print("Using LLM-generated sub-tasks.")
-            env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
-        else:
-            print("Using manually defined sub-tasks.")
-            env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
-
-        return llm_query, runner, system_message_master
-
-    def initialize_partitions_for_current_map():
-        """Initialize all partitions for the current map"""
-        partition_states = {}
-        partition_models = {}
-        active_partitions = []
-
-        num_partitions = len(env_manager.partitions)
-        print(f"Number of partitions: {num_partitions}")
-
-        # Initialize all partitions
-        for partition_idx in range(num_partitions):
-            try:
-                print(f"Initializing partition {partition_idx}...")
-                
-                small_env_timestep = env_manager.initialize_small_environment(partition_idx)
-                
-                partition_states[partition_idx] = {
-                    'timestep': small_env_timestep,
-                    'prev_actions_rl': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32),
-                    'step_count': 0,
-                    'status': 'active',
-                    'rewards': [],
-                    'actions': [],
-                    'total_reward': 0.0,
-                }
-                
-                active_partitions.append(partition_idx)
-                
-                partition_models[partition_idx] = {
-                    'model': load_neural_network(config, env_manager.small_env),
-                    'params': model_params.copy(),
-                    'prev_actions': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
-                }
-                        
-            except Exception as e:
-                print(f"Failed to initialize partition {partition_idx}: {e}")
-                if partition_idx < len(env_manager.partitions):
-                    env_manager.partitions[partition_idx]['status'] = 'failed'
-
-        if not active_partitions:
-            print("No partitions could be initialized!")
-            return None, None, None
-
-        print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
-        return partition_states, partition_models, active_partitions
+   
 
     tile_size = global_env_config.tile_size[0].item()
     move_tiles = global_env_config.agent.move_tiles[0].item()
@@ -317,7 +175,6 @@ def run_experiment(
     areas = (obs["target_map"] == -1).sum(
         tuple([i for i in range(len(obs["target_map"].shape))][1:])
             ) * (tile_size**2)
-    print(f"Areas: {areas}")
     target_maps_init = obs["target_map"].copy()
     #target_maps_init = env_manager.global_maps['target_map'].copy()
     dig_tiles_per_target_map_init = (target_maps_init == -1).sum(
@@ -341,10 +198,16 @@ def run_experiment(
         # Reset to next map (reusing the same environment)
         try:
             if current_map_index > 0:  # Don't reset on first map since it's already initialized
-                map_rng = reset_to_next_map(current_map_index)
+                map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
+                       initial_custom_pos, initial_custom_angle)
             
-            llm_query, runner, system_message_master = setup_partitions_and_llm(current_map_index)
-            partition_states, partition_models, active_partitions = initialize_partitions_for_current_map()
+            # llm_query, runner_partitioning, runner_delegation, system_message_master = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+            #                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING,
+            #                  USE_IMAGE_PROMPT)
+            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm_fixed(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+                             USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING,
+                             USE_IMAGE_PROMPT)
+            partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             
             if partition_states is None:
                 print(f"Failed to initialize map {current_map_index}, moving to next map")
@@ -439,7 +302,72 @@ def run_experiment(
                     if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0:
                         print("    Calling LLM agent for decision...")
                         # ... (keep the existing LLM decision logic)
-                        
+                        try:
+                            obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+                            observation_str = json.dumps(obs_dict)
+
+                        except AttributeError:
+                            # Handle the case where current_observation is not a dictionary
+                            observation_str = str(current_observation)
+                        # system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
+                        #     "Decide if you should delegate digging tasks to a " \
+                        #     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+                        #     "specialized LLM agent (respond with 'delegate_to_llm')."
+                        system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
+                            "Decide if you should delegate digging tasks to a " \
+                            "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+                            "specialized LLM agent (respond with 'delegate_to_llm')."
+                        if USE_IMAGE_PROMPT:
+                            delegation_prompt = f"Current observation: See image \n\nSystem Message: {system_message_delegation}"
+                        else:
+                            delegation_prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_delegation}"
+                        #print(f"Prompt: {prompt}")
+
+                        #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
+                        # Just make sure your session ID includes the map index:
+                        delegation_session_id = f"{SESSION_ID}_map_{current_map_index}_delegation"  # This creates "session_001_map_0_delegation"
+                        delegation_user_id = f"{USER_ID}_delegation"  # This creates "user_1_delegation"
+
+                        if not FORCE_DELEGATE_TO_RL:
+                            try:
+                                if USE_IMAGE_PROMPT:
+                                    response = asyncio.run(call_agent_async_master_fixed(
+                                        delegation_prompt, 
+                                        game_state_image_small, 
+                                        runner_delegation,               
+                                        delegation_user_id,
+                                        delegation_session_id,
+                                        session_manager
+                                    ))
+                                else:
+                                    response = asyncio.run(call_agent_async_master_fixed(
+                                        delegation_prompt, 
+                                        None, 
+                                        runner_delegation,               
+                                        delegation_user_id,
+                                        delegation_session_id,
+                                        session_manager
+                                    ))
+                                
+                                llm_response_text = response
+                                print(f"LLM response: {llm_response_text}")
+                                
+                                if "delegate_to_rl" in llm_response_text.lower():
+                                    llm_decision = "delegate_to_rl"
+                                    print("Delegating to RL agent based on LLM response.")
+                                elif "delegate_to_llm" in llm_response_text.lower():
+                                    llm_decision = "delegate_to_llm"
+                                    print("Delegating to LLM agent based on LLM response.")
+                                else:
+                                    llm_decision = "STOP"                    
+
+                            except Exception as adk_err:
+                                print(f"Error during ADK agent communication: {adk_err}")
+                                print("Defaulting to fallback action due to ADK error.")
+                                llm_decision = "fallback" # Indicate fallback needed
+                        else:
+                            print("Forcing delegation to RL agent for testing.")
+                            llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent`
                     if FORCE_DELEGATE_TO_LLM:
                         llm_decision = "delegate_to_llm"
                     elif FORCE_DELEGATE_TO_RL:
@@ -540,7 +468,8 @@ def run_experiment(
                         partition_state['status'] = 'completed'
                         partition_completed = True
                 
-                    elif partition_state['step_count'] >= max_steps_per_map // len(env_manager.partitions):
+                    #elif partition_state['step_count'] >= max_steps_per_map // len(env_manager.partitions):
+                    elif partition_state['step_count'] >= max_steps_per_map:
                         print(f"    Partition {partition_idx} TIMED OUT")
                         env_manager.partitions[partition_idx]['status'] = 'failed'
                         partition_state['status'] = 'failed'
@@ -579,7 +508,7 @@ def run_experiment(
             if GRID_RENDERING:
                 env_manager.render_all_partition_views_grid(partition_states)
             else:
-                env_manager.render_global_environment_with_multiple_agents(partition_states)
+                env_manager.render_global_environment_with_multiple_agents(partition_states, VISUALIZE_PARTITIONS)
             
 
             # After processing all partitions, check if map is complete

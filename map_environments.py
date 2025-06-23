@@ -1004,7 +1004,7 @@ class MapEnvironments:
                             self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
 
 
-    def render_global_environment_with_multiple_agents(self, partition_states):
+    def render_global_environment_with_multiple_agents(self, partition_states, VISUALIZE_PARTITIONS=False):
         """
         Update and render global environment showing ALL active excavators.
         Fixed to handle missing attributes gracefully.
@@ -1108,8 +1108,8 @@ class MapEnvironments:
         """
         Render a single partition's view within the given screen area.
         """
-        import pygame as pg
-        import numpy as np
+        # import pygame as pg
+        # import numpy as np
         
         # Get the maps from the partition
         current_timestep = partition_state['timestep']

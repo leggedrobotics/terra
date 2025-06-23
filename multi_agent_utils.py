@@ -90,7 +90,7 @@ def load_neural_network(config, env):
     model, _ = get_model_ready(rng, config, env)
     return model
 
-def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, APP_NAME, USER_ID, SESSION_ID):
+def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     if llm_model_key == "gpt":
         llm_model_name_extended = "openai/{}".format(llm_model_name)
     elif llm_model_key == "claude":
@@ -110,10 +110,12 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
     # "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
     # "specialized LLM agent (respond with 'delegate_to_llm')."
     description_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
-
+    
+    size = f"{MAP_SIZE}x{MAP_SIZE}"
+    print("Map size in init llm: ", size)
 
     system_message_master = "You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.\n\n" \
-    "IMPORTANT: You will receive a 128x128 map as input\n\n" \
+    f"IMPORTANT: You will receive a {size} map as input\n\n" \
     "IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions\n\n" \
     "GUIDELINES FOR PARTITIONING:\n" \
     "1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements\n" \
@@ -146,6 +148,14 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
     "Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck" \
     "REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."
 
+    # DISTINCT DELEGATION AGENT
+    description_delegation = "You are a task delegation coordinator. Your sole responsibility is to analyze the current excavation state and decide whether to delegate work to a specialized RL agent or a specialized LLM agent."
+
+    system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
+    "Decide if you should delegate digging tasks to a " \
+    "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+    "specialized LLM agent (respond with 'delegate_to_llm')."
+
     description_excavator = "You are an excavator agent. You can control the excavator to dig and move."
 
 
@@ -167,39 +177,58 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
         "You are a game playing assistant. Provide the best action for the current game state."
     )
 
+    # CREATE THREE DISTINCT AGENTS
     if llm_model_key == "gemini":
+        # Partitioning Agent
+        llm_partitioning_agent = Agent(
+            name="PartitioningAgent",
+            model=llm_model_name_extended,
+            description=description_master,
+            instruction=system_message_master,
+        )
+        
+        # Delegation Agent
+        llm_delegation_agent = Agent(
+            name="DelegationAgent", 
+            model=llm_model_name_extended,
+            description=description_delegation,
+            instruction=system_message_delegation,
+        )
+
+        # Excavator Agent
         llm_excavator_agent = Agent(
             name="ExcavatorAgent",
             model=llm_model_name_extended,
             description=description_excavator,
             instruction=system_message_excavator,
-        )
-
-        llm_master_agent = Agent(
-            name="MasterAgent",
-            model=llm_model_name_extended,
-            description=description_master,
-            instruction=system_message_master,
-            #sub_agents=[llm_excavator_agent],
         )
     else:
+        # Partitioning Agent
+        llm_partitioning_agent = Agent(
+            name="PartitioningAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description=description_master,
+            instruction=system_message_master,
+        )
+        
+        # Delegation Agent
+        llm_delegation_agent = Agent(
+            name="DelegationAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description=description_delegation,
+            instruction=system_message_delegation,
+        )
+
+        # Excavator Agent
         llm_excavator_agent = Agent(
             name="ExcavatorAgent",
             model=LiteLlm(model=llm_model_name_extended),
             description=description_excavator,
             instruction=system_message_excavator,
         )
-
-        llm_master_agent = Agent(
-            name="MasterAgent",
-            model=LiteLlm(model=llm_model_name_extended),
-            description=description_master,
-            instruction=system_message_master,
-            #sub_agents=[llm_excavator_agent],
-        )
     
-    
-    print("Master Agent initialized.")
+    print("Partitioning Agent initialized.")
+    print("Delegation Agent initialized.")
     print("Excavator Agent initialized.")
 
 
@@ -208,20 +237,36 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
 
 
 
-    session = session_service.create_session(
-        app_name=APP_NAME,
-        user_id=USER_ID,
-        session_id=SESSION_ID,
+    # Partitioning session
+    session_partitioning = session_service.create_session(
+        app_name=f"{APP_NAME}_partitioning",
+        user_id=f"{USER_ID}_partitioning",
+        session_id=f"{SESSION_ID}_partitioning",
     )
 
-    print("Session created. App: ", APP_NAME, " User ID: ", USER_ID, " Session ID: ", SESSION_ID)
+    # Delegation session
+    session_delegation = session_service.create_session(
+        app_name=f"{APP_NAME}_delegation",
+        user_id=f"{USER_ID}_delegation", 
+        session_id=f"{SESSION_ID}_delegation",
+    )
+
+    print("Sessions created for all agents.")
     
-    runner = Runner(
-        agent=llm_master_agent,
-        app_name=APP_NAME,
+    # CREATE SEPARATE RUNNERS
+    runner_partitioning = Runner(
+        agent=llm_partitioning_agent,
+        app_name=f"{APP_NAME}_partitioning",
         session_service=session_service,
     )
-    print(f"Runner initialized for agent {runner.agent.name}.")
+    
+    runner_delegation = Runner(
+        agent=llm_delegation_agent,
+        app_name=f"{APP_NAME}_delegation",
+        session_service=session_service,
+    )
+    
+    print(f"Runners initialized for partitioning and delegation agents.")
     
 
     APP_NAME_2 = APP_NAME + "_excavator"
@@ -259,7 +304,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
     else:
         print("Warning: rl_config is None, prev_actions will not be initialized.")
     
-    return llm_query, runner, prev_actions, system_message_master
+    return llm_query, runner_partitioning, runner_delegation, prev_actions, system_message_master
 
 def compute_action_list(timestep,env):
         # Compute the path
@@ -1423,3 +1468,591 @@ def add_batch_dimension_to_observation(obs):
         else:
             batched_obs[key] = jnp.array([value])
     return batched_obs
+
+def reset_to_next_map(map_index, seed, env_manager, global_env_config,
+                       initial_custom_pos=None, initial_custom_angle=None):
+    """Reset the existing environment to the next map"""
+    print(f"\n{'='*60}")
+    print(f"RESETTING TO MAP {map_index}")
+    print(f"{'='*60}")
+        
+    # Create new seed for this map reset
+    map_seed = seed + map_index * 1000
+    map_rng = jax.random.PRNGKey(map_seed)
+    map_rng, reset_rng = jax.random.split(map_rng)
+    reset_keys = jax.random.split(reset_rng, 1)
+
+    # Reset the existing environment to get a new map
+    # The environment will internally cycle through its available maps
+    env_manager.global_env.timestep = env_manager.global_env.reset(
+        global_env_config, reset_keys, initial_custom_pos, initial_custom_angle
+    )
+        
+    # Update the global maps from the new reset
+    env_manager._initialize_global_environment()
+        
+    print(f"Environment reset to map {map_index}")
+    return map_rng
+
+def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+                             USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING=False,
+                             USE_IMAGE_PROMPT=False):
+    """Setup partitions and LLM for the current map"""
+    action_size = 7
+        
+    # Define partitions based on map size
+    if ORIGINAL_MAP_SIZE == 64:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+        ]
+    elif ORIGINAL_MAP_SIZE == 128:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            # Add more partitions as needed
+        ]
+    else:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
+
+    # Initialize LLM agent (reuse if possible, or create new session)
+    llm_query, runner_partitioning, runner_delegation, prev_actions, system_message_master = init_llms(
+        llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
+        APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
+    )
+
+
+    sub_tasks_llm = []
+        
+    if not USE_MANUAL_PARTITIONING:
+        print("Calling LLM agent for partitioning decision...")
+        screen = pg.display.get_surface()
+        game_state_image = capture_screen(screen)
+        current_observation = env_manager.global_env.timestep.observation
+            
+        try:
+            obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+            observation_str = json.dumps(obs_dict)
+        except AttributeError:
+            observation_str = str(current_observation)
+
+        if USE_IMAGE_PROMPT:
+            prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
+        else:
+            prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
+
+        try:
+            if USE_IMAGE_PROMPT:
+                # USE PARTITIONING RUNNER HERE
+                response = asyncio.run(call_agent_async_master(prompt, game_state_image, runner_partitioning, f"{USER_ID}_partitioning", f"{SESSION_ID}_map_{map_index}_partitioning"))
+            else:
+                # USE PARTITIONING RUNNER HERE
+                response = asyncio.run(call_agent_async_master(prompt, game_state_image=None, runner=runner_partitioning, USER_ID=f"{USER_ID}_partitioning", SESSION_ID=f"{SESSION_ID}_map_{map_index}_partitioning"))
+        
+            llm_response_text = response
+            print(f"PARTITIONING LLM response: {llm_response_text}")
+
+            try:
+                sub_tasks_llm = extract_python_format_data(llm_response_text)
+                print("Successfully parsed LLM response with tuples preserved")
+            except ValueError as e:
+                print(f"Extraction failed: {e}")
+                sub_tasks_llm = sub_tasks_manual
+
+        except Exception as adk_err:
+            print(f"Error during PARTITIONING ADK agent communication: {adk_err}")
+            sub_tasks_llm = sub_tasks_manual
+
+
+        # Use appropriate partitions
+        partition_validation = is_valid_region_list(sub_tasks_llm)
+        
+        if partition_validation and USE_MANUAL_PARTITIONING == False:
+            print("Using LLM-generated sub-tasks.")
+            env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
+        else:
+            print("Using manually defined sub-tasks.")
+            env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
+
+    return llm_query, runner_partitioning, runner_delegation, system_message_master
+
+def initialize_partitions_for_current_map(env_manager, config, model_params):
+    """Initialize all partitions for the current map"""
+    partition_states = {}
+    partition_models = {}
+    active_partitions = []
+
+    num_partitions = len(env_manager.partitions)
+    print(f"Number of partitions: {num_partitions}")
+
+    # Initialize all partitions
+    for partition_idx in range(num_partitions):
+        try:
+            print(f"Initializing partition {partition_idx}...")
+                
+            small_env_timestep = env_manager.initialize_small_environment(partition_idx)
+                
+            partition_states[partition_idx] = {
+                'timestep': small_env_timestep,
+                'prev_actions_rl': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32),
+                'step_count': 0,
+                'status': 'active',
+                'rewards': [],
+                'actions': [],
+                'total_reward': 0.0,
+            }
+                
+            active_partitions.append(partition_idx)
+                
+            partition_models[partition_idx] = {
+                'model': load_neural_network(config, env_manager.small_env),
+                'params': model_params.copy(),
+                'prev_actions': jnp.zeros((1, config.num_prev_actions), dtype=jnp.int32)
+            }
+                        
+        except Exception as e:
+            print(f"Failed to initialize partition {partition_idx}: {e}")
+            if partition_idx < len(env_manager.partitions):
+                env_manager.partitions[partition_idx]['status'] = 'failed'
+
+    if not active_partitions:
+        print("No partitions could be initialized!")
+        return None, None, None
+
+    print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
+    return partition_states, partition_models, active_partitions
+
+
+
+class SessionManager:
+    """Manages ADK sessions across multiple agents to prevent session loss."""
+    
+    def __init__(self):
+        self.session_services = {}
+        self.sessions = {}
+        self.runners = {}
+    
+    def create_agent_session(self, agent_name, app_name, user_id, session_id):
+        """Create a new session for an agent."""
+        # Create unique session service for this agent
+        session_service_key = f"{agent_name}_{app_name}"
+        
+        if session_service_key not in self.session_services:
+            self.session_services[session_service_key] = InMemorySessionService()
+        
+        session_service = self.session_services[session_service_key]
+        
+        # Create session
+        session = session_service.create_session(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        
+        # Store session reference
+        session_key = f"{user_id}_{session_id}"
+        self.sessions[session_key] = {
+            'session': session,
+            'service': session_service,
+            'app_name': app_name,
+            'user_id': user_id,
+            'session_id': session_id
+        }
+        
+        print(f"Created session: {session_key} for {agent_name}")
+        return session_service
+    
+    def create_runner(self, agent, runner_key, app_name):
+        """Create and store a runner for an agent."""
+        session_service_key = f"{runner_key}_{app_name}"
+        session_service = self.session_services.get(session_service_key)
+        
+        if not session_service:
+            raise ValueError(f"No session service found for {session_service_key}")
+        
+        runner = Runner(
+            agent=agent,
+            app_name=app_name,
+            session_service=session_service,
+        )
+        
+        self.runners[runner_key] = runner
+        print(f"Created runner: {runner_key}")
+        return runner
+    
+    def get_session_info(self, user_id, session_id):
+        """Get session information."""
+        session_key = f"{user_id}_{session_id}"
+        return self.sessions.get(session_key)
+    
+    def list_sessions(self):
+        """List all active sessions for debugging."""
+        print("\nActive Sessions:")
+        for key, session_info in self.sessions.items():
+            print(f"  {key}: {session_info['app_name']}")
+
+def init_llms_fixed(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
+                   APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
+    """
+    Fixed initialization of LLM agents with proper session management.
+    """
+    # Initialize session manager
+    session_manager = SessionManager()
+    
+    if llm_model_key == "gpt":
+        llm_model_name_extended = "openai/{}".format(llm_model_name)
+    elif llm_model_key == "claude":
+        llm_model_name_extended = "anthropic/{}".format(llm_model_name)
+    else:
+        llm_model_name_extended = llm_model_name
+    
+    print("Using model: ", llm_model_name_extended)
+
+    # Define system messages
+    size = f"{MAP_SIZE}x{MAP_SIZE}"
+    print("Map size in init llm: ", size)
+
+    system_message_master = f"""You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.
+
+IMPORTANT: You will receive a {size} map as input
+
+IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions
+
+GUIDELINES FOR PARTITIONING:
+1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements
+2. Create efficient partitions that maximize excavator productivity and minimize travel time
+3. Ensure each partition has adequate space for the excavator to maneuver
+4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient
+5. Position starting points strategically to minimize initial travel time
+6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions
+
+USE AT MOST 2 PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. 
+IMPORTANT: If you see multiple trenches, you should create a partition for each trench. 
+RESPONSE FORMAT:
+Respond with a JSON list of partition objects, each containing:
+- 'id': Unique numeric identifier for each partition (starting from 0)
+- 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)
+- 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y, x)
+- 'start_angle': Always use 0 degrees for initial orientation
+- 'status': Set to 'pending' for all new partitions
+
+CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.
+
+CORRECT FORMAT (with tuples):
+[{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}]
+
+INCORRECT FORMAT (with arrays):
+[{{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [16, 16], 'start_angle': 0, 'status': 'pending'}}]
+
+Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):
+[{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}}, {{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}}]
+
+NOTE: Always return a list of partitions even if only creating a single partition.
+Very important. Ensure each partition has sufficient space for both excavation and soil deposit operations. 
+Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck
+REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."""
+
+    system_message_delegation = """You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm')."""
+
+    # Load game instructions
+    if USE_PATH:
+        with open("envs19.json", "r") as file:
+            game_instructions = json.load(file)
+    else:
+        with open("envs18.json", "r") as file:
+            game_instructions = json.load(file)
+
+    environment_name = "AutonomousExcavatorGame"
+    system_message_excavator = game_instructions.get(
+        environment_name,
+        "You are a game playing assistant. Provide the best action for the current game state."
+    )
+
+    # CREATE AGENTS
+    if llm_model_key == "gemini":
+        llm_partitioning_agent = Agent(
+            name="PartitioningAgent",
+            model=llm_model_name_extended,
+            description="Master excavation coordinator for partitioning",
+            instruction=system_message_master,
+        )
+        
+        llm_delegation_agent = Agent(
+            name="DelegationAgent", 
+            model=llm_model_name_extended,
+            description="Task delegation coordinator",
+            instruction=system_message_delegation,
+        )
+
+        llm_excavator_agent = Agent(
+            name="ExcavatorAgent",
+            model=llm_model_name_extended,
+            description="Excavator control agent",
+            instruction=system_message_excavator,
+        )
+    else:
+        llm_partitioning_agent = Agent(
+            name="PartitioningAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description="Master excavation coordinator for partitioning",
+            instruction=system_message_master,
+        )
+        
+        llm_delegation_agent = Agent(
+            name="DelegationAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description="Task delegation coordinator",
+            instruction=system_message_delegation,
+        )
+
+        llm_excavator_agent = Agent(
+            name="ExcavatorAgent",
+            model=LiteLlm(model=llm_model_name_extended),
+            description="Excavator control agent",
+            instruction=system_message_excavator,
+        )
+
+    print("All agents initialized.")
+
+    # CREATE SESSIONS WITH PROPER MANAGEMENT
+    
+    # Partitioning session
+    app_name_partitioning = f"{APP_NAME}_partitioning"
+    user_id_partitioning = f"{USER_ID}_partitioning"
+    session_id_partitioning = f"{SESSION_ID}_partitioning"
+    
+    session_service_partitioning = session_manager.create_agent_session(
+        "PartitioningAgent",
+        app_name_partitioning,
+        user_id_partitioning,
+        session_id_partitioning
+    )
+
+    # Delegation session
+    app_name_delegation = f"{APP_NAME}_delegation"
+    user_id_delegation = f"{USER_ID}_delegation"
+    session_id_delegation = f"{SESSION_ID}_delegation"
+    
+    session_service_delegation = session_manager.create_agent_session(
+        "DelegationAgent",
+        app_name_delegation,
+        user_id_delegation,
+        session_id_delegation
+    )
+
+    # Excavator session
+    app_name_excavator = f"{APP_NAME}_excavator"
+    user_id_excavator = f"{USER_ID}_excavator"
+    session_id_excavator = f"{SESSION_ID}_excavator"
+    
+    session_service_excavator = session_manager.create_agent_session(
+        "ExcavatorAgent",
+        app_name_excavator,
+        user_id_excavator,
+        session_id_excavator
+    )
+
+    print("All sessions created successfully.")
+
+    # CREATE RUNNERS WITH SESSION MANAGER
+    runner_partitioning = session_manager.create_runner(
+        llm_partitioning_agent,
+        "PartitioningAgent",
+        app_name_partitioning
+    )
+    
+    runner_delegation = session_manager.create_runner(
+        llm_delegation_agent,
+        "DelegationAgent", 
+        app_name_delegation
+    )
+    
+    runner_excavator = session_manager.create_runner(
+        llm_excavator_agent,
+        "ExcavatorAgent",
+        app_name_excavator
+    )
+
+    print("All runners created successfully.")
+
+    # Create LLM query object
+    from terra.viz.llms_adk import LLM_query  # Assuming this import works
+    
+    llm_query = LLM_query(
+        model_name=llm_model_name_extended,
+        model=llm_model_key,
+        system_message=system_message_excavator,
+        action_size=action_size,
+        session_id=session_id_excavator,
+        runner=runner_excavator,
+        user_id=user_id_excavator,
+    )
+
+    # Initialize previous actions
+    prev_actions = None
+    if config:
+        import jax.numpy as jnp
+        prev_actions = jnp.zeros(
+            (n_envs, config.num_prev_actions),
+            dtype=jnp.int32
+        )
+    else:
+        print("Warning: rl_config is None, prev_actions will not be initialized.")
+    
+    # Debug: List all sessions
+    session_manager.list_sessions()
+    
+    return (llm_query, runner_partitioning, runner_delegation, prev_actions, 
+            system_message_master, session_manager)
+
+async def call_agent_async_master_fixed(query: str, image, runner, user_id, session_id, session_manager=None):
+    """
+    Fixed version of call_agent_async_master with better error handling and session verification.
+    """
+    print(f"\n>>> Calling agent with user_id: {user_id}, session_id: {session_id}")
+    
+    # Verify session exists if session_manager is provided
+    if session_manager:
+        session_info = session_manager.get_session_info(user_id, session_id)
+        if not session_info:
+            print(f"WARNING: Session {user_id}_{session_id} not found in session manager")
+            # Try to recreate session if possible
+            # This would require more context about the agent and app_name
+    
+    # Prepare the user's message in ADK format
+    text = types.Part.from_text(text=query)
+    parts = [text]
+    
+    if image is not None:
+        # Convert the image to a format suitable for ADK
+        import base64
+        import cv2
+        
+        def encode_image(cv_image):
+            _, buffer = cv2.imencode(".jpg", cv_image)
+            return base64.b64encode(buffer).decode("utf-8")
+        
+        image_data = encode_image(image)
+        content_image = types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
+        parts.append(content_image)
+
+    user_content = types.Content(role='user', parts=parts)
+    
+    final_response_text = "Agent did not produce a final response."  # Default
+
+    try:
+        # Execute the agent with proper error handling
+        async for event in runner.run_async(
+            user_id=user_id, 
+            session_id=session_id, 
+            new_message=user_content
+        ):
+            print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}")
+            
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    final_response_text = event.content.parts[0].text
+                elif event.actions and event.actions.escalate:
+                    final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
+                break
+                
+    except Exception as e:
+        print(f"Error during agent execution: {e}")
+        final_response_text = f"Error: {str(e)}"
+    
+    print(f"<<< Agent Response: {final_response_text}")
+    return final_response_text
+
+
+# MODIFIED SETUP FUNCTION TO USE THE FIXED INITIALIZATION
+def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+                                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING=False,
+                                  USE_IMAGE_PROMPT=False):
+    """
+    Fixed version of setup_partitions_and_llm with proper session management.
+    """
+    action_size = 7
+        
+    # Define partitions based on map size
+    if ORIGINAL_MAP_SIZE == 64:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+        ]
+    elif ORIGINAL_MAP_SIZE == 128:
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            # Add more partitions as needed
+        ]
+    else:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
+
+    # Initialize LLM agent with fixed session management
+    (llm_query, runner_partitioning, runner_delegation, prev_actions, 
+     system_message_master, session_manager) = init_llms_fixed(
+        llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
+        APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
+    )
+
+    sub_tasks_llm = []
+        
+    if not USE_MANUAL_PARTITIONING:
+        print("Calling LLM agent for partitioning decision...")
+        import pygame as pg
+        from terra.viz.llms_utils import capture_screen  # Assuming this import works
+        
+        screen = pg.display.get_surface()
+        game_state_image = capture_screen(screen)
+        current_observation = env_manager.global_env.timestep.observation
+            
+        try:
+            import json
+            obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+            observation_str = json.dumps(obs_dict)
+        except AttributeError:
+            observation_str = str(current_observation)
+
+        if USE_IMAGE_PROMPT:
+            prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
+        else:
+            prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
+
+        try:
+            user_id_partitioning = f"{USER_ID}_partitioning"
+            session_id_partitioning = f"{SESSION_ID}_map_{map_index}_partitioning"
+            
+            if USE_IMAGE_PROMPT:
+                response = asyncio.run(call_agent_async_master_fixed(
+                    prompt, game_state_image, runner_partitioning, 
+                    user_id_partitioning, session_id_partitioning, session_manager
+                ))
+            else:
+                response = asyncio.run(call_agent_async_master_fixed(
+                    prompt, None, runner_partitioning, 
+                    user_id_partitioning, session_id_partitioning, session_manager
+                ))
+        
+            llm_response_text = response
+            print(f"PARTITIONING LLM response: {llm_response_text}")
+
+            try:
+                from multi_agent_utils import extract_python_format_data  # Assuming this import works
+                sub_tasks_llm = extract_python_format_data(llm_response_text)
+                print("Successfully parsed LLM response with tuples preserved")
+            except ValueError as e:
+                print(f"Extraction failed: {e}")
+                sub_tasks_llm = sub_tasks_manual
+
+        except Exception as adk_err:
+            print(f"Error during PARTITIONING ADK agent communication: {adk_err}")
+            sub_tasks_llm = sub_tasks_manual
+
+        # Use appropriate partitions
+        from multi_agent_utils import is_valid_region_list  # Assuming this import works
+        partition_validation = is_valid_region_list(sub_tasks_llm)
+        
+        if partition_validation and not USE_MANUAL_PARTITIONING:
+            print("Using LLM-generated sub-tasks.")
+            env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
+        else:
+            print("Using manually defined sub-tasks.")
+            env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
+
+    return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager
