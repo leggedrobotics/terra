@@ -1963,6 +1963,100 @@ async def call_agent_async_master_fixed(query: str, image, runner, user_id, sess
 
 
 # MODIFIED SETUP FUNCTION TO USE THE FIXED INITIALIZATION
+# def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+#                                   USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING=False,
+#                                   USE_IMAGE_PROMPT=False):
+#     """
+#     Fixed version of setup_partitions_and_llm with proper session management.
+#     """
+#     action_size = 7
+        
+#     # Define partitions based on map size
+#     if ORIGINAL_MAP_SIZE == 64:
+#         sub_tasks_manual = [
+#             {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+#         ]
+#     elif ORIGINAL_MAP_SIZE == 128:
+#         sub_tasks_manual = [
+#             {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+#             # Add more partitions as needed
+#         ]
+#     else:
+#         raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
+
+#     # Initialize LLM agent with fixed session management
+#     (llm_query, runner_partitioning, runner_delegation, prev_actions, 
+#      system_message_master, session_manager) = init_llms_fixed(
+#         llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
+#         APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
+#     )
+
+#     sub_tasks_llm = []
+        
+#     if not USE_MANUAL_PARTITIONING:
+#         print("Calling LLM agent for partitioning decision...")
+#         import pygame as pg
+#         from terra.viz.llms_utils import capture_screen  # Assuming this import works
+        
+#         screen = pg.display.get_surface()
+#         game_state_image = capture_screen(screen)
+#         current_observation = env_manager.global_env.timestep.observation
+            
+#         try:
+#             import json
+#             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
+#             observation_str = json.dumps(obs_dict)
+#         except AttributeError:
+#             observation_str = str(current_observation)
+
+#         if USE_IMAGE_PROMPT:
+#             prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
+#         else:
+#             prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}"
+
+#         try:
+#             user_id_partitioning = f"{USER_ID}_partitioning"
+#             session_id_partitioning = f"{SESSION_ID}_map_{map_index}_partitioning"
+            
+#             if USE_IMAGE_PROMPT:
+#                 response = asyncio.run(call_agent_async_master_fixed(
+#                     prompt, game_state_image, runner_partitioning, 
+#                     user_id_partitioning, session_id_partitioning, session_manager
+#                 ))
+#             else:
+#                 response = asyncio.run(call_agent_async_master_fixed(
+#                     prompt, None, runner_partitioning, 
+#                     user_id_partitioning, session_id_partitioning, session_manager
+#                 ))
+        
+#             llm_response_text = response
+#             print(f"PARTITIONING LLM response: {llm_response_text}")
+
+#             try:
+#                 from multi_agent_utils import extract_python_format_data  # Assuming this import works
+#                 sub_tasks_llm = extract_python_format_data(llm_response_text)
+#                 print("Successfully parsed LLM response with tuples preserved")
+#             except ValueError as e:
+#                 print(f"Extraction failed: {e}")
+#                 sub_tasks_llm = sub_tasks_manual
+
+#         except Exception as adk_err:
+#             print(f"Error during PARTITIONING ADK agent communication: {adk_err}")
+#             sub_tasks_llm = sub_tasks_manual
+
+#         # Use appropriate partitions
+#         from multi_agent_utils import is_valid_region_list  # Assuming this import works
+#         partition_validation = is_valid_region_list(sub_tasks_llm)
+        
+#         if partition_validation and not USE_MANUAL_PARTITIONING:
+#             print("Using LLM-generated sub-tasks.")
+#             env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
+#         else:
+#             print("Using manually defined sub-tasks.")
+#             env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
+
+#     return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager
+
 def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING=False,
                                   USE_IMAGE_PROMPT=False):
@@ -1992,8 +2086,12 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
     )
 
     sub_tasks_llm = []
-        
-    if not USE_MANUAL_PARTITIONING:
+    
+    # ALWAYS initialize partitions - either manual or LLM-generated
+    if USE_MANUAL_PARTITIONING:
+        print("Using manually defined sub-tasks.")
+        env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
+    else:
         print("Calling LLM agent for partitioning decision...")
         import pygame as pg
         from terra.viz.llms_utils import capture_screen  # Assuming this import works
@@ -2044,15 +2142,15 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
             print(f"Error during PARTITIONING ADK agent communication: {adk_err}")
             sub_tasks_llm = sub_tasks_manual
 
-        # Use appropriate partitions
+        # Use appropriate partitions - validate LLM response and fallback to manual if needed
         from multi_agent_utils import is_valid_region_list  # Assuming this import works
         partition_validation = is_valid_region_list(sub_tasks_llm)
         
-        if partition_validation and not USE_MANUAL_PARTITIONING:
+        if partition_validation:
             print("Using LLM-generated sub-tasks.")
             env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
         else:
-            print("Using manually defined sub-tasks.")
+            print("LLM-generated partitions invalid, falling back to manually defined sub-tasks.")
             env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
 
     return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager
