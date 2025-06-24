@@ -686,7 +686,7 @@ class State(NamedTuple):
         fixed_extension = 0.5
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
         r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-        theta_max = 1 * np.pi / self.env_cfg.agent.angles_cabin
+        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
