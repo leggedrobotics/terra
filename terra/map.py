@@ -46,6 +46,9 @@ class GridWorld(NamedTuple):
     dumpability_mask_init: GridMap
     last_dig_mask: GridMap
 
+    interaction_mask_1: GridMap 
+    interaction_mask_2: GridMap 
+
     trench_axes: Array
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
 
@@ -99,6 +102,8 @@ class GridWorld(NamedTuple):
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
+        ineteraction_mask_1 = GridMap.new(jnp.zeros_like(target_map.map, dtype=IntLowDim))
+        ineteraction_mask_2 = GridMap.new(jnp.zeros_like(target_map.map, dtype=IntLowDim))
 
         world = cls(
             target_map=target_map,
@@ -109,6 +114,8 @@ class GridWorld(NamedTuple):
             dumpability_mask=dumpability_mask,
             dumpability_mask_init=dumpability_mask_init_gm,
             last_dig_mask=last_dig_mask,
+            interaction_mask_1=ineteraction_mask_1,
+            interaction_mask_2=ineteraction_mask_2,
         )
 
         return world

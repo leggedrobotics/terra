@@ -46,7 +46,14 @@ class TraversabilityMaskWrapper:
         
         polygon_mask1 = compute_polygon_mask(agent_corners_1, map_width, map_height)
         polygon_mask2 = compute_polygon_mask(agent_corners_2, map_width, map_height)
-        
+        interaction_mask1 = state._build_dig_dump_cone().astype(IntLowDim).reshape(
+            state.world.height, state.world.width
+                )
+        interaction_mask2 = state._build_dig_dump_cone_2().astype(IntLowDim).reshape(
+            state.world.height, state.world.width
+                )
+        interaction_mask1 = jnp.where(polygon_mask1, -1, interaction_mask1)
+        interaction_mask2 = jnp.where(polygon_mask2, -1, interaction_mask2)
         traversability_mask = jnp.where(polygon_mask1, -1, traversability_mask)
         traversability_mask = jnp.where(polygon_mask2, -1, traversability_mask)
 
@@ -60,6 +67,12 @@ class TraversabilityMaskWrapper:
             world=state.world._replace(
             traversability_mask=state.world.traversability_mask._replace(
                 map=tm.astype(IntLowDim)
+            ),
+            interaction_mask_1=state.world.interaction_mask_1._replace(
+                map=interaction_mask1       
+            ),
+            interaction_mask_2=state.world.interaction_mask_2._replace(
+                map=interaction_mask2
             ),
             )
         )

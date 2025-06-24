@@ -644,10 +644,25 @@ class State(NamedTuple):
         return angle_idx_to_rad(
             self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base
         )
+    
+    def _get_cabin_angle_rad_2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_cabin, self.env_cfg.agent.angles_cabin
+        )
+
+    def _get_base_angle_rad_2(self) -> Float:
+        return angle_idx_to_rad(
+            self.agent.agent_state_2.angle_base, self.env_cfg.agent.angles_base
+        )
 
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
         cabin_angle = self._get_cabin_angle_rad()
+        return wrap_angle_rad(base_angle + cabin_angle)
+
+    def _get_arm_angle_rad_2(self) -> Float:
+        base_angle = self._get_base_angle_rad_2()
+        cabin_angle = self._get_cabin_angle_rad_2()
         return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
@@ -671,7 +686,7 @@ class State(NamedTuple):
         fixed_extension = 0.5
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
         r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
+        theta_max = 1 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(
@@ -822,12 +837,47 @@ class State(NamedTuple):
         current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad()))
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
+    
+    def _get_map_local_and_cyl_coords_2(self):
+        """
+        Returns:
+            - map_cyl_coords: (2, width*height) map with [r, theta] rows
+            - map_local_coords_base: (2, width*height) map with [x, y] rows
+        """
+        current_pos_idx = self._get_current_pos_vector_idx(
+            pos_base=self.agent.agent_state_2.pos_base,
+            map_height=self.env_cfg.maps.edge_length_px,
+        )
+        map_global_coords = self._map_to_flattened_global_coords(
+            self.world.width, self.world.height, self.env_cfg.tile_size
+        )
+        current_pos = self._get_current_pos_from_flattened_map(
+            map_global_coords, current_pos_idx
+        )
+        current_arm_angle = self._get_arm_angle_rad_2()
+
+        # Local coordinates including the cabin rotation
+        current_state_arm = jnp.hstack((current_pos, current_arm_angle))
+        map_local_coords_arm = apply_rot_transl(current_state_arm, map_global_coords)
+        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
+
+        # Local coordinates excluding the cabin rotation
+        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad_2()))
+        map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
+        return map_cyl_coords, map_local_coords_base
 
     def _build_dig_dump_cone(self) -> Array:
         """
         Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
         """
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
+        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
+
+    def _build_dig_dump_cone_2(self) -> Array:
+        """
+        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
+        """
+        map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords_2()
         return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -1403,6 +1453,7 @@ class State(NamedTuple):
             self._is_done_task(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
+                new_state.agent.agent_state.loaded,
                 new_state.agent.agent_state_2.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
@@ -1421,7 +1472,7 @@ class State(NamedTuple):
         return reward
 
     @staticmethod
-    def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array):
+    def _is_done_task(action_map: Array, target_map: Array, agent_loaded1: Array,agent_loaded2: Array):
         """
         Checks if the target map matches the action map,
         but only on the relevant tiles.
@@ -1448,14 +1499,15 @@ class State(NamedTuple):
         target_map_negative = jnp.clip(target_map, a_max=0)
 
         done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
-        done_unload = agent_loaded[0] == 0
-        done_task = done_dump & done_dig & done_unload
+        done_unload_1 = agent_loaded1[0] == 0
+        done_unload_2 = agent_loaded2[0] == 0
+        done_task = done_dump & done_dig & done_unload_1 & done_unload_2
         return done_task
 
     def _is_done(
-        self, action_map: Array, target_map: Array, agent_loaded: Array
+        self, action_map: Array, target_map: Array, agent_loaded1: Array, agent_loaded2: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
-        done_task = self._is_done_task(action_map, target_map, agent_loaded)
+        done_task = self._is_done_task(action_map, target_map, agent_loaded1,agent_loaded2)
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 
@@ -1594,7 +1646,7 @@ class State(NamedTuple):
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
-            "target_tiles": self._build_dig_dump_cone(),
+            "target_tiles": ~(~self._build_dig_dump_cone_2()*~self._build_dig_dump_cone()),
             # Include termination_type directly without done_task
             "task_done": task_done,
         }

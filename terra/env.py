@@ -198,6 +198,9 @@ class TerraEnv(NamedTuple):
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
         reward = reward_1 + reward_2 
+        # jax.debug.print( "interaction_mask_1: {interaction_mask_1}",
+        #     interaction_mask_1=new_state.world.interaction_mask_1.map[10][10]
+        # )
         # jax.debug.print("reward: {reward}", reward=reward)
         # #reward 1 and 2
         # jax.debug.print(
@@ -236,6 +239,7 @@ class TerraEnv(NamedTuple):
             new_state.world.action_map.map,
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
+            new_state.agent.agent_state_2.loaded,
         )
 
         def _reset_branch(s, o, cfg):
@@ -322,6 +326,8 @@ class TerraEnv(NamedTuple):
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
+            "interaction_mask_1": state.world.interaction_mask_1.map,
+            "interaction_mask_2": state.world.interaction_mask_2.map,
         }
 
 
