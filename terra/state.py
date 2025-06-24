@@ -70,13 +70,14 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
         custom_pos: Optional[Tuple[int, int]] = None,
         custom_angle: Optional[int] = None,
     ) -> "State":
         #print("new world")
         #print(target_map.shape, padding_mask.shape, dumpability_mask_init.shape)
         world = GridWorld.new(
-            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init
+            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
         )
         #print("new world done")
 
@@ -89,6 +90,7 @@ class State(NamedTuple):
             world.max_traversable_x,
             world.max_traversable_y,
             padding_mask,
+            action_map,
             custom_pos=custom_pos,
             custom_angle=custom_angle,
         )
@@ -113,6 +115,7 @@ class State(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
         custom_pos: Optional[Tuple[int, int]] = None,
         custom_angle: Optional[int] = None,
     ) -> "State":
@@ -128,6 +131,7 @@ class State(NamedTuple):
             trench_axes=trench_axes,
             trench_type=trench_type,
             dumpability_mask_init=dumpability_mask_init,
+            action_map=action_map,
             custom_pos=custom_pos,
             custom_angle=custom_angle,
         )
@@ -147,12 +151,10 @@ class State(NamedTuple):
             self._handle_cabin_anticlock,
             self._handle_do,
             # Wheeled
-            self._handle_move_forward,
-            self._handle_move_backward,
-            self._handle_move_clock_forward,
-            self._handle_move_clock_backward,
-            self._handle_move_anticlock_forward,
-            self._handle_move_anticlock_backward,
+            self._handle_move_forward_wheeled,
+            self._handle_move_backward_wheeled,
+            self._handle_turn_wheels_left,
+            self._handle_turn_wheels_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
@@ -312,12 +314,12 @@ class State(NamedTuple):
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         delta_xy = orientation_vector @ xy_delta
-        
+
         # Compute candidate new position and immediately round it to discrete grid points.
         candidate_pos = self.agent.agent_state.pos_base + delta_xy
         candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
         candidate_pos = jnp.squeeze(candidate_pos, axis=0)
-        
+
         # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
             candidate_pos,
@@ -325,11 +327,11 @@ class State(NamedTuple):
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
-        
+
         # Check if the new position is valid.
         valid_move = self._is_valid_move(agent_corners_xy)
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-        
+
         # Choose between the old position and the new candidate position.
         old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
         new_pos_base = valid_move_mask @ old_new_pos
@@ -337,6 +339,84 @@ class State(NamedTuple):
         return self._replace(
             agent=self.agent._replace(
                 agent_state=self.agent.agent_state._replace(pos_base=new_pos_base)
+            )
+        )
+
+    def _move_on_orientation_with_steering(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
+        return jax.lax.cond(
+            self.agent.agent_state.wheel_angle[0] == 0,
+            lambda: self._move_on_orientation(orientation_vector),
+            lambda: self._execute_curved_movement(angle_idx_to_rad(self.agent.agent_state.angle_base,
+                                                                   self.env_cfg.agent.angles_base),
+                                                                   is_forward),
+        )
+
+    def _execute_curved_movement(self, orientation_angle: float, is_forward: jnp.bool_) -> "State":
+        # Shift to different orientation coordinates
+        orientation_angle = orientation_angle + (jnp.pi / 2)
+
+        # For backward movement, reverse the wheel angle effect
+        wheel_angle = self.agent.agent_state.wheel_angle[0]
+        wheel_angle_rad = jnp.deg2rad(wheel_angle * self.env_cfg.agent.wheel_step)
+        # Use width as wheelbase for turning radius calculation
+        turn_radius = self.env_cfg.agent.width / (jnp.tan(wheel_angle_rad) + 1e-6)
+
+        # Calculate center of rotation (perpendicular to current orientation)
+        # Positive wheel angle means turn left, so center is to the left
+        center_offset = np.squeeze(jnp.array([
+            -jnp.sin(orientation_angle) * turn_radius,
+            jnp.cos(orientation_angle) * turn_radius
+        ]))
+        center_of_rotation = self.agent.agent_state.pos_base + center_offset
+
+        # Compute how far we move along the arc and new orientation
+        angle_change = self.env_cfg.agent.move_tiles / turn_radius
+        angle_change = jnp.where(is_forward, angle_change, -angle_change)
+        new_base_angle_rad = orientation_angle + angle_change
+
+        # Rotate the digger around the center of rotation
+        rotation_matrix = jnp.array([
+            [jnp.cos(angle_change), -jnp.sin(angle_change)],
+            [jnp.sin(angle_change), jnp.cos(angle_change)]
+        ])
+        relative_pos = self.agent.agent_state.pos_base - center_of_rotation
+        new_relative_pos = rotation_matrix @ relative_pos
+        candidate_pos = center_of_rotation + new_relative_pos
+
+        # Round to grid position
+        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
+
+        # Calculate new orientation angle in our discrete system
+        new_angle_base = jnp.round(
+            ((new_base_angle_rad - (jnp.pi / 2)) / (2 * jnp.pi)) * self.env_cfg.agent.angles_base
+        ).astype(IntLowDim)
+        new_angle_base = new_angle_base % self.env_cfg.agent.angles_base
+
+        # Check if the new position and orientation are valid
+        agent_corners_xy = self._get_agent_corners(
+            candidate_pos,
+            base_orientation=new_angle_base,
+            agent_width=self.env_cfg.agent.width,
+            agent_height=self.env_cfg.agent.height,
+        )
+
+        valid_move = self._is_valid_move(agent_corners_xy)
+        valid_move_mask = self._valid_move_to_valid_mask(valid_move)
+
+        # Choose between old and new positions
+        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        new_pos_base = valid_move_mask @ old_new_pos
+
+        # Choose between old and new angles
+        old_new_angle = jnp.array([self.agent.agent_state.angle_base, new_angle_base])
+        new_angle_base = valid_move_mask @ old_new_angle
+
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    pos_base=new_pos_base,
+                    angle_base=new_angle_base
+                )
             )
         )
 
@@ -370,6 +450,32 @@ class State(NamedTuple):
 
         return jax.lax.cond(
             self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
+        )
+
+    def _handle_move_forward_wheeled(self) -> "State":
+        """
+        Moves the wheeled vehicle forward along an arc determined by wheel angle - if not loaded
+        """
+        def _move_forward_wheeled():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(True))
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward_wheeled
+        )
+
+    def _handle_move_backward_wheeled(self) -> "State":
+        """
+        Moves the wheeled vehicle backward along an arc determined by wheel angle - if not loaded
+        """
+        def _move_backward_wheeled():
+            base_orientation = self.agent.agent_state.angle_base
+            orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
+            return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
+
+        return jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward_wheeled
         )
 
     def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
@@ -462,61 +568,41 @@ class State(NamedTuple):
                 agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
             )
         )
-
-    def _handle_move_clock_forward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_clock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+    
+    def _handle_turn_wheels_left(self) -> "State":
+        old_wheel_angle = self.agent.agent_state.wheel_angle
+        new_wheel_angle = jnp.min(
+            jnp.array([
+                old_wheel_angle + 1,
+                jnp.full((1,), fill_value=self.env_cfg.agent.max_wheel_angle, dtype=IntLowDim),
+            ]),
+            axis=0,
         )
 
-    def _handle_move_clock_backward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_clock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    wheel_angle=new_wheel_angle
+                )
+            )
         )
 
-    def _handle_move_anticlock_forward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_anticlock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_forward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+    def _handle_turn_wheels_right(self) -> "State":
+        old_wheel_angle = self.agent.agent_state.wheel_angle
+        new_wheel_angle = jnp.max(
+            jnp.array([
+                old_wheel_angle - 1,
+                jnp.full((1,), fill_value=-self.env_cfg.agent.max_wheel_angle, dtype=IntLowDim),
+            ]),
+            axis=0,
         )
 
-    def _handle_move_anticlock_backward(self) -> "State":
-        valid_chain = True
-        s0 = self._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(self, s0)
-        s1 = s0._handle_anticlock()
-        valid_chain *= self._check_agent_turn_on_turn_action(s0, s1)
-        s2 = s1._handle_move_backward()
-        valid_chain *= self._check_agent_moved_on_move_action(s1, s2)
-        return jax.lax.cond(
-            valid_chain,
-            lambda: s2,
-            lambda: self,
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    wheel_angle=new_wheel_angle
+                )
+            )
         )
 
     @staticmethod
@@ -762,7 +848,7 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
-        digged_mask_action_map = self.world.dig_map.map < 0
+        digged_mask_action_map = self.world.action_map.map < 0
         return dump_mask * (~digged_mask_action_map).reshape(-1)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
@@ -785,7 +871,7 @@ class State(NamedTuple):
         cone_mask = self._build_dig_dump_cone()
         dig_map_mask = jax.lax.cond(
             (
-                (self.world.dig_map.map != self.world.action_map.map).reshape(-1)
+                self.world.last_dig_mask.map.reshape(-1)
                 * (self.world.action_map.map.reshape(-1) > 0)
                 * cone_mask
             ).sum()
@@ -829,7 +915,7 @@ class State(NamedTuple):
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         new_dumpability_mask = self.world.dumpability_mask_init.map
         action_mask = (action_map < 0).astype(jnp.float16)
-        kernel = jnp.ones((3, 3), dtype=jnp.float16)
+        kernel = jnp.ones((5, 5), dtype=jnp.float16)
         action_mask_contoured = jax.scipy.signal.convolve2d(
             action_mask,
             kernel,
@@ -860,18 +946,28 @@ class State(NamedTuple):
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
             )
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
 
             return self._replace(
                 world=self.world._replace(
-                    dig_map=self.world.dig_map._replace(
+                    action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
+                    ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    ),
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.bool_(dig_mask.reshape(self.world.target_map.map.shape)),
                     )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
                         loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
-                    )
-                ),
+                    ),
+                    moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
+                )
             )
 
         s = jax.lax.cond(
@@ -891,19 +987,15 @@ class State(NamedTuple):
         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
         dump_volume = dump_mask.sum()
 
-        # dump_volume_per_tile = jnp.rint(
-        #     self.agent.agent_state.loaded / (dump_volume + 1e-6)
-        # ).astype(IntLowDim)
-
         remaining_volume = self.agent.agent_state.loaded % dump_volume
         even_volume_per_tile = (
             self.agent.agent_state.loaded - remaining_volume
         ) / dump_volume
 
         def _apply_dump():
-            flattened_dig_map = self.world.dig_map.map.reshape(-1)
+            flattened_action_map = self.world.action_map.map.reshape(-1)
             new_map_global_coords = self._apply_dump_mask(
-                flattened_dig_map,
+                flattened_action_map,
                 dump_mask,
                 even_volume_per_tile,
                 remaining_volume,
@@ -913,26 +1005,20 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
-            )
-
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     ),
-                    dig_map=self.world.dig_map._replace(
-                        map=IntLowDim(new_map_global_coords)
-                    ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
                     ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
                         loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
-                    )
+                    ),
+                    moving_dumped_dirt=jnp.bool_(False),
                 ),
             )
 
@@ -983,6 +1069,13 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
+        # Moving with turned wheels
+        reward += jax.lax.cond(
+            jnp.any(self.agent.agent_state.wheel_angle != 0),
+            lambda: self.env_cfg.rewards.move_with_turned_wheels,
+            lambda: 0.0,
+        )
+
         # Move
         reward += self.env_cfg.rewards.move
 
@@ -1004,21 +1097,40 @@ class State(NamedTuple):
         reward += self.env_cfg.rewards.base_turn
         return reward
 
+    def _handle_rewards_wheel_turn(
+        self, new_state: "State", action: WheeledActionType
+    ) -> Float:
+        reward = 0.0
+
+        # Check if wheels actually turned
+        wheel_not_turned = jnp.allclose(
+            self.agent.agent_state.wheel_angle,
+            new_state.agent.agent_state.wheel_angle
+        )
+
+        # Apply extra reward if wheels did not turn
+        reward += jax.lax.cond(
+            wheel_not_turned,
+            lambda: self.env_cfg.rewards.wheel_turn,
+            lambda: 0.0,
+        )
+
+        reward += self.env_cfg.rewards.wheel_turn
+        return reward
+
     def _handle_rewards_cabin_turn(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Cabin turn
         return self.env_cfg.rewards.cabin_turn
 
     @staticmethod
-    def _get_action_map_positive_progress(
+    def _get_action_map_dump_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
         Returns
-        > 0 if there was progress on the dump tiles
-        < 0 if there was -progress on the dump tiles
-        = 0 if there was no progress on the dump tiles
+        > 0 if there was progress on the dump tiles after the action
+        = 0 if there was no progress on the dump tiles after the action
         """
         action_map_clip_old = jnp.clip(action_map_old, a_min=0)
         action_map_clip_new = jnp.clip(action_map_new, a_min=0)
@@ -1029,73 +1141,47 @@ class State(NamedTuple):
             (action_map_clip_new - action_map_clip_old) * target_map_dump_mask
         ).sum()
 
-        return action_map_progress
+        return action_map_progress.astype(jnp.float32)
 
     @staticmethod
-    def _get_action_map_negative_progress(
+    def _get_action_map_dig_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
         Returns
-        > 0 if there was progress on the dig tiles
-        < 0 if there was -progress on the dig tiles (shouldn't be allowed)
-        = 0 if there was no progress on the dig tiles
+        > 0 if there was progress on the dig tiles after the action
+        = 0 if there was no progress on the dig tiles after the action
         """
-        action_map_clip_old = jnp.clip(action_map_old, a_min=None, a_max=0)
-        action_map_clip_new = jnp.clip(action_map_new, a_min=None, a_max=0)
+        action_map_clip_old = jnp.clip(action_map_old, a_max=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_max=0)
 
-        target_map_mask = target_map < 0
+        target_map_dump_mask = target_map < 0
+
         action_map_progress = (
-            (action_map_clip_old - action_map_clip_new) * target_map_mask
+            (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
         ).sum()
 
-        return action_map_progress
+        return action_map_progress.astype(jnp.float32)
 
     @staticmethod
-    def _get_action_map_spread_out_rate(
-        action_map_old: Array, action_map_new: Array, target_map: Array, loaded: int
+    def _get_action_map_dump_regress(
+        action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
         """
-        Returns the spread-out rate of the terrain that has just been dumped.
-        The rate is defined as (#tiles-dumped / #tiles-loaded)
+        Returns
+        > 0 if there was regress on the dig tiles after the action
+        = 0 if there was no regress on the dig tiles after the action
         """
-        action_map_mask_old = (action_map_old > 0).astype(IntLowDim)
-        action_map_mask_new = (action_map_new > 0).astype(IntLowDim)
+        action_map_clip_old = jnp.clip(action_map_old, a_min=0)
+        action_map_clip_new = jnp.clip(action_map_new, a_min=0)
 
-        target_map_mask = target_map >= 0  # include also neutral tiles
+        target_map_dump_mask = target_map > 0
 
-        action_map_progress = (
-            (action_map_mask_new - action_map_mask_old) * target_map_mask
+        action_map_regress = (
+            (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
         ).sum()
-        return action_map_progress.astype(jnp.float32) / loaded[0].astype(jnp.float32)
 
-    @staticmethod
-    def _get_dug_area_proximity_reward(
-        action_map_old: Array, action_map_new: Array
-    ) -> Float:
-        """
-        Returns a penalty for dumping soil within 2 tiles of any previously‐dug cell.
-        """
-        # Compute how much soil was newly dumped at each cell
-        dumped_old = jnp.clip(action_map_old, a_min=0)
-        dumped_new = jnp.clip(action_map_new, a_min=0)
-        dump_delta = jnp.clip(dumped_new - dumped_old, a_min=0)
-
-        # Mask of all cells that were dug
-        dug_mask = (action_map_new < 0).astype(IntMap)
-
-        # Build a 5×5 “any‐dug” filter by convolving dug_mask with a 5×5 ones kernel
-        kernel = jnp.ones((5, 5), dtype=IntMap)
-        nearby_dug_count = jax.scipy.signal.convolve2d(
-            dug_mask, kernel, mode="same", boundary="fill", fillvalue=0
-        )
-        # nearby_mask[i,j] == True iff there was at least one dug tile in ±2 window
-        nearby_dug_mask = nearby_dug_count > 0
-
-        # Penalty = sum of (amount dumped × nearby_dug_mask)
-        penalty = (dump_delta.astype(jnp.float32) * nearby_dug_mask.astype(jnp.float32)).sum()
-
-        return penalty
+        return action_map_regress.astype(jnp.float32)
 
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
@@ -1105,79 +1191,61 @@ class State(NamedTuple):
         This includes both the dump part and the realization
         of the previously digged terrain.
         """
-
-        # Dig
-        action_map_negative_progress = self._get_action_map_negative_progress(
+        action_map_dump_progress = self._get_action_map_dump_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
             self.world.target_map.map,
-        )
-        dig_reward = jax.lax.cond(
-            action_map_negative_progress > 0,
-            lambda: self.env_cfg.rewards.dig_correct,
-            lambda: 0.0,
-        )
-
-        # Dump
-        action_map_positive_progress = self._get_action_map_positive_progress(
-            self.world.dig_map.map,  # note dig_map here
-            new_state.world.action_map.map,
-            self.world.target_map.map,
-        )
-        spread_out_rate = self._get_action_map_spread_out_rate(
-            self.world.dig_map.map,  # note dig_map here
-            new_state.world.action_map.map,
-            self.world.target_map.map,
-            self.agent.agent_state.loaded,
         )
 
         dump_reward_condition = jnp.allclose(
             self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
         )
 
-        def dump_reward_fn() -> Float:
-            return jax.lax.cond(
-                action_map_positive_progress < 0,
-                lambda: self.env_cfg.rewards.dump_no_dump_area,
-                lambda: jax.lax.cond(
-                    action_map_negative_progress == 0,
-                    lambda: 0.0,
-                    lambda: jax.lax.cond(
-                        action_map_positive_progress > 0,
-                        lambda: spread_out_rate * self.env_cfg.rewards.dump_correct,
-                        lambda: 0.0,
-                    ),
-                ),
-            )
-
         dump_reward = jax.lax.cond(
             dump_reward_condition,
             lambda: self.env_cfg.rewards.dump_wrong,
-            dump_reward_fn,
+            lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
         )
 
-        dig_proximity_reward = jax.lax.cond(
-            dump_reward_condition,
-            lambda: 0.0,
-            lambda: self._get_dug_area_proximity_reward(
-                self.world.dig_map.map,
-                new_state.world.action_map.map,
-            ) * self.env_cfg.rewards.dump_close_to_dug_area,
-        )
-
-        return dig_reward + dump_reward + dig_proximity_reward
+        return dump_reward
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Dig
-        return jax.lax.cond(
+        action_map_dig_progress = self._get_action_map_dig_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+
+        action_map_dig_regress = self._get_action_map_dump_regress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+
+        dig_reward = jax.lax.cond(
+            action_map_dig_progress > 0,
+            lambda: action_map_dig_progress * self.env_cfg.rewards.dig_correct,
+            lambda: 0.0,
+        )
+
+        # Make penalty bigger than dumping reward
+        dig_on_dump_penalty = jax.lax.cond(
+            action_map_dig_regress > 0,
+            lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
+            lambda: 0.0,
+        )
+
+        dig_wrong_reward = jax.lax.cond(
             jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
         )
+
+        return dig_reward + dig_on_dump_penalty + dig_wrong_reward
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
@@ -1244,12 +1312,9 @@ class State(NamedTuple):
         )
 
         reward += jax.lax.cond(
-            (action == WheeledActionType.CLOCK_FORWARD)
-            | (action == WheeledActionType.ANTICLOCK_FORWARD)
-            | (action == WheeledActionType.CLOCK_BACKWARD)
-            | (action == WheeledActionType.ANTICLOCK_BACKWARD),
-            lambda new_state, action: self._handle_rewards_base_turn(new_state, action)
-            + self._handle_rewards_move(new_state, action),
+            (action == WheeledActionType.WHEELS_LEFT)
+            | (action == WheeledActionType.WHEELS_RIGHT),
+            self._handle_rewards_wheel_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -1332,15 +1397,6 @@ class State(NamedTuple):
         )
         return r
 
-    def _get_terminal_completed_tiles_reward(
-        self,
-    ) -> Float:
-        tiles_digged = (self.world.action_map.map == -1).sum()
-        total_tiles = (self.world.target_map.map == -1).sum()
-        return (
-            tiles_digged / total_tiles
-        ) * self.env_cfg.rewards.terminal_completed_tiles
-
     def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
         action = action_handler.action
 
@@ -1363,17 +1419,6 @@ class State(NamedTuple):
                 new_state.agent.agent_state.loaded,
             ),
             lambda: self.env_cfg.rewards.terminal,
-            lambda: 0.0,
-        )
-
-        # Terminal completed tiles
-        reward += jax.lax.cond(
-            self._is_done(
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-                new_state.agent.agent_state.loaded,
-            )[0],
-            self._get_terminal_completed_tiles_reward,
             lambda: 0.0,
         )
 
@@ -1481,8 +1526,6 @@ class State(NamedTuple):
                 bool_cabin_clock,
                 bool_cabin_anticlock,
                 bool_do,
-                0,  # dummy
-                0,  # dummy
             ],
             dtype=jnp.bool_,
         )
@@ -1501,30 +1544,16 @@ class State(NamedTuple):
             new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
         )
 
-        # move clock forward
-        new_state = self._handle_move_clock_forward()
-        bool_move_clock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+        # turn wheels left
+        new_state = self._handle_turn_wheels_left()
+        bool_turn_wheels_left = ~jnp.all(
+            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
         )
 
-        # move clock backward
-        new_state = self._handle_move_clock_backward()
-        bool_move_clock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
-        )
-
-        # move anticlock forward
-        new_state = self._handle_move_anticlock_forward()
-        bool_move_anticlock_forward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
-        )
-
-        # move anticlock backward
-        new_state = self._handle_move_anticlock_backward()
-        bool_move_anticlock_backward = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+        # turn wheels right
+        new_state = self._handle_turn_wheels_right()
+        bool_turn_wheels_right = ~jnp.all(
+            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
         )
 
         # cabin clock
@@ -1551,10 +1580,8 @@ class State(NamedTuple):
             [
                 bool_forward,
                 bool_backward,
-                bool_move_clock_forward,
-                bool_move_clock_backward,
-                bool_move_anticlock_forward,
-                bool_move_anticlock_backward,
+                bool_turn_wheels_left,
+                bool_turn_wheels_right,
                 bool_cabin_clock,
                 bool_cabin_anticlock,
                 bool_do,

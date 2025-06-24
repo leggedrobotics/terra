@@ -12,6 +12,7 @@ from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
 from terra.viz.llms_utils import *
 import csv
+from utils.models import load_neural_network
 
 from utils.models import get_model_ready
 import json
@@ -85,10 +86,10 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
     return final_response_text
 
 
-def load_neural_network(config, env):
-    rng = jax.random.PRNGKey(0)
-    model, _ = get_model_ready(rng, config, env)
-    return model
+# def load_neural_network(config, env):
+#     rng = jax.random.PRNGKey(0)
+#     model, _ = get_model_ready(rng, config, env)
+#     return model
 
 def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     if llm_model_key == "gpt":
@@ -349,7 +350,7 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
                                 target_map_override=None, traversability_mask_override=None,
                                 padding_mask_override=None, dumpability_mask_override=None,
                                 dumpability_mask_init_override=None, action_map_override=None,
-                                dig_map_override=None, agent_config_override=None):
+                                agent_config_override=None):
         """
         Reset the environment with custom map overrides.
         
@@ -364,7 +365,6 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
             dumpability_mask_override: Override for dumpability mask
             dumpability_mask_init_override: Override for initial dumpability mask
             action_map_override: Override for action map
-            dig_map_override: Override for dig map
             
         Returns:
             Initial timestep
@@ -377,7 +377,6 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
         # print(f"Dumpability Mask Override Shape: {dumpability_mask_override.shape if dumpability_mask_override is not None else None}")
         # print(f"Dumpability Init Mask Override Shape: {dumpability_mask_init_override.shape if dumpability_mask_init_override is not None else None}")
         # print(f"Action Map Override Shape: {action_map_override.shape if action_map_override is not None else None}")
-        # print(f"Dig Map Override Shape: {dig_map_override.shape if dig_map_override is not None else None}")
         
         # Determine the new edge length based on overrides
         new_edge_length = None
@@ -508,18 +507,7 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
                 )
             )
 
-        if dig_map_override is not None:
-            if len(dig_map_override.shape) == 2:
-                dig_map_override = dig_map_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        dig_map=timestep.state.world.dig_map._replace(
-                            map=dig_map_override
-                        )
-                    )
-                )
-            )
+
         
         # Print the new shapes after override
         # print("\nAfter Override Map Shapes:")
@@ -587,9 +575,7 @@ class TerraEnvBatchWithMapOverride(TerraEnvBatch):
         if dumpability_mask_init_override is not None and 'dumpability_mask_init' in updated_obs:
             updated_obs['dumpability_mask_init'] = dumpability_mask_init_override
             
-        if dig_map_override is not None and 'dig_map' in updated_obs:
-            updated_obs['dig_map'] = dig_map_override
-        
+
         # Force a reset of the environment to update the observation
         # Note: We already did a reset earlier, this is just for completeness
         #rngs_new = jax.random.split(rngs[0], 1)
@@ -1589,6 +1575,7 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
             print(f"Initializing partition {partition_idx}...")
                 
             small_env_timestep = env_manager.initialize_small_environment(partition_idx)
+            print(f"Small environment initialized for partition {partition_idx}")
                 
             partition_states[partition_idx] = {
                 'timestep': small_env_timestep,
@@ -1601,6 +1588,8 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
             }
                 
             active_partitions.append(partition_idx)
+            print(f"Partition {partition_idx} is active and ready.")
+            print("Loading neural network model for partition...")
                 
             partition_models[partition_idx] = {
                 'model': load_neural_network(config, env_manager.small_env),

@@ -58,7 +58,7 @@ from map_environments import MapEnvironments
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
@@ -77,7 +77,7 @@ COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
 
 def run_experiment(
     llm_model_name, llm_model_key, num_timesteps, seed, 
-    progressive_gif, run, small_env_config=None):
+    run, small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
     Modified to cycle through maps in the existing environment instead of creating new ones.
@@ -107,7 +107,6 @@ def run_experiment(
         seed=seed,
         global_env_config=global_env_config,
         small_env_config=small_env_config,
-        progressive_gif=progressive_gif,
         shuffle_maps=False  # This will give us access to different maps
     )
     print("Environment manager initialized.")
@@ -661,13 +660,7 @@ if __name__ == "__main__":
         default=0,
         help="Random seed for the environment.",
     )
-    parser.add_argument(
-        "-pg",
-        "--progressive_gif",
-        type=int,
-        default=0,
-        help="Random seed for the environment.",
-    )
+
     parser.add_argument(
         "-run",
         "--run_name",
@@ -678,7 +671,9 @@ if __name__ == "__main__":
         # help="gioele.pkl (8 cabin and 4 base rotations)",
         # default="/home/gioelemo/Documents/terra/gioele_new.pkl",
         # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
-        default="/home/gioelemo/Documents/terra/new-penalties.pkl",
+        #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
+        #default="/home/gioelemo/Documents/terra/benchmark.pkl",
+        default="/home/gioelemo/Documents/terra/no-action-map.pkl",
         help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 
@@ -703,7 +698,6 @@ if __name__ == "__main__":
                     args.model_key, 
                     args.num_timesteps, 
                     base_seed + i * 1000,  # Ensure different seeds
-                    args.progressive_gif, 
                     args.run_name
                 )
         #print(info)

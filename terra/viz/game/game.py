@@ -47,13 +47,11 @@ class Game:
         n_envs_x=1,
         n_envs_y=1,
         display=True,
-        progressive_gif=False,
     ):
         self.screen = screen
         self.surface = surface
         self.clock = clock
         self.display = display
-        self.progressive_gif = progressive_gif
         self.width, self.height = self.screen.get_size()
 
         self.n_envs_x = n_envs_x
@@ -255,8 +253,7 @@ class Game:
         surface_height = math.ceil(max_y - min_y) + 2
         agent_surface = pg.Surface((surface_width, surface_height), pg.SRCALPHA)
         
-        if self.progressive_gif:
-            agent_surface.set_alpha(50)
+
         
         # Adjust vertices for the surface coordinate system
         body_offset = [(v[0] - min_x, v[1] - min_y) for v in body_vertices]
@@ -296,8 +293,7 @@ class Game:
             
             # Create surface for the primary agent
             primary_surface = pg.Surface((surface_width, surface_height), pg.SRCALPHA)
-            if self.progressive_gif:
-                primary_surface.set_alpha(50)
+
             
             # Calculate surface position
             agent_x = min_x + total_offset_x
@@ -418,16 +414,16 @@ class Game:
 
         self.screen.blit(self.surface, (0, 0))
 
-        if self.progressive_gif:
-            if self.count % 5 == 0:
-                self.old_agents.append((all_agent_surfaces, all_agent_positions))
-            for s in self.old_agents:
-                for agent_surface, agent_position in zip(s[0], s[1]):
-                    self.screen.blit(agent_surface, agent_position)
-            self.count += 1
-        else:
-            for agent_surface, agent_position in zip(all_agent_surfaces, all_agent_positions):
-                self.screen.blit(agent_surface, agent_position)
+        # if self.progressive_gif:
+        #     if self.count % 5 == 0:
+        #         self.old_agents.append((all_agent_surfaces, all_agent_positions))
+        #     for s in self.old_agents:
+        #         for agent_surface, agent_position in zip(s[0], s[1]):
+        #             self.screen.blit(agent_surface, agent_position)
+        #     self.count += 1
+        # else:
+        for agent_surface, agent_position in zip(all_agent_surfaces, all_agent_positions):
+            self.screen.blit(agent_surface, agent_position)
 
         if self.display:
             pg.display.flip()

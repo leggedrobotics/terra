@@ -9,8 +9,6 @@ from pygame.locals import (
     K_RIGHT,
     K_a,
     K_d,
-    K_i,
-    K_o,
     K_k,
     K_l,
     K_SPACE,
@@ -84,14 +82,10 @@ def main():
                     action = action_type.cabin_anticlock()
                 elif event.key == K_d:
                     action = action_type.cabin_clock()
-                elif event.key == K_o:
-                    action = action_type.clock_forward()
                 elif event.key == K_k:
-                    action = action_type.clock_backward()
-                elif event.key == K_i:
-                    action = action_type.anticlock_forward()
+                    action = action_type.wheels_left()
                 elif event.key == K_l:
-                    action = action_type.anticlock_backward()
+                    action = action_type.wheels_right()
                 elif event.key == K_SPACE:
                     action = action_type.do()
 

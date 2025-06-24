@@ -37,8 +37,7 @@ class MapEnvironments:
     Only map data is exchanged between environments.
     """
         
-    def __init__(self, seed, global_env_config, small_env_config=None, 
-                 progressive_gif=False, shuffle_maps=False):
+    def __init__(self, seed, global_env_config, small_env_config=None, shuffle_maps=False):
         """
         Initialize with separate configurations for large and small environments.
         
@@ -47,13 +46,11 @@ class MapEnvironments:
             global_env_config: Environment configuration for the large global map
             small_env_config: Environment configuration for small maps (or None to derive from global)
             num_partitions: Number of partitions for the large map
-            progressive_gif: Whether to generate a progressive GIF
             shuffle_maps: Whether to shuffle maps
         """
         self.rng = jax.random.PRNGKey(seed)
         self.global_env_config = global_env_config
         # self.num_partitions = num_partitions
-        self.progressive_gif = progressive_gif
         self.shuffle_maps = shuffle_maps
         # Create a custom small environment config if not provided
         if small_env_config is None:
@@ -74,7 +71,6 @@ class MapEnvironments:
             n_envs_x_rendering=1,
             n_envs_y_rendering=1,
             display=True,
-            progressive_gif=progressive_gif,
             shuffle_maps=shuffle_maps,
         )
  
@@ -86,7 +82,6 @@ class MapEnvironments:
             n_envs_x=1,
             n_envs_y=1,
             display=False,
-            progressive_gif=progressive_gif,
         )
         
         # Store global map data
@@ -97,7 +92,6 @@ class MapEnvironments:
             'dumpability_mask_init': None,
             'padding_mask': None,
             'traversability_mask': None,
-            'dig_map': None,
             'trench_axes': None,
             'trench_type': None,
         }
@@ -401,7 +395,7 @@ class MapEnvironments:
                 #print(f"  ✓ Terrain synchronized between partitions {i} and {j}")
             
             # Also sync other environmental maps
-            environmental_maps = ['action_map', 'dig_map', 'dumpability_mask', 'target_map']
+            environmental_maps = ['action_map', 'dumpability_mask', 'target_map']
             
             for map_name in environmental_maps:
                 if hasattr(state_i.world, map_name) and hasattr(state_j.world, map_name):
@@ -560,6 +554,7 @@ class MapEnvironments:
         current_dumpability_mask_init = current_state.world.dumpability_mask_init.map
         current_trench_axes = current_state.world.trench_axes
         current_trench_type = current_state.world.trench_type
+        current_action_map = current_state.world.action_map.map
         
         # Step the environment
         new_timestep = self.small_env.step(
@@ -570,6 +565,7 @@ class MapEnvironments:
             trench_axes=current_trench_axes,
             trench_type=current_trench_type,
             dumpability_mask_init=current_dumpability_mask_init,
+            action_map=current_action_map,
             env_cfg=current_env_cfg
         )
         
@@ -619,7 +615,6 @@ class MapEnvironments:
             'dumpability_mask_init': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask_init'], region_coords),
             'padding_mask': create_sub_task_padding_mask_64x64(self.global_maps['padding_mask'], region_coords),
             'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
-            'dig_map': create_sub_task_action_map_64x64(self.global_maps['dig_map'], region_coords),
         }
         #DIAGNOSTIC: Check sub-map validity
         print(f"=== SUB-MAP DIAGNOSTICS ===")
@@ -657,6 +652,7 @@ class MapEnvironments:
                 trench_axes=trench_axes,
                 trench_type=trench_type,
                 dumpability_mask_init=sub_maps['dumpability_mask_init'],
+                action_map=sub_maps['action_map'],
                 env_cfg=clean_env_cfg,
                 custom_pos=custom_pos,
                 custom_angle=custom_angle
@@ -762,7 +758,6 @@ class MapEnvironments:
         self.global_maps['dumpability_mask_init'] = global_timestep.state.world.dumpability_mask_init.map[0].copy()
         self.global_maps['padding_mask'] = global_timestep.state.world.padding_mask.map[0].copy()
         self.global_maps['traversability_mask'] = global_timestep.state.world.traversability_mask.map[0].copy()
-        self.global_maps['dig_map'] = global_timestep.state.world.dig_map.map[0].copy()
         self.global_maps['trench_axes'] = global_timestep.state.world.trench_axes.copy()
         self.global_maps['trench_type'] = global_timestep.state.world.trench_type.copy()
     
@@ -909,7 +904,6 @@ class MapEnvironments:
                 dumpability_mask_override=self.global_maps['dumpability_mask'],
                 dumpability_mask_init_override=self.global_maps['dumpability_mask_init'],
                 action_map_override=self.global_maps['action_map'],
-                dig_map_override=self.global_maps['dig_map'],
                 agent_config_override=self.small_agent_config
             )
         
@@ -965,7 +959,6 @@ class MapEnvironments:
                     'action_map': small_state.world.action_map.map,
                     'traversability_mask': small_state.world.traversability_mask.map,
                     'padding_mask': small_state.world.padding_mask.map,
-                    'dig_map': small_state.world.dig_map.map,
                 }
             
                 # print(f"Small environment map shapes:")

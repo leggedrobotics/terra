@@ -36,7 +36,7 @@ class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
                            target_map_override=None, traversability_mask_override=None,
                            padding_mask_override=None, dumpability_mask_override=None,
                            dumpability_mask_init_override=None, action_map_override=None,
-                           dig_map_override=None, agent_config_override=None):
+                           agent_config_override=None):
         """Reset with 64x64 map overrides - ensures shapes are consistent"""
     
         # Call the TerraEnvBatchWithMapOverride's reset_with_map_override method directly
@@ -45,5 +45,5 @@ class LargeMapTerraEnv(TerraEnvBatchWithMapOverride):
             target_map_override, traversability_mask_override,
             padding_mask_override, dumpability_mask_override,
             dumpability_mask_init_override, action_map_override,
-            dig_map_override, agent_config_override
+            agent_config_override
         )

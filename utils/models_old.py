@@ -8,56 +8,6 @@ from terra.env import TerraEnvBatch
 from functools import partial
 
 
-# def get_model_ready(rng, config, env: TerraEnvBatch, speed=False):
-#     """Instantiate a model according to obs shape of environment."""
-#     num_embeddings_agent = jnp.max(
-#         jnp.array(
-#             [
-#                 env.batch_cfg.maps_dims.maps_edge_length,
-#                 env.batch_cfg.agent.angles_cabin,
-#                 env.batch_cfg.agent.angles_base,
-#             ],
-#             dtype=jnp.int16,
-#         )
-#     ).item()
-#     jax.debug.print("num_embeddings_agent = {x}", x=num_embeddings_agent)
-#     map_min_max = (
-#         tuple(config["maps_net_normalization_bounds"])
-#         if not config["clip_action_maps"]
-#         else (-1, 1)
-#     )
-#     jax.debug.print("map normalization min max = {x}", x=map_min_max)
-#     model = SimplifiedCoupledCategoricalNet(
-#         num_prev_actions=config["num_prev_actions"],
-#         num_embeddings_agent=num_embeddings_agent,
-#         map_min_max=map_min_max,
-#         local_map_min_max=tuple(config["local_map_normalization_bounds"]),
-#         loaded_max=config["loaded_max"],
-#         action_type=env.batch_cfg.action_type,
-#     )
-
-#     map_width = env.batch_cfg.maps_dims.maps_edge_length
-#     map_height = env.batch_cfg.maps_dims.maps_edge_length
-
-#     obs = [
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.num_state_obs)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], env.batch_cfg.agent.angles_cabin)),
-#         jnp.zeros((config["num_envs"], map_width, map_height)),
-#         jnp.zeros((config["num_envs"], map_width, map_height)),
-#         jnp.zeros((config["num_envs"], map_width, map_height)),
-#         jnp.zeros((config["num_envs"], config["num_prev_actions"])),
-#     ]
-#     params = model.init(rng, obs)
-
-#     print(f"Model: {sum(x.size for x in jax.tree_leaves(params)):,} parameters")
-#     return model, params
-
-
 def get_model_ready(rng, config, env: TerraEnvBatch, speed=False):
     """Instantiate a model according to obs shape of environment."""
     # num_embeddings_agent = jnp.max(
@@ -118,20 +68,14 @@ def get_model_ready(rng, config, env: TerraEnvBatch, speed=False):
         jnp.zeros((config["num_envs"], map_width, map_height)),
         jnp.zeros((config["num_envs"], map_width, map_height)),
         jnp.zeros((config["num_envs"], map_width, map_height)),
+        jnp.zeros((config["num_envs"], map_width, map_height)),
+        jnp.zeros((config["num_envs"], map_width, map_height)),
         jnp.zeros((config["num_envs"], config["num_prev_actions"])),
     ]
     params = model.init(rng, obs)
 
     print(f"Model: {sum(x.size for x in jax.tree_leaves(params)):,} parameters")
     return model, params
-
-
-
-def load_neural_network(config, env):
-    """Load neural network model based on config and environment."""
-    rng = jax.random.PRNGKey(0)
-    model, _ = get_model_ready(rng, config, env)
-    return model
 
 
 def normalize(x: Array, x_min: Array, x_max: Array) -> Array:
@@ -257,6 +201,7 @@ class LocalMapNet(nn.Module):
         obs["action_map"],
         obs["target_map"],
         obs["traversability_mask"],
+        obs["dig_map"],
         obs["dumpability_mask"],
         """
         x_action_neg = normalize(obs[1], self.map_min_max[0], self.map_min_max[1])
@@ -354,16 +299,19 @@ class MapsNet(nn.Module):
         obs["action_map"],
         obs["target_map"],
         obs["traversability_mask"],
+        obs["dig_map"],
         obs["dumpability_mask"],
         """
-        target_map = obs[7]
-        traversability_map = obs[8]
-        dumpability_mask = obs[9]
+        target_map = obs[8]
+        traversability_map = obs[9]
+        dig_map = obs[10]
+        dumpability_mask = obs[11]
 
         x = jnp.concatenate(
             (
                 traversability_map[..., None],
                 target_map[..., None],
+                dig_map[..., None],
                 dumpability_mask[..., None],
             ),
             axis=-1,
@@ -421,6 +369,7 @@ class SimplifiedCoupledCategoricalNet(nn.Module):
     obs["action_map"],
     obs["target_map"],
     obs["traversability_mask"],
+    obs["dig_map"],
     obs["dumpability_mask"],
     """
 

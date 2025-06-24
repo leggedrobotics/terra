@@ -29,7 +29,7 @@ def distance_point_to_line(x, y, A, B, C):
     return abs(A * x + B * y + C) / math.sqrt(A**2 + B**2)
 
 
-def initialize_image(img_edge_min, img_edge_max, color_dict):
+def initialize_image(img_edge_min, img_edge_max, color):
     """
     Initializes an image array with dimensions within given range, applying a color scheme.
 
@@ -43,7 +43,7 @@ def initialize_image(img_edge_min, img_edge_max, color_dict):
     """
     # Randomly select dimensions within the specified range
     w, h = np.random.randint(img_edge_min, img_edge_max + 1, size=2, dtype=np.int32)
-    img = np.ones((w, h, 3)) * np.array(color_dict["dumping"])
+    img = np.ones((w, h, 3)) * np.array(color)
     return img
 
 
@@ -527,6 +527,7 @@ def add_non_dumpables(
             dmp[x : x + sizeox, y : y + sizeoy] = (
                 np.ones((3,)) * color_dict["nondumpable"]
             )
+            cumulative_mask[x : x + sizeox, y : y + sizeoy] = True
             n_dmp_added += 1
 
     return dmp, cumulative_mask
@@ -585,7 +586,7 @@ def generate_trenches_v2(
     i = 0
     while i < n_imgs:
         print(f"Processing trench nr {i + 1}")
-        img = initialize_image(img_edge_min, img_edge_max, color_dict)
+        img = initialize_image(img_edge_min, img_edge_max, color_dict["dumping"])
         if diagonal:
             img, cumulative_mask, metadata = generate_diagonal_edges(
                 img, (min_edges, max_edges), sizes_small, sizes_long, color_dict

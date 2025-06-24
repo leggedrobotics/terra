@@ -41,7 +41,6 @@ class TerraEnv(NamedTuple):
         n_envs_x: int = 1,
         n_envs_y: int = 1,
         display: bool = False,
-        progressive_gif: bool = False,
     ) -> "TerraEnv":
         re = None
         tile_size_rendering = MAP_TILES // maps_size_px
@@ -71,7 +70,6 @@ class TerraEnv(NamedTuple):
                 n_envs_x=n_envs_x,
                 n_envs_y=n_envs_y,
                 display=display,
-                progressive_gif=progressive_gif,
             )
         return TerraEnv(rendering_engine=re)
 
@@ -84,6 +82,7 @@ class TerraEnv(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
         env_cfg: EnvConfig,
         custom_pos: Optional[Tuple[int, int]] = None,
         custom_angle: Optional[int] = None,
@@ -106,8 +105,9 @@ class TerraEnv(NamedTuple):
             trench_axes,
             trench_type,
             dumpability_mask_init,
-            custom_pos=custom_pos,
-            custom_angle=custom_angle
+            action_map,
+            custom_pos,
+            custom_angle,
         )
         state = self.wrap_state(state)
 
@@ -138,6 +138,7 @@ class TerraEnv(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
@@ -150,6 +151,7 @@ class TerraEnv(NamedTuple):
             trench_axes,
             trench_type,
             dumpability_mask_init,
+            action_map
         )
         state = self.wrap_state(state)
         observations = self._state_to_obs_dict(state)
@@ -178,7 +180,7 @@ class TerraEnv(NamedTuple):
             agent_pos=obs["agent_state"][..., [0, 1]],
             base_dir=obs["agent_state"][..., [2]],
             cabin_dir=obs["agent_state"][..., [3]],
-            loaded=obs["agent_state"][..., [4]],
+            loaded=obs["agent_state"][..., [5]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
             info=info,  # Pass the entire info object
@@ -194,6 +196,7 @@ class TerraEnv(NamedTuple):
         trench_axes: Array,
         trench_type: Array,
         dumpability_mask_init: Array,
+        action_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
         new_state = state._step(action)
@@ -215,6 +218,7 @@ class TerraEnv(NamedTuple):
                 trench_axes,
                 trench_type,
                 dumpability_mask_init,
+                action_map,
                 cfg,
             )
             return s_reset, o_reset, cfg
@@ -338,9 +342,7 @@ class TerraEnv(NamedTuple):
     #         padding_mask=state.world.padding_mask._replace(
     #             map=pad_map(state.world.padding_mask.map, target_size)
     #         ),
-    #         dig_map=state.world.dig_map._replace(
-    #             map=pad_map(state.world.dig_map.map, target_size)
-    #         ),
+
     #         dumpability_mask=state.world.dumpability_mask._replace(
     #             map=pad_map(state.world.dumpability_mask.map, target_size)
     #         ),
@@ -495,6 +497,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
                 state.agent.agent_state.angle_base,
                 state.agent.agent_state.angle_cabin,
+                state.agent.agent_state.wheel_angle,
                 state.agent.agent_state.loaded,
             ]
         )
@@ -513,7 +516,6 @@ class TerraEnv(NamedTuple):
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
-            "dig_map": state.world.dig_map.map,
             "dumpability_mask": state.world.dumpability_mask.map,
         }
 
@@ -530,17 +532,17 @@ class TerraEnvBatch:
         n_envs_x_rendering: int = 1,
         n_envs_y_rendering: int = 1,
         display: bool = False,
-        progressive_gif: bool = False,
         shuffle_maps: bool = False,
+        single_map_path: str = None,
     ) -> None:
-        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps)
+        print(single_map_path)
+        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps, single_map_path)
         self.terra_env = TerraEnv.new(
             maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,
             rendering=rendering,
             n_envs_x=n_envs_x_rendering,
             n_envs_y=n_envs_y_rendering,
             display=display,
-            progressive_gif=progressive_gif,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
@@ -630,6 +632,7 @@ class TerraEnvBatch:
             trench_axes,
             trench_type,
             dumpability_mask_init,
+            action_maps,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
         #jax.debug.print("custom_pos: {}, custom_angle: {}", custom_pos, custom_angle)
@@ -638,7 +641,7 @@ class TerraEnvBatch:
         #print(trench_axes.shape)
         timestep = jax.vmap(
             self.terra_env.reset,
-            in_axes=(0,0,0,0,0,0,0,None,None)
+            in_axes=(0,0,0,0,0,0,0,0,None,None)
             )(
                 rng_key,
                 target_maps,
@@ -646,6 +649,7 @@ class TerraEnvBatch:
                 trench_axes,
                 trench_type,
                 dumpability_mask_init,
+                action_maps,
                 env_cfgs,
                 custom_pos,
                 custom_angle,
@@ -668,6 +672,7 @@ class TerraEnvBatch:
             trench_axes,
             trench_type,
             dumpability_mask_init,
+            action_maps,
             maps_buffer_keys,
         ) = self._get_map(maps_buffer_keys, timestep.env_cfg)
         #print(f"Actions: {actions}, type: {type(actions)}")
@@ -681,6 +686,7 @@ class TerraEnvBatch:
             trench_axes,
             trench_type,
             dumpability_mask_init,
+            action_maps,
             timestep.env_cfg,
         )
         return timestep
