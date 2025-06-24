@@ -5,15 +5,12 @@ Partially from https://github.com/RobertTLange/gymnax-blines
 import numpy as np
 import jax
 from tqdm import tqdm
-from utils.models import get_model_ready
 from utils.helpers import load_pkl_object
 from terra.env import TerraEnvBatch
 import jax.numpy as jnp
-from utils.utils_ppo import obs_to_model_input, wrap_action
+from utils.utils_ppo import obs_to_model_input #, wrap_action
 from terra.state import State
-import matplotlib.animation as animation
 
-# from utils.curriculum import Curriculum
 from tensorflow_probability.substrates import jax as tfp
 from train import TrainConfig  # needed for unpickling checkpoints
 from terra.config import EnvConfig
@@ -24,7 +21,6 @@ from terra.env import TerraEnv
 from terra.viz.llms_utils import *
 from multi_agent_utils import *
 from terra.viz.llms_adk import *
-from terra.viz.a_star import compute_path, simplify_path
 from terra.actions import (
     WheeledAction,
     TrackedAction,
@@ -32,19 +28,13 @@ from terra.actions import (
     TrackedActionType,
 )
 
-from google.adk.agents import Agent
-from google.adk.models.lite_llm import LiteLlm
-from google.adk.sessions import InMemorySessionService
-from google.adk.runners import Runner
-from google.genai import types
+
 
 import asyncio
 import os
 import argparse
 import datetime
-import time
 import json
-import csv
 import pygame as pg
 
 from pygame.locals import (
@@ -200,9 +190,6 @@ def run_experiment(
                 map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
             
-            # llm_query, runner_partitioning, runner_delegation, system_message_master = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
-            #                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING,
-            #                  USE_IMAGE_PROMPT)
             llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm_fixed(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                              USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING,
                              USE_IMAGE_PROMPT)
@@ -237,7 +224,6 @@ def run_experiment(
 
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
-        #max_steps_per_map = num_timesteps // 3  # Allow reasonable time per map
         max_steps_per_map = num_timesteps 
         map_done = False  # Track map completion
 
@@ -300,7 +286,6 @@ def run_experiment(
                     # LLM decision making (keeping the original logic but simplified for brevity)
                     if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0:
                         print("    Calling LLM agent for decision...")
-                        # ... (keep the existing LLM decision logic)
                         try:
                             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
                             observation_str = json.dumps(obs_dict)
@@ -308,10 +293,6 @@ def run_experiment(
                         except AttributeError:
                             # Handle the case where current_observation is not a dictionary
                             observation_str = str(current_observation)
-                        # system_message_master = "You are a master agent controlling an excavator. Observe the state. " \
-                        #     "Decide if you should delegate digging tasks to a " \
-                        #     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
-                        #     "specialized LLM agent (respond with 'delegate_to_llm')."
                         system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
                             "Decide if you should delegate digging tasks to a " \
                             "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
@@ -320,10 +301,7 @@ def run_experiment(
                             delegation_prompt = f"Current observation: See image \n\nSystem Message: {system_message_delegation}"
                         else:
                             delegation_prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_delegation}"
-                        #print(f"Prompt: {prompt}")
 
-                        #llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent
-                        # Just make sure your session ID includes the map index:
                         delegation_session_id = f"{SESSION_ID}_map_{current_map_index}_delegation"  # This creates "session_001_map_0_delegation"
                         delegation_user_id = f"{USER_ID}_delegation"  # This creates "user_1_delegation"
 
@@ -514,7 +492,7 @@ def run_experiment(
             map_metrics = calculate_map_completion_metrics(partition_states, env_manager)
             map_done = map_metrics['done']
             
-            print(f"    Map {current_map_index} metrics: {map_metrics}")
+            #print(f"    Map {current_map_index} metrics: {map_metrics}")
             
             # Update done flag for this step
             done = jnp.array(map_done)  # Convert to JAX array for consistency
