@@ -115,7 +115,25 @@ class State(NamedTuple):
             dumpability_mask_init=dumpability_mask_init,
             action_map=action_map,
         )
+    def _terminal(self):
+        """
+        Returns a terminal state, which is the same as the current state,
+        but with env_steps set increment 1.
 
+        """
+        reward = jax.lax.cond(
+            self._is_done_task(
+                self.world.action_map.map,
+                self.world.target_map.map,
+                self.agent.agent_state.loaded,
+                self.agent.agent_state_2.loaded,
+            ),
+            lambda: self.env_cfg.rewards.terminal,
+            lambda: 0.0,
+        )
+        reward = reward//self.env_cfg.rewards.normalizer
+        return reward
+    
     def _step(self, action: Action, turn:bool = True) -> "State":
         """
         TrackedAction type --> 0
@@ -1456,7 +1474,7 @@ class State(NamedTuple):
                 new_state.agent.agent_state.loaded,
                 new_state.agent.agent_state_2.loaded,
             ),
-            lambda: self.env_cfg.rewards.terminal,
+            lambda: 0.0,
             lambda: 0.0,
         )
 
