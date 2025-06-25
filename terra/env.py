@@ -189,15 +189,31 @@ class TerraEnv(NamedTuple):
         action_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
+        
         inter_state = state._step(action1)
         reward_1 = state._get_reward(inter_state, action1)
 
         new_state = inter_state._step(action2)
         reward_2 = inter_state._get_reward(new_state, action2)
-
+        reward = ((reward_1+reward_2)/2)+ new_state._terminal()
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
-        reward = jnp.clip(reward_1 + reward_2, a_min=None, a_max=1)+ new_state._terminal()
+        
+        #new_state = new_state._update_terminal()
+        # jax.debug.print(
+        #     "steps1: {steps}",
+        #     steps=state.env_steps,
+        # )
+
+        # jax.debug.print(
+        #     "steps2: {steps}",
+        #     steps=inter_state.env_steps,
+        # )
+
+        # jax.debug.print(
+        #     "steps3: {steps}",
+        #     steps=new_state.env_steps,
+        # )
         # jax.debug.print( "interaction_mask_1: {interaction_mask_1}",
         #     interaction_mask_1=new_state.world.interaction_mask_1.map[10][10]
         # )
@@ -235,16 +251,20 @@ class TerraEnv(NamedTuple):
         #     local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
         #     local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
         # )
-        done, task_done = state._is_done(
+        done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
             new_state.agent.agent_state.loaded,
             new_state.agent.agent_state_2.loaded,
         )
         # jax.debug.print(
-        #     "done: {done}, task_done: {task_done}",
+        #     "done: {done}, task_done: {task_done} ,reward1: {reward_1}, reward2: {reward_2} ,steps: {steps}",
+        #     steps=new_state.env_steps,
         #     done=done,
         #     task_done=task_done,
+
+        #     reward_1=reward_1,
+        #     reward_2=reward_2,
         # )
 
         def _reset_branch(s, o, cfg):

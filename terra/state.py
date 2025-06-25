@@ -115,6 +115,10 @@ class State(NamedTuple):
             dumpability_mask_init=dumpability_mask_init,
             action_map=action_map,
         )
+    
+    def _update_terminal(self):
+        return self._replace(env_steps=self.env_steps + 1)
+    
     def _terminal(self):
         """
         Returns a terminal state, which is the same as the current state,
@@ -1525,7 +1529,7 @@ class State(NamedTuple):
     def _is_done(
         self, action_map: Array, target_map: Array, agent_loaded1: Array, agent_loaded2: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
-        done_task = self._is_done_task(action_map, target_map, agent_loaded1,agent_loaded2)
+        done_task = self._is_done_task(action_map, target_map, agent_loaded1, agent_loaded2)
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 
