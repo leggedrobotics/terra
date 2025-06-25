@@ -51,7 +51,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -180,7 +180,10 @@ def run_experiment(
     move_cumsum = None
     do_cumsum = None
 
-
+    import pygame as pg
+    from terra.viz.llms_utils import capture_screen  # Assuming this import works
+        
+    screen = pg.display.get_surface()
 
     # MAIN LOOP - PROCESS MULTIPLE MAPS
     while playing and global_step < num_timesteps and current_map_index < max_maps:
@@ -192,12 +195,25 @@ def run_experiment(
         # Reset to next map (reusing the same environment)
         try:
             if current_map_index > 0:  # Don't reset on first map since it's already initialized
+                previous_target_map = env_manager.global_maps['target_map'].copy()
+
                 map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
+                verify_map_changed(previous_target_map, env_manager.global_maps['target_map'], current_map_index)
+
+            env_manager.global_env.terra_env.render_obs_pygame(
+                env_manager.global_env.timestep.observation, 
+                env_manager.global_env.timestep.info
+            )
+            screen = pg.display.get_surface()
+            game_state_image = capture_screen(screen)
+
+            save_debug_image(game_state_image, current_map_index, 0, image_type="general", output_dir="debug_images")
+            
             
             llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm_fixed(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
-                             USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING,
-                             USE_IMAGE_PROMPT)
+                             USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
+                             USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             
             if partition_states is None:
@@ -229,7 +245,8 @@ def run_experiment(
 
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
-        max_steps_per_map = num_timesteps 
+        #max_steps_per_map = num_timesteps
+        max_steps_per_map = 50
         map_done = False  # Track map completion
 
         while playing and active_partitions and map_step < max_steps_per_map and global_step < num_timesteps:
@@ -292,6 +309,8 @@ def run_experiment(
                         game_state_image_small = capture_screen(subsurface)
                     else:
                         game_state_image_small = None  # Placeholder for small map image
+                    save_debug_image(game_state_image_small, current_map_index, partition_idx, image_type="partitions", output_dir="debug_images")
+
                     state = env_manager.small_env_timestep.state
                     base_orientation = extract_base_orientation(state)
                     bucket_status = extract_bucket_status(state)

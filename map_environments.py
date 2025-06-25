@@ -767,6 +767,8 @@ class MapEnvironments:
         self.global_timestep = global_timestep
     
         print("Global environment initialized successfully.")
+        print(f"Initial target map has {jnp.sum(self.global_maps['target_map'] < 0)} dig targets")
+
         return self.global_timestep
     
 

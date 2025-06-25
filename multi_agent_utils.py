@@ -856,11 +856,32 @@ def reset_to_next_map(map_index, seed, env_manager, global_env_config,
     env_manager.global_env.timestep = env_manager.global_env.reset(
         global_env_config, reset_keys, initial_custom_pos, initial_custom_angle
     )
-        
+
     # Update the global maps from the new reset
-    env_manager._initialize_global_environment()
-        
+    #env_manager._initialize_global_environment()
+
+    # Extract and store the NEW global map data directly
+    new_timestep = env_manager.global_env.timestep
+    env_manager.global_maps['target_map'] = new_timestep.state.world.target_map.map[0].copy()
+    env_manager.global_maps['action_map'] = new_timestep.state.world.action_map.map[0].copy()
+    env_manager.global_maps['dumpability_mask'] = new_timestep.state.world.dumpability_mask.map[0].copy()
+    env_manager.global_maps['dumpability_mask_init'] = new_timestep.state.world.dumpability_mask_init.map[0].copy()
+    env_manager.global_maps['padding_mask'] = new_timestep.state.world.padding_mask.map[0].copy()
+    env_manager.global_maps['traversability_mask'] = new_timestep.state.world.traversability_mask.map[0].copy()
+    env_manager.global_maps['trench_axes'] = new_timestep.state.world.trench_axes.copy()
+    env_manager.global_maps['trench_type'] = new_timestep.state.world.trench_type.copy()
+    
+    # Store the new global timestep
+    env_manager.global_timestep = new_timestep
+    
+    # Clear any existing partitions data to ensure fresh start
+    env_manager.partitions = []
+    env_manager.overlap_map = {}
+    env_manager.overlap_regions = {}
+    
     print(f"Environment reset to map {map_index}")
+    print(f"New target map has {jnp.sum(env_manager.global_maps['target_map'] < 0)} dig targets")
+    
     return map_rng
 
 def initialize_partitions_for_current_map(env_manager, config, model_params):
@@ -1255,7 +1276,7 @@ async def call_agent_async_master_fixed(query: str, image, runner, user_id, sess
 
 
 def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
-                                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, USE_MANUAL_PARTITIONING=False,
+                                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
                                   USE_IMAGE_PROMPT=False):
     """
     Fixed version of setup_partitions_and_llm with proper session management.
@@ -1264,9 +1285,26 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
         
     # Define partitions based on map size
     if ORIGINAL_MAP_SIZE == 64:
+        # single partition for 64x64 map
         sub_tasks_manual = [
             {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
         ]
+        # horizontal partitioning for 64x64 map
+        # sub_tasks_manual = [
+        #     {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+        # ]
+        # vertical partitioning for 64x64 map
+        # sub_tasks_manual = [
+        #     {'id': 0, 'region_coords': (0, 0, 63, 31), 'start_pos': (32, 16), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 1, 'region_coords': (0, 32, 63, 63), 'start_pos': (32, 48), 'start_angle': 0, 'status': 'pending'}
+        # ]
+        # vertical partitioning with overlapping
+        # sub_tasks_manual = [
+        #     {'id': 0, 'region_coords': (0, 0, 63, 35), 'start_pos': (32, 18), 'start_angle': 0, 'status': 'pending'},
+        #     {'id': 1, 'region_coords': (0, 28, 63, 63), 'start_pos': (32, 46), 'start_angle': 0, 'status': 'pending'}
+        # ]
+        # random partitioning for 64x64 map
         # sub_tasks_manual = [
         #     {'id': 0, 'region_coords': (0, 0, 32, 32), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
         #     {'id': 1, 'region_coords': (0, 33, 63, 63), 'start_pos': (40, 40), 'start_angle': 0, 'status': 'pending'},
@@ -1294,11 +1332,12 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
         env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
     else:
         print("Calling LLM agent for partitioning decision...")
-        import pygame as pg
-        from terra.viz.llms_utils import capture_screen  # Assuming this import works
+        # import pygame as pg
+        # from terra.viz.llms_utils import capture_screen  # Assuming this import works
         
-        screen = pg.display.get_surface()
+        # screen = pg.display.get_surface()
         game_state_image = capture_screen(screen)
+        #save_debug_image(game_state_image, map_index, 0, image_type="general", output_dir="debug_images")
         current_observation = env_manager.global_env.timestep.observation
             
         try:
@@ -1347,7 +1386,8 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
         from multi_agent_utils import is_valid_region_list  # Assuming this import works
         partition_validation = is_valid_region_list(sub_tasks_llm)
         
-        if partition_validation:
+        #if partition_validation:
+        if partition_validation and map_index != 0:
             print("Using LLM-generated sub-tasks.")
             env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
         else:
@@ -1355,3 +1395,64 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
             env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
 
     return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager
+
+
+import datetime
+def save_debug_image(image, map_index, step_count, image_type="general", output_dir="debug_images"):
+    """
+    Save debug images with proper naming and organization.
+    
+    Args:
+        image: The image array to save
+        map_index: Current map index
+        step_count: Current step count
+        image_type: Type of image (e.g., "partitioning", "delegation", "excavator")
+        output_dir: Directory to save images
+    
+    Returns:
+        str: Path to saved image
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create timestamp
+    timestamp = datetime.datetime.now().strftime("%H-%M-%S")
+    
+    # Create filename
+    filename = f"map_{map_index:03d}_step_{step_count:04d}_{image_type}_{timestamp}.jpg"
+    filepath = os.path.join(output_dir, filename)
+    
+    # Save image
+    try:
+        cv2.imwrite(filepath, image)
+        print(f"Debug image saved: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"Error saving debug image: {e}")
+        return None
+    
+
+def verify_map_changed(old_target_map, new_target_map, map_index):
+    """Verify that the map has actually changed after reset"""
+    if old_target_map is None:
+        print(f"Map {map_index}: First map loaded")
+        return True
+    
+    # Check if maps are different
+    maps_equal = jnp.array_equal(old_target_map, new_target_map)
+    
+    if maps_equal:
+        print(f"WARNING: Map {map_index} is identical to previous map!")
+        # Print some statistics to help debug
+        old_targets = jnp.sum(old_target_map < 0)
+        new_targets = jnp.sum(new_target_map < 0)
+        print(f"  Old map dig targets: {old_targets}")
+        print(f"  New map dig targets: {new_targets}")
+        return False
+    else:
+        print(f"✓ Map {map_index} is different from previous map")
+        old_targets = jnp.sum(old_target_map < 0)
+        new_targets = jnp.sum(new_target_map < 0)
+        print(f"  Old map dig targets: {old_targets}")
+        print(f"  New map dig targets: {new_targets}")
+        return True
