@@ -37,7 +37,7 @@ class MapEnvironments:
     Only map data is exchanged between environments.
     """
         
-    def __init__(self, seed, global_env_config, small_env_config=None, shuffle_maps=False):
+    def __init__(self, seed, global_env_config, small_env_config=None, shuffle_maps=False, rendering=False, display=False):
         """
         Initialize with separate configurations for large and small environments.
         
@@ -62,18 +62,20 @@ class MapEnvironments:
         self.partitions = []
         self.overlap_map = {}  # Maps partition_id -> set of overlapping partition_ids
         self.overlap_regions = {}  # Cache overlap region calculations
+        self.rendering = rendering
+        self.display = display
         
         # Initialize the global environment (128x128) with LargeMapTerraEnv
         print("Initializing LargeMapTerraEnv for global environment...")
 
         self.global_env = LargeMapTerraEnv(
-            rendering=True,
+            rendering=rendering,
             n_envs_x_rendering=1,
             n_envs_y_rendering=1,
-            display=True,
+            display=display,
             shuffle_maps=shuffle_maps,
         )
- 
+
         # Initialize the small environment with regular TerraEnv (non-batched)
         print("Initializing TerraEnv for small environment...")
         self.small_env = TerraEnv.new(
@@ -1037,8 +1039,8 @@ class MapEnvironments:
             if VISUALIZE_PARTITIONS:
                 info['show_partitions'] = True
                 info['partitions'] = self.partitions  # Just pass the whole partition list
-
-            self.global_env.terra_env.render_obs_pygame(obs, info)
+            if self.rendering:
+                self.global_env.terra_env.render_obs_pygame(obs, info)
     
         except Exception as e:
             print(f"Global rendering error: {e}")

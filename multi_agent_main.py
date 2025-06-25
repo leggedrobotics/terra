@@ -63,7 +63,8 @@ SESSION_ID = "session_001"      # Session ID for ADK
 GRID_RENDERING = False
 ORIGINAL_MAP_SIZE = 64
 COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
-
+USE_RENDERING = True  # Use rendering for the environment
+USE_DISPLAY = True  # Use display for the environment
 
 def run_experiment(
     llm_model_name, llm_model_key, num_timesteps, seed, 
@@ -97,7 +98,9 @@ def run_experiment(
         seed=seed,
         global_env_config=global_env_config,
         small_env_config=small_env_config,
-        shuffle_maps=False  # This will give us access to different maps
+        shuffle_maps=False,
+        rendering=USE_RENDERING,
+        display=USE_DISPLAY
     )
     print("Environment manager initialized.")
 
@@ -124,9 +127,11 @@ def run_experiment(
     env_manager.global_env.timestep = env_manager.global_env.step(
         env_manager.global_env.timestep, repeat_action(action_type.do_nothing()), rng_reset_initial
     )
-    env_manager.global_env.terra_env.render_obs_pygame(
-        env_manager.global_env.timestep.observation, env_manager.global_env.timestep.info
-    )
+
+    if USE_RENDERING:
+        env_manager.global_env.terra_env.render_obs_pygame(
+            env_manager.global_env.timestep.observation, env_manager.global_env.timestep.info
+        )
 
     # Initialize variables for tracking progress across all maps
     global_step = 0
@@ -229,16 +234,21 @@ def run_experiment(
 
         while playing and active_partitions and map_step < max_steps_per_map and global_step < num_timesteps:
             # Handle quit events
-            for event in pg.event.get():
-                if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
-                    playing = False
+            if USE_RENDERING:
+                for event in pg.event.get():
+                    if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
+                        playing = False
 
             print(f"\nMap {current_map_index}, Step {map_step} (Global {global_step}) - "
                   f"Processing {len(active_partitions)} active partitions")
 
-            # Capture screen state
-            screen = pg.display.get_surface()
-            game_state_image = capture_screen(screen)
+            if USE_RENDERING:
+                #Capture screen state
+                screen = pg.display.get_surface()
+                game_state_image = capture_screen(screen)
+            else:
+                screen = None
+                game_state_image = None
             map_frames.append(game_state_image)
 
             # Step all active partitions simultaneously
@@ -266,19 +276,22 @@ def run_experiment(
                     width = x_end - x_start + 1
                     height = y_end - y_start + 1
 
-                    # Extract subsurface safely
-                    try:
-                        screen_width, screen_height = screen.get_size()
-                        x_start = max(0, min(x_start, screen_width - 1))
-                        y_start = max(0, min(y_start, screen_height - 1))
-                        width = min(width, screen_width - x_start)
-                        height = min(height, screen_height - y_start)
-                        subsurface = screen.subsurface((x_start, y_start, width, height))
-                    except ValueError as e:
-                        print(f"Error extracting subsurface for partition {partition_idx}: {e}")
-                        subsurface = screen.subsurface((0, 0, min(128, screen_width), min(128, screen_height)))
+                    if USE_RENDERING:
+                        # Extract subsurface safely
+                        try:
+                            screen_width, screen_height = screen.get_size()
+                            x_start = max(0, min(x_start, screen_width - 1))
+                            y_start = max(0, min(y_start, screen_height - 1))
+                            width = min(width, screen_width - x_start)
+                            height = min(height, screen_height - y_start)
+                            subsurface = screen.subsurface((x_start, y_start, width, height))
+                        except ValueError as e:
+                            print(f"Error extracting subsurface for partition {partition_idx}: {e}")
+                            subsurface = screen.subsurface((0, 0, min(128, screen_width), min(128, screen_height)))
                     
-                    game_state_image_small = capture_screen(subsurface)
+                        game_state_image_small = capture_screen(subsurface)
+                    else:
+                        game_state_image_small = None  # Placeholder for small map image
                     state = env_manager.small_env_timestep.state
                     base_orientation = extract_base_orientation(state)
                     bucket_status = extract_bucket_status(state)
@@ -565,11 +578,12 @@ def run_experiment(
     os.makedirs(output_dir, exist_ok=True)
 
     # Save video
-    video_path = os.path.join(output_dir, "gameplay_all_maps.mp4")
-    save_video(all_frames, video_path)
+    if USE_RENDERING:
+        video_path = os.path.join(output_dir, "gameplay_all_maps.mp4")
+        save_video(all_frames, video_path)
         
-    print(f"\nResults saved to: {output_dir}")
-    print(f"Video: {video_path}")
+        print(f"\nResults saved to: {output_dir}")
+        print(f"Video: {video_path}")
 
     info = {
         "episode_done_once": episode_done_once,
