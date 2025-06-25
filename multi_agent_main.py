@@ -28,7 +28,8 @@ from terra.actions import (
     TrackedActionType,
 )
 
-
+import pygame as pg
+from terra.viz.llms_utils import capture_screen  # Assuming this import works
 
 import asyncio
 import os
@@ -51,7 +52,7 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -180,8 +181,7 @@ def run_experiment(
     move_cumsum = None
     do_cumsum = None
 
-    import pygame as pg
-    from terra.viz.llms_utils import capture_screen  # Assuming this import works
+
         
     screen = pg.display.get_surface()
 
@@ -246,7 +246,7 @@ def run_experiment(
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
         #max_steps_per_map = num_timesteps
-        max_steps_per_map = 50
+        max_steps_per_map = 25
         map_done = False  # Track map completion
 
         while playing and active_partitions and map_step < max_steps_per_map and global_step < num_timesteps:
@@ -263,6 +263,8 @@ def run_experiment(
                 #Capture screen state
                 screen = pg.display.get_surface()
                 game_state_image = capture_screen(screen)
+                #save_debug_image(game_state_image, current_map_index, 0, image_type="in", output_dir="debug_images")
+
             else:
                 screen = None
                 game_state_image = None
@@ -290,22 +292,72 @@ def run_experiment(
                     partition_info = env_manager.partitions[partition_idx]
                     region_coords = partition_info['region_coords']
                     y_start, x_start, y_end, x_end = region_coords
+                    print(f"    Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
                     width = x_end - x_start + 1
                     height = y_end - y_start + 1
+                    print(f"    Partition {partition_idx} size: {width}x{height}")
+
+                    # if USE_RENDERING:
+                    #     # Extract subsurface safely
+                    #     try:
+                    #         screen_width, screen_height = screen.get_size()
+                    #         print(f"    Screen size: {screen_width}x{screen_height}")
+                    #         x_start = max(0, min(x_start, screen_width - 1))
+                    #         y_start = max(0, min(y_start, screen_height - 1))
+                    #         print(f"    Subsurface start: ({x_start}, {y_start})")
+                    #         width = min(width, screen_width - x_start)
+                    #         height = min(height, screen_height - y_start)
+                    #         print(f"    Subsurface size: {width}x{height}")
+                    #         subsurface = screen.subsurface((x_start, y_start, width, height))
+                    #     except ValueError as e:
+                    #         print(f"Error extracting subsurface for partition {partition_idx}: {e}")
+                    #         subsurface = screen.subsurface((0, 0, min(128, screen_width), min(128, screen_height)))
+                    
+                    #     game_state_image_small = capture_screen(subsurface)
 
                     if USE_RENDERING:
-                        # Extract subsurface safely
+                        # Extract subsurface safely - using environment tile size
                         try:
                             screen_width, screen_height = screen.get_size()
-                            x_start = max(0, min(x_start, screen_width - 1))
-                            y_start = max(0, min(y_start, screen_height - 1))
-                            width = min(width, screen_width - x_start)
-                            height = min(height, screen_height - y_start)
-                            subsurface = screen.subsurface((x_start, y_start, width, height))
+                            print(f"    Screen size: {screen_width}x{screen_height}")
+                            
+                            # Get the actual tile size from the environment
+                            # This should be available from your global_env_config
+                            env_tile_size = global_env_config.tile_size[0].item()  # From your existing code
+                            
+                            # Calculate the rendering scale factor
+                            # This depends on how the environment renders to the screen
+                            render_scale = screen_width / (ORIGINAL_MAP_SIZE * env_tile_size)
+                            
+                            # Convert game world coordinates to screen pixel coordinates
+                            screen_x_start = int(x_start * env_tile_size * render_scale)
+                            screen_y_start = int(y_start * env_tile_size * render_scale)
+                            screen_width_partition = int(width * env_tile_size * render_scale)
+                            screen_height_partition = int(height * env_tile_size * render_scale)
+                            
+                            print(f"    Game coordinates: ({y_start}, {x_start}) to ({y_end}, {x_end})")
+                            print(f"    Environment tile size: {env_tile_size}")
+                            print(f"    Render scale: {render_scale}")
+                            print(f"    Screen coordinates: ({screen_x_start}, {screen_y_start})")
+                            print(f"    Screen partition size: {screen_width_partition}x{screen_height_partition}")
+                            
+                            # Rest of the clamping and subsurface creation code remains the same...
+                            screen_x_start = max(0, min(screen_x_start, screen_width - 1))
+                            screen_y_start = max(0, min(screen_y_start, screen_height - 1))
+                            screen_width_partition = min(screen_width_partition, screen_width - screen_x_start)
+                            screen_height_partition = min(screen_height_partition, screen_height - screen_y_start)
+                            
+                            if screen_width_partition <= 0 or screen_height_partition <= 0:
+                                print(f"    Warning: Invalid partition size, using fallback")
+                                subsurface = screen.subsurface((0, 0, min(64, screen_width), min(64, screen_height)))
+                            else:
+                                subsurface = screen.subsurface((screen_x_start, screen_y_start, screen_width_partition, screen_height_partition))
+                                
                         except ValueError as e:
                             print(f"Error extracting subsurface for partition {partition_idx}: {e}")
-                            subsurface = screen.subsurface((0, 0, min(128, screen_width), min(128, screen_height)))
-                    
+                            fallback_size = min(64, screen_width, screen_height)
+                            subsurface = screen.subsurface((0, 0, fallback_size, fallback_size))
+
                         game_state_image_small = capture_screen(subsurface)
                     else:
                         game_state_image_small = None  # Placeholder for small map image

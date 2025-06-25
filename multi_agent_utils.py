@@ -1286,14 +1286,18 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
     # Define partitions based on map size
     if ORIGINAL_MAP_SIZE == 64:
         # single partition for 64x64 map
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        ]
-        # horizontal partitioning for 64x64 map
         # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+        #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
         # ]
+
+        # sub_tasks_manual = [
+        #     {'id': 0, 'region_coords': (22, 22, 41, 41), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+        # ]
+        # horizontal partitioning for 64x64 map
+        sub_tasks_manual = [
+            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+        ]
         # vertical partitioning for 64x64 map
         # sub_tasks_manual = [
         #     {'id': 0, 'region_coords': (0, 0, 63, 31), 'start_pos': (32, 16), 'start_angle': 0, 'status': 'pending'},
@@ -1386,8 +1390,7 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
         from multi_agent_utils import is_valid_region_list  # Assuming this import works
         partition_validation = is_valid_region_list(sub_tasks_llm)
         
-        #if partition_validation:
-        if partition_validation and map_index != 0:
+        if partition_validation:
             print("Using LLM-generated sub-tasks.")
             env_manager.initialize_with_fixed_overlaps(sub_tasks_llm)
         else:
