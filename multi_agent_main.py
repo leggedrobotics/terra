@@ -199,7 +199,6 @@ def run_experiment(
 
                 map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
-                verify_map_changed(previous_target_map, env_manager.global_maps['target_map'], current_map_index)
 
             env_manager.global_env.terra_env.render_obs_pygame(
                 env_manager.global_env.timestep.observation, 
@@ -208,10 +207,10 @@ def run_experiment(
             screen = pg.display.get_surface()
             game_state_image = capture_screen(screen)
 
-            save_debug_image(game_state_image, current_map_index, 0, image_type="general", output_dir="debug_images")
+            #save_debug_image(game_state_image, current_map_index, 0, image_type="general", output_dir="debug_images")
             
             
-            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm_fixed(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                              USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
                              USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
@@ -292,34 +291,16 @@ def run_experiment(
                     partition_info = env_manager.partitions[partition_idx]
                     region_coords = partition_info['region_coords']
                     y_start, x_start, y_end, x_end = region_coords
-                    print(f"    Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
+                    #print(f"    Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
                     width = x_end - x_start + 1
                     height = y_end - y_start + 1
-                    print(f"    Partition {partition_idx} size: {width}x{height}")
-
-                    # if USE_RENDERING:
-                    #     # Extract subsurface safely
-                    #     try:
-                    #         screen_width, screen_height = screen.get_size()
-                    #         print(f"    Screen size: {screen_width}x{screen_height}")
-                    #         x_start = max(0, min(x_start, screen_width - 1))
-                    #         y_start = max(0, min(y_start, screen_height - 1))
-                    #         print(f"    Subsurface start: ({x_start}, {y_start})")
-                    #         width = min(width, screen_width - x_start)
-                    #         height = min(height, screen_height - y_start)
-                    #         print(f"    Subsurface size: {width}x{height}")
-                    #         subsurface = screen.subsurface((x_start, y_start, width, height))
-                    #     except ValueError as e:
-                    #         print(f"Error extracting subsurface for partition {partition_idx}: {e}")
-                    #         subsurface = screen.subsurface((0, 0, min(128, screen_width), min(128, screen_height)))
-                    
-                    #     game_state_image_small = capture_screen(subsurface)
+                    #print(f"    Partition {partition_idx} size: {width}x{height}")
 
                     if USE_RENDERING:
                         # Extract subsurface safely - using environment tile size
                         try:
                             screen_width, screen_height = screen.get_size()
-                            print(f"    Screen size: {screen_width}x{screen_height}")
+                            #print(f"    Screen size: {screen_width}x{screen_height}")
                             
                             # Get the actual tile size from the environment
                             # This should be available from your global_env_config
@@ -335,11 +316,11 @@ def run_experiment(
                             screen_width_partition = int(width * env_tile_size * render_scale)
                             screen_height_partition = int(height * env_tile_size * render_scale)
                             
-                            print(f"    Game coordinates: ({y_start}, {x_start}) to ({y_end}, {x_end})")
-                            print(f"    Environment tile size: {env_tile_size}")
-                            print(f"    Render scale: {render_scale}")
-                            print(f"    Screen coordinates: ({screen_x_start}, {screen_y_start})")
-                            print(f"    Screen partition size: {screen_width_partition}x{screen_height_partition}")
+                            # print(f"    Game coordinates: ({y_start}, {x_start}) to ({y_end}, {x_end})")
+                            # print(f"    Environment tile size: {env_tile_size}")
+                            # print(f"    Render scale: {render_scale}")
+                            # print(f"    Screen coordinates: ({screen_x_start}, {screen_y_start})")
+                            # print(f"    Screen partition size: {screen_width_partition}x{screen_height_partition}")
                             
                             # Rest of the clamping and subsurface creation code remains the same...
                             screen_x_start = max(0, min(screen_x_start, screen_width - 1))
@@ -361,7 +342,7 @@ def run_experiment(
                         game_state_image_small = capture_screen(subsurface)
                     else:
                         game_state_image_small = None  # Placeholder for small map image
-                    save_debug_image(game_state_image_small, current_map_index, partition_idx, image_type="partitions", output_dir="debug_images")
+                    #save_debug_image(game_state_image_small, current_map_index, partition_idx, image_type="partitions", output_dir="debug_images")
 
                     state = env_manager.small_env_timestep.state
                     base_orientation = extract_base_orientation(state)
@@ -392,7 +373,7 @@ def run_experiment(
                         if not FORCE_DELEGATE_TO_RL:
                             try:
                                 if USE_IMAGE_PROMPT:
-                                    response = asyncio.run(call_agent_async_master_fixed(
+                                    response = asyncio.run(call_agent_async_master(
                                         delegation_prompt, 
                                         game_state_image_small, 
                                         runner_delegation,               
@@ -401,7 +382,7 @@ def run_experiment(
                                         session_manager
                                     ))
                                 else:
-                                    response = asyncio.run(call_agent_async_master_fixed(
+                                    response = asyncio.run(call_agent_async_master(
                                         delegation_prompt, 
                                         None, 
                                         runner_delegation,               

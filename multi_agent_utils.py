@@ -1002,10 +1002,10 @@ class SessionManager:
         for key, session_info in self.sessions.items():
             print(f"  {key}: {session_info['app_name']}")
 
-def init_llms_fixed(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
+def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
                    APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     """
-    Fixed initialization of LLM agents with proper session management.
+    Initialization of LLM agents with proper session management.
     """
     # Initialize session manager
     session_manager = SessionManager()
@@ -1216,7 +1216,7 @@ REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES."""
     return (llm_query, runner_partitioning, runner_delegation, prev_actions, 
             system_message_master, session_manager)
 
-async def call_agent_async_master_fixed(query: str, image, runner, user_id, session_id, session_manager=None):
+async def call_agent_async_master(query: str, image, runner, user_id, session_id, session_manager=None):
     """
     Fixed version of call_agent_async_master with better error handling and session verification.
     """
@@ -1275,11 +1275,11 @@ async def call_agent_async_master_fixed(query: str, image, runner, user_id, sess
     return final_response_text
 
 
-def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
                                   USE_IMAGE_PROMPT=False):
     """
-    Fixed version of setup_partitions_and_llm with proper session management.
+    Setup_partitions_and_llm with proper session management.
     """
     action_size = 7
         
@@ -1323,7 +1323,7 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
 
     # Initialize LLM agent with fixed session management
     (llm_query, runner_partitioning, runner_delegation, prev_actions, 
-     system_message_master, session_manager) = init_llms_fixed(
+     system_message_master, session_manager) = init_llms(
         llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
         APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
     )
@@ -1361,12 +1361,12 @@ def setup_partitions_and_llm_fixed(map_index, ORIGINAL_MAP_SIZE, env_manager, co
             session_id_partitioning = f"{SESSION_ID}_map_{map_index}_partitioning"
             
             if USE_IMAGE_PROMPT:
-                response = asyncio.run(call_agent_async_master_fixed(
+                response = asyncio.run(call_agent_async_master(
                     prompt, game_state_image, runner_partitioning, 
                     user_id_partitioning, session_id_partitioning, session_manager
                 ))
             else:
-                response = asyncio.run(call_agent_async_master_fixed(
+                response = asyncio.run(call_agent_async_master(
                     prompt, None, runner_partitioning, 
                     user_id_partitioning, session_id_partitioning, session_manager
                 ))
@@ -1435,27 +1435,3 @@ def save_debug_image(image, map_index, step_count, image_type="general", output_
         return None
     
 
-def verify_map_changed(old_target_map, new_target_map, map_index):
-    """Verify that the map has actually changed after reset"""
-    if old_target_map is None:
-        print(f"Map {map_index}: First map loaded")
-        return True
-    
-    # Check if maps are different
-    maps_equal = jnp.array_equal(old_target_map, new_target_map)
-    
-    if maps_equal:
-        print(f"WARNING: Map {map_index} is identical to previous map!")
-        # Print some statistics to help debug
-        old_targets = jnp.sum(old_target_map < 0)
-        new_targets = jnp.sum(new_target_map < 0)
-        print(f"  Old map dig targets: {old_targets}")
-        print(f"  New map dig targets: {new_targets}")
-        return False
-    else:
-        print(f"✓ Map {map_index} is different from previous map")
-        old_targets = jnp.sum(old_target_map < 0)
-        new_targets = jnp.sum(new_target_map < 0)
-        print(f"  Old map dig targets: {old_targets}")
-        print(f"  New map dig targets: {new_targets}")
-        return True
