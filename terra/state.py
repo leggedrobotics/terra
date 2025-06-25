@@ -176,7 +176,7 @@ class State(NamedTuple):
             state._swap,
             lambda: state
         )
-        return state._replace(env_steps=state.env_steps + 1)
+        return state
 
     def _do_nothing(self):
         return self
