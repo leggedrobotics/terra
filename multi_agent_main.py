@@ -49,10 +49,10 @@ from map_environments import MapEnvironments
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
@@ -187,7 +187,6 @@ def run_experiment(
 
     # MAIN LOOP - PROCESS MULTIPLE MAPS
     while playing and global_step < num_timesteps and current_map_index < max_maps:
-        #obs_seq = _append_to_obs(obs, obs_seq)
         print(f"\n{'='*80}")
         print(f"STARTING MAP {current_map_index}")
         print(f"{'='*80}")
@@ -195,8 +194,6 @@ def run_experiment(
         # Reset to next map (reusing the same environment)
         try:
             if current_map_index > 0:  # Don't reset on first map since it's already initialized
-                previous_target_map = env_manager.global_maps['target_map'].copy()
-
                 map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
 
@@ -206,9 +203,6 @@ def run_experiment(
             )
             screen = pg.display.get_surface()
             game_state_image = capture_screen(screen)
-
-            #save_debug_image(game_state_image, current_map_index, 0, image_type="general", output_dir="debug_images")
-            
             
             llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                              USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
@@ -262,7 +256,6 @@ def run_experiment(
                 #Capture screen state
                 screen = pg.display.get_surface()
                 game_state_image = capture_screen(screen)
-                #save_debug_image(game_state_image, current_map_index, 0, image_type="in", output_dir="debug_images")
 
             else:
                 screen = None
@@ -291,16 +284,13 @@ def run_experiment(
                     partition_info = env_manager.partitions[partition_idx]
                     region_coords = partition_info['region_coords']
                     y_start, x_start, y_end, x_end = region_coords
-                    #print(f"    Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
                     width = x_end - x_start + 1
                     height = y_end - y_start + 1
-                    #print(f"    Partition {partition_idx} size: {width}x{height}")
 
                     if USE_RENDERING:
                         # Extract subsurface safely - using environment tile size
                         try:
                             screen_width, screen_height = screen.get_size()
-                            #print(f"    Screen size: {screen_width}x{screen_height}")
                             
                             # Get the actual tile size from the environment
                             # This should be available from your global_env_config
@@ -315,13 +305,7 @@ def run_experiment(
                             screen_y_start = int(y_start * env_tile_size * render_scale)
                             screen_width_partition = int(width * env_tile_size * render_scale)
                             screen_height_partition = int(height * env_tile_size * render_scale)
-                            
-                            # print(f"    Game coordinates: ({y_start}, {x_start}) to ({y_end}, {x_end})")
-                            # print(f"    Environment tile size: {env_tile_size}")
-                            # print(f"    Render scale: {render_scale}")
-                            # print(f"    Screen coordinates: ({screen_x_start}, {screen_y_start})")
-                            # print(f"    Screen partition size: {screen_width_partition}x{screen_height_partition}")
-                            
+                                                        
                             # Rest of the clamping and subsurface creation code remains the same...
                             screen_x_start = max(0, min(screen_x_start, screen_width - 1))
                             screen_y_start = max(0, min(screen_y_start, screen_height - 1))
@@ -342,14 +326,13 @@ def run_experiment(
                         game_state_image_small = capture_screen(subsurface)
                     else:
                         game_state_image_small = None  # Placeholder for small map image
-                    #save_debug_image(game_state_image_small, current_map_index, partition_idx, image_type="partitions", output_dir="debug_images")
 
                     state = env_manager.small_env_timestep.state
                     base_orientation = extract_base_orientation(state)
                     bucket_status = extract_bucket_status(state)
 
                     # LLM decision making (keeping the original logic but simplified for brevity)
-                    if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0:
+                    if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0 and FORCE_DELEGATE_TO_RL is False and FORCE_DELEGATE_TO_LLM is False:
                         print("    Calling LLM agent for decision...")
                         try:
                             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
@@ -510,7 +493,6 @@ def run_experiment(
                         partition_state['status'] = 'completed'
                         partition_completed = True
                 
-                    #elif partition_state['step_count'] >= max_steps_per_map // len(env_manager.partitions):
                     elif partition_state['step_count'] >= max_steps_per_map:
                         print(f"    Partition {partition_idx} TIMED OUT")
                         env_manager.partitions[partition_idx]['status'] = 'failed'

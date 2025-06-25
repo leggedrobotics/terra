@@ -9,12 +9,11 @@ from google.adk.runners import Runner
 from google.genai import types
 import jax.numpy as jnp
 from terra.viz.llms_adk import *
-from terra.viz.a_star import compute_path, simplify_path
+#from terra.viz.a_star import compute_path, simplify_path
 from terra.viz.llms_utils import *
 import csv
 from utils.models import load_neural_network
 
-#from utils.models import get_model_ready
 import json
 from terra.env import TerraEnvBatch
 import jax.numpy as jnp
@@ -24,27 +23,6 @@ import ast
 def encode_image(cv_image):
     _, buffer = cv2.imencode(".jpg", cv_image)
     return base64.b64encode(buffer).decode("utf-8")
-
-def compute_action_list(timestep,env):
-        # Compute the path
-        start, target_positions = extract_positions(timestep.state)
-        target = find_nearest_target(start, target_positions)
-        path, path2, _ = compute_path(timestep.state, start, target)
-
-
-        initial_orientation = extract_base_orientation(timestep.state)
-        initial_direction = initial_orientation["direction"]
-
-        actions = path_to_actions(path, initial_direction, 6)
-        print("Action list", actions)
-
-        if path:
-            game = env.terra_env.rendering_engine
-            game.path = path
-        else:
-            print("No path found.")
-
-        return actions
 
 def save_csv(output_file, action_list, cumulative_rewards):
     with open(output_file, "w", newline='') as f:
@@ -857,9 +835,6 @@ def reset_to_next_map(map_index, seed, env_manager, global_env_config,
         global_env_config, reset_keys, initial_custom_pos, initial_custom_angle
     )
 
-    # Update the global maps from the new reset
-    #env_manager._initialize_global_environment()
-
     # Extract and store the NEW global map data directly
     new_timestep = env_manager.global_env.timestep
     env_manager.global_maps['target_map'] = new_timestep.state.world.target_map.map[0].copy()
@@ -1021,7 +996,6 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
 
     # Define system messages
     size = f"{MAP_SIZE}x{MAP_SIZE}"
-    print("Map size in init llm: ", size)
 
     system_message_master = f"""You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.
 
