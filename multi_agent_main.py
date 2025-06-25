@@ -204,7 +204,7 @@ def run_experiment(
             screen = pg.display.get_surface()
             game_state_image = capture_screen(screen)
             
-            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
+            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                              USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
                              USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
@@ -341,14 +341,20 @@ def run_experiment(
                         except AttributeError:
                             # Handle the case where current_observation is not a dictionary
                             observation_str = str(current_observation)
-                        system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
-                            "Decide if you should delegate digging tasks to a " \
-                            "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
-                            "specialized LLM agent (respond with 'delegate_to_llm')."
+                        # system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
+                        #     "Decide if you should delegate digging tasks to a " \
+                        #     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
+                        #     "specialized LLM agent (respond with 'delegate_to_llm')."
+                        # if USE_IMAGE_PROMPT:
+                        #     delegation_prompt = f"Current observation: See image \n\nSystem Message: {system_message_delegation}"
+                        # else:
+                        #     delegation_prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_delegation}"
                         if USE_IMAGE_PROMPT:
-                            delegation_prompt = f"Current observation: See image \n\nSystem Message: {system_message_delegation}"
+                            delegation_prompt = get_delegation_prompt(prompts, "See image", 
+                                                                    context=f"Map {current_map_index}, Step {map_step}")
                         else:
-                            delegation_prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_delegation}"
+                            delegation_prompt = get_delegation_prompt(prompts, current_observation, 
+                                                                    context=f"Map {current_map_index}, Step {map_step}")
 
                         delegation_session_id = f"{SESSION_ID}_map_{current_map_index}_delegation"  # This creates "session_001_map_0_delegation"
                         delegation_user_id = f"{USER_ID}_delegation"  # This creates "user_1_delegation"
@@ -428,13 +434,17 @@ def run_experiment(
                         print(f"    Partition {partition_idx} - Delegating to LLM agent")
                         
                         start = env_manager.small_env_timestep.state.agent.agent_state.pos_base
-                        msg = (
-                            f"Analyze this game frame and the provided local map to select the optimal action. "
-                            f"The base of the excavator is currently facing {base_orientation['direction']}. "
-                            f"The bucket is currently {bucket_status}. "
-                            f"The excavator is currently located at {start} (y,x). "
-                            f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-                        )
+                        # msg = (
+                        #     f"Analyze this game frame and the provided local map to select the optimal action. "
+                        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
+                        #     f"The bucket is currently {bucket_status}. "
+                        #     f"The excavator is currently located at {start} (y,x). "
+                        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
+                        # )
+                        msg = get_excavator_prompt(prompts, 
+                          base_orientation['direction'], 
+                          bucket_status, 
+                          start)
 
                         llm_query.add_user_message(frame=game_state_image_small, user_msg=msg, local_map=None)
                         action_output, reasoning = llm_query.generate_response("./")
