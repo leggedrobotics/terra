@@ -19,7 +19,7 @@ from terra.env import TimeStep
 from terra.env import TerraEnv
 
 from terra.viz.llms_utils import *
-from multi_agent_utils import *
+from llm.multi_agent_utils import *
 from terra.viz.llms_adk import *
 from terra.actions import (
     WheeledAction,
@@ -43,14 +43,14 @@ from pygame.locals import (
     QUIT,
 )
 
-from eval_llm import compute_stats_llm
-from map_environments import MapEnvironments
+from llm.eval_llm import compute_stats_llm
+from llm.map_environments import MapEnvironments
 
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = True   # Force delegation to LLM agent for testing
+FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
 NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
@@ -238,8 +238,8 @@ def run_experiment(
 
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
-        #max_steps_per_map = num_timesteps
-        max_steps_per_map = 25
+        max_steps_per_map = num_timesteps
+        #max_steps_per_map = 25
         map_done = False  # Track map completion
 
         while playing and active_partitions and map_step < max_steps_per_map and global_step < num_timesteps:

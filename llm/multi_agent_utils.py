@@ -9,7 +9,7 @@ from google.adk.runners import Runner
 from google.genai import types
 import jax.numpy as jnp
 from terra.viz.llms_adk import *
-#from terra.viz.a_star import compute_path, simplify_path
+
 from terra.viz.llms_utils import *
 import csv
 from utils.models import load_neural_network
@@ -18,8 +18,7 @@ import json
 from terra.env import TerraEnvBatch
 import jax.numpy as jnp
 import ast
-
-
+#from terra.viz.llms_adk import LLM_query  
 """
 Simple file-based prompt manager that loads prompts from external files.
 Keeps the main code clean and prompts easily editable.
@@ -29,7 +28,7 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Optional
-
+import datetime
 
 class SimplePromptManager:
     """Lightweight prompt manager that loads from external files."""
@@ -38,7 +37,7 @@ class SimplePromptManager:
         self.prompts_dir = Path(prompts_dir)
         self.prompts_dir.mkdir(exist_ok=True)
         self._cache = {}
-        self._create_default_files()
+        # self._create_default_files()
     
     def get(self, prompt_name: str, **kwargs) -> str:
         """Get a prompt with optional variable substitution."""
@@ -57,6 +56,7 @@ class SimplePromptManager:
         """Load a prompt from file."""
         # Try .txt file first
         txt_file = self.prompts_dir / f"{prompt_name}.txt"
+        print(f"Loading prompt from {txt_file}")
         if txt_file.exists():
             with open(txt_file, 'r', encoding='utf-8') as f:
                 self._cache[prompt_name] = f.read().strip()
@@ -85,68 +85,68 @@ class SimplePromptManager:
         else:
             self._cache.clear()
     
-    def _create_default_files(self):
-        """Create default prompt files if they don't exist."""
-        prompts = {
-            "master_partitioning": """You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.
+#     def _create_default_files(self):
+#         """Create default prompt files if they don't exist."""
+#         prompts = {
+#             "master_partitioning": """You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.
 
-IMPORTANT: You will receive a {map_size}x{map_size} map as input
+# IMPORTANT: You will receive a {map_size}x{map_size} map as input
 
-IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions
+# IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions
 
-GUIDELINES FOR PARTITIONING:
-1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements
-2. Create efficient partitions that maximize excavator productivity and minimize travel time
-3. Ensure each partition has adequate space for the excavator to maneuver
-4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient
-5. Position starting points strategically to minimize initial travel time
-6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions
+# GUIDELINES FOR PARTITIONING:
+# 1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements
+# 2. Create efficient partitions that maximize excavator productivity and minimize travel time
+# 3. Ensure each partition has adequate space for the excavator to maneuver
+# 4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient
+# 5. Position starting points strategically to minimize initial travel time
+# 6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions
 
-USE AT MOST {max_partitions} PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. 
-IMPORTANT: If you see multiple trenches, you should create a partition for each trench. 
+# USE AT MOST {max_partitions} PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. 
+# IMPORTANT: If you see multiple trenches, you should create a partition for each trench. 
 
-RESPONSE FORMAT:
-Respond with a JSON list of partition objects, each containing:
-- 'id': Unique numeric identifier for each partition (starting from 0)
-- 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)
-- 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y, x)
-- 'start_angle': Always use 0 degrees for initial orientation
-- 'status': Set to 'pending' for all new partitions
+# RESPONSE FORMAT:
+# Respond with a JSON list of partition objects, each containing:
+# - 'id': Unique numeric identifier for each partition (starting from 0)
+# - 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)
+# - 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y, x)
+# - 'start_angle': Always use 0 degrees for initial orientation
+# - 'status': Set to 'pending' for all new partitions
 
-CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.
+# CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.
 
-CORRECT FORMAT (with tuples):
-[{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}]
+# CORRECT FORMAT (with tuples):
+# [{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}]
 
-INCORRECT FORMAT (with arrays):
-[{{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [16, 16], 'start_angle': 0, 'status': 'pending'}}]
+# INCORRECT FORMAT (with arrays):
+# [{{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [16, 16], 'start_angle': 0, 'status': 'pending'}}]
 
-Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):
-[{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}}, {{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}}]
+# Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):
+# [{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}}, {{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}}]
 
-NOTE: Always return a list of partitions even if only creating a single partition.
-Very important. Ensure each partition has sufficient space for both excavation and soil deposit operations. 
-Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck
-REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES.""",
+# NOTE: Always return a list of partitions even if only creating a single partition.
+# Very important. Ensure each partition has sufficient space for both excavation and soil deposit operations. 
+# Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck
+# REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES.""",
 
-            "delegation_decision": """You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').
+#             "delegation_decision": """You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').
 
-Current observation: {observation}
+# Current observation: {observation}
 
-System Message: You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').""",
+# System Message: You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').""",
 
-            "excavator_action": """Analyze this game frame and the provided local map to select the optimal action. 
-The base of the excavator is currently facing {direction}. 
-The bucket is currently {bucket_status}. 
-The excavator is currently located at {position} (y,x). 
-Follow the format: {{"reasoning": "detailed step-by-step analysis", "action": X}}"""
-        }
+#             "excavator_action": """Analyze this game frame and the provided local map to select the optimal action. 
+# The base of the excavator is currently facing {direction}. 
+# The bucket is currently {bucket_status}. 
+# The excavator is currently located at {position} (y,x). 
+# Follow the format: {{"reasoning": "detailed step-by-step analysis", "action": X}}"""
+#         }
         
-        for name, content in prompts.items():
-            file_path = self.prompts_dir / f"{name}.txt"
-            if not file_path.exists():
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
+#         for name, content in prompts.items():
+#             file_path = self.prompts_dir / f"{name}.txt"
+#             if not file_path.exists():
+#                 with open(file_path, 'w', encoding='utf-8') as f:
+#                     f.write(content)
 
 
 def encode_image(cv_image):
@@ -1106,192 +1106,17 @@ class SessionManager:
         for key, session_info in self.sessions.items():
             print(f"  {key}: {session_info['app_name']}")
 
-def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
-                   APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
-    """
-    Initialization of LLM agents with proper session management.
-    """
-    # Initialize session manager
-    session_manager = SessionManager()
-    
-    if llm_model_key == "gpt":
-        llm_model_name_extended = "openai/{}".format(llm_model_name)
-    elif llm_model_key == "claude":
-        llm_model_name_extended = "anthropic/{}".format(llm_model_name)
-    else:
-        llm_model_name_extended = llm_model_name
-    
-    print("Using model: ", llm_model_name_extended)
-
-    # Define system messages
-    size = f"{MAP_SIZE}x{MAP_SIZE}"
-
-    system_message_master = "zx"
-
-    system_message_delegation = """You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm')."""
-
-    # Load game instructions
-    if USE_PATH:
-        with open("envs19.json", "r") as file:
-            game_instructions = json.load(file)
-    else:
-        with open("envs18.json", "r") as file:
-            game_instructions = json.load(file)
-
-    environment_name = "AutonomousExcavatorGame"
-    system_message_excavator = game_instructions.get(
-        environment_name,
-        "You are a game playing assistant. Provide the best action for the current game state."
-    )
-
-    # CREATE AGENTS
-    if llm_model_key == "gemini":
-        llm_partitioning_agent = Agent(
-            name="PartitioningAgent",
-            model=llm_model_name_extended,
-            description="Master excavation coordinator for partitioning",
-            instruction=system_message_master,
-        )
-        
-        llm_delegation_agent = Agent(
-            name="DelegationAgent", 
-            model=llm_model_name_extended,
-            description="Task delegation coordinator",
-            instruction=system_message_delegation,
-        )
-
-        llm_excavator_agent = Agent(
-            name="ExcavatorAgent",
-            model=llm_model_name_extended,
-            description="Excavator control agent",
-            instruction=system_message_excavator,
-        )
-    else:
-        llm_partitioning_agent = Agent(
-            name="PartitioningAgent",
-            model=LiteLlm(model=llm_model_name_extended),
-            description="Master excavation coordinator for partitioning",
-            instruction=system_message_master,
-        )
-        
-        llm_delegation_agent = Agent(
-            name="DelegationAgent",
-            model=LiteLlm(model=llm_model_name_extended),
-            description="Task delegation coordinator",
-            instruction=system_message_delegation,
-        )
-
-        llm_excavator_agent = Agent(
-            name="ExcavatorAgent",
-            model=LiteLlm(model=llm_model_name_extended),
-            description="Excavator control agent",
-            instruction=system_message_excavator,
-        )
-
-    print("All agents initialized.")
-
-    # CREATE SESSIONS WITH PROPER MANAGEMENT
-    
-    # Partitioning session
-    app_name_partitioning = f"{APP_NAME}_partitioning"
-    user_id_partitioning = f"{USER_ID}_partitioning"
-    session_id_partitioning = f"{SESSION_ID}_partitioning"
-    
-    session_service_partitioning = session_manager.create_agent_session(
-        "PartitioningAgent",
-        app_name_partitioning,
-        user_id_partitioning,
-        session_id_partitioning
-    )
-
-    # Delegation session
-    app_name_delegation = f"{APP_NAME}_delegation"
-    user_id_delegation = f"{USER_ID}_delegation"
-    session_id_delegation = f"{SESSION_ID}_delegation"
-    
-    session_service_delegation = session_manager.create_agent_session(
-        "DelegationAgent",
-        app_name_delegation,
-        user_id_delegation,
-        session_id_delegation
-    )
-
-    # Excavator session
-    app_name_excavator = f"{APP_NAME}_excavator"
-    user_id_excavator = f"{USER_ID}_excavator"
-    session_id_excavator = f"{SESSION_ID}_excavator"
-    
-    session_service_excavator = session_manager.create_agent_session(
-        "ExcavatorAgent",
-        app_name_excavator,
-        user_id_excavator,
-        session_id_excavator
-    )
-
-    print("All sessions created successfully.")
-
-    # CREATE RUNNERS WITH SESSION MANAGER
-    runner_partitioning = session_manager.create_runner(
-        llm_partitioning_agent,
-        "PartitioningAgent",
-        app_name_partitioning
-    )
-    
-    runner_delegation = session_manager.create_runner(
-        llm_delegation_agent,
-        "DelegationAgent", 
-        app_name_delegation
-    )
-    
-    runner_excavator = session_manager.create_runner(
-        llm_excavator_agent,
-        "ExcavatorAgent",
-        app_name_excavator
-    )
-
-    print("All runners created successfully.")
-
-    # Create LLM query object
-    from terra.viz.llms_adk import LLM_query  # Assuming this import works
-    
-    llm_query = LLM_query(
-        model_name=llm_model_name_extended,
-        model=llm_model_key,
-        system_message=system_message_excavator,
-        action_size=action_size,
-        session_id=session_id_excavator,
-        runner=runner_excavator,
-        user_id=user_id_excavator,
-    )
-
-    # Initialize previous actions
-    prev_actions = None
-    if config:
-        import jax.numpy as jnp
-        prev_actions = jnp.zeros(
-            (n_envs, config.num_prev_actions),
-            dtype=jnp.int32
-        )
-    else:
-        print("Warning: rl_config is None, prev_actions will not be initialized.")
-    
-    # Debug: List all sessions
-    session_manager.list_sessions()
-    
-    return (llm_query, runner_partitioning, runner_delegation, prev_actions, 
-            system_message_master, session_manager)
-
 # Integration with your existing code
-def init_llms_simple(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
+def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
                      APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     """
     Simplified version of init_llms using file-based prompts.
     """
     # Initialize prompt manager
-    prompts = SimplePromptManager()
+    prompts = SimplePromptManager(prompts_dir="llm/prompts")
     
     # Initialize session manager (keeping your existing logic)
-    from multi_agent_utils import SessionManager
+    #from multi_agent_utils import SessionManager
     session_manager = SessionManager()
     
     if llm_model_key == "gpt":
@@ -1308,14 +1133,14 @@ def init_llms_simple(llm_model_key, llm_model_name, USE_PATH, config, action_siz
                                        map_size=MAP_SIZE, 
                                        max_partitions=2)
     
-    print(system_message_master)
+    #print(system_message_master)
     
     system_message_delegation = prompts.get("delegation_decision", 
                                            observation="See current state")
-    print(system_message_delegation)
+    #print(system_message_delegation)
 
     # Load excavator instructions from existing JSON or use default
-    environment_name = "AutonomousExcavatorGame"
+    #environment_name = "AutonomousExcavatorGame"
     try:
         # if USE_PATH:
         #     with open("envs19.json", "r") as file:
@@ -1331,7 +1156,7 @@ def init_llms_simple(llm_model_key, llm_model_name, USE_PATH, config, action_siz
             with open("prompts/excavator_llm_simple.txt", "r") as file:
                 game_instructions = file.read()
 
-        print(game_instructions)
+        #print(game_instructions)
         
         # system_message_excavator = game_instructions.get(
         #     environment_name,
@@ -1453,7 +1278,7 @@ def init_llms_simple(llm_model_key, llm_model_name, USE_PATH, config, action_siz
     print("All runners created successfully.")
 
     # Create LLM query object
-    from terra.viz.llms_adk import LLM_query  # Assuming this import works
+# Assuming this import works
     
     llm_query = LLM_query(
         model_name=llm_model_name_extended,
@@ -1618,7 +1443,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
 
     # Initialize LLM agent with fixed session management
     (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
-     system_message_master, session_manager) = init_llms_simple(
+     system_message_master, session_manager) = init_llms(
         llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
         APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
     )
@@ -1631,10 +1456,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
         env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
     else:
         print("Calling LLM agent for partitioning decision...")
-        # import pygame as pg
-        # from terra.viz.llms_utils import capture_screen  # Assuming this import works
-        
-        # screen = pg.display.get_surface()
+
         game_state_image = capture_screen(screen)
         #save_debug_image(game_state_image, map_index, 0, image_type="general", output_dir="debug_images")
         current_observation = env_manager.global_env.timestep.observation
@@ -1645,14 +1467,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             observation_str = json.dumps(obs_dict)
         except AttributeError:
             observation_str = str(current_observation)
-
-        # if USE_IMAGE_PROMPT:
-        #     prompt = f"Current observation: See image \n\nSystem Message: {system_message_master}"
-        # else:
-        #     prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_master}
-        # 
-        # `
-        # "
 
         # Use file-based prompt
         if USE_IMAGE_PROMPT:
@@ -1669,8 +1483,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             prompt = prompts.get("master_partitioning", 
                                map_size=ORIGINAL_MAP_SIZE, 
                                max_partitions=2) + f"\n\nCurrent observation: {observation_str}"
-
-        # Your existing LLM call logic...
 
         try:
             user_id_partitioning = f"{USER_ID}_partitioning"
@@ -1691,7 +1503,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             print(f"PARTITIONING LLM response: {llm_response_text}")
 
             try:
-                from multi_agent_utils import extract_python_format_data  # Assuming this import works
+                #from multi_agent_utils import extract_python_format_data  # Assuming this import works
                 sub_tasks_llm = extract_python_format_data(llm_response_text)
                 print("Successfully parsed LLM response with tuples preserved")
             except ValueError as e:
@@ -1703,7 +1515,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             sub_tasks_llm = sub_tasks_manual
 
         # Use appropriate partitions - validate LLM response and fallback to manual if needed
-        from multi_agent_utils import is_valid_region_list  # Assuming this import works
+        #from multi_agent_utils import is_valid_region_list  # Assuming this import works
         partition_validation = is_valid_region_list(sub_tasks_llm)
         
         if partition_validation:
@@ -1716,7 +1528,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts
 
 
-import datetime
+
 def save_debug_image(image, map_index, step_count, image_type="general", output_dir="debug_images"):
     """
     Save debug images with proper naming and organization.

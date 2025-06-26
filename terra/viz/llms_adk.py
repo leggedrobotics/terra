@@ -126,8 +126,8 @@ class LLM_query:
 
             # Save the raw response for debugging
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path+'all_responses.txt', "a") as file:
-                file.write(str(response_text) + '\n\n')
+            # with open(path+'all_responses.txt', "a") as file:
+            #     file.write(str(response_text) + '\n\n')
 
             # This regular expression finds the first { to the last }
             pattern = r'\{.*\}'

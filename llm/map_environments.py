@@ -18,7 +18,7 @@ from terra.env import TimeStep
 from terra.env import TerraEnv
 
 from terra.viz.llms_utils import *
-from multi_agent_utils import *
+from llm.multi_agent_utils import *
 from terra.viz.llms_adk import *
 from terra.viz.a_star import compute_path, simplify_path
 from terra.actions import (
@@ -28,7 +28,7 @@ from terra.actions import (
     TrackedActionType,
 )
 
-from large_map_terra_env import LargeMapTerraEnv
+from llm.large_map_terra_env import LargeMapTerraEnv
 
 class MapEnvironments:
     """

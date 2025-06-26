@@ -41,3 +41,5 @@ terra/env_generation/data/
 terra/env_generation/data-old/
 data-old
 *.zip
+TO_CHECK/
+OLD_FILES/
