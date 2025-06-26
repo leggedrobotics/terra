@@ -1308,30 +1308,43 @@ def init_llms_simple(llm_model_key, llm_model_name, USE_PATH, config, action_siz
                                        map_size=MAP_SIZE, 
                                        max_partitions=2)
     
+    print(system_message_master)
+    
     system_message_delegation = prompts.get("delegation_decision", 
                                            observation="See current state")
+    print(system_message_delegation)
 
     # Load excavator instructions from existing JSON or use default
     environment_name = "AutonomousExcavatorGame"
     try:
+        # if USE_PATH:
+        #     with open("envs19.json", "r") as file:
+        #         game_instructions = json.load(file)
+        # else:
+        #     with open("envs18.json", "r") as file:
+        #         game_instructions = json.load(file)
+
         if USE_PATH:
-            with open("envs19.json", "r") as file:
-                game_instructions = json.load(file)
+            with open("prompts/excavator_llm_advanced.txt", "r") as file:
+                game_instructions = file.read()
         else:
-            with open("envs18.json", "r") as file:
-                game_instructions = json.load(file)
+            with open("prompts/excavator_llm_simple.txt", "r") as file:
+                game_instructions = file.read()
+
+        print(game_instructions)
         
-        system_message_excavator = game_instructions.get(
-            environment_name,
-            "You are a game playing assistant. Provide the best action for the current game state."
-        )
+        # system_message_excavator = game_instructions.get(
+        #     environment_name,
+        #     "You are a game playing assistant. Provide the best action for the current game state."
+        # )
+        system_message_excavator = game_instructions
     except FileNotFoundError:
         # Use a basic default if files don't exist
         system_message_excavator = "You are an excavator control agent. Choose actions 0-6 based on game state."
 
     # Create agents (keeping your existing logic)
-    from google.adk.agents import Agent
-    from google.adk.models.lite_llm import LiteLlm
+    # from google.adk.agents import Agent
+    # from google.adk.models.lite_llm import LiteLlm
     
     if llm_model_key == "gemini":
         llm_partitioning_agent = Agent(
