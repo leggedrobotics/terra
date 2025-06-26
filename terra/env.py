@@ -535,7 +535,6 @@ class TerraEnvBatch:
         shuffle_maps: bool = False,
         single_map_path: str = None,
     ) -> None:
-        print(single_map_path)
         self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps, single_map_path)
         self.terra_env = TerraEnv.new(
             maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,

@@ -4,22 +4,19 @@ Partially from https://github.com/RobertTLange/gymnax-blines
 
 import numpy as np
 import jax
-from tqdm import tqdm
 from utils.helpers import load_pkl_object
-from terra.env import TerraEnvBatch
+
 import jax.numpy as jnp
-from utils.utils_ppo import obs_to_model_input #, wrap_action
+from utils.utils_ppo import obs_to_model_input
 from terra.state import State
 
 from tensorflow_probability.substrates import jax as tfp
 from train import TrainConfig  # needed for unpickling checkpoints
 from terra.config import EnvConfig
 from terra.config import BatchConfig
-from terra.env import TimeStep
-from terra.env import TerraEnv
 
-from terra.viz.llms_utils import *
-from llm.multi_agent_utils import *
+
+from llm.utils_llm import *
 from terra.viz.llms_adk import *
 from terra.actions import (
     WheeledAction,
@@ -27,9 +24,6 @@ from terra.actions import (
     WheeledActionType,
     TrackedActionType,
 )
-
-import pygame as pg
-from terra.viz.llms_utils import capture_screen  # Assuming this import works
 
 import asyncio
 import os
@@ -44,7 +38,7 @@ from pygame.locals import (
 )
 
 from llm.eval_llm import compute_stats_llm
-from llm.map_environments import MapEnvironments
+from llm.env_manager_llm import EnvironmentsManager
 
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
@@ -67,15 +61,13 @@ COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
 USE_RENDERING = True  # Use rendering for the environment
 USE_DISPLAY = True  # Use display for the environment
 
-def run_experiment(
-    llm_model_name, llm_model_key, num_timesteps, seed, 
-    run, small_env_config=None):
+
+def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed, 
+                run, small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
-    Modified to cycle through maps in the existing environment instead of creating new ones.
     """
     agent_checkpoint_path = run
-    model = None
     model_params = None
     config = None
 
@@ -95,7 +87,7 @@ def run_experiment(
 
     # Initialize the environment manager ONCE with all maps
     print("Initializing environment manager with all maps...")
-    env_manager = MapEnvironments(
+    env_manager = EnvironmentsManager(
         seed=seed,
         global_env_config=global_env_config,
         small_env_config=small_env_config,
@@ -147,11 +139,8 @@ def run_experiment(
     all_obs_seq = []
     all_action_list = []
     
-   
-
     tile_size = global_env_config.tile_size[0].item()
     move_tiles = global_env_config.agent.move_tiles[0].item()
-
 
     action_type = batch_cfg.action_type
     if action_type == TrackedAction:
@@ -180,9 +169,7 @@ def run_experiment(
     episode_length = None
     move_cumsum = None
     do_cumsum = None
-
-
-        
+    
     screen = pg.display.get_surface()
 
     # MAIN LOOP - PROCESS MULTIPLE MAPS
@@ -194,7 +181,7 @@ def run_experiment(
         # Reset to next map (reusing the same environment)
         try:
             if current_map_index > 0:  # Don't reset on first map since it's already initialized
-                map_rng = reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
+                reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
 
             env_manager.global_env.terra_env.render_obs_pygame(
@@ -204,9 +191,11 @@ def run_experiment(
             screen = pg.display.get_surface()
             game_state_image = capture_screen(screen)
             
-            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts = setup_partitions_and_llm(current_map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
-                             USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
-                             USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
+            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts = setup_partitions_and_llm(
+                        current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
+                        config, llm_model_name, llm_model_key,
+                        USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
+                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             
             if partition_states is None:
@@ -225,16 +214,9 @@ def run_experiment(
         map_global_step_rewards = []
         map_obs_seq = []
         map_action_list = []
-        map_start_step = global_step
         
-        # Calculate initial target pixels for this map
-        current_map = env_manager.global_timestep.state.world.target_map.map[0]
-        initial_target_num = jnp.sum(current_map < 0)
-        print(f"Map {current_map_index} - Initial target number: {initial_target_num}")
-
+        # First step delegate to RL agent
         llm_decision = "delegate_to_rl"
-
-
 
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
@@ -288,51 +270,20 @@ def run_experiment(
                     height = y_end - y_start + 1
 
                     if USE_RENDERING:
-                        # Extract subsurface safely - using environment tile size
-                        try:
-                            screen_width, screen_height = screen.get_size()
-                            
-                            # Get the actual tile size from the environment
-                            # This should be available from your global_env_config
-                            env_tile_size = global_env_config.tile_size[0].item()  # From your existing code
-                            
-                            # Calculate the rendering scale factor
-                            # This depends on how the environment renders to the screen
-                            render_scale = screen_width / (ORIGINAL_MAP_SIZE * env_tile_size)
-                            
-                            # Convert game world coordinates to screen pixel coordinates
-                            screen_x_start = int(x_start * env_tile_size * render_scale)
-                            screen_y_start = int(y_start * env_tile_size * render_scale)
-                            screen_width_partition = int(width * env_tile_size * render_scale)
-                            screen_height_partition = int(height * env_tile_size * render_scale)
-                                                        
-                            # Rest of the clamping and subsurface creation code remains the same...
-                            screen_x_start = max(0, min(screen_x_start, screen_width - 1))
-                            screen_y_start = max(0, min(screen_y_start, screen_height - 1))
-                            screen_width_partition = min(screen_width_partition, screen_width - screen_x_start)
-                            screen_height_partition = min(screen_height_partition, screen_height - screen_y_start)
-                            
-                            if screen_width_partition <= 0 or screen_height_partition <= 0:
-                                print(f"    Warning: Invalid partition size, using fallback")
-                                subsurface = screen.subsurface((0, 0, min(64, screen_width), min(64, screen_height)))
-                            else:
-                                subsurface = screen.subsurface((screen_x_start, screen_y_start, screen_width_partition, screen_height_partition))
-                                
-                        except ValueError as e:
-                            print(f"Error extracting subsurface for partition {partition_idx}: {e}")
-                            fallback_size = min(64, screen_width, screen_height)
-                            subsurface = screen.subsurface((0, 0, fallback_size, fallback_size))
-
+                        subsurface = extract_subsurface(screen, x_start, y_start, width, height, ORIGINAL_MAP_SIZE, global_env_config, partition_idx)
                         game_state_image_small = capture_screen(subsurface)
                     else:
-                        game_state_image_small = None  # Placeholder for small map image
+                        game_state_image_small = None
 
                     state = env_manager.small_env_timestep.state
                     base_orientation = extract_base_orientation(state)
                     bucket_status = extract_bucket_status(state)
 
-                    # LLM decision making (keeping the original logic but simplified for brevity)
-                    if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0 and FORCE_DELEGATE_TO_RL is False and FORCE_DELEGATE_TO_LLM is False:
+                    # LLM decision making 
+                    if global_step % LLM_CALL_FREQUENCY == 0 and global_step > 0 and \
+                        FORCE_DELEGATE_TO_RL is False and \
+                        FORCE_DELEGATE_TO_LLM is False:
+
                         print("    Calling LLM agent for decision...")
                         try:
                             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
@@ -341,64 +292,55 @@ def run_experiment(
                         except AttributeError:
                             # Handle the case where current_observation is not a dictionary
                             observation_str = str(current_observation)
-                        # system_message_delegation = "You are a master agent controlling an excavator. Observe the state. " \
-                        #     "Decide if you should delegate digging tasks to a " \
-                        #     "specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a" \
-                        #     "specialized LLM agent (respond with 'delegate_to_llm')."
-                        # if USE_IMAGE_PROMPT:
-                        #     delegation_prompt = f"Current observation: See image \n\nSystem Message: {system_message_delegation}"
-                        # else:
-                        #     delegation_prompt = f"Current observation: {observation_str}\n\nSystem Message: {system_message_delegation}"
+
                         if USE_IMAGE_PROMPT:
                             delegation_prompt = get_delegation_prompt(prompts, "See image", 
                                                                     context=f"Map {current_map_index}, Step {map_step}")
                         else:
-                            delegation_prompt = get_delegation_prompt(prompts, current_observation, 
+                            delegation_prompt = get_delegation_prompt(prompts, observation_str, 
                                                                     context=f"Map {current_map_index}, Step {map_step}")
 
                         delegation_session_id = f"{SESSION_ID}_map_{current_map_index}_delegation"  # This creates "session_001_map_0_delegation"
                         delegation_user_id = f"{USER_ID}_delegation"  # This creates "user_1_delegation"
 
-                        if not FORCE_DELEGATE_TO_RL:
-                            try:
-                                if USE_IMAGE_PROMPT:
-                                    response = asyncio.run(call_agent_async_master(
-                                        delegation_prompt, 
-                                        game_state_image_small, 
-                                        runner_delegation,               
-                                        delegation_user_id,
-                                        delegation_session_id,
-                                        session_manager
-                                    ))
-                                else:
-                                    response = asyncio.run(call_agent_async_master(
-                                        delegation_prompt, 
-                                        None, 
-                                        runner_delegation,               
-                                        delegation_user_id,
-                                        delegation_session_id,
-                                        session_manager
-                                    ))
-                                
-                                llm_response_text = response
-                                print(f"LLM response: {llm_response_text}")
-                                
-                                if "delegate_to_rl" in llm_response_text.lower():
-                                    llm_decision = "delegate_to_rl"
-                                    print("Delegating to RL agent based on LLM response.")
-                                elif "delegate_to_llm" in llm_response_text.lower():
-                                    llm_decision = "delegate_to_llm"
-                                    print("Delegating to LLM agent based on LLM response.")
-                                else:
-                                    llm_decision = "STOP"                    
 
-                            except Exception as adk_err:
-                                print(f"Error during ADK agent communication: {adk_err}")
-                                print("Defaulting to fallback action due to ADK error.")
-                                llm_decision = "fallback" # Indicate fallback needed
-                        else:
-                            print("Forcing delegation to RL agent for testing.")
-                            llm_decision = "delegate_to_rl" # For testing, force delegation to RL agent`
+                        try:
+                            if USE_IMAGE_PROMPT:
+                                response = asyncio.run(call_agent_async_master(
+                                    delegation_prompt, 
+                                    game_state_image_small, 
+                                    runner_delegation,               
+                                    delegation_user_id,
+                                    delegation_session_id,
+                                    session_manager
+                                ))
+                            else:
+                                response = asyncio.run(call_agent_async_master(
+                                    delegation_prompt, 
+                                    None, 
+                                    runner_delegation,               
+                                    delegation_user_id,
+                                    delegation_session_id,
+                                    session_manager
+                                ))
+                                
+                            llm_response_text = response
+                            print(f"LLM response: {llm_response_text}")
+                                
+                            if "delegate_to_rl" in llm_response_text.lower():
+                                llm_decision = "delegate_to_rl"
+                                print("Delegating to RL agent based on LLM response.")
+                            elif "delegate_to_llm" in llm_response_text.lower():
+                                llm_decision = "delegate_to_llm"
+                                print("Delegating to LLM agent based on LLM response.")
+                            else:
+                                llm_decision = "STOP"                    
+
+                        except Exception as adk_err:
+                            print(f"Error during ADK agent communication: {adk_err}")
+                            print("Defaulting to fallback action due to ADK error.")
+                            llm_decision = "fallback" # Indicate fallback needed
+
                     if FORCE_DELEGATE_TO_LLM:
                         llm_decision = "delegate_to_llm"
                     elif FORCE_DELEGATE_TO_RL:
@@ -434,13 +376,7 @@ def run_experiment(
                         print(f"    Partition {partition_idx} - Delegating to LLM agent")
                         
                         start = env_manager.small_env_timestep.state.agent.agent_state.pos_base
-                        # msg = (
-                        #     f"Analyze this game frame and the provided local map to select the optimal action. "
-                        #     f"The base of the excavator is currently facing {base_orientation['direction']}. "
-                        #     f"The bucket is currently {bucket_status}. "
-                        #     f"The excavator is currently located at {start} (y,x). "
-                        #     f"Follow the format: {{\"reasoning\": \"detailed step-by-step analysis\", \"action\": X}}"
-                        # )
+
                         msg = get_excavator_prompt(prompts, 
                           base_orientation['direction'], 
                           bucket_status, 
@@ -562,7 +498,6 @@ def run_experiment(
             #     print(f"  Total reward: {map_metrics['total_reward']:.4f}")
             #     break
 
-        
             map_step += 1
             global_step += 1
 
@@ -627,7 +562,6 @@ def run_experiment(
         save_video(all_frames, video_path)
         
         print(f"\nResults saved to: {output_dir}")
-        print(f"Video: {video_path}")
 
     info = {
         "episode_done_once": episode_done_once,

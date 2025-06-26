@@ -1,36 +1,18 @@
 import numpy as np
 import jax
-from tqdm import tqdm
-from utils.models import get_model_ready
-from utils.helpers import load_pkl_object
-from terra.env import TerraEnvBatch
-import jax.numpy as jnp
-from utils.utils_ppo import obs_to_model_input, wrap_action
-from terra.state import State
-import matplotlib.animation as animation
 
-# from utils.curriculum import Curriculum
-from tensorflow_probability.substrates import jax as tfp
-from train import TrainConfig  # needed for unpickling checkpoints
-from terra.config import EnvConfig
-from terra.config import BatchConfig
-from terra.env import TimeStep
+import jax.numpy as jnp
+
 from terra.env import TerraEnv
 
-from terra.viz.llms_utils import *
-from llm.multi_agent_utils import *
+from llm.utils_llm import *
 from terra.viz.llms_adk import *
-from terra.viz.a_star import compute_path, simplify_path
-from terra.actions import (
-    WheeledAction,
-    TrackedAction,
-    WheeledActionType,
-    TrackedActionType,
-)
 
-from llm.large_map_terra_env import LargeMapTerraEnv
+import pygame as pg
 
-class MapEnvironments:
+from llm.env_llm import LargeMapTerraEnv
+
+class EnvironmentsManager:
     """
     Manages completely separate environments for large map and small maps.
     Each environment has its own timestep, configuration, and state.
@@ -50,7 +32,6 @@ class MapEnvironments:
         """
         self.rng = jax.random.PRNGKey(seed)
         self.global_env_config = global_env_config
-        # self.num_partitions = num_partitions
         self.shuffle_maps = shuffle_maps
         # Create a custom small environment config if not provided
         if small_env_config is None:
@@ -122,10 +103,10 @@ class MapEnvironments:
             'width': jnp.array([11], dtype=jnp.int32)
         }
         
-        print(f"Agent configs - Small: {self.small_agent_config}, Big: {self.big_agent_config}")
+        #print(f"Agent configs - Small: {self.small_agent_config}, Big: {self.big_agent_config}")
 
-    def _partitions_overlap_fixed(self, i: int, j: int) -> bool:
-        """FIXED: Check if two partitions overlap."""
+    def _partitions_overlap(self, i: int, j: int) -> bool:
+        """Check if two partitions overlap."""
         p1_coords = self.partitions[i]['region_coords']
         p2_coords = self.partitions[j]['region_coords']
         
@@ -147,9 +128,9 @@ class MapEnvironments:
         return overlap_exists
 
 
-    def _calculate_overlap_region_fixed(self, partition_i: int, partition_j: int):
+    def _calculate_overlap_region(self, partition_i: int, partition_j: int):
             """
-            FIXED: Calculate the overlapping region between two partitions.
+            Calculate the overlapping region between two partitions.
             Returns slices for global coordinates, partition i local coordinates, and partition j local coordinates.
             """
             p1_coords = self.partitions[partition_i]['region_coords']
@@ -198,32 +179,10 @@ class MapEnvironments:
                                     slice(local_j_x_start, local_j_x_end + 1)),
                 'overlap_bounds': (overlap_y_start, overlap_x_start, overlap_y_end, overlap_x_end)
             }
-    def debug_partition_setup(self):
-        """
-        Debug the partition setup to verify everything is correct.
-        """
-        print(f"\n=== PARTITION SETUP DEBUG ===")
-        
-        print(f"Number of partitions: {len(self.partitions)}")
-        for i, partition in enumerate(self.partitions):
-            print(f"  Partition {i}: {partition}")
-        
-        print(f"\nOverlap map: {dict(self.overlap_map)}")
-        print(f"Overlap regions: {list(self.overlap_regions.keys())}")
-        
-        # Test specific pair
-        if len(self.partitions) >= 2:
-            print(f"\nTesting partitions 0 and 1 specifically:")
-            overlap_exists = self._partitions_overlap_fixed(0, 1)
-            print(f"Overlap exists: {overlap_exists}")
-            
-            if overlap_exists:
-                overlap_info = self._calculate_overlap_region_fixed(0, 1)
-                print(f"Overlap info: {overlap_info}")
 
-    def set_partitions_fixed(self, partitions):
+    def set_partitions(self, partitions):
         """
-        FIXED: Set the partitions and compute overlap relationships.
+        Set the partitions and compute overlap relationships.
         """
         print(f"\n=== SETTING PARTITIONS ===")
         self.partitions = partitions
@@ -233,13 +192,13 @@ class MapEnvironments:
             print(f"  Partition {i}: {partition}")
         
         # Use the fixed overlap computation
-        self._compute_overlap_relationships_fixed()
+        self._compute_overlap_relationships()
         
         print(f"Set {len(self.partitions)} partitions with overlaps computed.")
 
-    def _compute_overlap_relationships_fixed(self):
+    def _compute_overlap_relationships(self):
         """
-        FIXED: Compute which partitions overlap with each other and cache overlap regions.
+        Compute which partitions overlap with each other and cache overlap regions.
         """
         print(f"\n=== COMPUTING OVERLAP RELATIONSHIPS ===")
         
@@ -250,12 +209,12 @@ class MapEnvironments:
             for j in range(i + 1, len(self.partitions)):
                 print(f"\nChecking partitions {i} and {j}:")
                 
-                if self._partitions_overlap_fixed(i, j):
+                if self._partitions_overlap(i, j):
                     self.overlap_map[i].add(j)
                     self.overlap_map[j].add(i)
                     
                     # Cache the overlap region calculation
-                    overlap_info = self._calculate_overlap_region_fixed(i, j)
+                    overlap_info = self._calculate_overlap_region(i, j)
                     if overlap_info is not None:
                         self.overlap_regions[(i, j)] = overlap_info
                         self.overlap_regions[(j, i)] = overlap_info  # Symmetric
@@ -272,33 +231,18 @@ class MapEnvironments:
             print(f"Partition {i}: region={partition['region_coords']}, overlaps with {overlaps}")
         
         print(f"Total overlap regions cached: {len(self.overlap_regions)}")
-    # Fixed initialization for your DisjointMapEnvironments class
     def initialize_with_fixed_overlaps(self, partitions):
         """
         Initialize partitions with fixed overlap detection.
-        Call this instead of set_partitions.
         """
-        #print(f"\n=== INITIALIZING WITH FIXED OVERLAPS ===")
         
         # Set partitions using the fixed method
-        self.set_partitions_fixed(partitions)
+        self.set_partitions(partitions)
         
-        # Debug the setup
-        #self.debug_partition_setup()
-        
-        # Verify overlaps were detected
-        total_overlaps = len(self.overlap_regions)
-        #print(f"\nTotal overlap regions detected: {total_overlaps}")
-        
-        # if total_overlaps == 0:
-        #     #print("WARNING: No overlaps detected! This may be incorrect.")
-        # else:
-        #     #print("✓ Overlaps detected successfully")
-
 
     def sync_terrain_between_overlapping_partitions(self, partition_states):
         """
-        Now that overlap detection works, implement actual terrain synchronization.
+        Actual terrain synchronization.
         """
         #print(f"\n=== SYNCHRONIZING TERRAIN BETWEEN OVERLAPPING PARTITIONS ===")
         
@@ -444,7 +388,7 @@ class MapEnvironments:
 
     def add_agents_using_existing_representation(self, partition_states):
         """
-        Alternative approach: Extract agent representation from the other partition's traversability mask.
+        Extract agent representation from the other partition's traversability mask.
         This preserves the exact shape and orientation as calculated by the environment.
         """
         #print(f"\nAdding agents using existing representation...")
@@ -767,7 +711,7 @@ class MapEnvironments:
         self.global_timestep = global_timestep
     
         print("Global environment initialized successfully.")
-        print(f"Initial target map has {jnp.sum(self.global_maps['target_map'] < 0)} dig targets")
+        #print(f"Initial target map has {jnp.sum(self.global_maps['target_map'] < 0)} dig targets")
 
         return self.global_timestep
     
@@ -1054,8 +998,7 @@ class MapEnvironments:
         Render all active partition views in a grid layout.
         This shows what each agent sees simultaneously.
         """
-        import pygame as pg
-        import numpy as np
+
         
         active_partitions = [idx for idx, state in partition_states.items() 
                             if state['status'] == 'active']
@@ -1105,9 +1048,6 @@ class MapEnvironments:
         """
         Render a single partition's view within the given screen area.
         """
-        # import pygame as pg
-        # import numpy as np
-        
         # Get the maps from the partition
         current_timestep = partition_state['timestep']
         world = current_timestep.state.world

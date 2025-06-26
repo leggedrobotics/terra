@@ -4,8 +4,6 @@ import numpy as np
 import jax
 from google.adk.agents import Agent
 from google.adk.models.lite_llm import LiteLlm
-from google.adk.sessions import InMemorySessionService
-from google.adk.runners import Runner
 from google.genai import types
 import jax.numpy as jnp
 from terra.viz.llms_adk import *
@@ -15,138 +13,18 @@ import csv
 from utils.models import load_neural_network
 
 import json
-from terra.env import TerraEnvBatch
+#from terra.env import TerraEnvBatch
 import jax.numpy as jnp
 import ast
-#from terra.viz.llms_adk import LLM_query  
-"""
-Simple file-based prompt manager that loads prompts from external files.
-Keeps the main code clean and prompts easily editable.
-"""
+import io
+from PIL import Image
+import matplotlib.pyplot as plt
 
-import json
-import os
-from pathlib import Path
-from typing import Dict, Optional
-import datetime
+import jax.numpy as jnp
+import pygame as pg
 
-class SimplePromptManager:
-    """Lightweight prompt manager that loads from external files."""
-    
-    def __init__(self, prompts_dir: str = "prompts"):
-        self.prompts_dir = Path(prompts_dir)
-        self.prompts_dir.mkdir(exist_ok=True)
-        self._cache = {}
-        # self._create_default_files()
-    
-    def get(self, prompt_name: str, **kwargs) -> str:
-        """Get a prompt with optional variable substitution."""
-        if prompt_name not in self._cache:
-            self._load_prompt(prompt_name)
-        
-        prompt = self._cache[prompt_name]
-        if kwargs:
-            try:
-                return prompt.format(**kwargs)
-            except KeyError as e:
-                raise ValueError(f"Missing variable {e} for prompt '{prompt_name}'")
-        return prompt
-    
-    def _load_prompt(self, prompt_name: str):
-        """Load a prompt from file."""
-        # Try .txt file first
-        txt_file = self.prompts_dir / f"{prompt_name}.txt"
-        print(f"Loading prompt from {txt_file}")
-        if txt_file.exists():
-            with open(txt_file, 'r', encoding='utf-8') as f:
-                self._cache[prompt_name] = f.read().strip()
-            return
-        
-        # Try .json file
-        json_file = self.prompts_dir / f"{prompt_name}.json"
-        if json_file.exists():
-            with open(json_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if isinstance(data, dict) and 'prompt' in data:
-                    self._cache[prompt_name] = data['prompt']
-                elif isinstance(data, str):
-                    self._cache[prompt_name] = data
-                else:
-                    raise ValueError(f"Invalid JSON format in {json_file}")
-            return
-        
-        raise FileNotFoundError(f"Prompt file not found: {prompt_name}.txt or {prompt_name}.json")
-    
-    def reload(self, prompt_name: str = None):
-        """Reload prompts from files (useful for development)."""
-        if prompt_name:
-            if prompt_name in self._cache:
-                del self._cache[prompt_name]
-        else:
-            self._cache.clear()
-    
-#     def _create_default_files(self):
-#         """Create default prompt files if they don't exist."""
-#         prompts = {
-#             "master_partitioning": """You are a master excavation coordinator responsible for optimizing excavation operations on a site map. Your task is to analyze the given terrain and intelligently partition it into optimal regions for multiple excavator deployments.
-
-# IMPORTANT: You will receive a {map_size}x{map_size} map as input
-
-# IMPORTANT: The partitions should be of maximal size 64x64. You could also consider smaller partitions
-
-# GUIDELINES FOR PARTITIONING:
-# 1. Analyze the state of the map carefully, considering terrain features, obstacles, and excavation requirements
-# 2. Create efficient partitions that maximize excavator productivity and minimize travel time
-# 3. Ensure each partition has adequate space for the excavator to maneuver
-# 4. Designate appropriate soil deposit areas within each partition or create shared deposit zones if more efficient
-# 5. Position starting points strategically to minimize initial travel time
-# 6. Consider terrain complexity when determining partition size - more complex areas may require smaller partitions
-
-# USE AT MOST {max_partitions} PARTITIONS TO OPTIMIZE EXCAVATION OPERATIONS. 
-# IMPORTANT: If you see multiple trenches, you should create a partition for each trench. 
-
-# RESPONSE FORMAT:
-# Respond with a JSON list of partition objects, each containing:
-# - 'id': Unique numeric identifier for each partition (starting from 0)
-# - 'region_coords': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y_start, x_start, y_end, x_end)
-# - 'start_pos': MUST BE A TUPLE with parentheses, NOT an array with brackets: (y, x)
-# - 'start_angle': Always use 0 degrees for initial orientation
-# - 'status': Set to 'pending' for all new partitions
-
-# CRITICAL: You MUST use Python tuple notation with parentheses () for coordinates, NOT arrays with square brackets []. Failure to use tuple notation will result in errors.
-
-# CORRECT FORMAT (with tuples):
-# [{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}]
-
-# INCORRECT FORMAT (with arrays):
-# [{{'id': 0, 'region_coords': [0, 0, 31, 31], 'start_pos': [16, 16], 'start_angle': 0, 'status': 'pending'}}]
-
-# Example response for partitioning a 64x64 map into 4 equal quadrants (USING TUPLES, NOT ARRAYS):
-# [{{'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'}}, {{'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'}}, {{'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}}]
-
-# NOTE: Always return a list of partitions even if only creating a single partition.
-# Very important. Ensure each partition has sufficient space for both excavation and soil deposit operations. 
-# Make sure to also consider a lot of space in the partition for moving the excavator to avoid getting stuck
-# REMEMBER TO USE TUPLES (PARENTHESES) FOR ALL COORDINATES.""",
-
-#             "delegation_decision": """You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').
-
-# Current observation: {observation}
-
-# System Message: You are a master agent controlling an excavator. Observe the state. Decide if you should delegate digging tasks to a specialized RL agent (respond with 'delegate_to_rl') or to delegate the task to a specialized LLM agent (respond with 'delegate_to_llm').""",
-
-#             "excavator_action": """Analyze this game frame and the provided local map to select the optimal action. 
-# The base of the excavator is currently facing {direction}. 
-# The bucket is currently {bucket_status}. 
-# The excavator is currently located at {position} (y,x). 
-# Follow the format: {{"reasoning": "detailed step-by-step analysis", "action": X}}"""
-#         }
-        
-#         for name, content in prompts.items():
-#             file_path = self.prompts_dir / f"{name}.txt"
-#             if not file_path.exists():
-#                 with open(file_path, 'w', encoding='utf-8') as f:
-#                     f.write(content)
+from llm.session_manager_llm import SessionManager
+from llm.prompt_manager_llm import PromptManager 
 
 
 def encode_image(cv_image):
@@ -166,236 +44,7 @@ def save_csv(output_file, action_list, cumulative_rewards):
             writer.writerow([action_value, reward_value])
 
     print(f"Results saved to {output_file}")
-class TerraEnvBatchWithMapOverride(TerraEnvBatch):
-    """
-    Extended version of TerraEnvBatch that supports map overrides.
-    This class enables working with subsets of larger maps.
-    """
-    def reset_with_map_override(self, env_cfgs, rngs, custom_pos=None, custom_angle=None,
-                                target_map_override=None, traversability_mask_override=None,
-                                padding_mask_override=None, dumpability_mask_override=None,
-                                dumpability_mask_init_override=None, action_map_override=None,
-                                agent_config_override=None):
-        """
-        Reset the environment with custom map overrides.
-        
-        Args:
-            env_cfgs: Environment configurations
-            rngs: Random number generators
-            custom_pos: Custom initial position
-            custom_angle: Custom initial angle
-            target_map_override: Override for target map
-            traversability_mask_override: Override for traversability mask
-            padding_mask_override: Override for padding mask
-            dumpability_mask_override: Override for dumpability mask
-            dumpability_mask_init_override: Override for initial dumpability mask
-            action_map_override: Override for action map
-            
-        Returns:
-            Initial timestep
-        """
-        # Print the shape of the override maps for debugging
-        # print("\nOverride Map Shapes:")
-        # print(f"Target Map Override Shape: {target_map_override.shape if target_map_override is not None else None}")
-        # print(f"Traversability Mask Override Shape: {traversability_mask_override.shape if traversability_mask_override is not None else None}")
-        # print(f"Padding Mask Override Shape: {padding_mask_override.shape if padding_mask_override is not None else None}")
-        # print(f"Dumpability Mask Override Shape: {dumpability_mask_override.shape if dumpability_mask_override is not None else None}")
-        # print(f"Dumpability Init Mask Override Shape: {dumpability_mask_init_override.shape if dumpability_mask_init_override is not None else None}")
-        # print(f"Action Map Override Shape: {action_map_override.shape if action_map_override is not None else None}")
-        
-        # Determine the new edge length based on overrides
-        new_edge_length = None
-        if target_map_override is not None:
-            if len(target_map_override.shape) == 2:
-                new_edge_length = target_map_override.shape[0]  # Use the first dimension
-            else:
-                new_edge_length = target_map_override.shape[1]  # Use the second dimension for batched maps
-        elif action_map_override is not None:
-            if len(action_map_override.shape) == 2:
-                new_edge_length = action_map_override.shape[0]
-            else:
-                new_edge_length = action_map_override.shape[1]
-    
-        # If we have a new edge length, update the env_cfg
-        # Update the env_cfg with new map size and agent config if provided
-        if new_edge_length is not None or agent_config_override is not None:
-            
-            # Update maps config if new edge length is provided
-            if new_edge_length is not None:
-                updated_maps_config = env_cfgs.maps._replace(
-                    edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
-                )
-            else:
-                updated_maps_config = env_cfgs.maps
-            
-            # Update agent config if override is provided
-            if agent_config_override is not None:
-                print(f"Overriding agent config: {agent_config_override}")
-                updated_agent_config = env_cfgs.agent._replace(**agent_config_override)
-            else:
-                updated_agent_config = env_cfgs.agent
-        
-            # Update the env_cfgs with the new configurations
-            env_cfgs = env_cfgs._replace(
-                maps=updated_maps_config,
-                agent=updated_agent_config
-            )
-        
-            print(f"Updated env_cfgs - edge_length_px: {env_cfgs.maps.edge_length_px}, agent height: {env_cfgs.agent.height}, agent width: {env_cfgs.agent.width}")
-        
-        # First reset with possibly updated env_cfgs
-        timestep = self.reset(env_cfgs, rngs, custom_pos, custom_angle)
-        
-        # Print the original shapes before override
-        # print("\nOriginal Map Shapes:")
-        # print(f"Target Map Shape: {timestep.state.world.target_map.map.shape}")
-        # print(f"Action Map Shape: {timestep.state.world.action_map.map.shape}")
-        # print(f"Environment Config: {timestep.state.env_cfg if hasattr(timestep.state, 'env_cfg') else 'No env_cfg in state'}")
 
-        # Then override maps if provided - use completely new arrays
-        if target_map_override is not None:
-            # Add batch dimension if needed
-            if len(target_map_override.shape) == 2:
-                target_map_override = target_map_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        target_map=timestep.state.world.target_map._replace(
-                            map=target_map_override
-                        )
-                    )
-                )
-            )
-        
-        if traversability_mask_override is not None:
-            if len(traversability_mask_override.shape) == 2:
-                traversability_mask_override = traversability_mask_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        traversability_mask=timestep.state.world.traversability_mask._replace(
-                            map=traversability_mask_override
-                        )
-                    )
-                )
-            )
-        
-        if padding_mask_override is not None:
-            if len(padding_mask_override.shape) == 2:
-                padding_mask_override = padding_mask_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        padding_mask=timestep.state.world.padding_mask._replace(
-                            map=padding_mask_override
-                        )
-                    )
-                )
-            )
-        
-        if dumpability_mask_override is not None:
-            if len(dumpability_mask_override.shape) == 2:
-                dumpability_mask_override = dumpability_mask_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        dumpability_mask=timestep.state.world.dumpability_mask._replace(
-                            map=dumpability_mask_override
-                        )
-                    )
-                )
-            )
-        
-        if dumpability_mask_init_override is not None:
-            if len(dumpability_mask_init_override.shape) == 2:
-                dumpability_mask_init_override = dumpability_mask_init_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        dumpability_mask_init=timestep.state.world.dumpability_mask_init._replace(
-                            map=dumpability_mask_init_override
-                        )
-                    )
-                )
-            )
-        
-        if action_map_override is not None:
-            if len(action_map_override.shape) == 2:
-                action_map_override = action_map_override[None, ...]
-            timestep = timestep._replace(
-                state=timestep.state._replace(
-                    world=timestep.state.world._replace(
-                        action_map=timestep.state.world.action_map._replace(
-                            map=action_map_override
-                        )
-                    )
-                )
-            )
-
-        # Update the env_cfg in the timestep state to ensure consistency
-        if new_edge_length is not None or agent_config_override is not None:
-            # Update the state's env_cfg if it exists
-            if hasattr(timestep.state, 'env_cfg'):
-                state_env_cfg = timestep.state.env_cfg
-                
-                if new_edge_length is not None:
-                    state_env_cfg = state_env_cfg._replace(
-                        maps=state_env_cfg.maps._replace(
-                            edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
-                        )
-                    )
-                
-                if agent_config_override is not None:
-                    state_env_cfg = state_env_cfg._replace(
-                        agent=state_env_cfg.agent._replace(**agent_config_override)
-                    )
-                
-                timestep = timestep._replace(
-                    state=timestep.state._replace(env_cfg=state_env_cfg)
-                )
-        
-            # Update the timestep's env_cfg if it exists at the top level
-            if hasattr(timestep, 'env_cfg'):
-                timestep_env_cfg = timestep.env_cfg
-                
-                if new_edge_length is not None:
-                    timestep_env_cfg = timestep_env_cfg._replace(
-                        maps=timestep_env_cfg.maps._replace(
-                            edge_length_px=jnp.array([new_edge_length], dtype=jnp.int32)
-                        )
-                    )
-                
-                if agent_config_override is not None:
-                    timestep_env_cfg = timestep_env_cfg._replace(
-                        agent=timestep_env_cfg.agent._replace(**agent_config_override)
-                    )
-        # We need to manually update the observation to match the new maps
-        updated_obs = dict(timestep.observation)
-
-
-        # Update all map-related observations
-        if target_map_override is not None and 'target_map' in updated_obs:
-            updated_obs['target_map'] = target_map_override
-        
-        if action_map_override is not None and 'action_map' in updated_obs:
-            updated_obs['action_map'] = action_map_override
-        
-        if dumpability_mask_override is not None and 'dumpability_mask' in updated_obs:
-            updated_obs['dumpability_mask'] = dumpability_mask_override
-        
-        if traversability_mask_override is not None and 'traversability_mask' in updated_obs:
-            updated_obs['traversability_mask'] = traversability_mask_override
-        
-        if padding_mask_override is not None and 'padding_mask' in updated_obs:
-            updated_obs['padding_mask'] = padding_mask_override
-            
-        if dumpability_mask_init_override is not None and 'dumpability_mask_init' in updated_obs:
-            updated_obs['dumpability_mask_init'] = dumpability_mask_init_override
-                    
-        # Return the timestep with the updated observation
-        timestep = timestep._replace(observation=updated_obs)
-        
-        return timestep
 
 
 def create_sub_task_target_map_64x64(global_target_map_data: jnp.ndarray,
@@ -601,7 +250,6 @@ def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversabi
     Returns:
     - bool: True if all maps match, False otherwise
     """
-    import numpy as np
     
     # Extract current maps from timestep
     current_target_map = timestep.state.world.target_map.map[0]
@@ -618,14 +266,6 @@ def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversabi
     dumpability_match = np.array_equal(current_dumpability_mask, sub_task_dumpability_mask_data)
     dumpability_match_init = np.array_equal(current_dumpability_mask_init, sub_task_dumpability_init_mask_data)
     action_match = np.array_equal(current_action_map, sub_task_action_map_data)
-
-    # Print verification results
-    # print(f"Target map properly overridden: {target_match}")
-    # print(f"Traversability mask properly overridden: {traversability_match}")
-    # print(f"Padding mask properly overridden: {padding_match}")
-    # print(f"Dumpability mask properly overridden: {dumpability_match}")
-    # print(f"Dumpability mask init properly overridden: {dumpability_match_init}")
-    # print(f"Action map properly overridden: {action_match}")
 
     # Check if all maps match
     all_match = (target_match and traversability_match and padding_match and 
@@ -849,22 +489,11 @@ def check_overall_completion(partition_states, env_manager):
             active_partitions.append(partition_idx)
     
     total_partitions = len(partition_states)
-    completion_rate = len(completed_partitions) / total_partitions if total_partitions > 0 else 0
-    
-    # Consider task complete if:
-    # 1. All partitions are completed, OR
-    # 2. At least 80% of partitions are completed and no active partitions remain, OR
-    # 3. All partitions are either completed or failed (no active ones left)
+
     
     all_completed = len(completed_partitions) == total_partitions
-    high_completion_no_active = completion_rate >= 0.8 and len(active_partitions) == 0
-    no_active_remaining = len(active_partitions) == 0
-    
-    #is_complete = all_completed or high_completion_no_active or no_active_remaining
+
     is_complete = all_completed
-    
-    #print(f"Completion check: {completed_partitions=}, {failed_partitions=}, {active_partitions=}")
-    #print(f"Completion rate: {completion_rate:.2%}, Overall complete: {is_complete}")
     
     return is_complete
 
@@ -986,7 +615,6 @@ def reset_to_next_map(map_index, seed, env_manager, global_env_config,
     print(f"Environment reset to map {map_index}")
     print(f"New target map has {jnp.sum(env_manager.global_maps['target_map'] < 0)} dig targets")
     
-    return map_rng
 
 def initialize_partitions_for_current_map(env_manager, config, model_params):
     """Initialize all partitions for the current map"""
@@ -1003,7 +631,6 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
             print(f"Initializing partition {partition_idx}...")
                 
             small_env_timestep = env_manager.initialize_small_environment(partition_idx)
-            print(f"Small environment initialized for partition {partition_idx}")
                 
             partition_states[partition_idx] = {
                 'timestep': small_env_timestep,
@@ -1016,8 +643,6 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
             }
                 
             active_partitions.append(partition_idx)
-            print(f"Partition {partition_idx} is active and ready.")
-            print("Loading neural network model for partition...")
                 
             partition_models[partition_idx] = {
                 'model': load_neural_network(config, env_manager.small_env),
@@ -1038,85 +663,14 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
     return partition_states, partition_models, active_partitions
 
 
-
-class SessionManager:
-    """Manages ADK sessions across multiple agents to prevent session loss."""
-    
-    def __init__(self):
-        self.session_services = {}
-        self.sessions = {}
-        self.runners = {}
-    
-    def create_agent_session(self, agent_name, app_name, user_id, session_id):
-        """Create a new session for an agent."""
-        # Create unique session service for this agent
-        session_service_key = f"{agent_name}_{app_name}"
-        
-        if session_service_key not in self.session_services:
-            self.session_services[session_service_key] = InMemorySessionService()
-        
-        session_service = self.session_services[session_service_key]
-        
-        # Create session
-        session = session_service.create_session(
-            app_name=app_name,
-            user_id=user_id,
-            session_id=session_id,
-        )
-        
-        # Store session reference
-        session_key = f"{user_id}_{session_id}"
-        self.sessions[session_key] = {
-            'session': session,
-            'service': session_service,
-            'app_name': app_name,
-            'user_id': user_id,
-            'session_id': session_id
-        }
-        
-        print(f"Created session: {session_key} for {agent_name}")
-        return session_service
-    
-    def create_runner(self, agent, runner_key, app_name):
-        """Create and store a runner for an agent."""
-        session_service_key = f"{runner_key}_{app_name}"
-        session_service = self.session_services.get(session_service_key)
-        
-        if not session_service:
-            raise ValueError(f"No session service found for {session_service_key}")
-        
-        runner = Runner(
-            agent=agent,
-            app_name=app_name,
-            session_service=session_service,
-        )
-        
-        self.runners[runner_key] = runner
-        print(f"Created runner: {runner_key}")
-        return runner
-    
-    def get_session_info(self, user_id, session_id):
-        """Get session information."""
-        session_key = f"{user_id}_{session_id}"
-        return self.sessions.get(session_key)
-    
-    def list_sessions(self):
-        """List all active sessions for debugging."""
-        print("\nActive Sessions:")
-        for key, session_info in self.sessions.items():
-            print(f"  {key}: {session_info['app_name']}")
-
-# Integration with your existing code
 def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
                      APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     """
     Simplified version of init_llms using file-based prompts.
     """
     # Initialize prompt manager
-    prompts = SimplePromptManager(prompts_dir="llm/prompts")
+    prompts = PromptManager(prompts_dir="llm/prompts")
     
-    # Initialize session manager (keeping your existing logic)
-    #from multi_agent_utils import SessionManager
     session_manager = SessionManager()
     
     if llm_model_key == "gpt":
@@ -1133,22 +687,9 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
                                        map_size=MAP_SIZE, 
                                        max_partitions=2)
     
-    #print(system_message_master)
-    
     system_message_delegation = prompts.get("delegation_decision", 
                                            observation="See current state")
-    #print(system_message_delegation)
-
-    # Load excavator instructions from existing JSON or use default
-    #environment_name = "AutonomousExcavatorGame"
     try:
-        # if USE_PATH:
-        #     with open("envs19.json", "r") as file:
-        #         game_instructions = json.load(file)
-        # else:
-        #     with open("envs18.json", "r") as file:
-        #         game_instructions = json.load(file)
-
         if USE_PATH:
             with open("prompts/excavator_llm_advanced.txt", "r") as file:
                 game_instructions = file.read()
@@ -1156,21 +697,11 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
             with open("prompts/excavator_llm_simple.txt", "r") as file:
                 game_instructions = file.read()
 
-        #print(game_instructions)
-        
-        # system_message_excavator = game_instructions.get(
-        #     environment_name,
-        #     "You are a game playing assistant. Provide the best action for the current game state."
-        # )
         system_message_excavator = game_instructions
     except FileNotFoundError:
-        # Use a basic default if files don't exist
-        system_message_excavator = "You are an excavator control agent. Choose actions 0-6 based on game state."
+        system_message_excavator = "You are an excavator control agent. Choose actions -1-6 based on game state."
 
-    # Create agents (keeping your existing logic)
-    # from google.adk.agents import Agent
-    # from google.adk.models.lite_llm import LiteLlm
-    
+    # Create agents
     if llm_model_key == "gemini":
         llm_partitioning_agent = Agent(
             name="PartitioningAgent",
@@ -1214,11 +745,8 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
             instruction=system_message_excavator,
         )
 
-    print("All agents initialized with file-based prompts.")
 
-    # Continue with your existing session and runner setup...
-    # [Rest of your session creation logic]
-     # Partitioning session
+    # Partitioning session
     app_name_partitioning = f"{APP_NAME}_partitioning"
     user_id_partitioning = f"{USER_ID}_partitioning"
     session_id_partitioning = f"{SESSION_ID}_partitioning"
@@ -1254,7 +782,7 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
         session_id_excavator
     )
 
-    print("All sessions created successfully.")
+    #print("All sessions created successfully.")
 
     # CREATE RUNNERS WITH SESSION MANAGER
     runner_partitioning = session_manager.create_runner(
@@ -1275,11 +803,9 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
         app_name_excavator
     )
 
-    print("All runners created successfully.")
+    #print("All runners created successfully.")
 
-    # Create LLM query object
-# Assuming this import works
-    
+    # Create LLM query object    
     llm_query = LLM_query(
         model_name=llm_model_name_extended,
         model=llm_model_key,
@@ -1302,12 +828,11 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
         print("Warning: rl_config is None, prev_actions will not be initialized.")
     
     # Debug: List all sessions
-    session_manager.list_sessions()
+    #session_manager.list_sessions()
 
     return (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
             system_message_master, session_manager)
 
-# Simple helper functions for your main code
 def get_delegation_prompt(prompts, current_observation, context=""):
     """Get delegation prompt with current state."""
     try:
@@ -1352,13 +877,13 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
     parts = [text]
     
     if image is not None:
-        # Convert the image to a format suitable for ADK
-        import base64
-        import cv2
+        # # Convert the image to a format suitable for ADK
+        # import base64
+        # import cv2
         
-        def encode_image(cv_image):
-            _, buffer = cv2.imencode(".jpg", cv_image)
-            return base64.b64encode(buffer).decode("utf-8")
+        # def encode_image(cv_image):
+        #     _, buffer = cv2.imencode(".jpg", cv_image)
+        #     return base64.b64encode(buffer).decode("utf-8")
         
         image_data = encode_image(image)
         content_image = types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
@@ -1398,8 +923,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     """
     Setup_partitions_and_llm with proper session management.
     """
-
-    #prompts = SimplePromptManager()
 
     action_size = 7
         
@@ -1458,7 +981,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
         print("Calling LLM agent for partitioning decision...")
 
         game_state_image = capture_screen(screen)
-        #save_debug_image(game_state_image, map_index, 0, image_type="general", output_dir="debug_images")
         current_observation = env_manager.global_env.timestep.observation
         
         try:
@@ -1500,10 +1022,8 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
                 ))
         
             llm_response_text = response
-            print(f"PARTITIONING LLM response: {llm_response_text}")
 
             try:
-                #from multi_agent_utils import extract_python_format_data  # Assuming this import works
                 sub_tasks_llm = extract_python_format_data(llm_response_text)
                 print("Successfully parsed LLM response with tuples preserved")
             except ValueError as e:
@@ -1514,8 +1034,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             print(f"Error during PARTITIONING ADK agent communication: {adk_err}")
             sub_tasks_llm = sub_tasks_manual
 
-        # Use appropriate partitions - validate LLM response and fallback to manual if needed
-        #from multi_agent_utils import is_valid_region_list  # Assuming this import works
         partition_validation = is_valid_region_list(sub_tasks_llm)
         
         if partition_validation:
@@ -1528,38 +1046,373 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts
 
 
-
-def save_debug_image(image, map_index, step_count, image_type="general", output_dir="debug_images"):
-    """
-    Save debug images with proper naming and organization.
-    
-    Args:
-        image: The image array to save
-        map_index: Current map index
-        step_count: Current step count
-        image_type: Type of image (e.g., "partitioning", "delegation", "excavator")
-        output_dir: Directory to save images
-    
-    Returns:
-        str: Path to saved image
-    """
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Create timestamp
-    timestamp = datetime.datetime.now().strftime("%H-%M-%S")
-    
-    # Create filename
-    filename = f"map_{map_index:03d}_step_{step_count:04d}_{image_type}_{timestamp}.jpg"
-    filepath = os.path.join(output_dir, filename)
-    
-    # Save image
+def extract_subsurface(screen, x_start, y_start, width, height, ORIGINAL_MAP_SIZE, global_env_config, partition_idx):
+    """Extract a subsurface from the screen."""
+                           
     try:
-        cv2.imwrite(filepath, image)
-        print(f"Debug image saved: {filepath}")
-        return filepath
-    except Exception as e:
-        print(f"Error saving debug image: {e}")
-        return None
-    
+        screen_width, screen_height = screen.get_size()
+                                
+        # Get the actual tile size from the environment
+        # This should be available from your global_env_config
+        env_tile_size = global_env_config.tile_size[0].item()  # From your existing code
+                                
+        # Calculate the rendering scale factor
+        # This depends on how the environment renders to the screen
+        render_scale = screen_width / (ORIGINAL_MAP_SIZE * env_tile_size)
+                                
+        # Convert game world coordinates to screen pixel coordinates
+        screen_x_start = int(x_start * env_tile_size * render_scale)
+        screen_y_start = int(y_start * env_tile_size * render_scale)
+        screen_width_partition = int(width * env_tile_size * render_scale)
+        screen_height_partition = int(height * env_tile_size * render_scale)
+                                                            
+        # Rest of the clamping and subsurface creation code remains the same...
+        screen_x_start = max(0, min(screen_x_start, screen_width - 1))
+        screen_y_start = max(0, min(screen_y_start, screen_height - 1))
+        screen_width_partition = min(screen_width_partition, screen_width - screen_x_start)
+        screen_height_partition = min(screen_height_partition, screen_height - screen_y_start)
+                                
+        if screen_width_partition <= 0 or screen_height_partition <= 0:
+            print(f"    Warning: Invalid partition size, using fallback")
+            subsurface = screen.subsurface((0, 0, min(64, screen_width), min(64, screen_height)))
+        else:
+            subsurface = screen.subsurface((screen_x_start, screen_y_start, screen_width_partition, screen_height_partition))
+                                    
+    except ValueError as e:
+        print(f"Error extracting subsurface for partition {partition_idx}: {e}")
+        fallback_size = min(64, screen_width, screen_height)
+        subsurface = screen.subsurface((0, 0, fallback_size, fallback_size))
 
+    return subsurface
+
+
+
+def generate_local_map(timestep):
+    """
+    Generate a local map from the environment's current state.
+
+    Args:
+        env: The TerraEnvBatch environment instance.
+        timestep: The current timestep of the environment.
+
+    Returns:
+        A dictionary representing the local map.
+    """
+    # Access the state object
+    state = timestep.state
+
+    # Access the world (GridWorld) object from the state
+    world = state.world
+    # Extract relevant local maps from the world
+    local_map = {
+        "local_map_action_neg": world.local_map_action_neg.map.tolist(),
+        "local_map_action_pos": world.local_map_action_pos.map.tolist(),
+        "local_map_target_neg": world.local_map_target_neg.map.tolist(),
+        "local_map_target_pos": world.local_map_target_pos.map.tolist(),
+        "local_map_dumpability": world.local_map_dumpability.map.tolist(),
+        "local_map_obstacles": world.local_map_obstacles.map.tolist(),
+    }
+
+
+    return local_map
+
+def local_map_to_image(local_map):
+    """
+    Convert a local map dictionary to an image.
+
+    Args:
+        local_map: A dictionary containing local map data.
+
+    Returns:
+        An image (numpy array) representing the local map.
+    """
+    # Example: Visualize the traversability mask
+    local_map_target_pos = np.array(local_map["local_map_target_pos"])
+
+    #local_map_target_pos = np.squeeze(local_map_target_pos)
+
+
+    # Normalize the values for visualization
+    normalized_map = (local_map_target_pos - local_map_target_pos.min()) / (local_map_target_pos.max() - local_map_target_pos.min() + 1e-6)
+
+    # Create a heatmap using matplotlib
+    plt.figure(figsize=(5, 5))
+    plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
+    #plt.imshow(local_map_target_pos, cmap="viridis", interpolation="nearest")
+
+    plt.axis("off")
+
+    # Save the plot to a buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format="jpg", bbox_inches="tight", pad_inches=0)
+    #plt.savefig("local_map.jpg", format="jpg", bbox_inches="tight", pad_inches=0)
+    buf.seek(0)
+
+    # Convert the buffer to a PIL image and then to a numpy array
+    img = Image.open(buf)
+    img_array = np.array(img)
+    buf.close()
+
+    return img_array
+
+def capture_screen(surface):
+    """Captures the current screen and converts it to an image format."""
+    img_array = pg.surfarray.array3d(surface)
+    #img_array = np.rot90(img_array, k=3)  # Rotate if needed
+    img_array = np.transpose(img_array, (1, 0, 2))  # Correct rotation
+
+    img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    return img_array
+
+def save_video(frames, output_path, fps=1):
+    """Saves a list of frames as a video."""
+    if len(frames) == 0:
+        print("No frames to save.")
+        return
+    
+    height, width, _ = frames[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    
+    for frame in frames:
+        out.write(frame)
+    out.release()
+    print(f"Video saved to {output_path}")
+
+def extract_bucket_status(state):
+    """
+    Extract the bucket status from the state.
+
+    Args:
+        state: The current State object.
+
+    Returns:
+        str: The bucket status ('loaded' or 'empty').
+    """
+    # Access the bucket status from the agent's state
+    bucket_status = state.agent.agent_state.loaded
+
+    # Map the status to a human-readable string
+    return "loaded" if bucket_status else "empty"
+
+def base_orientation_to_direction(angle_base):
+    """
+    Convert the base orientation value (0-3) to a cardinal direction.
+
+    Args:
+        angle_base (int or JAX array): The base orientation value.
+
+    Returns:
+        str: The corresponding cardinal direction ('up', 'right', 'down', 'left').
+    """
+    # Convert JAX array to a Python scalar if necessary
+    if isinstance(angle_base, jax.Array):
+        angle_base = angle_base.item()
+
+    # Map orientation to cardinal direction
+    direction_map = {
+        0: "right",
+        1: "up",
+        2: "left",
+        3: "down"
+    }
+    return direction_map.get(angle_base, "unknown")  # Default to 'unknown' if invalid
+
+def extract_base_orientation(state):
+    """
+    Extract the excavator's base orientation from the state and convert it to a cardinal direction.
+
+    Args:
+        state: The current State object.
+
+    Returns:
+        A dictionary containing the base angle and its corresponding cardinal direction.
+    """
+    # Extract the base angle
+    angle_base = state.agent.agent_state.angle_base
+
+    # Convert the base angle to a cardinal direction
+    direction = base_orientation_to_direction(angle_base)
+
+    return {
+        "angle_base": angle_base,
+        "direction": direction,
+    }    
+
+def summarize_local_map(local_map):
+    """
+    Generate a textual summary of the local map.
+
+    Args:
+        local_map: A dictionary representing the local map.
+
+    Returns:
+        str: A textual summary of the local map.
+    """
+    num_obstacles = np.sum(np.array(local_map["local_map_obstacles"]) > 0)
+    num_dumpable = np.sum(np.array(local_map["local_map_dumpability"]) > 0)
+    num_target_pos = np.sum(np.array(local_map["local_map_target_pos"]) > 0)
+    num_target_neg = np.sum(np.array(local_map["local_map_target_neg"]) > 0)
+
+    return (
+        f"The local map contains {num_obstacles} obstacles, "
+        f"{num_dumpable} dumpable areas, "
+        f"{num_target_pos} positive target areas, and "
+        f"{num_target_neg} negative target areas."
+    )
+
+def extract_positions(state):
+    """
+    Extract the current base position and target position from the game state.
+
+    Args:
+        state: The current game state object.
+
+    Returns:
+        A tuple containing:
+        - current_position: A dictionary with the current base position (x, y).
+        - target_position: A dictionary with the target position (x, y), or None if not available.
+        
+    """
+
+    #print(state.agent.agent_state.pos_base[0])
+    # Extract th11e current base position
+    current_position = {
+        "x": state.agent.agent_state.pos_base[0][0],
+        "y": state.agent.agent_state.pos_base[0][1]
+    }
+
+    # Extract the target position from the target_map if available
+    #print(state.world.target_map.map)
+    target_positions = []
+
+    for x in range(state.world.target_map.map.shape[1]):  # Iterate over rows
+        for y in range(state.world.target_map.map.shape[2]):  # Iterate over columns
+            if state.world.target_map.map[0, x, y] == -1:  # Access the value at (0, x, y)
+                target_positions.append((x, y))
+    
+    # # Convert positions to tuples
+    start = (int(current_position["x"]), int(current_position["y"]))
+    #target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
+
+    return start, target_positions
+
+def path_to_actions(path, initial_orientation, step_size=1):
+    """
+    Convert a path into a list of action numbers based on the current base orientation.
+
+    Args:
+        path (list of tuples): The path as a list of (x, y) positions.
+        initial_orientation (str): The initial base orientation ('up', 'down', 'left', 'right').
+        step_size (int): The step size to consider between path points.
+
+    Returns:
+        list of int: A list of action numbers corresponding to the path.
+    """
+    # Define the mapping of directions to deltas
+    direction_deltas = {
+        "up": (-1, 0),
+        "right": (0, 1),
+        "down": (1, 0),
+        "left": (0, -1),
+    }
+
+    # Define the order of directions for turning (90-degree increments)
+    directions = ["up", "right", "down", "left"]
+
+    # Define action numbers
+    FORWARD = 0
+    CLOCK = 2
+    ANTICLOCK = 3
+
+    # Helper function to determine the direction between two points
+    def get_direction(from_pos, to_pos):
+        delta = (to_pos[0] - from_pos[0], to_pos[1] - from_pos[1])
+        # Normalize the delta to match one of the predefined directions
+        if delta[0] != 0:
+            delta = (delta[0] // abs(delta[0]), 0)
+        elif delta[1] != 0:
+            delta = (0, delta[1] // abs(delta[1]))
+        for direction, d in direction_deltas.items():
+            if delta == d:
+                return direction
+        return None
+
+    # Initialize the list of actions
+    actions = []
+    current_orientation = initial_orientation
+
+    # Iterate through the path with the given step size
+    for i in range(0, len(path) - 1, step_size):
+        current_pos = path[i]
+        next_pos = path[min(i + step_size, len(path) - 1)]
+
+        # Determine the required direction to move
+        required_direction = get_direction(current_pos, next_pos)
+        if required_direction is None:
+            actions.append(-1)
+            continue
+
+        # Determine the turns needed to face the required direction
+        while current_orientation != required_direction:
+            current_idx = directions.index(current_orientation)
+            required_idx = directions.index(required_direction)
+
+            # Determine if we need to turn right (CLOCK) or left (ANTICLOCK)
+            if (required_idx - current_idx) % 4 == 1:  # Clockwise
+                actions.append(CLOCK)
+                current_orientation = directions[(current_idx + 1) % 4]
+            else:  # Counter-clockwise
+                actions.append(ANTICLOCK)
+                current_orientation = directions[(current_idx - 1) % 4]
+
+        # Add a forward action
+        actions.append(FORWARD)
+
+    return actions
+
+def find_nearest_target(start, target_positions):
+    """
+    Find the nearest target position to the starting point.
+
+    Args:
+        start (tuple): The starting position as (x, y).
+        target_positions (list of tuples): A list of target positions as (x, y).
+
+    Returns:
+        tuple: The nearest target position as (x, y), or None if the list is empty.
+    """
+    if not target_positions:
+        return None
+
+    # Calculate the Euclidean distance to each target and find the nearest one
+    nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
+    return nearest_target
+
+def calculate_digging_percentage(initial_target_num, timestep):
+    """
+    Calculate the percentage of digging left in the map.
+
+    Args:
+        initial_target_num: The initial number of dig targets (-1) in the target map.
+        timestep: The current timestep object containing the state of the environment.
+
+    Returns:
+        A float representing the percentage of digging left to do.
+    """
+    target_map = timestep.state.world.target_map.map[0]  # -1: must dig here
+    dig_map = timestep.state.world.dig_map.map[0]        # -1: dug here during the episode
+
+    # A location was originally a dig target if target_map == -1
+    # A location has been dug if dig_map == -1
+    # So, if target_map == -1 and dig_map != -1 → still not dug
+
+    still_to_dig_mask = (target_map == -1) & (dig_map != -1)
+    remaining_to_dig = jnp.sum(still_to_dig_mask)
+
+    if initial_target_num > 0:
+        digging_left_percentage = (remaining_to_dig / initial_target_num) * 100
+    else:
+        digging_left_percentage = 0.0
+
+    return float(digging_left_percentage)
