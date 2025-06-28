@@ -13,7 +13,6 @@ import csv
 from utils.models import load_neural_network
 
 import json
-#from terra.env import TerraEnvBatch
 import jax.numpy as jnp
 import ast
 import io
@@ -960,6 +959,23 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
         sub_tasks_manual = [
             {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
             # Add more partitions as needed
+        ]
+
+        sub_tasks_manual = [
+            {
+                "id": 0,
+                "region_coords": (30, 0, 93, 63),
+                "start_pos": (45, 45),
+                "start_angle": 0,
+                "status": "pending"
+            },
+            {
+                "id": 1,
+                "region_coords": (64, 32, 127, 95),
+                "start_pos": (80, 50),
+                "start_angle": 0,
+                "status": "pending"
+            }
         ]
     else:
         raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
