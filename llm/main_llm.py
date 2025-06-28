@@ -43,11 +43,11 @@ from llm.env_manager_llm import EnvironmentsManager
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
+FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
-MAX_NUM_PARTITIONS=2        # Number of partitions for LLM (Master Agent)
+USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
+MAX_NUM_PARTITIONS = 4        # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
@@ -56,7 +56,7 @@ APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
 GRID_RENDERING = False
-ORIGINAL_MAP_SIZE = 64
+ORIGINAL_MAP_SIZE = 128
 COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
 USE_RENDERING = True  # Use rendering for the environment
 USE_DISPLAY = True  # Use display for the environment
