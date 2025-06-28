@@ -47,7 +47,7 @@ FORCE_DELEGATE_TO_RL = False     # Force delegation to RL agent for testing
 FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
 LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
 USE_MANUAL_PARTITIONING = False  # Use manual partitioning for LLM (Master Agent)
-NUM_PARTITIONS = 4              # Number of partitions for LLM (Master Agent)
+MAX_NUM_PARTITIONS=2        # Number of partitions for LLM (Master Agent)
 VISUALIZE_PARTITIONS = True      # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
@@ -195,7 +195,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
                         config, llm_model_name, llm_model_key,
                         USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
-                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT)
+                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             
             if partition_states is None:
@@ -643,7 +643,8 @@ if __name__ == "__main__":
         # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
         #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
         #default="/home/gioelemo/Documents/terra/benchmark.pkl",
-        default="/home/gioelemo/Documents/terra/no-action-map.pkl",
+        #default="/home/gioelemo/Documents/terra/no-action-map.pkl",
+        default="/home/gioelemo/Documents/terra/tracked-dense.pkl",
         help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
     )
 

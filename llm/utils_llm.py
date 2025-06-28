@@ -918,7 +918,7 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
 
 def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
-                                  USE_IMAGE_PROMPT=False):
+                                  USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4):
     """
     Setup_partitions_and_llm with proper session management.
     """
@@ -976,7 +976,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
                 "start_angle": 0,
                 "status": "pending"
             }
-        ]
+    ]
     else:
         raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
 
@@ -1005,12 +1005,11 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             observation_str = json.dumps(obs_dict)
         except AttributeError:
             observation_str = str(current_observation)
-
         # Use file-based prompt
         if USE_IMAGE_PROMPT:
             prompt = prompts.get("master_partitioning", 
                                map_size=ORIGINAL_MAP_SIZE, 
-                               max_partitions=2) + "\n\nCurrent observation: See image"
+                               max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
         else:
             try:
                 obs_dict = {k: v.tolist() for k, v in current_observation.items()}
@@ -1020,7 +1019,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             
             prompt = prompts.get("master_partitioning", 
                                map_size=ORIGINAL_MAP_SIZE, 
-                               max_partitions=2) + f"\n\nCurrent observation: {observation_str}"
+                               max_partitions=MAX_NUM_PARTITIONS) + f"\n\nCurrent observation: {observation_str}"
 
         try:
             user_id_partitioning = f"{USER_ID}_partitioning"
