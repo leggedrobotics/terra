@@ -1448,3 +1448,38 @@ def calculate_digging_percentage(initial_target_num, timestep):
         digging_left_percentage = 0.0
 
     return float(digging_left_percentage)
+
+
+import datetime
+def save_debug_image(image, map_index, step_count, image_type="general", output_dir="debug_images"):
+    """
+    Save debug images with proper naming and organization.
+    
+    Args:
+        image: The image array to save
+        map_index: Current map index
+        step_count: Current step count
+        image_type: Type of image (e.g., "partitioning", "delegation", "excavator")
+        output_dir: Directory to save images
+    
+    Returns:
+        str: Path to saved image
+    """
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create timestamp
+    timestamp = datetime.datetime.now().strftime("%H-%M-%S")
+    
+    # Create filename
+    filename = f"map_{map_index:03d}_step_{step_count:04d}_{image_type}_{timestamp}.jpg"
+    filepath = os.path.join(output_dir, filename)
+    
+    # Save image
+    try:
+        cv2.imwrite(filepath, image)
+        print(f"Debug image saved: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"Error saving debug image: {e}")
+        return None

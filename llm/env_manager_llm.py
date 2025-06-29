@@ -391,7 +391,7 @@ class EnvironmentsManager:
         Extract agent representation from the other partition's traversability mask.
         This preserves the exact shape and orientation as calculated by the environment.
         """
-        #print(f"\nAdding agents using existing representation...")
+        print(f"\nAdding agents using existing representation...")
         
         for target_partition_idx, target_partition_state in partition_states.items():
             if target_partition_state['status'] != 'active':
@@ -419,7 +419,7 @@ class EnvironmentsManager:
                 agent_positions = jnp.where(agent_mask)
                 
                 if len(agent_positions[0]) > 0:
-                   # print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
+                    print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
                     
                     # Convert each agent cell to global coordinates, then to target local coordinates
                     other_partition = self.partitions[other_partition_idx]
@@ -452,7 +452,7 @@ class EnvironmentsManager:
                     
                     if cells_added > 0:
                         agents_added += 1
-                        #print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
+                        print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
             
             # Update the traversability mask if we added agents
             if agents_added > 0:
@@ -466,7 +466,7 @@ class EnvironmentsManager:
                 
                 partition_states[target_partition_idx]['timestep'] = updated_timestep
                 
-               # print(f"  ✓ Added {agents_added} agents with exact representation to partition {target_partition_idx}")
+                print(f"  ✓ Added {agents_added} agents with exact representation to partition {target_partition_idx}")
 
 
     def complete_synchronization_with_full_agents(self, partition_states):
@@ -840,6 +840,11 @@ class EnvironmentsManager:
             custom_pos = all_agent_positions[0] if all_agent_positions else None
             custom_angle = all_agent_angles_base[0] if all_agent_angles_base else None
 
+            self.render_all_partition_views_grid(partition_states)
+
+            import time
+            time.sleep(2)  # All
+
             # Reset global environment with updated maps
             self.global_timestep = self.global_env.reset_with_map_override(
                 self.global_env_config,
@@ -1059,6 +1064,11 @@ class EnvironmentsManager:
         traversability_mask = world.traversability_mask.map
         agent_pos = agent_state.pos_base
         
+        #print(current_timestep.observation)
+        # target_map = current_timestep.observation['target_map']
+        # action_map = current_timestep.observation['action_map']
+        # traversability_mask = current_timestep.observation['traversability_mask']
+
         # Map dimensions
         map_height, map_width = target_map.shape
         
