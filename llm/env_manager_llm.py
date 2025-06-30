@@ -239,153 +239,6 @@ class EnvironmentsManager:
         # Set partitions using the fixed method
         self.set_partitions(partitions)
         
-
-    def sync_terrain_between_overlapping_partitions(self, partition_states):
-        """
-        Actual terrain synchronization.
-        """
-        #print(f"\n=== SYNCHRONIZING TERRAIN BETWEEN OVERLAPPING PARTITIONS ===")
-        
-        if not self.overlap_regions:
-            print("No overlap regions found!")
-            return
-        
-        # Process each unique overlap pair (avoid duplicates)
-        processed_pairs = set()
-        
-        for (i, j), overlap_info in self.overlap_regions.items():
-            # Only process each pair once
-            pair_key = tuple(sorted([i, j]))
-            if pair_key in processed_pairs:
-                continue
-            processed_pairs.add(pair_key)
-            
-            # Check if both partitions are active
-            if (i not in partition_states or j not in partition_states or
-                partition_states[i]['status'] != 'active' or 
-                partition_states[j]['status'] != 'active'):
-                continue
-            
-            #print(f"\nSyncing terrain between partitions {i} and {j}")
-            
-            # Get the overlap region info
-            slice_i = overlap_info['partition_i_slice']
-            slice_j = overlap_info['partition_j_slice']
-            
-            # Get current maps
-            state_i = partition_states[i]['timestep'].state
-            state_j = partition_states[j]['timestep'].state
-            
-            # Get traversability maps
-            trav_i = state_i.world.traversability_mask.map
-            trav_j = state_j.world.traversability_mask.map
-            
-            # print(f"  Partition {i} map shape: {trav_i.shape}, overlap slice: {slice_i}")
-            # print(f"  Partition {j} map shape: {trav_j.shape}, overlap slice: {slice_j}")
-            
-            # Extract overlap data
-            overlap_data_i = trav_i[slice_i]
-            overlap_data_j = trav_j[slice_j]
-            
-            #print(f"  Overlap data shapes: {overlap_data_i.shape} vs {overlap_data_j.shape}")
-            
-            # Check if terrain differs (ignore agent positions -1)
-            terrain_mask_i = (overlap_data_i > 0)  # Terrain obstacles
-            terrain_mask_j = (overlap_data_j > 0)  # Terrain obstacles
-            
-            terrain_matches = jnp.array_equal(terrain_mask_i, terrain_mask_j)
-            #print(f"  Terrain matches: {terrain_matches}")
-            
-            if not terrain_matches:
-                #print(f"  Synchronizing terrain...")
-                
-                # Create unified terrain (union of both)
-                unified_terrain = terrain_mask_i | terrain_mask_j
-                
-                # Update partition i overlap region
-                new_overlap_i = jnp.where(
-                    unified_terrain & (overlap_data_i != -1),  # Set terrain where needed, but don't touch agents
-                    1,  # Terrain obstacle
-                    jnp.where(
-                        ~unified_terrain & (overlap_data_i > 0),  # Clear terrain where it shouldn't be
-                        0,  # Free space
-                        overlap_data_i  # Keep everything else (including agents)
-                    )
-                )
-                
-                # Update partition j overlap region
-                new_overlap_j = jnp.where(
-                    unified_terrain & (overlap_data_j != -1),  # Set terrain where needed, but don't touch agents
-                    1,  # Terrain obstacle
-                    jnp.where(
-                        ~unified_terrain & (overlap_data_j > 0),  # Clear terrain where it shouldn't be
-                        0,  # Free space
-                        overlap_data_j  # Keep everything else (including agents)
-                    )
-                )
-                
-                # Update partition i
-                updated_trav_i = trav_i.at[slice_i].set(new_overlap_i)
-                updated_world_i = self._update_world_map(state_i.world, 'traversability_mask', updated_trav_i)
-                updated_state_i = state_i._replace(world=updated_world_i)
-                updated_timestep_i = partition_states[i]['timestep']._replace(state=updated_state_i)
-                partition_states[i]['timestep'] = updated_timestep_i
-                
-                # Update partition j
-                updated_trav_j = trav_j.at[slice_j].set(new_overlap_j)
-                updated_world_j = self._update_world_map(state_j.world, 'traversability_mask', updated_trav_j)
-                updated_state_j = state_j._replace(world=updated_world_j)
-                updated_timestep_j = partition_states[j]['timestep']._replace(state=updated_state_j)
-                partition_states[j]['timestep'] = updated_timestep_j
-                
-                #print(f"  ✓ Terrain synchronized between partitions {i} and {j}")
-            
-            # Also sync other environmental maps
-            environmental_maps = ['action_map', 'dumpability_mask', 'target_map']
-            
-            for map_name in environmental_maps:
-                if hasattr(state_i.world, map_name) and hasattr(state_j.world, map_name):
-                    map_i = getattr(state_i.world, map_name).map
-                    map_j = getattr(state_j.world, map_name).map
-                    
-                    overlap_map_i = map_i[slice_i]
-                    overlap_map_j = map_j[slice_j]
-                    
-                    if not jnp.array_equal(overlap_map_i, overlap_map_j):
-                        #print(f"  Syncing {map_name}...")
-                        
-                        # For environmental maps, use the "more advanced" state
-                        # (e.g., if one has been dug and the other hasn't, use the dug state)
-                        if map_name == 'action_map':
-                            # Use the state with more changes (more dug/dumped areas)
-                            changes_i = jnp.sum(overlap_map_i != 0)
-                            changes_j = jnp.sum(overlap_map_j != 0)
-                            
-                            if changes_i >= changes_j:
-                                source_data = overlap_map_i
-                                target_map = map_j
-                                target_slice = slice_j
-                                target_partition = j
-                            else:
-                                source_data = overlap_map_j
-                                target_map = map_i
-                                target_slice = slice_i
-                                target_partition = i
-                            
-                            # Update the target map
-                            updated_map = target_map.at[target_slice].set(source_data)
-                            updated_world = self._update_world_map(
-                                partition_states[target_partition]['timestep'].state.world, 
-                                map_name, 
-                                updated_map
-                            )
-                            updated_state = partition_states[target_partition]['timestep'].state._replace(world=updated_world)
-                            updated_timestep = partition_states[target_partition]['timestep']._replace(state=updated_state)
-                            partition_states[target_partition]['timestep'] = updated_timestep
-                            
-                            #print(f"    ✓ Synced {map_name} to partition {target_partition}")
-
-
     def add_agents_using_existing_representation(self, partition_states):
         """
         Extract agent representation from the other partition's traversability mask.
@@ -467,22 +320,6 @@ class EnvironmentsManager:
                 partition_states[target_partition_idx]['timestep'] = updated_timestep
                 
                 print(f"  ✓ Added {agents_added} agents with exact representation to partition {target_partition_idx}")
-
-
-    def complete_synchronization_with_full_agents(self, partition_states):
-        """
-        Complete synchronization with full agent representation.
-        """
-        #print(f"\n=== COMPLETE SYNCHRONIZATION WITH FULL AGENTS ===")
-        
-        # Step 1: Sync terrain and environmental maps between overlapping regions
-        self.sync_terrain_between_overlapping_partitions(partition_states)
-        
-        # Step 2: Add other agents with their full representation
-
-        self.add_agents_using_existing_representation(partition_states)
-        
-        #print("✓ Complete synchronization with full agents finished")
 
     # Simple step function that doesn't do any sync
     def step_simple(self, partition_idx: int, action, partition_states: dict):
@@ -660,33 +497,6 @@ class EnvironmentsManager:
             
         return small_config
     
-    def _define_partitions(self):
-        """
-        Define partitions of the global map.
-        """
-        if self.num_partitions == 4:  # 2x2 grid for a 128x128 map
-            self.partitions = [
-                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-                {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
-                {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
-                {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
-            ]
-        #     self.partitions = [
-        #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (20, 20), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (20, 44), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (44, 20), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (44, 44), 'start_angle': 0, 'status': 'pending'}
-        # ]
-        elif self.num_partitions == 2:  # 1x2 grid
-            self.partitions = [
-                {'id': 0, 'region_coords': (0, 0, 63, 127), 'start_pos': (32, 64), 'start_angle': 0, 'status': 'pending'},
-                {'id': 1, 'region_coords': (64, 0, 127, 127), 'start_pos': (96, 64), 'start_angle': 0, 'status': 'pending'}
-            ]
-        else:
-            raise ValueError("Only 2 or 4 partitions are supported currently")
-        
-
-    
     def _initialize_global_environment(self):
         """Initialize the global environment with proper batching"""
         self.rng, reset_key = jax.random.split(self.rng)
@@ -839,11 +649,6 @@ class EnvironmentsManager:
             # Use first agent for reset position (others will be added during rendering)
             custom_pos = all_agent_positions[0] if all_agent_positions else None
             custom_angle = all_agent_angles_base[0] if all_agent_angles_base else None
-
-            self.render_all_partition_views_grid(partition_states)
-
-            import time
-            time.sleep(2)  # All
 
             # Reset global environment with updated maps
             self.global_timestep = self.global_env.reset_with_map_override(

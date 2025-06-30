@@ -1483,3 +1483,202 @@ def save_debug_image(image, map_index, step_count, image_type="general", output_
     except Exception as e:
         print(f"Error saving debug image: {e}")
         return None
+
+
+def verify_sync_effectiveness(partition_states, env_manager):
+    """
+    Verify that synchronization is actually working by checking overlap consistency.
+    """
+    print("\n=== VERIFYING SYNC EFFECTIVENESS ===")
+    
+    for (i, j), overlap_info in env_manager.overlap_regions.items():
+        if i >= j:  # Only check each pair once
+            continue
+            
+        if (i not in partition_states or j not in partition_states or
+            partition_states[i]['status'] != 'active' or 
+            partition_states[j]['status'] != 'active'):
+            continue
+        
+        # Get current states
+        state_i = partition_states[i]['timestep'].state
+        state_j = partition_states[j]['timestep'].state
+        
+        # Get slices
+        slice_i = overlap_info['partition_i_slice']
+        slice_j = overlap_info['partition_j_slice']
+        
+        # Check each map
+        for map_name in ['traversability_mask', 'action_map', 'target_map', 'dumpability_mask']:
+            map_i = getattr(state_i.world, map_name).map
+            map_j = getattr(state_j.world, map_name).map
+            
+            overlap_i = map_i[slice_i]
+            overlap_j = map_j[slice_j]
+            
+            if map_name == 'traversability_mask':
+                # For traversability, compare terrain only
+                terrain_i = jnp.where(overlap_i == -1, 0, overlap_i)
+                terrain_j = jnp.where(overlap_j == -1, 0, overlap_j)
+                
+                if not jnp.array_equal(terrain_i, terrain_j):
+                    print(f"  ❌ {map_name} terrain mismatch between partitions {i} and {j}")
+                    print(f"     Differences: {jnp.sum(terrain_i != terrain_j)} cells")
+                else:
+                    print(f"  ✅ {map_name} terrain consistent between partitions {i} and {j}")
+            else:
+                if not jnp.array_equal(overlap_i, overlap_j):
+                    print(f"  ❌ {map_name} mismatch between partitions {i} and {j}")
+                    print(f"     Differences: {jnp.sum(overlap_i != overlap_j)} cells")
+                else:
+                    print(f"  ✅ {map_name} consistent between partitions {i} and {j}")
+
+def simple_sync_overlapping_regions(partition_states, env_manager, source_partition_idx, target_partition_idx):
+    """
+    Simple synchronization: Extract overlapping region from source partition and update target partition.
+    This version preserves existing obstacles in the target that might be other agents.
+    """
+    # Check if both partitions are active
+    if (source_partition_idx not in partition_states or 
+        target_partition_idx not in partition_states or
+        partition_states[source_partition_idx]['status'] != 'active' or
+        partition_states[target_partition_idx]['status'] != 'active'):
+        return
+    
+    # Check if partitions overlap
+    if target_partition_idx not in env_manager.overlap_map.get(source_partition_idx, set()):
+        return
+    
+    # Get overlap region info
+    overlap_key = (source_partition_idx, target_partition_idx)
+    if overlap_key not in env_manager.overlap_regions:
+        return
+    
+    overlap_info = env_manager.overlap_regions[overlap_key]
+    
+    # Get source and target states
+    source_state = partition_states[source_partition_idx]['timestep'].state
+    target_state = partition_states[target_partition_idx]['timestep'].state
+    
+    # Get the correct slices based on partition order
+    if source_partition_idx < target_partition_idx:
+        source_slice = overlap_info['partition_i_slice']
+        target_slice = overlap_info['partition_j_slice']
+    else:
+        source_slice = overlap_info['partition_j_slice']
+        target_slice = overlap_info['partition_i_slice']
+    
+    # Define which maps to sync
+    maps_to_sync = [
+        'traversability_mask',
+        'action_map',
+        'target_map',
+        'dumpability_mask'
+    ]
+    
+    # Process each map
+    for map_name in maps_to_sync:
+        # Get source map
+        source_map = getattr(source_state.world, map_name).map
+        
+        # Get target map
+        target_map = getattr(target_state.world, map_name).map.copy()
+        
+        # Extract overlapping regions
+        source_overlap = source_map[source_slice]
+        target_overlap = target_map[target_slice]
+        
+        if map_name == 'traversability_mask':
+            # Special handling for traversability mask
+            # We need to:
+            # 1. Preserve target's own agent (-1)
+            # 2. Preserve obstacles in target that might be other agents
+            # 3. Update terrain from source
+            
+            target_has_agent = (target_overlap == -1)
+            source_has_agent = (source_overlap == -1)
+            
+            # Convert source data: agent positions become free space
+            source_terrain = jnp.where(source_has_agent, 0, source_overlap)
+            
+            # IMPORTANT: Merge obstacles instead of overwriting
+            # If target has an obstacle (1) that source doesn't have, it might be another agent
+            # So we take the maximum to preserve obstacles
+            merged_terrain = jnp.maximum(
+                source_terrain,
+                jnp.where(target_has_agent, 0, target_overlap)  # Exclude target's own agent from merge
+            )
+            
+            # Final overlap: keep target's agent, use merged terrain elsewhere
+            new_overlap = jnp.where(target_has_agent, -1, merged_terrain)
+            
+            # Debug output
+            old_obstacles = jnp.sum(target_overlap == 1)
+            new_obstacles = jnp.sum(new_overlap == 1)
+            if old_obstacles != new_obstacles:
+                print(f"  Traversability sync {source_partition_idx}->{target_partition_idx}:")
+                print(f"    Obstacles before: {old_obstacles}, after: {new_obstacles}")
+                print(f"    Target agents preserved: {jnp.sum(target_has_agent)}")
+        else:
+            # For other maps, direct copy from source
+            new_overlap = source_overlap
+        
+        # Update target map
+        target_map = target_map.at[target_slice].set(new_overlap)
+        
+        # Update the world state
+        updated_world = env_manager._update_world_map(target_state.world, map_name, target_map)
+        target_state = target_state._replace(world=updated_world)
+    
+    # Update the timestep with the new state
+    updated_timestep = partition_states[target_partition_idx]['timestep']._replace(state=target_state)
+    partition_states[target_partition_idx]['timestep'] = updated_timestep
+    
+    print(f"  ✓ Synced overlapping region from partition {source_partition_idx} to {target_partition_idx}")
+
+
+def debug_agent_visibility(partition_states, env_manager):
+    """
+    Debug function to check if agents are visible as obstacles in other partitions.
+    """
+    print("\n=== AGENT VISIBILITY DEBUG ===")
+    
+    for partition_idx, partition_state in partition_states.items():
+        if partition_state['status'] != 'active':
+            continue
+            
+        print(f"\nPartition {partition_idx}:")
+        
+        # Get traversability mask
+        trav_mask = partition_state['timestep'].state.world.traversability_mask.map
+        
+        # Count different cell types
+        own_agent = jnp.sum(trav_mask == -1)
+        obstacles = jnp.sum(trav_mask == 1)
+        free_space = jnp.sum(trav_mask == 0)
+        
+        print(f"  Own agent cells (-1): {own_agent}")
+        print(f"  Obstacle cells (1): {obstacles}")
+        print(f"  Free space cells (0): {free_space}")
+        
+        # Check overlap regions for other agents
+        for other_idx in env_manager.overlap_map.get(partition_idx, set()):
+            if other_idx not in partition_states or partition_states[other_idx]['status'] != 'active':
+                continue
+                
+            # Get overlap info
+            overlap_key = (min(partition_idx, other_idx), max(partition_idx, other_idx))
+            if overlap_key in env_manager.overlap_regions:
+                overlap_info = env_manager.overlap_regions[overlap_key]
+                
+                # Get the correct slice for this partition
+                if partition_idx < other_idx:
+                    my_slice = overlap_info['partition_i_slice']
+                else:
+                    my_slice = overlap_info['partition_j_slice']
+                
+                # Check overlap region
+                overlap_data = trav_mask[my_slice]
+                overlap_obstacles = jnp.sum(overlap_data == 1)
+                
+                print(f"  Overlap with partition {other_idx}: {overlap_obstacles} obstacles in overlap region")
