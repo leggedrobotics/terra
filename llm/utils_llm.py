@@ -1509,7 +1509,7 @@ def verify_sync_effectiveness(partition_states, env_manager):
         slice_j = overlap_info['partition_j_slice']
         
         # Check each map
-        for map_name in ['traversability_mask', 'action_map', 'target_map', 'dumpability_mask']:
+        for map_name in ['traversability_mask', 'action_map', 'target_map', 'dumpability_mask', 'dumpability_mask_init']:
             map_i = getattr(state_i.world, map_name).map
             map_j = getattr(state_j.world, map_name).map
             
@@ -1573,7 +1573,8 @@ def simple_sync_overlapping_regions(partition_states, env_manager, source_partit
         'traversability_mask',
         'action_map',
         'target_map',
-        'dumpability_mask'
+        'dumpability_mask',
+        'dumpability_mask_init'
     ]
     
     # Process each map
