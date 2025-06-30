@@ -1,3 +1,5 @@
+import os
+os.environ['SDL_AUDIODRIVER'] = 'dummy'
 import time
 import jax
 import jax.numpy as jnp
@@ -20,7 +22,35 @@ from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
 
 
+def test_x11_availability():
+    """Test if X11 is available for pygame"""
+    try:
+        # Save current environment
+        old_display = os.environ.get('DISPLAY')
+        old_videodriver = os.environ.get('SDL_VIDEODRIVER')
+        
+        # Try to initialize pygame with X11
+        pg.init()
+        screen = pg.display.set_mode((100, 100))
+        pg.quit()
+        
+        print("X11 is available for pygame")
+        return True
+    except pg.error as e:
+        if "x11 not available" in str(e):
+            print("X11 not available for pygame, using dummy driver")
+            # Set dummy driver for headless mode
+            os.environ['SDL_VIDEODRIVER'] = 'dummy'
+            os.environ['DISPLAY'] = ':0'
+            return False
+        else:
+            raise e
+
+
 def main():
+    # Test X11 availability and set up display accordingly
+    x11_available = test_x11_availability()
+    
     batch_cfg = BatchConfig()
     action_type = batch_cfg.action_type
     n_envs_x = 1
@@ -30,7 +60,7 @@ def main():
     rng = jax.random.PRNGKey(seed)
     env = TerraEnvBatch(
         rendering=True,
-        display=True,
+        display=True, #x11_available
         n_envs_x_rendering=n_envs_x,
         n_envs_y_rendering=n_envs_y,
     )

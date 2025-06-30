@@ -53,9 +53,11 @@ class TerraEnv(NamedTuple):
             )
             if not display:
                 print("TerraEnv: disabling display...")
-                screen = pg.display.set_mode(
-                    display_dims, pg.FULLSCREEN | pg.HIDDEN
-                )
+                screen = pg.display.set_mode(display_dims, pg.HIDDEN)
+
+                # screen = pg.display.set_mode(
+                #     display_dims, pg.FULLSCREEN | pg.HIDDEN
+                # )# Set the display to the screen
             else:
                 screen = pg.display.set_mode(display_dims)
             surface = pg.Surface(display_dims, pg.SRCALPHA)

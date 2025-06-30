@@ -50,7 +50,8 @@ def create_procedural_trenches(config):
     size_nodump_max = trenches_config["size_nodump_max"]
 
     for level, n_trenches in zip(difficulty_levels, corrected_trenches_per_level):
-        save_folder = os.path.join("data/terra", "trenches", level)
+        #save_folder = os.path.join("data/terra", "trenches", level)
+        save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "trenches", level)
         os.makedirs(save_folder, exist_ok=True)
 
         # Updated to use new configuration structure

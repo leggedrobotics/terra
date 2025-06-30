@@ -186,6 +186,67 @@ class MapsDimsConfig(NamedTuple):
     maps_edge_length: int = 0  # updated in the code
 
 
+
+class CurriculumGlobalConfig(NamedTuple):
+    increase_level_threshold: int = 20
+    decrease_level_threshold: int = 50
+    last_level_type = "random"  # ["random", "none"]
+
+    # NOTE: all maps need to have the same size
+    levels = [
+        
+        # {
+        #     "maps_path": "trenches/easy",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "trenches/medium",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "trenches/hard",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        {
+            "maps_path": "foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
+            "maps_path": "trenches/single",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "trenches/double",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
+        {
+            "maps_path": "foundations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        # {
+        #     "maps_path": "trenches/hard",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        
+    ]
+
+'''
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 20
     decrease_level_threshold: int = 50
@@ -231,6 +292,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         
     ]
+'''
 
 
 class BatchConfig(NamedTuple):
