@@ -16,9 +16,11 @@ Structure of the folder
     - prompts
         - delegation_decision.txt
         - excavator_action.txt
-        - excavator_llm_advanced.txt
         - excavator_llm_simple.txt
         - master_partitioning.txt
     - __init__.py
     - ...
 ```
+
+The configuration of the experiment can be defined in the `llm.yaml` file:
+

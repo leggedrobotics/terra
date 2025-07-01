@@ -16,12 +16,9 @@ user_id: "user_1"               # User ID for ADK
 session_id: "session_001"       # Session ID for ADK
 
 # Rendering settings
-grid_rendering: false            # Use grid rendering for partitions
+grid_rendering: false           # Use grid rendering for partitions
 use_rendering: true             # Use rendering for the environment
 use_display: true               # Use display for the environment
 
 # Environment settings
 original_map_size: 128          # Original map size for the environment
-
-# Statistics
-compute_bench_stats: true       # Compute statistics for the benchmark

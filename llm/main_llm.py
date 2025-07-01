@@ -39,7 +39,6 @@ from pygame.locals import (
 from llm.eval_llm import compute_stats_llm
 from llm.env_manager_llm import EnvironmentsManager
 
-
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed, 
@@ -363,14 +362,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
                             #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction_beforeRL', partition_idx, map_step)
 
-                            debug_info = enhanced_save_traversability_mask_with_debug(
-                                np.array(current_observation['traversability_mask']), 
-                                'debug_traversability', 
-                                partition_idx, 
-                                map_step, 
-                                active_partitions,
-                                'beforeRL_with_agents'
-                            )
+                            # debug_info = enhanced_save_traversability_mask_with_debug(
+                            #     np.array(current_observation['traversability_mask']), 
+                            #     'debug_traversability', 
+                            #     partition_idx, 
+                            #     map_step, 
+                            #     active_partitions,
+                            #     'beforeRL_with_agents'
+                            # )
 
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
