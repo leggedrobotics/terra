@@ -42,28 +42,17 @@ from llm.env_manager_llm import EnvironmentsManager
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-FORCE_DELEGATE_TO_RL = True     # Force delegation to RL agent for testing
-FORCE_DELEGATE_TO_LLM = False   # Force delegation to LLM agent for testing
-LLM_CALL_FREQUENCY = 15         # Number of steps between LLM calls
-USE_MANUAL_PARTITIONING = True  # Use manual partitioning for LLM (Master Agent)
-MAX_NUM_PARTITIONS = 2          # Maximum number of partitions for LLM (Master Agent)
-VISUALIZE_PARTITIONS = True     # Visualize partitions for LLM (Master Agent)
-USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
-USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
-APP_NAME = "ExcavatorGameApp"   # Application name for ADK
-USER_ID = "user_1"              # User ID for ADK
-SESSION_ID = "session_001"      # Session ID for ADK
-GRID_RENDERING = True  # Use grid rendering for partitions
-ORIGINAL_MAP_SIZE = 128 # Original map size for the environment
-COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
-USE_RENDERING = True  # Use rendering for the environment
-USE_DISPLAY = True  # Use display for the environment
-
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed, 
                 run, small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
     """
+    (FORCE_DELEGATE_TO_RL, FORCE_DELEGATE_TO_LLM, LLM_CALL_FREQUENCY,
+     USE_MANUAL_PARTITIONING, MAX_NUM_PARTITIONS, VISUALIZE_PARTITIONS,
+     USE_IMAGE_PROMPT , APP_NAME, USER_ID, SESSION_ID,
+     GRID_RENDERING, ORIGINAL_MAP_SIZE, 
+     USE_RENDERING, USE_DISPLAY) = setup_experiment_config()
+    
     agent_checkpoint_path = run
     model_params = None
     config = None
@@ -188,7 +177,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             screen = pg.display.get_surface()
             game_state_image = capture_screen(screen)
             
-            llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts = setup_partitions_and_llm(
+            llm_query, runner_delegation, session_manager, prompts = setup_partitions_and_llm(
                         current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
                         config, llm_model_name, llm_model_key,
                         APP_NAME, USER_ID, SESSION_ID, screen,
@@ -435,7 +424,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     partition_state['prev_actions_rl'] = jnp.roll(partition_state['prev_actions_rl'], shift=1, axis=1)
                     partition_state['prev_actions_rl'] = partition_state['prev_actions_rl'].at[:, 0].set(action_rl)
 
-                    wrapped_action = wrap_action2(action_rl, action_type)
+                    wrapped_action = wrap_action_llm(action_rl, action_type)
                     new_timestep = env_manager.step_simple(partition_idx, wrapped_action, partition_states)
                     partition_states[partition_idx]['timestep'] = new_timestep
                     partition_state['step_count'] += 1
@@ -562,7 +551,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                 env_manager.render_global_environment_with_multiple_agents(partition_states, VISUALIZE_PARTITIONS)
             
             # After processing all partitions, check if map is complete
-            map_metrics = calculate_map_completion_metrics(partition_states, env_manager)
+            map_metrics = calculate_map_completion_metrics(partition_states)
             map_done = map_metrics['done']
             
             #print(f"    Map {current_map_index} metrics: {map_metrics}")
@@ -770,7 +759,7 @@ if __name__ == "__main__":
         dug_tiles_per_action_map_list.append(dug_tiles_per_action_map.item())
 
     print("\nExperiment completed for all environments.")
-
+    COMPUTE_BENCH_STATS = True  # Set to True to compute and print stats}
     if COMPUTE_BENCH_STATS:
         compute_stats_llm(episode_done_once_list, episode_length_list, move_cumsum_list,
                       do_cumsum_list, areas_list, dig_tiles_per_target_map_init_list,

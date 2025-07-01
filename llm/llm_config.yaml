@@ -1,0 +1,27 @@
+
+# Agent behavior
+force_delegate_to_rl: true      # Force delegation to RL agent for testing
+force_delegate_to_llm: false    # Force delegation to LLM agent for testing
+llm_call_frequency: 15          # Number of steps between LLM calls
+
+# Partitioning settings  
+use_manual_partitioning: true   # Use manual partitioning for LLM (Master Agent)
+max_num_partitions: 2           # Maximum number of partitions for LLM (Master Agent)
+visualize_partitions: true      # Visualize partitions for LLM (Master Agent)
+use_image_prompt: true          # Use image prompt for LLM (Master Agent)
+
+# Application settings
+app_name: "ExcavatorGameApp"    # Application name for ADK
+user_id: "user_1"               # User ID for ADK  
+session_id: "session_001"       # Session ID for ADK
+
+# Rendering settings
+grid_rendering: false            # Use grid rendering for partitions
+use_rendering: true             # Use rendering for the environment
+use_display: true               # Use display for the environment
+
+# Environment settings
+original_map_size: 128          # Original map size for the environment
+
+# Statistics
+compute_bench_stats: true       # Compute statistics for the benchmark

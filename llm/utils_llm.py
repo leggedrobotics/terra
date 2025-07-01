@@ -25,6 +25,7 @@ import pygame as pg
 from llm.session_manager_llm import SessionManager
 from llm.prompt_manager_llm import PromptManager 
 import os
+import yaml
 
 
 
@@ -540,7 +541,7 @@ def compute_manual_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS):
 
     return sub_tasks_manual
 
-def check_overall_completion(partition_states, env_manager):
+def check_overall_completion(partition_states):
     """
     Check if the overall task is complete based on partition completion status.
     Returns True if all partitions are completed or if sufficient progress has been made.
@@ -570,8 +571,7 @@ def check_overall_completion(partition_states, env_manager):
     
     return is_complete
 
-
-def calculate_map_completion_metrics(partition_states, env_manager):
+def calculate_map_completion_metrics(partition_states):
     """
     Calculate completion metrics for the current map based on partition states.
     """
@@ -601,7 +601,7 @@ def calculate_map_completion_metrics(partition_states, env_manager):
             failed_count += 1
     
     completion_rate = completed_count / total_partitions if total_partitions > 0 else 0.0
-    is_done = check_overall_completion(partition_states, env_manager)
+    is_done = check_overall_completion(partition_states)
     
     return {
         'done': is_done,
@@ -612,7 +612,7 @@ def calculate_map_completion_metrics(partition_states, env_manager):
         'total_partitions': total_partitions
     }
 
-def wrap_action2(action_rl, action_type):
+def wrap_action_llm(action_rl, action_type):
     """
     Wrap RL action for the environment.
     Ensures correct shape for single environment (non-batched).
@@ -688,7 +688,6 @@ def reset_to_next_map(map_index, seed, env_manager, global_env_config,
     print(f"Environment reset to map {map_index}")
     print(f"New target map has {jnp.sum(env_manager.global_maps['target_map'] < 0)} dig targets")
     
-
 def initialize_partitions_for_current_map(env_manager, config, model_params):
     """Initialize all partitions for the current map"""
     partition_states = {}
@@ -735,11 +734,10 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
     print(f"Successfully initialized {len(active_partitions)} partitions: {active_partitions}")
     return partition_states, partition_models, active_partitions
 
-
-def init_llms(llm_model_key, llm_model_name, config, action_size, n_envs, 
-                     APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
+def init_llms(llm_model_key, llm_model_name, config, action_size, 
+                     APP_NAME, USER_ID, SESSION_ID, MAP_SIZE, MAX_NUM_PARTITIONS):
     """
-    Simplified version of init_llms using file-based prompts.
+    Initialize LLMs using file-based prompts.
     """
     # Initialize prompt manager
     prompts = PromptManager(prompts_dir="llm/prompts")
@@ -756,19 +754,11 @@ def init_llms(llm_model_key, llm_model_name, config, action_size, n_envs,
     print("Using model: ", llm_model_name_extended)
 
     # Load system messages from files
-    system_message_master = prompts.get("master_partitioning", 
-                                       map_size=MAP_SIZE, 
-                                       max_partitions=2)
+    system_message_master = prompts.get("master_partitioning", map_size=MAP_SIZE, max_partitions=MAX_NUM_PARTITIONS)
     
-    system_message_delegation = prompts.get("delegation_decision", 
-                                           observation="See current state")
-    try:
-        with open("prompts/excavator_llm_simple.txt", "r") as file:
-            game_instructions = file.read()
-
-        system_message_excavator = game_instructions
-    except FileNotFoundError:
-        system_message_excavator = "You are an excavator control agent. Choose actions -1-6 based on game state."
+    system_message_delegation = prompts.get("delegation_decision", observation="See current state")
+    
+    system_message_excavator = prompts.get("excavator_llm_simple")
 
     # Create agents
     if llm_model_key == "gemini":
@@ -890,7 +880,7 @@ def init_llms(llm_model_key, llm_model_name, config, action_size, n_envs,
     if config:
         import jax.numpy as jnp
         prev_actions = jnp.zeros(
-            (n_envs, config.num_prev_actions),
+            (1, config.num_prev_actions),
             dtype=jnp.int32
         )
     else:
@@ -899,8 +889,7 @@ def init_llms(llm_model_key, llm_model_name, config, action_size, n_envs,
     # Debug: List all sessions
     #session_manager.list_sessions()
 
-    return (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
-            system_message_master, session_manager)
+    return (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, session_manager)
 
 def get_delegation_prompt(prompts, current_observation, context=""):
     """Get delegation prompt with current state."""
@@ -990,10 +979,9 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
 
     # Initialize LLM agent with fixed session management
-    (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
-     system_message_master, session_manager) = init_llms(
-        llm_model_key, llm_model_name, config, action_size, 1, 
-        APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
+    (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, session_manager) = init_llms(
+        llm_model_key, llm_model_name, config, action_size, 
+        APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS
     )
 
     sub_tasks_llm = []
@@ -1066,7 +1054,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             print("LLM-generated partitions invalid, falling back to manually defined sub-tasks.")
             env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
 
-    return llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts
+    return llm_query, runner_delegation, session_manager, prompts
 
 
 def extract_subsurface(screen, x_start, y_start, width, height, ORIGINAL_MAP_SIZE, global_env_config, partition_idx):
@@ -1923,3 +1911,98 @@ def enhanced_save_traversability_mask_with_debug(traversability_mask, output_pat
     print(f"    Enhanced traversability mask saved to {full_path}")
     
     return debug_info
+
+
+
+def load_experiment_constants(config_file="llm/llm_config.yaml"):
+    """
+    Load all experiment constants from YAML file.
+    Returns a namespace object with all your constants as attributes.
+    
+    Usage:
+        Replace this:
+            FORCE_DELEGATE_TO_RL = True
+            FORCE_DELEGATE_TO_LLM = False
+            ...
+        
+        With this:
+            constants = load_experiment_constants()
+            FORCE_DELEGATE_TO_RL = constants.force_delegate_to_rl
+            FORCE_DELEGATE_TO_LLM = constants.force_delegate_to_llm
+            ...
+    """
+    
+    # Default values (same as your original constants)
+    defaults = {
+        'force_delegate_to_rl': True,
+        'force_delegate_to_llm': False,
+        'llm_call_frequency': 15,
+        'use_manual_partitioning': True,
+        'max_num_partitions': 2,
+        'visualize_partitions': True,
+        'use_image_prompt': True,
+        'app_name': "ExcavatorGameApp",
+        'user_id': "user_1",
+        'session_id': "session_001",
+        'grid_rendering': True,
+        'original_map_size': 128,
+        'use_rendering': True,
+        'use_display': True
+    }
+    
+    # Try to load from YAML file
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+                # Update defaults with loaded values
+                defaults.update(config)
+                #print(f"✅ Configuration loaded from {config_file}")
+        except Exception as e:
+            print(f"⚠️  Error loading {config_file}: {e}. Using defaults.")
+    else:
+        print(f"⚠️  Config file {config_file} not found. Using defaults.")
+    
+    # Convert to namespace for easy attribute access
+    class ConfigNamespace:
+        def __init__(self, config_dict):
+            for key, value in config_dict.items():
+                setattr(self, key, value)
+        
+        def __repr__(self):
+            attrs = [f"{k}={v}" for k, v in self.__dict__.items()]
+            return f"ConfigNamespace({', '.join(attrs)})"
+    
+    return ConfigNamespace(defaults)
+
+def setup_experiment_config(config_file="llm/llm_config.yaml"):
+    """
+    Direct replacement for your constant definitions.
+    
+    Replace this block in your code:
+        FORCE_DELEGATE_TO_RL = True
+        FORCE_DELEGATE_TO_LLM = False
+        LLM_CALL_FREQUENCY = 15
+        # ... etc
+    
+    With this single line:
+        FORCE_DELEGATE_TO_RL, FORCE_DELEGATE_TO_LLM, LLM_CALL_FREQUENCY, ... = setup_experiment_config()
+    """
+    constants = load_experiment_constants(config_file)
+    
+    return (
+        constants.force_delegate_to_rl,     # FORCE_DELEGATE_TO_RL
+        constants.force_delegate_to_llm,    # FORCE_DELEGATE_TO_LLM  
+        constants.llm_call_frequency,       # LLM_CALL_FREQUENCY
+        constants.use_manual_partitioning,  # USE_MANUAL_PARTITIONING
+        constants.max_num_partitions,       # MAX_NUM_PARTITIONS
+        constants.visualize_partitions,     # VISUALIZE_PARTITIONS
+        constants.use_image_prompt,         # USE_IMAGE_PROMPT
+        constants.app_name,                 # APP_NAME
+        constants.user_id,                  # USER_ID
+        constants.session_id,               # SESSION_ID
+        constants.grid_rendering,           # GRID_RENDERING
+        constants.original_map_size,        # ORIGINAL_MAP_SIZE
+        constants.use_rendering,            # USE_RENDERING
+        constants.use_display               # USE_DISPLAY
+    )
