@@ -77,7 +77,8 @@ class State(NamedTuple):
         )
 
         agent, key = Agent.new(
-            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map,
+            agent_types=(0, 2)  # Agent 1: tracked (0), Agent 2: skid steer (2)
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
@@ -422,7 +423,7 @@ class State(NamedTuple):
 
     def _handle_move_forward(self) -> "State":
         """
-        Moves the base forward - if not loaded
+        Moves the base forward - if not loaded (or if skid steer)
         """
 
         def _move_forward():
@@ -432,13 +433,18 @@ class State(NamedTuple):
             )
             return self._move_on_orientation(orientation_vector)
 
-        return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward
-        )
+        # Use JAX conditional: skid steer (type 2) can move when loaded, others cannot
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        is_loaded = self.agent.agent_state.loaded[0] > 0
+        
+        # Skid steer can always move, others only when not loaded
+        can_move = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+        
+        return jax.lax.cond(can_move, _move_forward, self._do_nothing)
 
     def _handle_move_backward(self) -> "State":
         """
-        Moves the base backward - if not loaded
+        Moves the base backward - if not loaded (or if skid steer)
         """
 
         def _move_backward():
@@ -448,9 +454,14 @@ class State(NamedTuple):
             )
             return self._move_on_orientation(orientation_vector)
 
-        return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward
-        )
+        # Use JAX conditional: skid steer (type 2) can move when loaded, others cannot
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        is_loaded = self.agent.agent_state.loaded[0] > 0
+        
+        # Skid steer can always move, others only when not loaded
+        can_move = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+        
+        return jax.lax.cond(can_move, _move_backward, self._do_nothing)
 
     def _handle_move_forward_wheeled(self) -> "State":
         """
@@ -501,6 +512,18 @@ class State(NamedTuple):
                             lambda: new_angle_base,
                             lambda: old_angle_base)
 
+    def _apply_cabin_rotation_mask(self, old_angle_cabin: Array, new_angle_cabin: Array) -> Array:
+        """
+        Given an old and a candidate new cabin angle, check if the rotation is valid.
+        For cabin rotation, we don't need to check body collision (since the body doesn't move),
+        but we should ensure the new cabin angle is within valid bounds.
+        Since cabin angles are already constrained by the circular angle system,
+        we can just return the new angle.
+        """
+        # Cabin rotation is always valid since it's just changing the arm direction
+        # and the angle system already constrains it to valid values
+        return new_angle_cabin
+
     def _handle_clock(self) -> "State":
         def _rotate_clock():
             old_angle_base = self.agent.agent_state.angle_base
@@ -519,9 +542,14 @@ class State(NamedTuple):
                 )
             )
 
-        return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_clock
-        )
+        # Use JAX conditional: skid steer (type 2) can rotate when loaded, others cannot
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        is_loaded = self.agent.agent_state.loaded[0] > 0
+        
+        # Skid steer can always rotate, others only when not loaded
+        can_rotate = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+        
+        return jax.lax.cond(can_rotate, _rotate_clock, self._do_nothing)
 
     def _handle_anticlock(self) -> "State":
         def _rotate_anticlock():
@@ -541,34 +569,57 @@ class State(NamedTuple):
                 )
             )
 
-        return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _rotate_anticlock
-        )
+        # Use JAX conditional: skid steer (type 2) can rotate when loaded, others cannot
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        is_loaded = self.agent.agent_state.loaded[0] > 0
+        
+        # Skid steer can always rotate, others only when not loaded
+        can_rotate = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+        
+        return jax.lax.cond(can_rotate, _rotate_anticlock, self._do_nothing)
 
     def _handle_cabin_clock(self) -> "State":
-        old_angle_cabin = self.agent.agent_state.angle_cabin
-        new_angle_cabin = decrease_angle_circular(
-            old_angle_cabin, self.env_cfg.agent.angles_cabin
-        )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
+        """Handle cabin clockwise rotation. Does nothing for skid steer."""
+        # Skid steer cannot rotate cabin
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        
+        def _cabin_clock():
+            old_angle_cabin = self.agent.agent_state.angle_cabin
+            new_angle_cabin = decrease_angle_circular(
+                old_angle_cabin, self.env_cfg.agent.angles_cabin
             )
-        )
+
+            return self._replace(
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        angle_cabin=new_angle_cabin
+                    )
+                )
+            )
+        
+        return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_clock)
 
     def _handle_cabin_anticlock(self) -> "State":
-        old_angle_cabin = self.agent.agent_state.angle_cabin
-        new_angle_cabin = increase_angle_circular(
-            old_angle_cabin, self.env_cfg.agent.angles_cabin
-        )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(angle_cabin=new_angle_cabin)
+        """Handle cabin anti-clockwise rotation. Does nothing for skid steer."""
+        # Skid steer cannot rotate cabin
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        
+        def _cabin_anticlock():
+            old_angle_cabin = self.agent.agent_state.angle_cabin
+            new_angle_cabin = increase_angle_circular(
+                old_angle_cabin, self.env_cfg.agent.angles_cabin
             )
-        )
-    
+
+            return self._replace(
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        angle_cabin=new_angle_cabin
+                    )
+                )
+            )
+        
+        return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_anticlock)
+
     def _handle_turn_wheels_left(self) -> "State":
         old_wheel_angle = self.agent.agent_state.wheel_angle
         new_wheel_angle = jnp.min(
@@ -1089,6 +1140,25 @@ class State(NamedTuple):
             * dig_mask_maps.reshape(-1)
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
+                ).astype(jnp.bool_)
+
+    def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
+        """
+        For skid steer: ONLY allow lifting from action_map > 0 (dumped dirt)
+        NEVER allow digging new holes (target_map < 0)
+        """
+        # Only allow lifting from existing dumped dirt (action_map > 0)
+        dig_mask_action_map = self.world.action_map.map > 0
+        
+        # Respect max dig limit
+        max_dig_limit_mask = (
+            self.world.action_map.map > -self.env_cfg.agent.dig_depth
+        ).reshape(-1)
+
+        return (
+            dig_mask
+            * dig_mask_action_map.reshape(-1)  # Only dumped dirt tiles
+            * max_dig_limit_mask
         ).astype(jnp.bool_)
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
@@ -1106,16 +1176,16 @@ class State(NamedTuple):
 
     def _handle_dig(self) -> "State":
         dig_mask = self._build_dig_dump_cone()
-        # dig_mask = self._exclude_dump_tiles_from_dig_mask(dig_mask)
         dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
         flattened_action_map = self.world.action_map.map.reshape(-1)
         selected_tiles_sum = flattened_action_map @ dig_mask
         moving_dumped_dirt = selected_tiles_sum > 0
         # if moving dumped dirt, move it all at once
+        # Ensure both branches return the same dtype (int32)
         dig_volume = jax.lax.cond(
             moving_dumped_dirt,
             lambda: selected_tiles_sum.astype(jnp.int32),
-            lambda: dig_mask.sum(),
+            lambda: dig_mask.sum().astype(jnp.int32),
         )
 
         def _apply_dig(volume, fam):
@@ -1203,13 +1273,81 @@ class State(NamedTuple):
 
         return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
 
-    def _handle_do(self) -> "State":
-        state = jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded.astype(jnp.bool_)),
-            self._handle_dump,
-            self._handle_dig,
+    def _handle_lift_dumped_dirt(self) -> "State":
+        """
+        For skid steer: ONLY lift dumped dirt from action_map > 0
+        CANNOT dig new holes like excavators
+        """
+        dig_mask = self._build_dig_dump_cone()
+        dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
+        flattened_action_map = self.world.action_map.map.reshape(-1)
+        selected_tiles_sum = flattened_action_map @ dig_mask
+        moving_dumped_dirt = selected_tiles_sum > 0
+        
+        # Use same volume logic as normal dig: if moving dumped dirt, move it all at once
+        # Ensure both branches return the same dtype (int32)
+        dig_volume = jax.lax.cond(
+            moving_dumped_dirt,
+            lambda: selected_tiles_sum.astype(jnp.int32),
+            lambda: dig_mask.sum().astype(jnp.int32),
         )
-        return state
+
+        def _apply_dig(volume, fam):
+            new_map_global_coords = self._apply_dig_mask(
+                fam, dig_mask, moving_dumped_dirt
+            )
+            new_map_global_coords = new_map_global_coords.reshape(
+                self.world.action_map.map.shape
+            )
+            new_dumpability_mask = self._get_new_dumpability_mask(
+                new_map_global_coords,
+            )
+
+            return self._replace(
+                world=self.world._replace(
+                    action_map=self.world.action_map._replace(
+                        map=IntLowDim(new_map_global_coords)
+                    ),
+                    dumpability_mask=self.world.dumpability_mask._replace(
+                        map=jnp.bool_(new_dumpability_mask),
+                    ),
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape)),
+                    )
+                ),
+                agent=self.agent._replace(
+                    agent_state=self.agent.agent_state._replace(
+                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
+                    ),
+                    moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
+                )
+            )
+
+        s = jax.lax.cond(
+            dig_volume > 0,
+            lambda v, fam: _apply_dig(v, fam),
+            lambda v, fam: self._do_nothing(),
+            dig_volume,
+            flattened_action_map,
+        )
+        return s
+
+    def _handle_do(self) -> "State":
+        """
+        Handle the DO action based on agent type:
+        - Tracked/Wheeled (0,1): dig (not loaded) / dump (loaded)
+        - Skid steer (2): lift dumped dirt (not loaded) / dump (loaded)
+        """
+        is_skid_steer = self.agent.agent_state.agent_type == 2
+        is_loaded = self.agent.agent_state.loaded[0] > 0
+        
+        def _skid_steer_do():
+            return jax.lax.cond(is_loaded, self._handle_dump, self._handle_lift_dumped_dirt)
+        
+        def _tracked_wheeled_do():
+            return jax.lax.cond(is_loaded, self._handle_dump, self._handle_dig)
+        
+        return jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
 
     @staticmethod
     def _check_agent_moved_on_move_action(
@@ -1771,18 +1909,41 @@ class State(NamedTuple):
         )
         return action_mask
 
+    def _get_action_mask_skidsteer(self):
+        # Get the tracked action mask as base
+        mask = self._get_action_mask_tracked()
+        # Disable cabin actions for skid steer
+        mask = mask.at[4].set(False)  # cabin_clock
+        mask = mask.at[5].set(False)  # cabin_anticlock
+        return mask
+
     def _get_action_mask(self, dummy_action: Action):
         """
         Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
         """
         num_actions = dummy_action.get_num_actions()
-        action_mask = jax.lax.cond(
-            dummy_action.type[0] == 0,
-            self._get_action_mask_tracked,
-            self._get_action_mask_wheeled,
-        )
+        
+        # Check agent type from the current agent state
+        current_agent_type = self.agent.agent_state.agent_type
+        
+        # Use JAX switch instead of if statements for JIT compatibility
+        def get_tracked_mask():
+            return self._get_action_mask_tracked()
+        
+        def get_wheeled_mask():
+            return self._get_action_mask_wheeled()
+        
+        def get_skidsteer_mask():
+            return self._get_action_mask_skidsteer()
+        
+        # Create a list of functions for jax.lax.switch
+        mask_functions = [get_tracked_mask, get_wheeled_mask, get_skidsteer_mask]
+        
+        # Use jax.lax.switch with clamped index to handle any agent_type value
+        clamped_agent_type = jnp.clip(current_agent_type, 0, len(mask_functions) - 1)
+        action_mask = jax.lax.switch(clamped_agent_type, mask_functions)
+            
         action_mask = action_mask[:num_actions]
-
         return action_mask
 
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:

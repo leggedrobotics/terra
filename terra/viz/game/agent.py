@@ -14,7 +14,7 @@ class Agent:
         self.angles_base = angles_base
         self.angles_cabin = angles_cabin
 
-    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded):
+    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded, agent_type=0):
     # Convert angle_base index to degrees using the util function
         base_angle_degrees = agent_base_to_angle(angle_base, self.angles_base)
         
@@ -64,31 +64,39 @@ class Agent:
             (center_y, center_x), points, self.tile_size, global_cabin_angle
         )
 
+        # Choose colors based on agent type
+        if agent_type == 2:  # Skid steer
+            body_color = COLORS["skid_steer_body"]
+            cabin_color = COLORS["skid_steer_cabin"]["loaded"] if loaded else COLORS["skid_steer_cabin"]["not_loaded"]
+        else:  # Tracked or wheeled (default)
+            body_color = COLORS["agent_body"]
+            cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
+
         out = {
             "body": {
                 "vertices": agent_body,
                 "width": w,
                 "height": h,
-                "color": COLORS["agent_body"],
+                "color": body_color,
             },
             "cabin": {
                 "vertices": agent_cabin,
-                "color": COLORS["agent_cabin"]["loaded"]
-                if loaded
-                else COLORS["agent_cabin"]["not_loaded"],
+                "color": cabin_color,
             },
         }
         return out
 
-    def update(self, agent_pos, base_dir, cabin_dir, loaded):
+    def update(self, agent_pos, base_dir, cabin_dir, loaded, agent_type=0):
         agent_pos = np.asarray(agent_pos, dtype=np.int32)
         base_dir = np.asarray(base_dir, dtype=np.int32)
         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
         loaded = np.asarray(loaded, dtype=bool)
+        agent_type = np.asarray(agent_type, dtype=np.int32)
         self.agent = self.create_agent(
             agent_pos[0].item(),
             agent_pos[1].item(),
             base_dir.item(),
             cabin_dir.item(),
             loaded.item(),
+            agent_type.item(),  # Pass agent type
         )

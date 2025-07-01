@@ -88,10 +88,12 @@ class Game:
         base_dir_1,
         cabin_dir_1,
         loaded_1,
+        agent_type_1,
         agent_pos_2,
         base_dir_2,
         cabin_dir_2,
         loaded_2,
+        agent_type_2,
         generate_gif,
         target_tiles=None,
     ):
@@ -105,10 +107,12 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
+            agent_type_1,
             agent_pos_2,
             base_dir_2,
             cabin_dir_2,
             loaded_2,
+            agent_type_2,
             target_tiles,
         )
         self.draw()
@@ -148,10 +152,12 @@ class Game:
         base_dir_1,
         cabin_dir_1,
         loaded_1,
+        agent_type_1,
         agent_pos_2,
         base_dir_2,
         cabin_dir_2,
         loaded_2,
+        agent_type_2,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -166,15 +172,17 @@ class Game:
             base_dir_1,
             cabin_dir_1,
             loaded_1,
+            agent_type_1,
             agent_pos_2,
             base_dir_2,
             cabin_dir_2,
             loaded_2,
+            agent_type_2,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
-            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
-            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2)
+            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1, agent_type_1)
+            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2, agent_type_2)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -188,14 +196,16 @@ class Game:
             bd1 = base_dir_1[i]
             cd1 = cabin_dir_1[i]
             ld1 = loaded_1[i]
+            at1 = agent_type_1[i]
             ap2 = agent_pos_2[i]
             bd2 = base_dir_2[i]
             cd2 = cabin_dir_2[i]
             ld2 = loaded_2[i]
+            at2 = agent_type_2[i]
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, ap2, bd2, cd2, ld2, tt),
+                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, at1, ap2, bd2, cd2, ld2, at2, tt),
             )
             thread.start()
             threads.append(thread)

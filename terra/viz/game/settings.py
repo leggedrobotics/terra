@@ -9,9 +9,14 @@ COLORS = {
     2: "#000000",  # obstacle
     1: "#002B5B",  # action map dump
     -1: "#26bd6c",  # action map dug
-    "agent_body": (0, 43, 91),
+    "agent_body": (0, 43, 91),  # Blue for tracked agents
     "agent_cabin": {
         "loaded": (165, 115, 75),
         "not_loaded": (234, 84, 85),
+    },
+    "skid_steer_body": (255, 140, 0),  # Orange for skid steer body
+    "skid_steer_cabin": {
+        "loaded": (255, 215, 0),  # Gold when loaded
+        "not_loaded": (255, 165, 0),  # Orange when not loaded
     },
 }

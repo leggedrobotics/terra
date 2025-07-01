@@ -27,6 +27,7 @@ class AgentState(NamedTuple):
     angle_cabin: IntLowDim
     wheel_angle: IntLowDim
     loaded: IntLowDim
+    agent_type: IntLowDim  # 0=tracked, 1=wheeled, 2=skid steer
 
 
 class Agent(NamedTuple):
@@ -50,6 +51,7 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
         action_map: Array,
+        agent_types: tuple = (0, 0),  # 0=tracked, 1=wheeled, 2=skid steer
     ) -> tuple["Agent", jax.random.PRNGKey]:
         # Split the key for the two agent initializations
         key, key_agent1, key_agent2 = jax.random.split(key, 3)
@@ -95,6 +97,7 @@ class Agent(NamedTuple):
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            agent_type=agent_types[0],
         )
         
         agent_state_2 = AgentState(
@@ -103,6 +106,7 @@ class Agent(NamedTuple):
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            agent_type=agent_types[1],
         )
 
         width = env_cfg.agent.width
