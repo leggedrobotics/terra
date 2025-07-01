@@ -50,7 +50,6 @@ MAX_NUM_PARTITIONS = 2          # Maximum number of partitions for LLM (Master A
 VISUALIZE_PARTITIONS = True     # Visualize partitions for LLM (Master Agent)
 USE_IMAGE_PROMPT = True         # Use image prompt for LLM (Master Agent)
 USE_LOCAL_MAP = True            # Use local map for LLM (Excavator Agent)
-USE_PATH = False                 # Use path for LLM (Excavator Agent)
 APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
@@ -192,7 +191,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             llm_query, runner_partitioning, runner_delegation, system_message_master, session_manager, prompts = setup_partitions_and_llm(
                         current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
                         config, llm_model_name, llm_model_key,
-                        USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen,
+                        APP_NAME, USER_ID, SESSION_ID, screen,
                         USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             

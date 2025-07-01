@@ -742,7 +742,7 @@ def initialize_partitions_for_current_map(env_manager, config, model_params):
     return partition_states, partition_models, active_partitions
 
 
-def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_envs, 
+def init_llms(llm_model_key, llm_model_name, config, action_size, n_envs, 
                      APP_NAME, USER_ID, SESSION_ID, MAP_SIZE):
     """
     Simplified version of init_llms using file-based prompts.
@@ -769,12 +769,8 @@ def init_llms(llm_model_key, llm_model_name, USE_PATH, config, action_size, n_en
     system_message_delegation = prompts.get("delegation_decision", 
                                            observation="See current state")
     try:
-        if USE_PATH:
-            with open("prompts/excavator_llm_advanced.txt", "r") as file:
-                game_instructions = file.read()
-        else:
-            with open("prompts/excavator_llm_simple.txt", "r") as file:
-                game_instructions = file.read()
+        with open("prompts/excavator_llm_simple.txt", "r") as file:
+            game_instructions = file.read()
 
         system_message_excavator = game_instructions
     except FileNotFoundError:
@@ -997,7 +993,7 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
 
 
 def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
-                                  USE_PATH, APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
+                                  APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
                                   USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4):
     """
     Setup_partitions_and_llm with proper session management.
@@ -1010,7 +1006,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     # Initialize LLM agent with fixed session management
     (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
      system_message_master, session_manager) = init_llms(
-        llm_model_key, llm_model_name, USE_PATH, config, action_size, 1, 
+        llm_model_key, llm_model_name, config, action_size, 1, 
         APP_NAME, USER_ID, f"{SESSION_ID}_map_{map_index}", ORIGINAL_MAP_SIZE
     )
 
