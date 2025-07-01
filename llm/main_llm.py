@@ -54,7 +54,7 @@ USE_PATH = False                 # Use path for LLM (Excavator Agent)
 APP_NAME = "ExcavatorGameApp"   # Application name for ADK
 USER_ID = "user_1"              # User ID for ADK
 SESSION_ID = "session_001"      # Session ID for ADK
-GRID_RENDERING = False  # Use grid rendering for partitions
+GRID_RENDERING = True  # Use grid rendering for partitions
 ORIGINAL_MAP_SIZE = 128 # Original map size for the environment
 COMPUTE_BENCH_STATS = True  # Compute statistics for the benchmark
 USE_RENDERING = True  # Use rendering for the environment
@@ -254,6 +254,25 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                 partition_state = partition_states[partition_idx]
             
                 print(f"  Processing partition {partition_idx} (partition step {partition_state['step_count']})")
+                
+                print("Recovering partition state...")
+                for other_partition_idx in active_partitions:
+                        if other_partition_idx != partition_idx:
+                            # Only sync if they overlap
+                            if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
+                                    simple_sync_overlapping_regions(partition_states, env_manager, 
+                                                            other_partition_idx, partition_idx)
+                # DEBUG: Compare state vs observation
+                state_traversability = partition_state['timestep'].state.world.traversability_mask.map[0]
+                obs_traversability = partition_state['timestep'].observation['traversability_mask']
+
+                diff_count = jnp.sum(state_traversability != obs_traversability)
+                print(f"  Partition {partition_idx}: {diff_count} differences between state and observation")
+
+                if diff_count > 0:
+                    print("  ❌ CONFIRMED: Observation is stale after sync!")
+                else:
+                    print("  ✅ Observation matches synced state")
 
                 try:
                     # Set the small environment to the current partition's state
@@ -261,7 +280,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     env_manager.current_partition_idx = partition_idx
 
                     # Get the current observation
-                    current_observation = env_manager.small_env_timestep.observation
+                    #current_observation = env_manager.small_env_timestep.observation
+                    current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                    
+                    # verify_traversability_after_sync(partition_state['timestep'].state.world.traversability_mask.map[0],
+                    #                                 partition_idx, active_partitions)
+                    # Verify it worked:
+                    #verify_observation_includes_other_agents(current_observation, partition_idx, active_partitions)
                     map_obs_seq.append(current_observation)
 
                     # Extract partition info and create subsurface
@@ -354,6 +379,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         print(f"    Partition {partition_idx} - Delegating to RL agent")
                         try:
                             current_observation = env_manager.small_env_timestep.observation
+                            #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'beforeRL', partition_idx, map_step)
+
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
 
@@ -431,6 +458,20 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         print(f"    Partition {partition_idx} - reward: {reward_val:.4f}, action: {action_rl}, done: {new_timestep.done}")
                     else:
                         print(f"    Partition {partition_idx} - INVALID reward: {reward_val}, action: {action_rl}, done: {new_timestep.done}")
+                    
+                    # print(type(env_manager.small_env_timestep.observation['traversability_mask']))
+                    # save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'before_sync', partition_idx, map_step)
+                    env_manager.add_agents_using_existing_representation(partition_states)
+
+
+                    before_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
+                    before_mask0 =np.array(partition_states[partition_idx]['timestep'].state.world.traversability_mask.map)
+                    if partition_idx == 0:
+                        before_mask1 =np.array(partition_states[partition_idx+1]['timestep'].state.world.traversability_mask.map)
+                    else:
+                        before_mask1 =np.array(partition_states[partition_idx-1]['timestep'].state.world.traversability_mask.map)
+
+
 
 
                     print(f"    Syncing changes from partition {partition_idx} to overlapping partitions...")
@@ -440,7 +481,31 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
                                 simple_sync_overlapping_regions(partition_states, env_manager, 
                                                             partition_idx, other_partition_idx)
+                                # simple_sync_overlapping_regions(partition_states, env_manager, 
+                                #                             other_partition_idx, partition_idx)
+                    #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'after_sync', partition_idx, map_step)
+                    env_manager.add_agents_using_existing_representation(partition_states)
 
+                    after_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
+                    after_mask0 = np.array(partition_states[partition_idx]['timestep'].state.world.traversability_mask.map)
+                    if partition_idx == 0:
+                        after_mask1 = np.array(partition_states[partition_idx+1]['timestep'].state.world.traversability_mask.map)
+                    else:
+                        after_mask1 = np.array(partition_states[partition_idx-1]['timestep'].state.world.traversability_mask.map)
+
+
+                    #Save combined image
+                    # if map_step > 0:
+                    #     save_traversability_mask_comparison(
+                    #         before_mask0,
+                    #         before_mask1,
+                    #         after_mask0,
+                    #         after_mask1,
+                    #         output_dir='fully_complete_sync',
+                    #         partition_index=partition_idx,
+                    #         other_partition_index= int(not partition_idx),
+                    #         map_step=map_step
+                    #     )
 
                     verify_sync_effectiveness(partition_states, env_manager)
 

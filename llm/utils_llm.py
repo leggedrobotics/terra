@@ -1605,11 +1605,16 @@ def simple_sync_overlapping_regions(partition_states, env_manager, source_partit
             # IMPORTANT: Merge obstacles instead of overwriting
             # If target has an obstacle (1) that source doesn't have, it might be another agent
             # So we take the maximum to preserve obstacles
-            merged_terrain = jnp.maximum(
-                source_terrain,
-                jnp.where(target_has_agent, 0, target_overlap)  # Exclude target's own agent from merge
-            )
+            # merged_terrain = jnp.maximum(
+            #     source_terrain,
+            #     jnp.where(target_has_agent, 0, target_overlap)  # Exclude target's own agent from merge
+            # )
             
+            merged_terrain = jnp.where(
+                target_has_agent,
+                -1,
+                source_terrain
+            )
             # Final overlap: keep target's agent, use merged terrain elsewhere
             new_overlap = jnp.where(target_has_agent, -1, merged_terrain)
             
@@ -1683,3 +1688,279 @@ def debug_agent_visibility(partition_states, env_manager):
                 overlap_obstacles = jnp.sum(overlap_data == 1)
                 
                 print(f"  Overlap with partition {other_idx}: {overlap_obstacles} obstacles in overlap region")
+
+
+import os
+
+# def save_traversability_mask(traversability_mask, output_path, partition_index, map_step):
+#     """
+#     Save the traversability mask as an image.
+#     """
+#     os.makedirs(output_path, exist_ok=True)  # <-- this ensures the folder exists
+#     output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
+#     mask_image = (traversability_mask * 255).astype(np.uint8)
+#     cv2.imwrite(output_path, mask_image)
+#     print(f"Traversability mask saved to {output_path}")
+
+
+def save_traversability_mask(traversability_mask, output_path, partition_index, map_step=None):
+    import os
+    import cv2
+    import numpy as np
+
+    os.makedirs(output_path, exist_ok=True)
+    output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
+
+    h, w = traversability_mask.shape
+    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+
+    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red for agent occupancy
+    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White for traversable
+    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black for non-traversable
+
+    cv2.imwrite(output_path, rgb_image)
+    print(f"Traversability mask saved to {output_path}")
+
+def mask_to_rgb(traversability_mask):
+    """Convert traversability mask to RGB image with color coding."""
+    h, w = traversability_mask.shape
+    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red: agent
+    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White: traversable
+    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black: obstacle
+    return rgb_image
+
+def annotate(image, text):
+    """Overlay label text onto the image."""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.4
+    thickness = 1
+    color = (0, 255, 0)  # Green
+    margin = 10
+
+    annotated = image.copy()
+    cv2.putText(
+        annotated,
+        text,
+        (margin, margin + 20),
+        font,
+        font_scale,
+        color,
+        thickness,
+        lineType=cv2.LINE_AA
+    )
+    return annotated
+def annotate_with_diff_highlight(mask, label, reference_mask=None):
+    """Convert mask to RGB, annotate, and highlight differences if reference is given."""
+    rgb = mask_to_rgb(mask)
+    annotated = annotate(rgb, label)
+
+    if reference_mask is not None:
+        diff = (mask != reference_mask)
+        # Highlight changed pixels in yellow [0, 255, 255]
+        annotated[diff] = [0, 255, 255]
+
+    return annotated
+# def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0, after_mask1,
+#                                         output_dir, partition_index, other_partition_index, map_step):
+#     """
+#     Save a single 2×2 grid image showing before/after traversability masks for two partitions.
+#     """
+#     os.makedirs(output_dir, exist_ok=True)
+#     output_path = f"{output_dir}/compare_p{partition_index}_step{map_step}.png"
+
+#     # Convert masks to RGB and annotate
+#     before_rgb_0 = annotate(mask_to_rgb(before_mask0), f"Before Sync P{partition_index}")
+#     before_rgb_1 = annotate(mask_to_rgb(before_mask1), f"Before Sync P{other_partition_index}")
+#     after_rgb_0  = annotate(mask_to_rgb(after_mask0),  f"After Sync P{partition_index}")
+#     after_rgb_1  = annotate(mask_to_rgb(after_mask1),  f"After Sync P{other_partition_index}")
+
+#     # Create 2x2 grid: two rows of horizontal images
+#     top_row = np.concatenate([before_rgb_0, before_rgb_1], axis=1)
+#     bottom_row = np.concatenate([after_rgb_0, after_rgb_1], axis=1)
+#     grid_image = np.concatenate([top_row, bottom_row], axis=0)
+
+#     cv2.imwrite(output_path, grid_image)
+#     print(f"2x2 Comparison image saved to {output_path}")
+
+def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0, after_mask1,
+                                        output_dir, partition_index, other_partition_index, map_step):
+    """
+    Save a 2×2 image showing before/after traversability masks for two partitions,
+    with differences highlighted.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = f"{output_dir}/compare_p{partition_index}_step{map_step}.png"
+
+    before_rgb_0 = annotate_with_diff_highlight(before_mask0, f"BP{partition_index}")
+    before_rgb_1 = annotate_with_diff_highlight(before_mask1, f"BP{other_partition_index}")
+    after_rgb_0  = annotate_with_diff_highlight(after_mask0,  f"AP{partition_index}", before_mask0)
+    after_rgb_1  = annotate_with_diff_highlight(after_mask1,  f"AP{other_partition_index}", before_mask1)
+
+    top_row = np.concatenate([before_rgb_0, before_rgb_1], axis=1)
+    bottom_row = np.concatenate([after_rgb_0, after_rgb_1], axis=1)
+    grid_image = np.concatenate([top_row, bottom_row], axis=0)
+
+    cv2.imwrite(output_path, grid_image)
+    print(f"2x2 Comparison with diff saved to {output_path}")
+
+# def reconstruct_observation_from_synced_state(timestep):
+#     """
+#     Reconstruct observation dictionary from the current (synced) state.
+#     This ensures observation matches the internal synced state.
+#     """
+#     state = timestep.state
+    
+#     # Reconstruct the observation dictionary
+#     observation = {}
+    
+#     # Extract all the maps from the synced world state
+#     observation['traversability_mask'] = state.world.traversability_mask.map[0]
+#     observation['action_map'] = state.world.action_map.map[0]
+#     observation['target_map'] = state.world.target_map.map[0]
+#     observation['dumpability_mask'] = state.world.dumpability_mask.map[0]
+#     observation['padding_mask'] = state.world.padding_mask.map[0]
+#     observation['dumpability_mask_init'] = state.world.dumpability_mask_init.map[0]
+    
+#     # Agent state information
+#     # observation['agent_pos'] = state.agent.agent_state.pos_base[0]
+#     # observation['agent_angle'] = state.agent.agent_state.angle_base
+#     # observation['loaded'] = state.agent.agent_state.loaded
+#     # observation['bucket_angle'] = state.agent.agent_state.angle_bucket
+    
+#     # Local maps (if they exist)
+#     if hasattr(state.world, 'local_map_action_neg'):
+#         observation['local_map_action_neg'] = state.world.local_map_action_neg.map[0]
+#     if hasattr(state.world, 'local_map_action_pos'):
+#         observation['local_map_action_pos'] = state.world.local_map_action_pos.map[0]
+#     if hasattr(state.world, 'local_map_target_neg'):
+#         observation['local_map_target_neg'] = state.world.local_map_target_neg.map[0]
+#     if hasattr(state.world, 'local_map_target_pos'):
+#         observation['local_map_target_pos'] = state.world.local_map_target_pos.map[0]
+#     if hasattr(state.world, 'local_map_dumpability'):
+#         observation['local_map_dumpability'] = state.world.local_map_dumpability.map[0]
+#     if hasattr(state.world, 'local_map_obstacles'):
+#         observation['local_map_obstacles'] = state.world.local_map_obstacles.map[0]
+    
+#     # Add any other fields that your RL model expects
+#     # You might need to check the original observation to see what else is included
+    
+#     return observation
+
+
+# Alternative approach - Force observation refresh through environment
+def refresh_observation_through_environment(env_manager, partition_idx, partition_states):
+    """
+    Alternative: Force the environment to regenerate the observation.
+    """
+    # Get the current synced state
+    current_state = partition_states[partition_idx]['timestep'].state
+    
+    # Create a new timestep with refreshed observation
+    # This depends on your environment's API
+    if hasattr(env_manager.small_env, 'get_observation'):
+        # If your environment has a method to get observation from state
+        fresh_observation = env_manager.small_env.get_observation(current_state)
+        
+        # Update the timestep
+        updated_timestep = partition_states[partition_idx]['timestep']._replace(
+            observation=fresh_observation
+        )
+        partition_states[partition_idx]['timestep'] = updated_timestep
+        env_manager.small_env_timestep = updated_timestep
+        
+        return fresh_observation
+    else:
+        # Fallback to manual reconstruction
+        return reconstruct_observation_from_synced_state(partition_states[partition_idx]['timestep'])
+
+
+# Debug function to verify sync worked
+def verify_observation_includes_other_agents(observation, partition_idx, active_partitions):
+    """
+    Verify that the observation includes other agents as obstacles.
+    """
+    traversability = observation['traversability_mask']
+    
+    own_agent_count = jnp.sum(traversability == -1)
+    obstacle_count = jnp.sum(traversability == 1)
+    free_space_count = jnp.sum(traversability == 0)
+    
+    expected_obstacles = len(active_partitions) - 1  # Other agents should appear as obstacles
+    
+    print(f"    Partition {partition_idx} observation verification:")
+    print(f"      Own agent (-1): {own_agent_count}")
+    print(f"      Obstacles (1): {obstacle_count}")  
+    print(f"      Free space (0): {free_space_count}")
+    print(f"      Expected other agents as obstacles: {expected_obstacles}")
+    
+    # Check if we have the expected number of other agents
+    if obstacle_count < expected_obstacles:
+        print(f"      ⚠️  WARNING: Missing other agents in observation!")
+        return False
+    else:
+        print(f"      ✅ Other agents properly visible")
+        return True
+    
+
+def reconstruct_observation_from_synced_state(timestep):
+    """
+    Reconstruct observation from synced state, specifically updating traversability_mask.
+    """
+    state = timestep.state
+    
+    # Start with the original observation (copy all fields)
+    observation = {}
+    for key, value in timestep.observation.items():
+        observation[key] = value
+    
+    # Update the critical field with synced data
+    observation['traversability_mask'] = state.world.traversability_mask.map[0]
+    
+    # Also update other maps that might be affected by sync
+    observation['action_map'] = state.world.action_map.map[0]
+    observation['target_map'] = state.world.target_map.map[0]
+    observation['dumpability_mask'] = state.world.dumpability_mask.map[0]
+    observation['padding_mask'] = state.world.padding_mask.map[0]
+    
+    # Keep local maps as-is (they might be computed differently)
+    # observation['local_map_*'] fields remain unchanged
+    print("Reconstructed observation from synced state:")
+    return observation
+
+def verify_traversability_after_sync(observation, partition_idx, active_partitions):
+    """
+    Debug function to verify that other agents are now visible in traversability_mask.
+    """
+    traversability = observation['traversability_mask']
+    
+    own_agent_count = jnp.sum(traversability == -1)
+    obstacle_count = jnp.sum(traversability == 1) 
+    free_space_count = jnp.sum(traversability == 0)
+    
+    print(f"    Partition {partition_idx} updated traversability:")
+    print(f"      Own agent (-1): {own_agent_count}")
+    print(f"      Obstacles (1): {obstacle_count}")
+    print(f"      Free space (0): {free_space_count}")
+    
+    expected_other_agents = len(active_partitions) - 1
+    
+    if own_agent_count == 0:
+        print(f"      ❌ WARNING: No own agent visible!")
+    elif own_agent_count > 1:
+        print(f"      ❌ WARNING: Multiple own agent positions!")
+    else:
+        print(f"      ✅ Own agent properly visible")
+    
+    if obstacle_count < expected_other_agents:
+        print(f"      ❌ WARNING: Expected {expected_other_agents} other agents as obstacles, only {obstacle_count} found")
+    else:
+        print(f"      ✅ Other agents visible as obstacles")
+    
+    # Check if it's still all zeros (the original problem)
+    if obstacle_count == 0 and own_agent_count == 0:
+        print(f"      ❌ CRITICAL: Traversability mask still all zeros after sync!")
+        return False
+    else:
+        print(f"      ✅ Traversability mask properly updated")
+        return True
