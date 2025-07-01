@@ -24,6 +24,8 @@ import pygame as pg
 
 from llm.session_manager_llm import SessionManager
 from llm.prompt_manager_llm import PromptManager 
+import os
+
 
 
 def encode_image(cv_image):
@@ -230,7 +232,6 @@ def create_sub_task_dumpability_mask_64x64(dumpability_mask_data: jnp.ndarray,
 
     return sub_task_mask
 
-
 def verify_maps_override(timestep, sub_task_target_map_data, sub_task_traversability_mask_data, 
                          sub_task_padding_mask_data, sub_task_dumpability_mask_data,
                          sub_task_dumpability_init_mask_data, sub_task_action_map_data):
@@ -371,8 +372,6 @@ def extract_python_format_data(llm_response_text):
     
     raise ValueError("Could not extract valid Python data with tuples from LLM response")
 
-
-
 def is_valid_region_list(var):
     """
     Checks if the variable is a list of dictionaries with the required structure.
@@ -445,25 +444,106 @@ def is_valid_region_list(var):
     
     return True
 
-def compute_manual_subtasks(NUM_PARTITIONS):
-    if NUM_PARTITIONS == 1:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
-        ]
-    elif NUM_PARTITIONS == 2:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
-        ]
-    elif NUM_PARTITIONS == 4:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
-            {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
-            {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
-        ]
+def compute_manual_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS):
+
+    if ORIGINAL_MAP_SIZE not in [64, 128]:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}. Must be 64 or 128.")
+    elif ORIGINAL_MAP_SIZE == 64:
+        if NUM_PARTITIONS == 1:
+            # Single partition for 64x64 map
+            sub_tasks_manual = [
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+            ]
+            # Single partition for 64x64 map (different start position)
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            # ]
+
+            # Single partition for 64x64 map (different region, square centered in middle)
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (22, 22, 41, 41), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            # ]
+
+            
+        elif NUM_PARTITIONS == 2:
+            # Horizontal partitioning for 64x64 map
+            sub_tasks_manual = [
+                {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
+            ]
+
+            # Vertical partitioning for 64x64 map
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (0, 0, 63, 31), 'start_pos': (32, 16), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 1, 'region_coords': (0, 32, 63, 63), 'start_pos': (32, 48), 'start_angle': 0, 'status': 'pending'}
+            # ]
+
+            # Vertical partitioning with overlapping
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (0, 0, 63, 35), 'start_pos': (32, 18), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 1, 'region_coords': (0, 28, 63, 63), 'start_pos': (32, 46), 'start_angle': 0, 'status': 'pending'}
+            # ]
+
+            # Random partitioning for 64x64 map
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (0, 0, 32, 32), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 1, 'region_coords': (0, 33, 63, 63), 'start_pos': (40, 40), 'start_angle': 0, 'status': 'pending'},
+            # ]
+            
+        elif NUM_PARTITIONS == 4:
+            # 4 partitions for 64x64 map (2x2 grid)
+            sub_tasks_manual = [
+                {'id': 0, 'region_coords': (0, 0, 31, 31), 'start_pos': (16, 16), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (0, 32, 31, 63), 'start_pos': (16, 48), 'start_angle': 0, 'status': 'pending'},
+                {'id': 2, 'region_coords': (32, 0, 63, 31), 'start_pos': (48, 16), 'start_angle': 0, 'status': 'pending'},
+                {'id': 3, 'region_coords': (32, 32, 63, 63), 'start_pos': (48, 48), 'start_angle': 0, 'status': 'pending'}
+            ]
+        else:
+            raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+    
+    elif ORIGINAL_MAP_SIZE == 128:
+        if NUM_PARTITIONS == 1:
+            sub_tasks_manual = [
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
+            ]
+        elif NUM_PARTITIONS == 2:
+            #     sub_tasks_manual = [
+            #         {
+            #             "id": 0,
+            #             "region_coords": (30, 0, 93, 63),
+            #             "start_pos": (45, 45),
+            #             "start_angle": 0,
+            #             "status": "pending"
+            #         },
+            #         {
+            #             "id": 1,
+            #             "region_coords": (64, 32, 127, 95),
+            #             "start_pos": (80, 50),
+            #             "start_angle": 0,
+            #             "status": "pending"
+            #         }
+            # ]
+        
+            sub_tasks_manual = [
+                    {
+                        "id": 0,
+                        "region_coords": (20, 15, 83, 78),
+                        "start_pos": (45, 80),
+                        "start_angle": 0,
+                        "status": "pending"
+                    },
+                    {
+                        "id": 1,
+                        "region_coords": (60, 10, 123, 73),
+                        "start_pos": (85, 50),
+                        "start_angle": 0,
+                        "status": "pending"
+                    }
+                    ]
     else:
-        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
+
+
     return sub_tasks_manual
 
 def check_overall_completion(partition_states, env_manager):
@@ -925,77 +1005,7 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
 
     action_size = 7
         
-    # Define partitions based on map size
-    if ORIGINAL_MAP_SIZE == 64:
-        # single partition for 64x64 map
-        # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        # ]
-
-        # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (22, 22, 41, 41), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        # ]
-        # horizontal partitioning for 64x64 map
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 31, 63), 'start_pos': (16, 32), 'start_angle': 0, 'status': 'pending'},
-            {'id': 1, 'region_coords': (32, 0, 63, 63), 'start_pos': (48, 32), 'start_angle': 0, 'status': 'pending'}
-        ]
-        # vertical partitioning for 64x64 map
-        # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (0, 0, 63, 31), 'start_pos': (32, 16), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 1, 'region_coords': (0, 32, 63, 63), 'start_pos': (32, 48), 'start_angle': 0, 'status': 'pending'}
-        # ]
-        # vertical partitioning with overlapping
-        # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (0, 0, 63, 35), 'start_pos': (32, 18), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 1, 'region_coords': (0, 28, 63, 63), 'start_pos': (32, 46), 'start_angle': 0, 'status': 'pending'}
-        # ]
-        # random partitioning for 64x64 map
-        # sub_tasks_manual = [
-        #     {'id': 0, 'region_coords': (0, 0, 32, 32), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-        #     {'id': 1, 'region_coords': (0, 33, 63, 63), 'start_pos': (40, 40), 'start_angle': 0, 'status': 'pending'},
-        # ]
-    elif ORIGINAL_MAP_SIZE == 128:
-        sub_tasks_manual = [
-            {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
-            # Add more partitions as needed
-        ]
-
-    #     sub_tasks_manual = [
-    #         {
-    #             "id": 0,
-    #             "region_coords": (30, 0, 93, 63),
-    #             "start_pos": (45, 45),
-    #             "start_angle": 0,
-    #             "status": "pending"
-    #         },
-    #         {
-    #             "id": 1,
-    #             "region_coords": (64, 32, 127, 95),
-    #             "start_pos": (80, 50),
-    #             "start_angle": 0,
-    #             "status": "pending"
-    #         }
-    # ]
-        
-        sub_tasks_manual = [
-                {
-                    "id": 0,
-                    "region_coords": (20, 15, 83, 78),
-                    "start_pos": (45, 80),
-                    "start_angle": 0,
-                    "status": "pending"
-                },
-                {
-                    "id": 1,
-                    "region_coords": (60, 10, 123, 73),
-                    "start_pos": (85, 50),
-                    "start_angle": 0,
-                    "status": "pending"
-                }
-                ]
-    else:
-        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
+    sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
 
     # Initialize LLM agent with fixed session management
     (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, 
@@ -1690,23 +1700,9 @@ def debug_agent_visibility(partition_states, env_manager):
                 print(f"  Overlap with partition {other_idx}: {overlap_obstacles} obstacles in overlap region")
 
 
-import os
-
-# def save_traversability_mask(traversability_mask, output_path, partition_index, map_step):
-#     """
-#     Save the traversability mask as an image.
-#     """
-#     os.makedirs(output_path, exist_ok=True)  # <-- this ensures the folder exists
-#     output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
-#     mask_image = (traversability_mask * 255).astype(np.uint8)
-#     cv2.imwrite(output_path, mask_image)
-#     print(f"Traversability mask saved to {output_path}")
 
 
 def save_traversability_mask(traversability_mask, output_path, partition_index, map_step=None):
-    import os
-    import cv2
-    import numpy as np
 
     os.makedirs(output_path, exist_ok=True)
     output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
@@ -1761,27 +1757,6 @@ def annotate_with_diff_highlight(mask, label, reference_mask=None):
         annotated[diff] = [0, 255, 255]
 
     return annotated
-# def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0, after_mask1,
-#                                         output_dir, partition_index, other_partition_index, map_step):
-#     """
-#     Save a single 2×2 grid image showing before/after traversability masks for two partitions.
-#     """
-#     os.makedirs(output_dir, exist_ok=True)
-#     output_path = f"{output_dir}/compare_p{partition_index}_step{map_step}.png"
-
-#     # Convert masks to RGB and annotate
-#     before_rgb_0 = annotate(mask_to_rgb(before_mask0), f"Before Sync P{partition_index}")
-#     before_rgb_1 = annotate(mask_to_rgb(before_mask1), f"Before Sync P{other_partition_index}")
-#     after_rgb_0  = annotate(mask_to_rgb(after_mask0),  f"After Sync P{partition_index}")
-#     after_rgb_1  = annotate(mask_to_rgb(after_mask1),  f"After Sync P{other_partition_index}")
-
-#     # Create 2x2 grid: two rows of horizontal images
-#     top_row = np.concatenate([before_rgb_0, before_rgb_1], axis=1)
-#     bottom_row = np.concatenate([after_rgb_0, after_rgb_1], axis=1)
-#     grid_image = np.concatenate([top_row, bottom_row], axis=0)
-
-#     cv2.imwrite(output_path, grid_image)
-#     print(f"2x2 Comparison image saved to {output_path}")
 
 def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0, after_mask1,
                                         output_dir, partition_index, other_partition_index, map_step):
@@ -1803,77 +1778,6 @@ def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0,
 
     cv2.imwrite(output_path, grid_image)
     print(f"2x2 Comparison with diff saved to {output_path}")
-
-# def reconstruct_observation_from_synced_state(timestep):
-#     """
-#     Reconstruct observation dictionary from the current (synced) state.
-#     This ensures observation matches the internal synced state.
-#     """
-#     state = timestep.state
-    
-#     # Reconstruct the observation dictionary
-#     observation = {}
-    
-#     # Extract all the maps from the synced world state
-#     observation['traversability_mask'] = state.world.traversability_mask.map[0]
-#     observation['action_map'] = state.world.action_map.map[0]
-#     observation['target_map'] = state.world.target_map.map[0]
-#     observation['dumpability_mask'] = state.world.dumpability_mask.map[0]
-#     observation['padding_mask'] = state.world.padding_mask.map[0]
-#     observation['dumpability_mask_init'] = state.world.dumpability_mask_init.map[0]
-    
-#     # Agent state information
-#     # observation['agent_pos'] = state.agent.agent_state.pos_base[0]
-#     # observation['agent_angle'] = state.agent.agent_state.angle_base
-#     # observation['loaded'] = state.agent.agent_state.loaded
-#     # observation['bucket_angle'] = state.agent.agent_state.angle_bucket
-    
-#     # Local maps (if they exist)
-#     if hasattr(state.world, 'local_map_action_neg'):
-#         observation['local_map_action_neg'] = state.world.local_map_action_neg.map[0]
-#     if hasattr(state.world, 'local_map_action_pos'):
-#         observation['local_map_action_pos'] = state.world.local_map_action_pos.map[0]
-#     if hasattr(state.world, 'local_map_target_neg'):
-#         observation['local_map_target_neg'] = state.world.local_map_target_neg.map[0]
-#     if hasattr(state.world, 'local_map_target_pos'):
-#         observation['local_map_target_pos'] = state.world.local_map_target_pos.map[0]
-#     if hasattr(state.world, 'local_map_dumpability'):
-#         observation['local_map_dumpability'] = state.world.local_map_dumpability.map[0]
-#     if hasattr(state.world, 'local_map_obstacles'):
-#         observation['local_map_obstacles'] = state.world.local_map_obstacles.map[0]
-    
-#     # Add any other fields that your RL model expects
-#     # You might need to check the original observation to see what else is included
-    
-#     return observation
-
-
-# Alternative approach - Force observation refresh through environment
-def refresh_observation_through_environment(env_manager, partition_idx, partition_states):
-    """
-    Alternative: Force the environment to regenerate the observation.
-    """
-    # Get the current synced state
-    current_state = partition_states[partition_idx]['timestep'].state
-    
-    # Create a new timestep with refreshed observation
-    # This depends on your environment's API
-    if hasattr(env_manager.small_env, 'get_observation'):
-        # If your environment has a method to get observation from state
-        fresh_observation = env_manager.small_env.get_observation(current_state)
-        
-        # Update the timestep
-        updated_timestep = partition_states[partition_idx]['timestep']._replace(
-            observation=fresh_observation
-        )
-        partition_states[partition_idx]['timestep'] = updated_timestep
-        env_manager.small_env_timestep = updated_timestep
-        
-        return fresh_observation
-    else:
-        # Fallback to manual reconstruction
-        return reconstruct_observation_from_synced_state(partition_states[partition_idx]['timestep'])
-
 
 # Debug function to verify sync worked
 def verify_observation_includes_other_agents(observation, partition_idx, active_partitions):
