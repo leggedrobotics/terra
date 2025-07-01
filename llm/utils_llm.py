@@ -46,8 +46,6 @@ def save_csv(output_file, action_list, cumulative_rewards):
 
     print(f"Results saved to {output_file}")
 
-
-
 def create_sub_task_target_map_64x64(global_target_map_data: jnp.ndarray,
                                      region_coords: tuple[int, int, int, int]) -> jnp.ndarray:
     """
@@ -507,39 +505,35 @@ def compute_manual_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS):
                 {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (25, 20), 'start_angle': 0, 'status': 'pending'},
             ]
         elif NUM_PARTITIONS == 2:
-            #     sub_tasks_manual = [
-            #         {
-            #             "id": 0,
-            #             "region_coords": (30, 0, 93, 63),
-            #             "start_pos": (45, 45),
-            #             "start_angle": 0,
-            #             "status": "pending"
-            #         },
-            #         {
-            #             "id": 1,
-            #             "region_coords": (64, 32, 127, 95),
-            #             "start_pos": (80, 50),
-            #             "start_angle": 0,
-            #             "status": "pending"
-            #         }
+            # Partition for starting map seed ?, DATASET_SIZE = ?
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (30, 0, 93, 63), 'start_pos': (45, 45), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 1, 'region_coords': (64, 32, 127, 95), 'start_pos': (80, 50), 'start_angle': 0, 'status': 'pending'}
             # ]
-        
+
+            # Partition for starting map seed 30, DATASET_SIZE = 100
             sub_tasks_manual = [
-                    {
-                        "id": 0,
-                        "region_coords": (20, 15, 83, 78),
-                        "start_pos": (45, 80),
-                        "start_angle": 0,
-                        "status": "pending"
-                    },
-                    {
-                        "id": 1,
-                        "region_coords": (60, 10, 123, 73),
-                        "start_pos": (85, 50),
-                        "start_angle": 0,
-                        "status": "pending"
-                    }
-                    ]
+                {'id': 0, 'region_coords': (20, 15, 83, 78), 'start_pos': (45, 80), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (60, 10, 123, 73), 'start_pos': (85, 50), 'start_angle': 0, 'status': 'pending'}
+            ]
+        elif NUM_PARTITIONS == 4:
+            # 4 partitions for 128x128 map (2x2 grid)
+            sub_tasks_manual = [
+                {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (32, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (32, 96), 'start_angle': 0, 'status': 'pending'},
+                {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (96, 32), 'start_angle': 0, 'status': 'pending'},
+                {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (96, 96), 'start_angle': 0, 'status': 'pending'}
+            ]
+
+            # 4 partitions for 128x128 map (2x2 grid) with different start positions
+            # sub_tasks_manual = [
+            #     {'id': 0, 'region_coords': (0, 0, 63, 63), 'start_pos': (20, 20), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 1, 'region_coords': (0, 64, 63, 127), 'start_pos': (20, 44), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 2, 'region_coords': (64, 0, 127, 63), 'start_pos': (44, 20), 'start_angle': 0, 'status': 'pending'},
+            #     {'id': 3, 'region_coords': (64, 64, 127, 127), 'start_pos': (44, 44), 'start_angle': 0, 'status': 'pending'}
+            # ]         
+        else:
+            raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
     else:
         raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}")
 
@@ -952,14 +946,6 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
     parts = [text]
     
     if image is not None:
-        # # Convert the image to a format suitable for ADK
-        # import base64
-        # import cv2
-        
-        # def encode_image(cv_image):
-        #     _, buffer = cv2.imencode(".jpg", cv_image)
-        #     return base64.b64encode(buffer).decode("utf-8")
-        
         image_data = encode_image(image)
         content_image = types.Part.from_bytes(data=image_data, mime_type="image/jpeg")
         parts.append(content_image)
@@ -1023,7 +1009,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
         current_observation = env_manager.global_env.timestep.observation
         
         try:
-            import json
             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
             observation_str = json.dumps(obs_dict)
         except AttributeError:
