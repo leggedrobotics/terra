@@ -1915,13 +1915,13 @@ def reconstruct_observation_from_synced_state(timestep):
         observation[key] = value
     
     # Update the critical field with synced data
-    observation['traversability_mask'] = state.world.traversability_mask.map[0]
+    observation['traversability_mask'] = state.world.traversability_mask.map
     
     # Also update other maps that might be affected by sync
-    observation['action_map'] = state.world.action_map.map[0]
-    observation['target_map'] = state.world.target_map.map[0]
-    observation['dumpability_mask'] = state.world.dumpability_mask.map[0]
-    observation['padding_mask'] = state.world.padding_mask.map[0]
+    observation['action_map'] = state.world.action_map.map
+    observation['target_map'] = state.world.target_map.map
+    observation['dumpability_mask'] = state.world.dumpability_mask.map
+    observation['padding_mask'] = state.world.padding_mask.map
     
     # Keep local maps as-is (they might be computed differently)
     # observation['local_map_*'] fields remain unchanged
@@ -1964,3 +1964,77 @@ def verify_traversability_after_sync(observation, partition_idx, active_partitio
     else:
         print(f"      ✅ Traversability mask properly updated")
         return True
+    
+
+def debug_agent_presence_in_traversability(traversability_mask, partition_idx, step_name, active_partitions):
+    """
+    Debug function to check and print agent presence in traversability mask.
+    
+    Args:
+        traversability_mask: The traversability mask array
+        partition_idx: Current partition index
+        step_name: Name of the step (e.g., "beforeRL", "afterRL")
+        active_partitions: List of active partition indices
+    """
+    own_agent_count = np.sum(traversability_mask == -1)
+    obstacle_count = np.sum(traversability_mask == 1)
+    free_space_count = np.sum(traversability_mask == 0)
+    
+    expected_other_agents = len(active_partitions) - 1
+    
+    print(f"    🔍 DEBUG: Partition {partition_idx} traversability at {step_name}:")
+    print(f"      Own agent (-1): {own_agent_count}")
+    print(f"      Obstacles (1): {obstacle_count}")
+    print(f"      Free space (0): {free_space_count}")
+    print(f"      Expected other agents: {expected_other_agents}")
+    
+    if own_agent_count == 0:
+        print(f"      ❌ WARNING: No own agent visible!")
+    elif own_agent_count > 1:
+        print(f"      ⚠️  WARNING: Multiple own agent positions detected!")
+    else:
+        print(f"      ✅ Own agent properly visible")
+    
+    if obstacle_count == 0:
+        print(f"      ❌ No obstacles found - other agents not visible")
+    elif obstacle_count < expected_other_agents:
+        print(f"      ⚠️  Only {obstacle_count}/{expected_other_agents} other agents visible")
+    else:
+        print(f"      ✅ All other agents visible as obstacles")
+    
+    return {
+        'own_agent_count': own_agent_count,
+        'obstacle_count': obstacle_count,
+        'free_space_count': free_space_count,
+        'expected_other_agents': expected_other_agents,
+        'all_agents_visible': obstacle_count >= expected_other_agents and own_agent_count == 1
+    }
+
+def enhanced_save_traversability_mask_with_debug(traversability_mask, output_path, partition_idx, 
+                                                map_step, active_partitions, step_name=""):
+    """
+    Enhanced version of save_traversability_mask that includes debug information.
+    """
+    # Debug agent presence
+    debug_info = debug_agent_presence_in_traversability(
+        traversability_mask, partition_idx, step_name, active_partitions
+    )
+    
+    # Save the mask with debug info in filename
+    agents_status = "with_agents" if debug_info['all_agents_visible'] else "missing_agents"
+    filename = f"traversability_mask_partition_{partition_idx}_step_{map_step}_{step_name}_{agents_status}.png"
+    
+    os.makedirs(output_path, exist_ok=True)
+    full_path = os.path.join(output_path, filename)
+
+    h, w = traversability_mask.shape
+    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+
+    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red for agent occupancy
+    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White for traversable
+    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black for non-traversable
+
+    cv2.imwrite(full_path, rgb_image)
+    print(f"    Enhanced traversability mask saved to {full_path}")
+    
+    return debug_info

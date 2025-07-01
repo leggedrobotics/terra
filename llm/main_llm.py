@@ -262,17 +262,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
                                     simple_sync_overlapping_regions(partition_states, env_manager, 
                                                             other_partition_idx, partition_idx)
-                # DEBUG: Compare state vs observation
-                state_traversability = partition_state['timestep'].state.world.traversability_mask.map[0]
-                obs_traversability = partition_state['timestep'].observation['traversability_mask']
-
-                diff_count = jnp.sum(state_traversability != obs_traversability)
-                print(f"  Partition {partition_idx}: {diff_count} differences between state and observation")
-
-                if diff_count > 0:
-                    print("  ❌ CONFIRMED: Observation is stale after sync!")
-                else:
-                    print("  ✅ Observation matches synced state")
 
                 try:
                     # Set the small environment to the current partition's state
@@ -282,6 +271,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     # Get the current observation
                     #current_observation = env_manager.small_env_timestep.observation
                     current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                    #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction', partition_idx, map_step)
                     
                     # verify_traversability_after_sync(partition_state['timestep'].state.world.traversability_mask.map[0],
                     #                                 partition_idx, active_partitions)
@@ -378,8 +368,21 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     if llm_decision == "delegate_to_rl":
                         print(f"    Partition {partition_idx} - Delegating to RL agent")
                         try:
-                            current_observation = env_manager.small_env_timestep.observation
+                            #current_observation = env_manager.small_env_timestep.observation
                             #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'beforeRL', partition_idx, map_step)
+                            env_manager.add_agents_using_existing_representation(partition_states)
+
+                            current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                            #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction_beforeRL', partition_idx, map_step)
+
+                            debug_info = enhanced_save_traversability_mask_with_debug(
+                                np.array(current_observation['traversability_mask']), 
+                                'debug_traversability', 
+                                partition_idx, 
+                                map_step, 
+                                active_partitions,
+                                'beforeRL_with_agents'
+                            )
 
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
