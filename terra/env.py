@@ -192,6 +192,10 @@ class TerraEnv(NamedTuple):
         reward = state._get_reward(new_state, action)
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
+        # jax.debug.print(
+        #     "agent_state: {agent_state}",
+        #     agent_state=new_state.agent.agent_state,
+        # )
         #print agent agentstate_2
         # jax.debug.print(
         #     "agent_state_2: {agent_state_2}",
@@ -311,6 +315,7 @@ class TerraEnv(NamedTuple):
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
             "interaction_mask": state.world.interaction_mask.map,
+            "id": state.agent.agent_state.id,
         }
 
 

@@ -27,6 +27,7 @@ class AgentState(NamedTuple):
     angle_cabin: IntLowDim
     wheel_angle: IntLowDim
     loaded: IntLowDim
+    id : IntLowDim
 
 
 class Agent(NamedTuple):
@@ -95,6 +96,7 @@ class Agent(NamedTuple):
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            id=jnp.full((1,), 0, dtype=IntLowDim),  # Assuming id is initialized to 0
         )
         
         agent_state_2 = AgentState(
@@ -103,7 +105,9 @@ class Agent(NamedTuple):
             angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
             wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
             loaded=jnp.full((1,), 0, dtype=IntLowDim),
+            id=jnp.full((1,), 1, dtype=IntLowDim),  # Assuming id is initialized to 1
         )
+
 
         width = env_cfg.agent.width
         height = env_cfg.agent.height

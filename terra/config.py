@@ -194,7 +194,7 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     levels = [
         {
-            "maps_path": "trenches/easy",
+            "maps_path": "foundations",
             "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
