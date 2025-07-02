@@ -244,7 +244,7 @@ class EnvironmentsManager:
         Extract agent representation from the other partition's traversability mask.
         This preserves the exact shape and orientation as calculated by the environment.
         """
-        print(f"\nAdding agents using existing representation...")
+        #print(f"\nAdding agents using existing representation...")
         
         for target_partition_idx, target_partition_state in partition_states.items():
             if target_partition_state['status'] != 'active':
@@ -272,7 +272,7 @@ class EnvironmentsManager:
                 agent_positions = jnp.where(agent_mask)
                 
                 if len(agent_positions[0]) > 0:
-                    print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
+                    #print(f"  Found agent {other_partition_idx} with {len(agent_positions[0])} occupied cells")
                     
                     # Convert each agent cell to global coordinates, then to target local coordinates
                     other_partition = self.partitions[other_partition_idx]
@@ -305,7 +305,7 @@ class EnvironmentsManager:
                     
                     if cells_added > 0:
                         agents_added += 1
-                        print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
+                        #print(f"    ✓ Added {cells_added} cells from agent {other_partition_idx}")
             
             # Update the traversability mask if we added agents
             if agents_added > 0:
@@ -400,10 +400,10 @@ class EnvironmentsManager:
             'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
         }
         #DIAGNOSTIC: Check sub-map validity
-        print(f"=== SUB-MAP DIAGNOSTICS ===")
-        for name, map_data in sub_maps.items():
-            print(f"{name}:")
-            print(f"  Shape: {map_data.shape}")
+        # print(f"=== SUB-MAP DIAGNOSTICS ===")
+        # for name, map_data in sub_maps.items():
+        #     print(f"{name}:")
+        #     print(f"  Shape: {map_data.shape}")
         
 
         # Fix trench data shapes - remove batch dimension for single environment

@@ -374,7 +374,7 @@ class TerraEnvBatch:
     def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
 
-    @partial(jax.jit, static_argnums=(0,3,4))
+    @partial(jax.jit, static_argnums=(0,))
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey, 
           custom_pos: Optional[Tuple[int, int]] = None, 
           custom_angle: Optional[int] = None) -> State:
