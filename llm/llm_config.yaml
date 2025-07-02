@@ -1,8 +1,8 @@
 
 # Agent behavior
-force_delegate_to_rl: true      # Force delegation to RL agent for testing
+force_delegate_to_rl: false      # Force delegation to RL agent for testing
 force_delegate_to_llm: false    # Force delegation to LLM agent for testing
-llm_call_frequency: 15          # Number of steps between LLM calls
+llm_call_frequency: 5          # Number of steps between LLM calls
 
 # Partitioning settings  
 use_manual_partitioning: true   # Use manual partitioning for LLM (Master Agent)
@@ -22,3 +22,14 @@ use_display: true               # Use display for the environment
 
 # Environment settings
 original_map_size: 128          # Original map size for the environment
+
+# Intervention System Settings
+enable_intervention: true
+intervention_check_frequency: 5  # Check every N steps
+stuck_detection_window: 10        # Number of recent steps to analyze
+min_reward_threshold: 0.001       # Minimum reward expected in window
+intervention_cooldown: 3           # Minimum steps between interventions
+
+# Enhanced delegation
+enhanced_delegation_prompts: true
+include_stuck_context: true

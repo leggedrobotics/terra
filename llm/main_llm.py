@@ -50,8 +50,13 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
      USE_MANUAL_PARTITIONING, MAX_NUM_PARTITIONS, VISUALIZE_PARTITIONS,
      USE_IMAGE_PROMPT , APP_NAME, USER_ID, SESSION_ID,
      GRID_RENDERING, ORIGINAL_MAP_SIZE, 
-     USE_RENDERING, USE_DISPLAY) = setup_experiment_config()
-    
+     USE_RENDERING, USE_DISPLAY,
+    ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD) = setup_experiment_config()
+
+    # Track intervention statistics
+    total_interventions = 0
+    partition_interventions = {}
+
     agent_checkpoint_path = run
     model_params = None
     config = None
@@ -290,6 +295,27 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         FORCE_DELEGATE_TO_LLM is False:
 
                         print("    Calling LLM agent for decision...")
+
+                        # Check if intervention is enabled and needed
+                        needs_intervention = False
+                        stuck_info = {'is_stuck': False, 'reason': 'not_checked'}
+
+                        if ENABLE_INTERVENTION:
+                            stuck_info = detect_stuck_excavator(
+                                partition_state,
+                                threshold_steps=STUCK_WINDOW,
+                                min_reward_threshold=MIN_REWARD
+                            )
+                            needs_intervention = should_intervene(
+                                partition_state, 
+                                active_partitions,
+                                intervention_frequency=INTERVENTION_FREQUENCY
+                            )
+    
+                            if needs_intervention:
+                                print(f"    🚨 Partition {partition_idx} appears stuck: {stuck_info['reason']}")
+                                print(f"    Details: {stuck_info['details']}")
+
                         try:
                             obs_dict = {k: v.tolist() for k, v in current_observation.items()}
                             observation_str = json.dumps(obs_dict)
@@ -298,16 +324,28 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             # Handle the case where current_observation is not a dictionary
                             observation_str = str(current_observation)
 
-                        if USE_IMAGE_PROMPT:
-                            delegation_prompt = get_delegation_prompt(prompts, "See image", 
-                                                                    context=f"Map {current_map_index}, Step {map_step}")
+                        # Enhanced context with stuck information
+                        base_context = f"Map {current_map_index}, Step {map_step}"
+                        if needs_intervention and ENABLE_INTERVENTION:  # ← USED HERE
+                            stuck_context = f" | STUCK: {stuck_info['reason']} - {stuck_info['details']}"
+                            context = base_context + stuck_context
                         else:
-                            delegation_prompt = get_delegation_prompt(prompts, observation_str, 
-                                                                    context=f"Map {current_map_index}, Step {map_step}")
+                            context = base_context
 
+                        if USE_IMAGE_PROMPT:
+                            delegation_prompt = get_delegation_prompt(
+                                prompts, 
+                                "See image", 
+                                context=context
+                            )
+                        else:
+                            delegation_prompt = get_delegation_prompt(
+                                prompts, 
+                                observation_str, 
+                                context=context
+                            )
                         delegation_session_id = f"{SESSION_ID}_map_{current_map_index}_delegation"  # This creates "session_001_map_0_delegation"
                         delegation_user_id = f"{USER_ID}_delegation"  # This creates "user_1_delegation"
-
 
                         try:
                             if USE_IMAGE_PROMPT:
@@ -338,13 +376,24 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             elif "delegate_to_llm" in llm_response_text.lower():
                                 llm_decision = "delegate_to_llm"
                                 print("Delegating to LLM agent based on LLM response.")
+                            elif "intervention" in llm_response_text.lower():
+                                llm_decision = "intervention"
+                                print("INTERVENTION mode activated based on LLM response.")
                             else:
-                                llm_decision = "STOP"                    
+                                # Default fallback
+                                if needs_intervention:
+                                    llm_decision = "intervention"
+                                    print("INTERVENTION mode activated due to detected stuck condition.")
+                                else:
+                                    llm_decision = "delegate_to_rl"           
 
                         except Exception as adk_err:
                             print(f"Error during ADK agent communication: {adk_err}")
-                            print("Defaulting to fallback action due to ADK error.")
-                            llm_decision = "fallback" # Indicate fallback needed
+                            if needs_intervention:
+                                llm_decision = "intervention"
+                                print("INTERVENTION mode activated due to communication error and stuck condition.")
+                            else:
+                                llm_decision = "delegate_to_rl"
 
                     if FORCE_DELEGATE_TO_LLM:
                         llm_decision = "delegate_to_llm"
@@ -409,6 +458,33 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
                         action_rl = jnp.array([action_output], dtype=jnp.int32)
                         map_action_list.append(action_rl)
+                    
+                    elif llm_decision == "intervention" and ENABLE_INTERVENTION:
+                        print(f"    Partition {partition_idx} - INTERVENTION MODE")
+                        total_interventions += 1
+                        if partition_idx not in partition_interventions:
+                            partition_interventions[partition_idx] = 0
+                        partition_interventions[partition_idx] += 1
+
+                        try:
+                            stuck_info = detect_stuck_excavator(
+                                partition_state,
+                                threshold_steps=STUCK_WINDOW,
+                                min_reward_threshold=MIN_REWARD
+                            )
+                            action_rl = get_intervention_action(partition_state, stuck_info, action_type)
+                            partition_state['actions'].append(action_rl)
+                            map_action_list.append(action_rl)
+                            
+                            # Log intervention details
+                            print(f"    🔧 Intervention #{total_interventions} for partition {partition_idx}")
+                            print(f"    🔧 Reason: {stuck_info['reason']} | Action: {action_rl}")
+                        except Exception as intervention_error:
+                            print(f"    ERROR during intervention for partition {partition_idx}: {intervention_error}")
+                            # Fallback to a safe action
+                            action_rl = jnp.array([0], dtype=jnp.int32)  # Forward movement
+                            partition_state['actions'].append(action_rl)
+                            map_action_list.append(action_rl)
                     
                     else:
                         print("    Master Agent stop.")
@@ -640,6 +716,17 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
         "dig_tiles_per_target_map_init": dig_tiles_per_target_map_init,
         "dug_tiles_per_action_map": dug_tiles_per_action_map,
     }
+
+        # Print intervention statistics
+    if ENABLE_INTERVENTION and total_interventions > 0:  # ← USED HERE
+        print(f"\n🔧 INTERVENTION STATISTICS:")
+        print(f"   Total interventions: {total_interventions}")
+        print(f"   Interventions per partition: {partition_interventions}")
+        print(f"   Intervention rate: {total_interventions/global_step:.1%}")
+        
+        # Save intervention stats
+        info["total_interventions"] = total_interventions
+        info["partition_interventions"] = partition_interventions
 
     return info
 

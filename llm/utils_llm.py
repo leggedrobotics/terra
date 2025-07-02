@@ -1947,7 +1947,11 @@ def load_experiment_constants(config_file="llm/llm_config.yaml"):
         'grid_rendering': True,
         'original_map_size': 128,
         'use_rendering': True,
-        'use_display': True
+        'use_display': True,
+        'enable_intervention': True,
+        'intervention_check_frequency': 15,
+        'stuck_detection_window': 10,
+        'min_reward_threshold': 0.001
     }
     
     # Try to load from YAML file
@@ -2004,5 +2008,181 @@ def setup_experiment_config(config_file="llm/llm_config.yaml"):
         constants.grid_rendering,           # GRID_RENDERING
         constants.original_map_size,        # ORIGINAL_MAP_SIZE
         constants.use_rendering,            # USE_RENDERING
-        constants.use_display               # USE_DISPLAY
+        constants.use_display,               # USE_DISPLAY
+        constants.enable_intervention,
+        constants.intervention_check_frequency,
+        constants.stuck_detection_window,
+        constants.min_reward_threshold
     )
+
+def detect_stuck_excavator(partition_state, threshold_steps=10, min_reward_threshold=0.001):
+    """
+    Detect if an excavator is stuck based on recent performance.
+    
+    Args:
+        partition_state: Current partition state dictionary
+        threshold_steps: Number of recent steps to analyze
+        min_reward_threshold: Minimum reward expected in the period
+    
+    Returns:
+        dict: Stuck detection result with details
+    """
+    step_count = partition_state['step_count']
+    rewards = partition_state['rewards']
+    actions = partition_state['actions']
+    
+    # Need minimum steps to evaluate
+    if step_count < threshold_steps:
+        return {
+            'is_stuck': False,
+            'reason': 'insufficient_data',
+            'details': f'Only {step_count} steps, need {threshold_steps}'
+        }
+    
+    # Analyze recent performance
+    recent_rewards = rewards[-threshold_steps:] if len(rewards) >= threshold_steps else rewards
+    recent_actions = actions[-threshold_steps:] if len(actions) >= threshold_steps else actions
+    
+    # Check 1: Very low or negative rewards
+    total_recent_reward = sum(recent_rewards)
+    if total_recent_reward < min_reward_threshold:
+        return {
+            'is_stuck': True,
+            'reason': 'low_reward',
+            'details': f'Total reward in last {len(recent_rewards)} steps: {total_recent_reward:.4f}'
+        }
+    
+    # Check 2: Repetitive actions (agent going in circles)
+    if len(recent_actions) >= 6:
+        action_sequence = [int(a[0]) if hasattr(a, '__getitem__') else int(a) for a in recent_actions[-6:]]
+        # Check for simple repetitive patterns
+        if len(set(action_sequence)) <= 2:  # Only using 2 or fewer different actions
+            return {
+                'is_stuck': True,
+                'reason': 'repetitive_actions',
+                'details': f'Recent actions: {action_sequence}'
+            }
+    
+    # Check 3: No progress (consistently getting 0 rewards)
+    zero_reward_count = sum(1 for r in recent_rewards if abs(r) < 0.0001)
+    if zero_reward_count >= threshold_steps * 0.8:  # 80% of recent steps had no reward
+        return {
+            'is_stuck': True,
+            'reason': 'no_progress',
+            'details': f'{zero_reward_count}/{len(recent_rewards)} recent steps had zero reward'
+        }
+    
+    return {
+        'is_stuck': False,
+        'reason': 'performing_well',
+        'details': f'Recent reward: {total_recent_reward:.4f}, unique actions: {len(set([int(a[0]) if hasattr(a, "__getitem__") else int(a) for a in recent_actions]))}'
+    }
+
+def get_intervention_action(partition_state, stuck_info, action_type):
+    """
+    Get an intervention action to help unstuck the agent.
+    
+    Args:
+        partition_state: Current partition state
+        stuck_info: Result from detect_stuck_excavator()
+        action_type: Action type class (TrackedAction or WheeledAction)
+    
+    Returns:
+        jnp.array: Action to take
+    """
+    # Import action types
+    from terra.actions import TrackedActionType, WheeledActionType
+    
+    # Determine available actions based on action type
+    if action_type.__name__ == 'TrackedAction':
+        FORWARD = TrackedActionType.FORWARD
+        BACKWARD = TrackedActionType.BACKWARD
+        DO = TrackedActionType.DO
+        turn_actions = []  # Tracked vehicles don't have turn actions
+    else:  # WheeledAction
+        FORWARD = WheeledActionType.FORWARD
+        BACKWARD = WheeledActionType.BACKWARD
+        CLOCK = WheeledActionType.CLOCK
+        ANTICLOCK = WheeledActionType.ANTICLOCK
+        DO = WheeledActionType.DO
+        turn_actions = [CLOCK, ANTICLOCK]
+    
+    # Get recent actions to avoid repeating them
+    recent_actions = partition_state['actions'][-5:] if len(partition_state['actions']) >= 5 else partition_state['actions']
+    recent_action_values = [int(a[0]) if hasattr(a, '__getitem__') else int(a) for a in recent_actions]
+    
+    intervention_action = None
+    
+    if stuck_info['reason'] == 'repetitive_actions':
+        # Agent is repeating actions - try something different
+        print(f"    🔧 INTERVENTION: Breaking repetitive pattern")
+        
+        # If mostly moving forward/backward, try turning (for wheeled) or DO action
+        if FORWARD in recent_action_values or BACKWARD in recent_action_values:
+            if turn_actions and CLOCK not in recent_action_values:
+                intervention_action = CLOCK
+            elif turn_actions and ANTICLOCK not in recent_action_values:
+                intervention_action = ANTICLOCK
+            else:
+                intervention_action = DO  # Try digging/dumping
+        else:
+            # Try moving if not moving recently
+            intervention_action = FORWARD
+    
+    elif stuck_info['reason'] == 'low_reward' or stuck_info['reason'] == 'no_progress':
+        # Agent making no progress - try strategic actions
+        print(f"    🔧 INTERVENTION: Addressing low progress")
+        
+        # Cycle through: turn -> move -> dig -> turn
+        step_in_cycle = partition_state['step_count'] % 4
+        
+        if step_in_cycle == 0 and turn_actions:
+            intervention_action = CLOCK
+        elif step_in_cycle == 1:
+            intervention_action = FORWARD
+        elif step_in_cycle == 2:
+            intervention_action = DO
+        else:
+            if turn_actions:
+                intervention_action = ANTICLOCK
+            else:
+                intervention_action = BACKWARD
+    
+    else:
+        # Default intervention - try a different direction
+        print(f"    🔧 INTERVENTION: General unstuck attempt")
+        if turn_actions:
+            intervention_action = CLOCK  # Turn to face new direction
+        else:
+            intervention_action = BACKWARD  # Back up
+    
+    # Convert to proper format
+    intervention_action_val = int(intervention_action)
+    print(f"    🔧 INTERVENTION ACTION: {intervention_action_val} (reason: {stuck_info['reason']})")
+    
+    return jnp.array([intervention_action_val], dtype=jnp.int32)
+
+
+def should_intervene(partition_state, active_partitions, intervention_frequency=15):
+    """
+    Decide if intervention should be considered for this partition.
+    
+    Args:
+        partition_state: Current partition state
+        active_partitions: List of active partitions
+        intervention_frequency: How often to check for intervention
+    
+    Returns:
+        bool: True if intervention should be considered
+    """
+    # Only check every N steps to avoid over-intervening
+    if partition_state['step_count'] % intervention_frequency != 0:
+        return False
+    
+    # Don't intervene too early
+    if partition_state['step_count'] < 10:
+        return False
+    
+    # Check if stuck
+    stuck_info = detect_stuck_excavator(partition_state)
+    return stuck_info['is_stuck']
