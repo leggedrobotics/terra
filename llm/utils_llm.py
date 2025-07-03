@@ -968,14 +968,19 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
 
 def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
-                                  USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4):
+                                  USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4, USE_RANDOM_PARTITIONING=False, sub_task_seed=58):
     """
     Setup_partitions_and_llm with proper session management.
     """
 
     action_size = 7
-        
-    sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
+    
+    if USE_MANUAL_PARTITIONING:
+        sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
+    elif USE_RANDOM_PARTITIONING:
+        sub_tasks_manual = compute_random_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS, seed=sub_task_seed)
+    else:
+        sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
 
     # Initialize LLM agent with fixed session management
     (prompts, llm_query, runner_partitioning, runner_delegation, prev_actions, session_manager) = init_llms(
@@ -986,8 +991,8 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     sub_tasks_llm = []
     
     # ALWAYS initialize partitions - either manual or LLM-generated
-    if USE_MANUAL_PARTITIONING:
-        print("Using manually defined sub-tasks.")
+    if USE_MANUAL_PARTITIONING or USE_RANDOM_PARTITIONING:
+        print("Using manually or random defined sub-tasks.")
         env_manager.initialize_with_fixed_overlaps(sub_tasks_manual)
     else:
         print("Calling LLM agent for partitioning decision...")
@@ -1430,7 +1435,8 @@ def load_experiment_constants(config_file="llm/llm_config.yaml"):
         'enable_intervention': True,
         'intervention_check_frequency': 15,
         'stuck_detection_window': 10,
-        'min_reward_threshold': 0.001
+        'min_reward_threshold': 0.001,
+        'use_random_partitioning': False
     }
     
     # Try to load from YAML file
@@ -1491,7 +1497,8 @@ def setup_experiment_config(config_file="llm/llm_config.yaml"):
         constants.enable_intervention,
         constants.intervention_check_frequency,
         constants.stuck_detection_window,
-        constants.min_reward_threshold
+        constants.min_reward_threshold,
+        constants.use_random_partitioning,  # USE_RANDOM_PARTITIONING
     )
 
 def detect_stuck_excavator(partition_state, threshold_steps=10, min_reward_threshold=0.001):
@@ -1664,3 +1671,154 @@ def should_intervene(partition_state, active_partitions, intervention_frequency=
     # Check if stuck
     stuck_info = detect_stuck_excavator(partition_state)
     return stuck_info['is_stuck']
+
+import random
+import jax.numpy as jnp
+
+def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
+    """
+    Compute random subtasks by choosing random vertical or horizontal partition lines.
+    
+    Args:
+        ORIGINAL_MAP_SIZE: Size of the original map (64 or 128)
+        NUM_PARTITIONS: Number of partitions (1, 2, or 4)
+        seed: Random seed for reproducibility
+    
+    Returns:
+        List of partition dictionaries with same format as manual subtasks
+    """
+    if seed is not None:
+        random.seed(seed)
+    
+    if ORIGINAL_MAP_SIZE not in [64, 128]:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}. Must be 64 or 128.")
+    
+    if NUM_PARTITIONS not in [1, 2, 4]:
+        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+    
+    # Single partition - return full map
+    if NUM_PARTITIONS == 1:
+        center_x = ORIGINAL_MAP_SIZE // 2
+        center_y = ORIGINAL_MAP_SIZE // 2
+        return [
+            {
+                'id': 0, 
+                'region_coords': (0, 0, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1), 
+                'start_pos': (center_y, center_x), 
+                'start_angle': 0, 
+                'status': 'pending'
+            }
+        ]
+    
+    # Two partitions - random vertical or horizontal split
+    elif NUM_PARTITIONS == 2:
+        # Choose random orientation
+        is_vertical = random.choice([True, False])
+        
+        if is_vertical:
+            # Vertical split - choose random x coordinate
+            # Ensure both partitions have reasonable size (at least 20% of map width)
+            min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+            max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+            split_x = random.randint(min_split, max_split)
+            
+            # Calculate start positions
+            start_y = ORIGINAL_MAP_SIZE // 2
+            start_x1 = split_x // 2
+            start_x2 = split_x + (ORIGINAL_MAP_SIZE - split_x) // 2
+            
+            sub_tasks = [
+                {
+                    'id': 0,
+                    'region_coords': (0, 0, ORIGINAL_MAP_SIZE - 1, split_x - 1),
+                    'start_pos': (start_y, start_x1),
+                    'start_angle': 0,
+                    'status': 'pending'
+                },
+                {
+                    'id': 1,
+                    'region_coords': (0, split_x, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+                    'start_pos': (start_y, start_x2),
+                    'start_angle': 0,
+                    'status': 'pending'
+                }
+            ]
+        else:
+            # Horizontal split - choose random y coordinate
+            min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+            max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+            split_y = random.randint(min_split, max_split)
+            
+            # Calculate start positions
+            start_x = ORIGINAL_MAP_SIZE // 2
+            start_y1 = split_y // 2
+            start_y2 = split_y + (ORIGINAL_MAP_SIZE - split_y) // 2
+            
+            sub_tasks = [
+                {
+                    'id': 0,
+                    'region_coords': (0, 0, split_y - 1, ORIGINAL_MAP_SIZE - 1),
+                    'start_pos': (start_y1, start_x),
+                    'start_angle': 0,
+                    'status': 'pending'
+                },
+                {
+                    'id': 1,
+                    'region_coords': (split_y, 0, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+                    'start_pos': (start_y2, start_x),
+                    'start_angle': 0,
+                    'status': 'pending'
+                }
+            ]
+        
+        return sub_tasks
+    
+    # Four partitions - create 2x2 grid with random split lines
+    elif NUM_PARTITIONS == 4:
+        # Choose two random split lines (one vertical, one horizontal)
+        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        
+        split_x = random.randint(min_split, max_split)
+        split_y = random.randint(min_split, max_split)
+        
+        # Calculate start positions for each quadrant
+        start_x1 = split_x // 2
+        start_x2 = split_x + (ORIGINAL_MAP_SIZE - split_x) // 2
+        start_y1 = split_y // 2
+        start_y2 = split_y + (ORIGINAL_MAP_SIZE - split_y) // 2
+        
+        sub_tasks = [
+            {
+                'id': 0,
+                'region_coords': (0, 0, split_y - 1, split_x - 1),
+                'start_pos': (start_y1, start_x1),
+                'start_angle': 0,
+                'status': 'pending'
+            },
+            {
+                'id': 1,
+                'region_coords': (0, split_x, split_y - 1, ORIGINAL_MAP_SIZE - 1),
+                'start_pos': (start_y1, start_x2),
+                'start_angle': 0,
+                'status': 'pending'
+            },
+            {
+                'id': 2,
+                'region_coords': (split_y, 0, ORIGINAL_MAP_SIZE - 1, split_x - 1),
+                'start_pos': (start_y2, start_x1),
+                'start_angle': 0,
+                'status': 'pending'
+            },
+            {
+                'id': 3,
+                'region_coords': (split_y, split_x, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+                'start_pos': (start_y2, start_x2),
+                'start_angle': 0,
+                'status': 'pending'
+            }
+        ]
+        
+        return sub_tasks
+
+

@@ -5,7 +5,8 @@ force_delegate_to_llm: false    # Force delegation to LLM agent for testing
 llm_call_frequency: 5          # Number of steps between LLM calls
 
 # Partitioning settings  
-use_manual_partitioning: true   # Use manual partitioning for LLM (Master Agent)
+use_manual_partitioning: false   # Use manual partitioning for LLM (Master Agent)
+use_random_partitioning: true  # Use random partitioning for LLM (Master Agent)
 max_num_partitions: 2           # Maximum number of partitions for LLM (Master Agent)
 visualize_partitions: true      # Visualize partitions for LLM (Master Agent)
 use_image_prompt: true          # Use image prompt for LLM (Master Agent)

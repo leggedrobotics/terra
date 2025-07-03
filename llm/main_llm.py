@@ -42,7 +42,7 @@ from llm.env_manager_llm import EnvironmentsManager
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed, 
-                run, small_env_config=None):
+                run, current_experiment_number, small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
     """
@@ -51,7 +51,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
      USE_IMAGE_PROMPT , APP_NAME, USER_ID, SESSION_ID,
      GRID_RENDERING, ORIGINAL_MAP_SIZE, 
      USE_RENDERING, USE_DISPLAY,
-    ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD) = setup_experiment_config()
+    ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD, USE_RANDOM_PARTITIONING) = setup_experiment_config()
 
     # Track intervention statistics
     total_interventions = 0
@@ -159,6 +159,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
     episode_length = None
     move_cumsum = None
     do_cumsum = None
+    sub_task_seed = current_experiment_number
     
     screen = pg.display.get_surface()
 
@@ -185,7 +186,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
                         config, llm_model_name, llm_model_key,
                         APP_NAME, USER_ID, SESSION_ID, screen,
-                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS)
+                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS, USE_RANDOM_PARTITIONING, sub_task_seed)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
             
             if partition_states is None:
@@ -753,8 +754,10 @@ if __name__ == "__main__":
                     args.model_name, 
                     args.model_key, 
                     args.num_timesteps, 
-                    base_seed + i * 1000,  # Ensure different seeds
-                    args.run_name
+                    #base_seed + i * 1000,  # Ensure different seeds
+                    base_seed,
+                    args.run_name,
+                    i+1
                 )
         # Collect results from this experiment
         episode_done_once = info["episode_done_once"]
