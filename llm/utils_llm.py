@@ -974,11 +974,18 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
     """
 
     action_size = 7
+
+    target_map = env_manager.global_maps['target_map']
+
     
     if USE_MANUAL_PARTITIONING:
         sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
     elif USE_RANDOM_PARTITIONING:
-        sub_tasks_manual = compute_random_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS, seed=sub_task_seed)
+        #sub_tasks_manual = compute_random_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS, seed=sub_task_seed * (map_index+1))
+        sub_tasks_manual = compute_random_subtasks_validated(
+                ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS, target_map,
+                seed=sub_task_seed * (map_index+1), min_targets=1
+            )
     else:
         sub_tasks_manual = compute_manual_subtasks(ORIGINAL_MAP_SIZE, MAX_NUM_PARTITIONS)
 
@@ -1108,7 +1115,7 @@ def capture_screen(surface):
     img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     return img_array
 
-def save_video(frames, output_path, fps=1):
+def save_video(frames, output_path, fps=10):
     """Saves a list of frames as a video."""
     if len(frames) == 0:
         print("No frames to save.")
@@ -1721,8 +1728,6 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
             min_split = int(ORIGINAL_MAP_SIZE * 0.2)
             max_split = int(ORIGINAL_MAP_SIZE * 0.8)
             split_x = random.randint(min_split, max_split)
-            
-            # Calculate start positions
             start_y = ORIGINAL_MAP_SIZE // 2
             start_x1 = split_x // 2
             start_x2 = split_x + (ORIGINAL_MAP_SIZE - split_x) // 2
@@ -1748,7 +1753,7 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
             min_split = int(ORIGINAL_MAP_SIZE * 0.2)
             max_split = int(ORIGINAL_MAP_SIZE * 0.8)
             split_y = random.randint(min_split, max_split)
-            
+
             # Calculate start positions
             start_x = ORIGINAL_MAP_SIZE // 2
             start_y1 = split_y // 2
@@ -1822,3 +1827,253 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
         return sub_tasks
 
 
+def check_partition_has_targets(target_map, region_coords, min_targets=1):
+    """
+    Check if a partition region contains dig targets.
+    
+    Args:
+        target_map: Global target map (jnp.ndarray)
+        region_coords: (y_start, x_start, y_end, x_end) tuple
+        min_targets: Minimum number of dig targets required
+    
+    Returns:
+        dict: Information about targets in the partition
+    """
+    y_start, x_start, y_end, x_end = region_coords
+    
+    # Extract the region from the target map
+    region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+    region_data = target_map[region_slice]
+    
+    # Count dig targets (-1) and dump targets (1)
+    dig_targets = jnp.sum(region_data == -1)
+    dump_targets = jnp.sum(region_data == 1)
+    free_space = jnp.sum(region_data == 0)
+    
+    has_enough_targets = dig_targets >= min_targets
+    
+    return {
+        'has_targets': has_enough_targets,
+        'dig_targets': int(dig_targets),
+        'dump_targets': int(dump_targets),
+        'free_space': int(free_space),
+        'total_cells': region_data.size,
+        'region_coords': region_coords
+    }
+
+def filter_empty_partitions(partitions, target_map, min_targets=1):
+    """
+    Filter out partitions that don't have enough dig targets.
+    
+    Args:
+        partitions: List of partition dictionaries
+        target_map: Global target map from env_manager
+        min_targets: Minimum dig targets required per partition
+    
+    Returns:
+        tuple: (filtered_partitions, partition_stats)
+    """
+    valid_partitions = []
+    partition_stats = []
+    
+    for partition in partitions:
+        region_coords = partition['region_coords']
+        stats = check_partition_has_targets(target_map, region_coords, min_targets)
+        partition_stats.append(stats)
+        
+        if stats['has_targets']:
+            valid_partitions.append(partition)
+            print(f"  Partition {partition['id']}: {stats['dig_targets']} dig targets, {stats['dump_targets']} dump targets")
+        else:
+            print(f"  Partition {partition['id']}: Only {stats['dig_targets']} dig targets (minimum: {min_targets}) - SKIPPED")
+    
+    return valid_partitions, partition_stats
+
+def compute_random_subtasks_validated(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, target_map, 
+                                     seed=None, min_targets=1, max_attempts=10):
+    """
+    Compute random subtasks and validate they contain dig targets.
+    Will retry with different random splits if partitions are empty.
+    
+    Args:
+        ORIGINAL_MAP_SIZE: Size of the original map (64 or 128)
+        NUM_PARTITIONS: Number of partitions (1, 2, or 4)
+        target_map: Global target map from env_manager
+        seed: Random seed for reproducibility
+        min_targets: Minimum dig targets required per partition
+        max_attempts: Maximum attempts to find valid partitions
+    
+    Returns:
+        List of valid partition dictionaries
+    """
+    if seed is not None:
+        random.seed(seed)
+    
+    if ORIGINAL_MAP_SIZE not in [64, 128]:
+        raise ValueError(f"Unsupported ORIGINAL_MAP_SIZE: {ORIGINAL_MAP_SIZE}. Must be 64 or 128.")
+    
+    if NUM_PARTITIONS not in [1, 2, 4]:
+        raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+    
+    print(f"\nGenerating {NUM_PARTITIONS} random partitions with target validation...")
+    
+    # For single partition, just return the full map if it has targets
+    if NUM_PARTITIONS == 1:
+        full_partition = [{
+            'id': 0, 
+            'region_coords': (0, 0, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1), 
+            'start_pos': (ORIGINAL_MAP_SIZE // 2, ORIGINAL_MAP_SIZE // 2), 
+            'start_angle': 0, 
+            'status': 'pending'
+        }]
+        
+        valid_partitions, _ = filter_empty_partitions(full_partition, target_map, min_targets)
+        if valid_partitions:
+            return valid_partitions
+        else:
+            raise ValueError("The entire map has no dig targets!")
+    
+    best_partitions = []
+    best_valid_count = 0
+    
+    for attempt in range(max_attempts):
+        print(f"  Attempt {attempt + 1}/{max_attempts}...")
+        
+        # Generate random partitions
+        if NUM_PARTITIONS == 2:
+            partitions = _generate_random_2_partitions(ORIGINAL_MAP_SIZE)
+        elif NUM_PARTITIONS == 4:
+            partitions = _generate_random_4_partitions(ORIGINAL_MAP_SIZE)
+        
+        # Validate partitions
+        valid_partitions, stats = filter_empty_partitions(partitions, target_map, min_targets)
+        
+        print(f"    Generated {len(partitions)} partitions, {len(valid_partitions)} valid")
+        
+        # Keep track of the best result so far
+        if len(valid_partitions) > best_valid_count:
+            best_partitions = valid_partitions.copy()
+            best_valid_count = len(valid_partitions)
+        
+        # If we got enough valid partitions, we're done
+        #if len(valid_partitions) >= max(1, NUM_PARTITIONS // 2):  # At least half the requested partitions
+        if len(valid_partitions) == NUM_PARTITIONS:
+            print(f"  Found {len(valid_partitions)} valid partitions after {attempt + 1} attempts")
+            return valid_partitions
+    
+    # If we couldn't find enough good partitions, return the best we found
+    if best_partitions:
+        print(f"  Returning best result: {len(best_partitions)} valid partitions (out of {NUM_PARTITIONS} requested)")
+        return best_partitions
+    else:
+        # Fallback: return full map as single partition
+        print(f"  No valid partitions found, falling back to single full-map partition")
+        return [{
+            'id': 0, 
+            'region_coords': (0, 0, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1), 
+            'start_pos': (ORIGINAL_MAP_SIZE // 2, ORIGINAL_MAP_SIZE // 2), 
+            'start_angle': 0, 
+            'status': 'pending'
+        }]
+
+def _generate_random_2_partitions(ORIGINAL_MAP_SIZE):
+    """Generate 2 random partitions."""
+    is_vertical = random.choice([True, False])
+    
+    if is_vertical:
+        # Vertical split
+        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        split_x = random.randint(min_split, max_split)
+        
+        start_y = ORIGINAL_MAP_SIZE // 2
+        start_x1 = split_x // 2
+        start_x2 = split_x + (ORIGINAL_MAP_SIZE - split_x) // 2
+        
+        return [
+            {
+                'id': 0,
+                'region_coords': (0, 0, ORIGINAL_MAP_SIZE - 1, split_x - 1),
+                'start_pos': (start_y, start_x1),
+                'start_angle': 0,
+                'status': 'pending'
+            },
+            {
+                'id': 1,
+                'region_coords': (0, split_x, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+                'start_pos': (start_y, start_x2),
+                'start_angle': 0,
+                'status': 'pending'
+            }
+        ]
+    else:
+        # Horizontal split
+        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        split_y = random.randint(min_split, max_split)
+        
+        start_x = ORIGINAL_MAP_SIZE // 2
+        start_y1 = split_y // 2
+        start_y2 = split_y + (ORIGINAL_MAP_SIZE - split_y) // 2
+        
+        return [
+            {
+                'id': 0,
+                'region_coords': (0, 0, split_y - 1, ORIGINAL_MAP_SIZE - 1),
+                'start_pos': (start_y1, start_x),
+                'start_angle': 0,
+                'status': 'pending'
+            },
+            {
+                'id': 1,
+                'region_coords': (split_y, 0, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+                'start_pos': (start_y2, start_x),
+                'start_angle': 0,
+                'status': 'pending'
+            }
+        ]
+
+def _generate_random_4_partitions(ORIGINAL_MAP_SIZE):
+    """Generate 4 random partitions in a 2x2 grid."""
+    min_split = int(ORIGINAL_MAP_SIZE * 0.2)
+    max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+    
+    split_x = random.randint(min_split, max_split)
+    split_y = random.randint(min_split, max_split)
+    
+    # Calculate start positions for each quadrant
+    start_x1 = split_x // 2
+    start_x2 = split_x + (ORIGINAL_MAP_SIZE - split_x) // 2
+    start_y1 = split_y // 2
+    start_y2 = split_y + (ORIGINAL_MAP_SIZE - split_y) // 2
+    
+    return [
+        {
+            'id': 0,
+            'region_coords': (0, 0, split_y - 1, split_x - 1),
+            'start_pos': (start_y1, start_x1),
+            'start_angle': 0,
+            'status': 'pending'
+        },
+        {
+            'id': 1,
+            'region_coords': (0, split_x, split_y - 1, ORIGINAL_MAP_SIZE - 1),
+            'start_pos': (start_y1, start_x2),
+            'start_angle': 0,
+            'status': 'pending'
+        },
+        {
+            'id': 2,
+            'region_coords': (split_y, 0, ORIGINAL_MAP_SIZE - 1, split_x - 1),
+            'start_pos': (start_y2, start_x1),
+            'start_angle': 0,
+            'status': 'pending'
+        },
+        {
+            'id': 3,
+            'region_coords': (split_y, split_x, ORIGINAL_MAP_SIZE - 1, ORIGINAL_MAP_SIZE - 1),
+            'start_pos': (start_y2, start_x2),
+            'start_angle': 0,
+            'status': 'pending'
+        }
+    ]
