@@ -90,13 +90,6 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
-        # print("terra_env.reset")
-        # print(target_map.shape)
-        # print(padding_mask.shape)
-        # print(trench_axes.shape)
-        # print(trench_type.shape)
-        # print(dumpability_mask_init.shape)
-        # print("finished printing shapes")
         state = State.new(
             key,
             env_cfg,
@@ -380,8 +373,7 @@ class TerraEnvBatch:
           custom_angle: Optional[int] = None) -> State:
         
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
-        #print("terra_env batch.reset")
-        #print(env_cfgs)
+
         env_cfgs = self.update_env_cfgs(env_cfgs)
         (
             target_maps,
@@ -392,10 +384,7 @@ class TerraEnvBatch:
             action_maps,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
-        #jax.debug.print("custom_pos: {}, custom_angle: {}", custom_pos, custom_angle)
-        #print(target_maps.shape)
-        #print(padding_masks.shape)
-        #print(trench_axes.shape)
+
         timestep = jax.vmap(
             self.terra_env.reset,
             in_axes=(0,0,0,0,0,0,0,0,None,None)

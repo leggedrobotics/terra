@@ -1798,7 +1798,7 @@ def reconstruct_observation_from_synced_state(timestep):
     
     # Keep local maps as-is (they might be computed differently)
     # observation['local_map_*'] fields remain unchanged
-    print("Reconstructed observation from synced state:")
+    #print("Reconstructed observation from synced state:")
     return observation
 
 def verify_traversability_after_sync(observation, partition_idx, active_partitions):

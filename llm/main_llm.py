@@ -225,7 +225,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             print(f"\nMap {current_map_index}, Step {map_step} (Global {global_step}) - "
                   f"Processing {len(active_partitions)} active partitions")
             
-            #env_manager.add_agents_using_existing_representation(partition_states)
+            env_manager.add_agents_using_existing_representation(partition_states)
 
             if USE_RENDERING:
                 #Capture screen state
@@ -244,16 +244,18 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
             for partition_idx in active_partitions:
                 partition_state = partition_states[partition_idx]
-            
+                synched = False
                 print(f"  Processing partition {partition_idx} (partition step {partition_state['step_count']})")
                 
                 #print("Recovering partition state...")
-                # for other_partition_idx in active_partitions:
-                #         if other_partition_idx != partition_idx:
-                #             # Only sync if they overlap
-                #             if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
-                #                     simple_sync_overlapping_regions(partition_states, env_manager, 
-                #                                             other_partition_idx, partition_idx)
+                for other_partition_idx in active_partitions:
+                        if other_partition_idx != partition_idx:
+                            # Only sync if they overlap
+                            if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
+                                print(f"    Syncing partition {partition_idx} with overlapping partition {other_partition_idx}")
+                                simple_sync_overlapping_regions(partition_states, env_manager, 
+                                                            other_partition_idx, partition_idx)
+                                synched = True
 
                 try:
                     # Set the small environment to the current partition's state
@@ -261,8 +263,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     env_manager.current_partition_idx = partition_idx
 
                     # Get the current observation
-                    current_observation = env_manager.small_env_timestep.observation
-                    #current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                    if not synched:
+                        current_observation = env_manager.small_env_timestep.observation
+                    else:
+                        current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
                     #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction', partition_idx, map_step)
                     
                     # verify_traversability_after_sync(partition_state['timestep'].state.world.traversability_mask.map[0],
@@ -404,11 +408,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     if llm_decision == "delegate_to_rl":
                         print(f"    Partition {partition_idx} - Delegating to RL agent")
                         try:
-                            current_observation = env_manager.small_env_timestep.observation
                             #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'beforeRL', partition_idx, map_step)
-                            #env_manager.add_agents_using_existing_representation(partition_states)
+                            env_manager.add_agents_using_existing_representation(partition_states)
 
-                            #current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                            if not synched:
+                                current_observation = env_manager.small_env_timestep.observation
+                                #current_observation = env_manager.small_env_timestep.observation
+                            else:
+                                current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
                             #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction_beforeRL', partition_idx, map_step)
 
                             # debug_info = enhanced_save_traversability_mask_with_debug(
@@ -527,7 +534,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     
                     # print(type(env_manager.small_env_timestep.observation['traversability_mask']))
                     # save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'before_sync', partition_idx, map_step)
-                    #env_manager.add_agents_using_existing_representation(partition_states)
+                    env_manager.add_agents_using_existing_representation(partition_states)
 
 
                     # before_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
@@ -540,17 +547,19 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
 
 
-                    # print(f"    Syncing changes from partition {partition_idx} to overlapping partitions...")
-                    # for other_partition_idx in active_partitions:
-                    #     if other_partition_idx != partition_idx:
-                    #         # Only sync if they overlap
-                    #         if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
-                    #             simple_sync_overlapping_regions(partition_states, env_manager, 
-                    #                                         partition_idx, other_partition_idx)
+                    #print(f"    Syncing changes from partition {partition_idx} to overlapping partitions...")
+                    for other_partition_idx in active_partitions:
+                        if other_partition_idx != partition_idx:
+                            # Only sync if they overlap
+                            if other_partition_idx in env_manager.overlap_map.get(partition_idx, set()):
+                                print(f"    Syncing partition {partition_idx} with overlapping partition {other_partition_idx}")
+                                simple_sync_overlapping_regions(partition_states, env_manager, 
+                                                            partition_idx, other_partition_idx)
+                                
                                 # simple_sync_overlapping_regions(partition_states, env_manager, 
                                 #                             other_partition_idx, partition_idx)
                     #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'after_sync', partition_idx, map_step)
-                    #env_manager.add_agents_using_existing_representation(partition_states)
+                    env_manager.add_agents_using_existing_representation(partition_states)
 
                     # after_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
                     # after_mask0 = np.array(partition_states[partition_idx]['timestep'].state.world.traversability_mask.map)
@@ -800,7 +809,7 @@ if __name__ == "__main__":
         #default="/home/gioelemo/Documents/terra/benchmark.pkl",
         #default="/home/gioelemo/Documents/terra/no-action-map.pkl",
         default="/home/gioelemo/Documents/terra/tracked-dense.pkl",
-        help="new-penalties.pkl (12 cabin and 12 base rotations) Version 7 May",
+        help="Policy to use for the experiment. Must be a valid path to a .pkl file containing the policy.",
     )
 
 
