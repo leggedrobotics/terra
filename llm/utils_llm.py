@@ -26,7 +26,7 @@ from llm.session_manager_llm import SessionManager
 from llm.prompt_manager_llm import PromptManager 
 import os
 import yaml
-
+import datetime
 
 
 def encode_image(cv_image):
@@ -905,7 +905,6 @@ def get_delegation_prompt(prompts, current_observation, context=""):
         print(f"Error generating delegation prompt: {e}")
         return "Decide between 'delegate_to_rl' or 'delegate_to_llm'."
 
-
 def get_excavator_prompt(prompts, direction, bucket_status, position):
     """Get excavator action prompt with current state."""
     try:
@@ -916,6 +915,7 @@ def get_excavator_prompt(prompts, direction, bucket_status, position):
     except Exception as e:
         print(f"Error generating excavator prompt: {e}")
         return "Choose the best action (0-6) for the current game state."
+    
 async def call_agent_async_master(query: str, image, runner, user_id, session_id, session_manager=None):
     """
     Fixed version of call_agent_async_master with better error handling and session verification.
@@ -965,7 +965,6 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
     
     print(f"<<< Agent Response: {final_response_text}")
     return final_response_text
-
 
 def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
@@ -1056,7 +1055,6 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
 
     return llm_query, runner_delegation, session_manager, prompts
 
-
 def extract_subsurface(screen, x_start, y_start, width, height, ORIGINAL_MAP_SIZE, global_env_config, partition_idx):
     """Extract a subsurface from the screen."""
                            
@@ -1095,76 +1093,6 @@ def extract_subsurface(screen, x_start, y_start, width, height, ORIGINAL_MAP_SIZ
         subsurface = screen.subsurface((0, 0, fallback_size, fallback_size))
 
     return subsurface
-
-
-
-def generate_local_map(timestep):
-    """
-    Generate a local map from the environment's current state.
-
-    Args:
-        env: The TerraEnvBatch environment instance.
-        timestep: The current timestep of the environment.
-
-    Returns:
-        A dictionary representing the local map.
-    """
-    # Access the state object
-    state = timestep.state
-
-    # Access the world (GridWorld) object from the state
-    world = state.world
-    # Extract relevant local maps from the world
-    local_map = {
-        "local_map_action_neg": world.local_map_action_neg.map.tolist(),
-        "local_map_action_pos": world.local_map_action_pos.map.tolist(),
-        "local_map_target_neg": world.local_map_target_neg.map.tolist(),
-        "local_map_target_pos": world.local_map_target_pos.map.tolist(),
-        "local_map_dumpability": world.local_map_dumpability.map.tolist(),
-        "local_map_obstacles": world.local_map_obstacles.map.tolist(),
-    }
-
-
-    return local_map
-
-def local_map_to_image(local_map):
-    """
-    Convert a local map dictionary to an image.
-
-    Args:
-        local_map: A dictionary containing local map data.
-
-    Returns:
-        An image (numpy array) representing the local map.
-    """
-    # Example: Visualize the traversability mask
-    local_map_target_pos = np.array(local_map["local_map_target_pos"])
-
-    #local_map_target_pos = np.squeeze(local_map_target_pos)
-
-
-    # Normalize the values for visualization
-    normalized_map = (local_map_target_pos - local_map_target_pos.min()) / (local_map_target_pos.max() - local_map_target_pos.min() + 1e-6)
-
-    # Create a heatmap using matplotlib
-    plt.figure(figsize=(5, 5))
-    plt.imshow(normalized_map, cmap="viridis", interpolation="nearest")
-    #plt.imshow(local_map_target_pos, cmap="viridis", interpolation="nearest")
-
-    plt.axis("off")
-
-    # Save the plot to a buffer
-    buf = io.BytesIO()
-    plt.savefig(buf, format="jpg", bbox_inches="tight", pad_inches=0)
-    #plt.savefig("local_map.jpg", format="jpg", bbox_inches="tight", pad_inches=0)
-    buf.seek(0)
-
-    # Convert the buffer to a PIL image and then to a numpy array
-    img = Image.open(buf)
-    img_array = np.array(img)
-    buf.close()
-
-    return img_array
 
 def capture_screen(surface):
     """Captures the current screen and converts it to an image format."""
@@ -1250,186 +1178,6 @@ def extract_base_orientation(state):
         "direction": direction,
     }    
 
-def summarize_local_map(local_map):
-    """
-    Generate a textual summary of the local map.
-
-    Args:
-        local_map: A dictionary representing the local map.
-
-    Returns:
-        str: A textual summary of the local map.
-    """
-    num_obstacles = np.sum(np.array(local_map["local_map_obstacles"]) > 0)
-    num_dumpable = np.sum(np.array(local_map["local_map_dumpability"]) > 0)
-    num_target_pos = np.sum(np.array(local_map["local_map_target_pos"]) > 0)
-    num_target_neg = np.sum(np.array(local_map["local_map_target_neg"]) > 0)
-
-    return (
-        f"The local map contains {num_obstacles} obstacles, "
-        f"{num_dumpable} dumpable areas, "
-        f"{num_target_pos} positive target areas, and "
-        f"{num_target_neg} negative target areas."
-    )
-
-def extract_positions(state):
-    """
-    Extract the current base position and target position from the game state.
-
-    Args:
-        state: The current game state object.
-
-    Returns:
-        A tuple containing:
-        - current_position: A dictionary with the current base position (x, y).
-        - target_position: A dictionary with the target position (x, y), or None if not available.
-        
-    """
-
-    #print(state.agent.agent_state.pos_base[0])
-    # Extract th11e current base position
-    current_position = {
-        "x": state.agent.agent_state.pos_base[0][0],
-        "y": state.agent.agent_state.pos_base[0][1]
-    }
-
-    # Extract the target position from the target_map if available
-    #print(state.world.target_map.map)
-    target_positions = []
-
-    for x in range(state.world.target_map.map.shape[1]):  # Iterate over rows
-        for y in range(state.world.target_map.map.shape[2]):  # Iterate over columns
-            if state.world.target_map.map[0, x, y] == -1:  # Access the value at (0, x, y)
-                target_positions.append((x, y))
-    
-    # # Convert positions to tuples
-    start = (int(current_position["x"]), int(current_position["y"]))
-    #target = (int(target_position["x"]), int(target_position["y"])) if target_position else None
-
-    return start, target_positions
-
-def path_to_actions(path, initial_orientation, step_size=1):
-    """
-    Convert a path into a list of action numbers based on the current base orientation.
-
-    Args:
-        path (list of tuples): The path as a list of (x, y) positions.
-        initial_orientation (str): The initial base orientation ('up', 'down', 'left', 'right').
-        step_size (int): The step size to consider between path points.
-
-    Returns:
-        list of int: A list of action numbers corresponding to the path.
-    """
-    # Define the mapping of directions to deltas
-    direction_deltas = {
-        "up": (-1, 0),
-        "right": (0, 1),
-        "down": (1, 0),
-        "left": (0, -1),
-    }
-
-    # Define the order of directions for turning (90-degree increments)
-    directions = ["up", "right", "down", "left"]
-
-    # Define action numbers
-    FORWARD = 0
-    CLOCK = 2
-    ANTICLOCK = 3
-
-    # Helper function to determine the direction between two points
-    def get_direction(from_pos, to_pos):
-        delta = (to_pos[0] - from_pos[0], to_pos[1] - from_pos[1])
-        # Normalize the delta to match one of the predefined directions
-        if delta[0] != 0:
-            delta = (delta[0] // abs(delta[0]), 0)
-        elif delta[1] != 0:
-            delta = (0, delta[1] // abs(delta[1]))
-        for direction, d in direction_deltas.items():
-            if delta == d:
-                return direction
-        return None
-
-    # Initialize the list of actions
-    actions = []
-    current_orientation = initial_orientation
-
-    # Iterate through the path with the given step size
-    for i in range(0, len(path) - 1, step_size):
-        current_pos = path[i]
-        next_pos = path[min(i + step_size, len(path) - 1)]
-
-        # Determine the required direction to move
-        required_direction = get_direction(current_pos, next_pos)
-        if required_direction is None:
-            actions.append(-1)
-            continue
-
-        # Determine the turns needed to face the required direction
-        while current_orientation != required_direction:
-            current_idx = directions.index(current_orientation)
-            required_idx = directions.index(required_direction)
-
-            # Determine if we need to turn right (CLOCK) or left (ANTICLOCK)
-            if (required_idx - current_idx) % 4 == 1:  # Clockwise
-                actions.append(CLOCK)
-                current_orientation = directions[(current_idx + 1) % 4]
-            else:  # Counter-clockwise
-                actions.append(ANTICLOCK)
-                current_orientation = directions[(current_idx - 1) % 4]
-
-        # Add a forward action
-        actions.append(FORWARD)
-
-    return actions
-
-def find_nearest_target(start, target_positions):
-    """
-    Find the nearest target position to the starting point.
-
-    Args:
-        start (tuple): The starting position as (x, y).
-        target_positions (list of tuples): A list of target positions as (x, y).
-
-    Returns:
-        tuple: The nearest target position as (x, y), or None if the list is empty.
-    """
-    if not target_positions:
-        return None
-
-    # Calculate the Euclidean distance to each target and find the nearest one
-    nearest_target = min(target_positions, key=lambda target: (target[0] - start[0])**2 + (target[1] - start[1])**2)
-    return nearest_target
-
-def calculate_digging_percentage(initial_target_num, timestep):
-    """
-    Calculate the percentage of digging left in the map.
-
-    Args:
-        initial_target_num: The initial number of dig targets (-1) in the target map.
-        timestep: The current timestep object containing the state of the environment.
-
-    Returns:
-        A float representing the percentage of digging left to do.
-    """
-    target_map = timestep.state.world.target_map.map[0]  # -1: must dig here
-    dig_map = timestep.state.world.dig_map.map[0]        # -1: dug here during the episode
-
-    # A location was originally a dig target if target_map == -1
-    # A location has been dug if dig_map == -1
-    # So, if target_map == -1 and dig_map != -1 → still not dug
-
-    still_to_dig_mask = (target_map == -1) & (dig_map != -1)
-    remaining_to_dig = jnp.sum(still_to_dig_mask)
-
-    if initial_target_num > 0:
-        digging_left_percentage = (remaining_to_dig / initial_target_num) * 100
-    else:
-        digging_left_percentage = 0.0
-
-    return float(digging_left_percentage)
-
-
-import datetime
 def save_debug_image(image, map_index, step_count, image_type="general", output_dir="debug_images"):
     """
     Save debug images with proper naming and organization.
@@ -1462,7 +1210,6 @@ def save_debug_image(image, map_index, step_count, image_type="general", output_
     except Exception as e:
         print(f"Error saving debug image: {e}")
         return None
-
 
 def verify_sync_effectiveness(partition_states, env_manager):
     """
@@ -1621,161 +1368,6 @@ def simple_sync_overlapping_regions(partition_states, env_manager, source_partit
     
     print(f"  ✓ Synced overlapping region from partition {source_partition_idx} to {target_partition_idx}")
 
-
-def debug_agent_visibility(partition_states, env_manager):
-    """
-    Debug function to check if agents are visible as obstacles in other partitions.
-    """
-    print("\n=== AGENT VISIBILITY DEBUG ===")
-    
-    for partition_idx, partition_state in partition_states.items():
-        if partition_state['status'] != 'active':
-            continue
-            
-        print(f"\nPartition {partition_idx}:")
-        
-        # Get traversability mask
-        trav_mask = partition_state['timestep'].state.world.traversability_mask.map
-        
-        # Count different cell types
-        own_agent = jnp.sum(trav_mask == -1)
-        obstacles = jnp.sum(trav_mask == 1)
-        free_space = jnp.sum(trav_mask == 0)
-        
-        print(f"  Own agent cells (-1): {own_agent}")
-        print(f"  Obstacle cells (1): {obstacles}")
-        print(f"  Free space cells (0): {free_space}")
-        
-        # Check overlap regions for other agents
-        for other_idx in env_manager.overlap_map.get(partition_idx, set()):
-            if other_idx not in partition_states or partition_states[other_idx]['status'] != 'active':
-                continue
-                
-            # Get overlap info
-            overlap_key = (min(partition_idx, other_idx), max(partition_idx, other_idx))
-            if overlap_key in env_manager.overlap_regions:
-                overlap_info = env_manager.overlap_regions[overlap_key]
-                
-                # Get the correct slice for this partition
-                if partition_idx < other_idx:
-                    my_slice = overlap_info['partition_i_slice']
-                else:
-                    my_slice = overlap_info['partition_j_slice']
-                
-                # Check overlap region
-                overlap_data = trav_mask[my_slice]
-                overlap_obstacles = jnp.sum(overlap_data == 1)
-                
-                print(f"  Overlap with partition {other_idx}: {overlap_obstacles} obstacles in overlap region")
-
-
-
-
-def save_traversability_mask(traversability_mask, output_path, partition_index, map_step=None):
-
-    os.makedirs(output_path, exist_ok=True)
-    output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
-
-    h, w = traversability_mask.shape
-    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
-
-    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red for agent occupancy
-    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White for traversable
-    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black for non-traversable
-
-    cv2.imwrite(output_path, rgb_image)
-    print(f"Traversability mask saved to {output_path}")
-
-def mask_to_rgb(traversability_mask):
-    """Convert traversability mask to RGB image with color coding."""
-    h, w = traversability_mask.shape
-    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
-    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red: agent
-    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White: traversable
-    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black: obstacle
-    return rgb_image
-
-def annotate(image, text):
-    """Overlay label text onto the image."""
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.4
-    thickness = 1
-    color = (0, 255, 0)  # Green
-    margin = 10
-
-    annotated = image.copy()
-    cv2.putText(
-        annotated,
-        text,
-        (margin, margin + 20),
-        font,
-        font_scale,
-        color,
-        thickness,
-        lineType=cv2.LINE_AA
-    )
-    return annotated
-def annotate_with_diff_highlight(mask, label, reference_mask=None):
-    """Convert mask to RGB, annotate, and highlight differences if reference is given."""
-    rgb = mask_to_rgb(mask)
-    annotated = annotate(rgb, label)
-
-    if reference_mask is not None:
-        diff = (mask != reference_mask)
-        # Highlight changed pixels in yellow [0, 255, 255]
-        annotated[diff] = [0, 255, 255]
-
-    return annotated
-
-def save_traversability_mask_comparison(before_mask0, before_mask1, after_mask0, after_mask1,
-                                        output_dir, partition_index, other_partition_index, map_step):
-    """
-    Save a 2×2 image showing before/after traversability masks for two partitions,
-    with differences highlighted.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = f"{output_dir}/compare_p{partition_index}_step{map_step}.png"
-
-    before_rgb_0 = annotate_with_diff_highlight(before_mask0, f"BP{partition_index}")
-    before_rgb_1 = annotate_with_diff_highlight(before_mask1, f"BP{other_partition_index}")
-    after_rgb_0  = annotate_with_diff_highlight(after_mask0,  f"AP{partition_index}", before_mask0)
-    after_rgb_1  = annotate_with_diff_highlight(after_mask1,  f"AP{other_partition_index}", before_mask1)
-
-    top_row = np.concatenate([before_rgb_0, before_rgb_1], axis=1)
-    bottom_row = np.concatenate([after_rgb_0, after_rgb_1], axis=1)
-    grid_image = np.concatenate([top_row, bottom_row], axis=0)
-
-    cv2.imwrite(output_path, grid_image)
-    print(f"2x2 Comparison with diff saved to {output_path}")
-
-# Debug function to verify sync worked
-def verify_observation_includes_other_agents(observation, partition_idx, active_partitions):
-    """
-    Verify that the observation includes other agents as obstacles.
-    """
-    traversability = observation['traversability_mask']
-    
-    own_agent_count = jnp.sum(traversability == -1)
-    obstacle_count = jnp.sum(traversability == 1)
-    free_space_count = jnp.sum(traversability == 0)
-    
-    expected_obstacles = len(active_partitions) - 1  # Other agents should appear as obstacles
-    
-    print(f"    Partition {partition_idx} observation verification:")
-    print(f"      Own agent (-1): {own_agent_count}")
-    print(f"      Obstacles (1): {obstacle_count}")  
-    print(f"      Free space (0): {free_space_count}")
-    print(f"      Expected other agents as obstacles: {expected_obstacles}")
-    
-    # Check if we have the expected number of other agents
-    if obstacle_count < expected_obstacles:
-        print(f"      ⚠️  WARNING: Missing other agents in observation!")
-        return False
-    else:
-        print(f"      ✅ Other agents properly visible")
-        return True
-    
-
 def reconstruct_observation_from_synced_state(timestep):
     """
     Reconstruct observation from synced state, specifically updating traversability_mask.
@@ -1800,119 +1392,6 @@ def reconstruct_observation_from_synced_state(timestep):
     # observation['local_map_*'] fields remain unchanged
     #print("Reconstructed observation from synced state:")
     return observation
-
-def verify_traversability_after_sync(observation, partition_idx, active_partitions):
-    """
-    Debug function to verify that other agents are now visible in traversability_mask.
-    """
-    traversability = observation['traversability_mask']
-    
-    own_agent_count = jnp.sum(traversability == -1)
-    obstacle_count = jnp.sum(traversability == 1) 
-    free_space_count = jnp.sum(traversability == 0)
-    
-    print(f"    Partition {partition_idx} updated traversability:")
-    print(f"      Own agent (-1): {own_agent_count}")
-    print(f"      Obstacles (1): {obstacle_count}")
-    print(f"      Free space (0): {free_space_count}")
-    
-    expected_other_agents = len(active_partitions) - 1
-    
-    if own_agent_count == 0:
-        print(f"      ❌ WARNING: No own agent visible!")
-    elif own_agent_count > 1:
-        print(f"      ❌ WARNING: Multiple own agent positions!")
-    else:
-        print(f"      ✅ Own agent properly visible")
-    
-    if obstacle_count < expected_other_agents:
-        print(f"      ❌ WARNING: Expected {expected_other_agents} other agents as obstacles, only {obstacle_count} found")
-    else:
-        print(f"      ✅ Other agents visible as obstacles")
-    
-    # Check if it's still all zeros (the original problem)
-    if obstacle_count == 0 and own_agent_count == 0:
-        print(f"      ❌ CRITICAL: Traversability mask still all zeros after sync!")
-        return False
-    else:
-        print(f"      ✅ Traversability mask properly updated")
-        return True
-    
-
-def debug_agent_presence_in_traversability(traversability_mask, partition_idx, step_name, active_partitions):
-    """
-    Debug function to check and print agent presence in traversability mask.
-    
-    Args:
-        traversability_mask: The traversability mask array
-        partition_idx: Current partition index
-        step_name: Name of the step (e.g., "beforeRL", "afterRL")
-        active_partitions: List of active partition indices
-    """
-    own_agent_count = np.sum(traversability_mask == -1)
-    obstacle_count = np.sum(traversability_mask == 1)
-    free_space_count = np.sum(traversability_mask == 0)
-    
-    expected_other_agents = len(active_partitions) - 1
-    
-    print(f"    🔍 DEBUG: Partition {partition_idx} traversability at {step_name}:")
-    print(f"      Own agent (-1): {own_agent_count}")
-    print(f"      Obstacles (1): {obstacle_count}")
-    print(f"      Free space (0): {free_space_count}")
-    print(f"      Expected other agents: {expected_other_agents}")
-    
-    if own_agent_count == 0:
-        print(f"      ❌ WARNING: No own agent visible!")
-    elif own_agent_count > 1:
-        print(f"      ⚠️  WARNING: Multiple own agent positions detected!")
-    else:
-        print(f"      ✅ Own agent properly visible")
-    
-    if obstacle_count == 0:
-        print(f"      ❌ No obstacles found - other agents not visible")
-    elif obstacle_count < expected_other_agents:
-        print(f"      ⚠️  Only {obstacle_count}/{expected_other_agents} other agents visible")
-    else:
-        print(f"      ✅ All other agents visible as obstacles")
-    
-    return {
-        'own_agent_count': own_agent_count,
-        'obstacle_count': obstacle_count,
-        'free_space_count': free_space_count,
-        'expected_other_agents': expected_other_agents,
-        'all_agents_visible': obstacle_count >= expected_other_agents and own_agent_count == 1
-    }
-
-def enhanced_save_traversability_mask_with_debug(traversability_mask, output_path, partition_idx, 
-                                                map_step, active_partitions, step_name=""):
-    """
-    Enhanced version of save_traversability_mask that includes debug information.
-    """
-    # Debug agent presence
-    debug_info = debug_agent_presence_in_traversability(
-        traversability_mask, partition_idx, step_name, active_partitions
-    )
-    
-    # Save the mask with debug info in filename
-    agents_status = "with_agents" if debug_info['all_agents_visible'] else "missing_agents"
-    filename = f"traversability_mask_partition_{partition_idx}_step_{map_step}_{step_name}_{agents_status}.png"
-    
-    os.makedirs(output_path, exist_ok=True)
-    full_path = os.path.join(output_path, filename)
-
-    h, w = traversability_mask.shape
-    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
-
-    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red for agent occupancy
-    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White for traversable
-    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black for non-traversable
-
-    cv2.imwrite(full_path, rgb_image)
-    print(f"    Enhanced traversability mask saved to {full_path}")
-    
-    return debug_info
-
-
 
 def load_experiment_constants(config_file="llm/llm_config.yaml"):
     """
@@ -2161,7 +1640,6 @@ def get_intervention_action(partition_state, stuck_info, action_type):
     print(f"    🔧 INTERVENTION ACTION: {intervention_action_val} (reason: {stuck_info['reason']})")
     
     return jnp.array([intervention_action_val], dtype=jnp.int32)
-
 
 def should_intervene(partition_state, active_partitions, intervention_frequency=15):
     """

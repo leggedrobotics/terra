@@ -211,7 +211,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
         # MAP-SPECIFIC GAME LOOP
         map_step = 0
         max_steps_per_map = num_timesteps
-        #max_steps_per_map = 25
         map_done = False  # Track map completion
 
 
@@ -267,12 +266,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         current_observation = env_manager.small_env_timestep.observation
                     else:
                         current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
-                    #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction', partition_idx, map_step)
-                    
-                    # verify_traversability_after_sync(partition_state['timestep'].state.world.traversability_mask.map[0],
-                    #                                 partition_idx, active_partitions)
-                    # Verify it worked:
-                    #verify_observation_includes_other_agents(current_observation, partition_idx, active_partitions)
+
                     map_obs_seq.append(current_observation)
 
                     # Extract partition info and create subsurface
@@ -408,24 +402,12 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     if llm_decision == "delegate_to_rl":
                         print(f"    Partition {partition_idx} - Delegating to RL agent")
                         try:
-                            #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'beforeRL', partition_idx, map_step)
                             env_manager.add_agents_using_existing_representation(partition_states)
 
                             if not synched:
                                 current_observation = env_manager.small_env_timestep.observation
-                                #current_observation = env_manager.small_env_timestep.observation
                             else:
                                 current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
-                            #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction_beforeRL', partition_idx, map_step)
-
-                            # debug_info = enhanced_save_traversability_mask_with_debug(
-                            #     np.array(current_observation['traversability_mask']), 
-                            #     'debug_traversability', 
-                            #     partition_idx, 
-                            #     map_step, 
-                            #     active_partitions,
-                            #     'beforeRL_with_agents'
-                            # )
 
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
@@ -532,22 +514,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     else:
                         print(f"    Partition {partition_idx} - INVALID reward: {reward_val}, action: {action_rl}, done: {new_timestep.done}")
                     
-                    # print(type(env_manager.small_env_timestep.observation['traversability_mask']))
-                    # save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'before_sync', partition_idx, map_step)
                     env_manager.add_agents_using_existing_representation(partition_states)
 
-
-                    # before_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
-                    # before_mask0 =np.array(partition_states[partition_idx]['timestep'].state.world.traversability_mask.map)
-                    # if partition_idx == 0:
-                    #     before_mask1 =np.array(partition_states[partition_idx+1]['timestep'].state.world.traversability_mask.map)
-                    # else:
-                    #     before_mask1 =np.array(partition_states[partition_idx-1]['timestep'].state.world.traversability_mask.map)
-
-
-
-
-                    #print(f"    Syncing changes from partition {partition_idx} to overlapping partitions...")
                     for other_partition_idx in active_partitions:
                         if other_partition_idx != partition_idx:
                             # Only sync if they overlap
@@ -556,33 +524,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                                 simple_sync_overlapping_regions(partition_states, env_manager, 
                                                             partition_idx, other_partition_idx)
                                 
-                                # simple_sync_overlapping_regions(partition_states, env_manager, 
-                                #                             other_partition_idx, partition_idx)
-                    #save_traversability_mask(np.array(env_manager.small_env_timestep.observation['traversability_mask']), 'after_sync', partition_idx, map_step)
                     env_manager.add_agents_using_existing_representation(partition_states)
-
-                    # after_mask = np.array(env_manager.small_env_timestep.observation['traversability_mask'])
-                    # after_mask0 = np.array(partition_states[partition_idx]['timestep'].state.world.traversability_mask.map)
-                    # if partition_idx == 0:
-                    #     after_mask1 = np.array(partition_states[partition_idx+1]['timestep'].state.world.traversability_mask.map)
-                    # else:
-                    #     after_mask1 = np.array(partition_states[partition_idx-1]['timestep'].state.world.traversability_mask.map)
-
-
-                    #Save combined image
-                    # if map_step > 0:
-                    #     save_traversability_mask_comparison(
-                    #         before_mask0,
-                    #         before_mask1,
-                    #         after_mask0,
-                    #         after_mask1,
-                    #         output_dir='fully_complete_sync',
-                    #         partition_index=partition_idx,
-                    #         other_partition_index= int(not partition_idx),
-                    #         map_step=map_step
-                    #     )
-
-                    #verify_sync_effectiveness(partition_states, env_manager)
 
                     # Check completion conditions
                     partition_completed = False
@@ -625,8 +567,6 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             print(f"    Remaining active partitions: {active_partitions}")
             map_global_step_rewards.append(current_step_reward)
             print(f"    Map {current_map_index} step {map_step} reward: {current_step_reward:.4f}")
-            #env_manager.add_agents_using_existing_representation(partition_states)
-            #debug_agent_visibility(partition_states, env_manager)
 
             # Render
             if GRID_RENDERING:
@@ -637,20 +577,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             # After processing all partitions, check if map is complete
             map_metrics = calculate_map_completion_metrics(partition_states)
             map_done = map_metrics['done']
-            
-            #print(f"    Map {current_map_index} metrics: {map_metrics}")
-            
+                        
             # Update done flag for this step
             done = jnp.array(map_done)  # Convert to JAX array for consistency
             
-            # if map_done:
-            #     print(f"Map {current_map_index} COMPLETED!")
-            #     print(f"  Completion rate: {map_metrics['completion_rate']:.2%}")
-            #     print(f"  Completed partitions: {map_metrics['completed_partitions']}")
-            #     print(f"  Failed partitions: {map_metrics['failed_partitions']}")
-            #     print(f"  Total reward: {map_metrics['total_reward']:.4f}")
-            #     break
-
             map_step += 1
             global_step += 1
 
@@ -799,15 +729,6 @@ if __name__ == "__main__":
         "-run",
         "--run_name",
         type=str,
-        # default="/home/gioelemo/Documents/terra/new-maps-different-order.pkl",
-        # help="new-maps-different-order.pkl (12 cabin and 12 base rotations)",
-        # default="/home/gioelemo/Documents/terra/gioele.pkl",
-        # help="gioele.pkl (8 cabin and 4 base rotations)",
-        # default="/home/gioelemo/Documents/terra/gioele_new.pkl",
-        # help="gioele_new.pkl (8 cabin and 4 base rotations) Version 7 May",
-        #default="/home/gioelemo/Documents/terra/new-penalties.pkl",
-        #default="/home/gioelemo/Documents/terra/benchmark.pkl",
-        #default="/home/gioelemo/Documents/terra/no-action-map.pkl",
         default="/home/gioelemo/Documents/terra/tracked-dense.pkl",
         help="Policy to use for the experiment. Must be a valid path to a .pkl file containing the policy.",
     )
@@ -835,7 +756,6 @@ if __name__ == "__main__":
                     base_seed + i * 1000,  # Ensure different seeds
                     args.run_name
                 )
-        #print(info)
         # Collect results from this experiment
         episode_done_once = info["episode_done_once"]
         episode_length = info["episode_length"]
