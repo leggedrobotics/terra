@@ -1,6 +1,7 @@
 MAP_TILES = (
     #192  # 64 * 3, total number of tiles for a nice visualization (scales with MAP_EDGE)
-    256
+    #256
+    192
 )
 COLORS = {
     0: "#cfcfcf",  # neutral
