@@ -118,7 +118,50 @@ def main():
                         repeat_action(action),
                         _rng,
                     )
-                    print("Reward: ", timestep.reward.item())
+                    # DEBUG: Show reward with agent type and reward function used
+                    agent_type = timestep.state.agent.agent_state.agent_type[0].item()  # Convert JAX array to Python int
+                    reward_value = timestep.reward.item()
+                    action_num = action.action[0].item()  # Convert JAX array to Python int
+                    
+                    agent_type_names = {0: "Tracked/Excavator", 1: "Wheeled", 2: "Skid Steer"}
+                    reward_function_names = {0: "_get_rewards_tracked()", 1: "_get_rewards_wheeled()", 2: "_get_rewards_skidsteer()"}
+                    
+                    agent_name = agent_type_names.get(agent_type, f"Unknown({agent_type})")
+                    reward_func = reward_function_names.get(agent_type, f"unknown_function({agent_type})")
+                    
+                    print(f"🎯 REWARD: {reward_value:.4f} | Agent: {agent_name} | Function: {reward_func}")
+                    
+                    # For skid steers, show additional debugging for specific reward components
+                    if agent_type == 2:  # Skid steer
+                        if action_num == 0:  # Forward action
+                            print("   💡 Skid Steer Forward: Auto-loading checked")
+                        elif action_num == 6:  # DO action  
+                            print("   💡 Skid Steer DO: Dump/Lift/Shovel rewards applied")
+                    
+                    # Show action details
+                    action_names = {
+                        0: "FORWARD", 1: "BACKWARD", 2: "CLOCK", 3: "ANTICLOCK", 
+                        4: "CABIN_CLOCK", 5: "CABIN_ANTICLOCK", 6: "DO"
+                    }
+                    action_name = action_names.get(action_num, f"ACTION_{action_num}")
+                    print(f"⚡ ACTION: {action_name} ({action_num})")
+                    
+                    # DEBUG: Show maximum dirt on any single tile
+                    action_map = timestep.state.world.action_map.map[0]  # First environment
+                    max_dirt = jnp.max(action_map)
+                    min_dirt = jnp.min(action_map)
+                    total_dirt = jnp.sum(action_map)
+                    print(f"🏔️  MAX DIRT ON TILE: {max_dirt}")
+                    print(f"⛳ MIN DIRT ON TILE: {min_dirt}")
+                    print(f"🌍 TOTAL DIRT: {total_dirt}")
+                    
+                    # Show agent loading state for context
+                    agent_loaded = timestep.state.agent.agent_state.loaded[0]
+                    shovel_lifted = timestep.state.agent.agent_state.shovel_lifted[0]
+                    total_dirt_with_agent = total_dirt + agent_loaded
+                    print(f"🚜 AGENT: Loaded={agent_loaded}, Shovel={'UP' if shovel_lifted else 'DOWN'}")
+                    print(f"🧮 TOTAL DIRT (map + agent): {total_dirt_with_agent}")
+                    print("-" * 40)
 
             elif event.type == QUIT:
                 playing = False
@@ -126,6 +169,7 @@ def main():
         env.terra_env.render_obs_pygame(
             timestep.observation,
             timestep.info,
+            generate_gif=False,
         )
 
 

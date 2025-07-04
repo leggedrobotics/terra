@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import pygame as pg
 from .settings import COLORS
 from .utils import agent_base_to_angle
 from .utils import agent_cabin_to_angle
@@ -14,7 +15,58 @@ class Agent:
         self.angles_base = angles_base
         self.angles_cabin = angles_cabin
 
-    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded, agent_type=0):
+    def create_shovel(self, center_x, center_y, base_angle_degrees):
+        """
+        Create a shovel (rectangle) for skid steer agents.
+        The shovel is positioned in the same direction as the cabin triangle.
+        """
+        # Shovel dimensions - wider than the agent base
+        shovel_depth = (self.height * self.tile_size) * 0.4    # Increased from 0.25 to 0.4 (40% of agent height)
+        shovel_width = (self.width * self.tile_size) * 1.1     # 120% of agent width (wide perpendicular to movement)
+        
+        # Calculate shovel position using the same method as cabin triangle
+        agent_half_height = (self.height * self.tile_size) / 2
+        shovel_offset_distance = agent_half_height + shovel_depth / 2 + 1  # Small gap
+        
+        # Create shovel center point in the same direction as cabin front point
+        # Cabin front point is at (3/scaling, 0) in local coordinates
+        scaling = self.tile_size / 3
+        cabin_front_direction = pg.math.Vector2(3 / scaling, 0)
+        
+        # Normalize and scale to shovel offset distance
+        cabin_front_normalized = cabin_front_direction.normalize()
+        shovel_center_local = cabin_front_normalized * shovel_offset_distance
+        
+        # Rotate the shovel center using the same method as cabin
+        shovel_center_rotated = shovel_center_local.rotate(base_angle_degrees)
+        
+        # Calculate final shovel center position
+        center_vector = pg.math.Vector2(center_y, center_x)  # Note: (y, x) order
+        shovel_center_world = center_vector + shovel_center_rotated
+        
+        # Create shovel rectangle corners relative to shovel center
+        half_depth = shovel_depth / 2   # Half depth in movement direction 
+        half_width = shovel_width / 2   # Half width perpendicular to movement
+        
+        shovel_local_points = [
+            pg.math.Vector2(-half_depth, -half_width),  # back-left
+            pg.math.Vector2(half_depth, -half_width),   # front-left  
+            pg.math.Vector2(half_depth, half_width),    # front-right
+            pg.math.Vector2(-half_depth, half_width)    # back-right
+        ]
+        
+        # Rotate and position all shovel points
+        shovel_vertices = []
+        for local_point in shovel_local_points:
+            # Rotate the local point
+            rotated_point = local_point.rotate(base_angle_degrees)
+            # Position relative to shovel center
+            final_point = shovel_center_world + rotated_point
+            shovel_vertices.append((final_point.x, final_point.y))
+        
+        return shovel_vertices
+
+    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded, agent_type=0, shovel_lifted=0):
     # Convert angle_base index to degrees using the util function
         base_angle_degrees = agent_base_to_angle(angle_base, self.angles_base)
         
@@ -84,14 +136,31 @@ class Agent:
                 "color": cabin_color,
             },
         }
+        
+        # Add shovel for skid steer agents
+        if agent_type == 2:
+            shovel_vertices = self.create_shovel(center_x, center_y, base_angle_degrees)
+            
+            # Determine shovel color based on lifted state only
+            if shovel_lifted == 0:
+                shovel_color = COLORS["shovel"]["lowered"]  # Brown - shovel on ground
+            else:
+                shovel_color = COLORS["shovel"]["lifted"]   # Silver - shovel lifted
+            
+            out["shovel"] = {
+                "vertices": shovel_vertices,
+                "color": shovel_color,
+            }
+        
         return out
 
-    def update(self, agent_pos, base_dir, cabin_dir, loaded, agent_type=0):
+    def update(self, agent_pos, base_dir, cabin_dir, loaded, agent_type=0, shovel_lifted=0):
         agent_pos = np.asarray(agent_pos, dtype=np.int32)
         base_dir = np.asarray(base_dir, dtype=np.int32)
         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
         loaded = np.asarray(loaded, dtype=bool)
         agent_type = np.asarray(agent_type, dtype=np.int32)
+        shovel_lifted = np.asarray(shovel_lifted, dtype=np.int32)
         self.agent = self.create_agent(
             agent_pos[0].item(),
             agent_pos[1].item(),
@@ -99,4 +168,5 @@ class Agent:
             cabin_dir.item(),
             loaded.item(),
             agent_type.item(),  # Pass agent type
+            shovel_lifted.item(),  # Pass shovel state
         )

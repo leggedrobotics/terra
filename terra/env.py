@@ -170,11 +170,13 @@ class TerraEnv(NamedTuple):
             cabin_dir_1=obs["agent_state"][..., [3]],
             loaded_1=obs["agent_state"][..., [5]],
             agent_type_1=obs["agent_state"][..., [6]],
+            shovel_lifted_1=obs["agent_state"][..., [7]],
             agent_pos_2=obs["agent_state_2"][..., [0, 1]],
             base_dir_2=obs["agent_state_2"][..., [2]],
             cabin_dir_2=obs["agent_state_2"][..., [3]],
             loaded_2=obs["agent_state_2"][..., [5]],
             agent_type_2=obs["agent_state_2"][..., [6]],
+            shovel_lifted_2=obs["agent_state_2"][..., [7]],
             generate_gif=generate_gif,
             target_tiles=target_tiles,
         )
@@ -278,6 +280,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state.wheel_angle,
                 state.agent.agent_state.loaded,
                 state.agent.agent_state.agent_type,  # Add agent type for rendering
+                state.agent.agent_state.shovel_lifted,  # Add shovel state for rendering
             ]
         
         )
@@ -290,6 +293,7 @@ class TerraEnv(NamedTuple):
                 state.agent.agent_state_2.wheel_angle,
                 state.agent.agent_state_2.loaded,
                 state.agent.agent_state_2.agent_type,  # Add agent type for rendering
+                state.agent.agent_state_2.shovel_lifted,  # Add shovel state for rendering
             ]
         
         )

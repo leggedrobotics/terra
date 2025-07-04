@@ -1,0 +1,88 @@
+{
+    "os": "Linux-6.2.0-39-generic-x86_64-with-glibc2.37",
+    "python": "3.12.2",
+    "heartbeatAt": "2025-07-04T16:05:25.964654",
+    "startedAt": "2025-07-04T16:05:24.898422",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--agent_config",
+        "mixed",
+        "--name",
+        "test-run",
+        "--total_timesteps",
+        "1000",
+        "--num_envs_per_device",
+        "1"
+    ],
+    "state": "running",
+    "program": "/media/alessandro/Volume/Dokumente/TerraProject/terra/../terra-baselines/train_mixed_agents.py",
+    "codePathLocal": null,
+    "git": {
+        "remote": "git@github.com:SawneyX/terra.git",
+        "commit": "093e0dd9aeb9b03b7e87b164d08930d0d743175d"
+    },
+    "email": "alesweber@student.ethz.ch",
+    "root": "/media/alessandro/Volume/Dokumente/TerraProject/terra",
+    "host": "alessandro-81C4",
+    "username": "alessandro",
+    "executable": "/home/alessandro/miniconda3/envs/terra/bin/python",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 1550.09825,
+        "min": 400.0,
+        "max": 4000.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 1599.008,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1601.065,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1200.196,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1599.142,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1600.016,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1600.009,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1599.994,
+            "min": 400.0,
+            "max": 4000.0
+        },
+        {
+            "current": 1600.01,
+            "min": 400.0,
+            "max": 4000.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 105.17715072631836,
+            "used": 66.37643051147461
+        }
+    },
+    "memory": {
+        "total": 15.356735229492188
+    }
+}

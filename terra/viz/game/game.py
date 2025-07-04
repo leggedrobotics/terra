@@ -89,11 +89,13 @@ class Game:
         cabin_dir_1,
         loaded_1,
         agent_type_1,
+        shovel_lifted_1,
         agent_pos_2,
         base_dir_2,
         cabin_dir_2,
         loaded_2,
         agent_type_2,
+        shovel_lifted_2,
         generate_gif,
         target_tiles=None,
     ):
@@ -108,11 +110,13 @@ class Game:
             cabin_dir_1,
             loaded_1,
             agent_type_1,
+            shovel_lifted_1,
             agent_pos_2,
             base_dir_2,
             cabin_dir_2,
             loaded_2,
             agent_type_2,
+            shovel_lifted_2,
             target_tiles,
         )
         self.draw()
@@ -153,11 +157,13 @@ class Game:
         cabin_dir_1,
         loaded_1,
         agent_type_1,
+        shovel_lifted_1,
         agent_pos_2,
         base_dir_2,
         cabin_dir_2,
         loaded_2,
         agent_type_2,
+        shovel_lifted_2,
         target_tiles=None,
     ):
         def update_world_agent(
@@ -173,16 +179,18 @@ class Game:
             cabin_dir_1,
             loaded_1,
             agent_type_1,
+            shovel_lifted_1,
             agent_pos_2,
             base_dir_2,
             cabin_dir_2,
             loaded_2,
             agent_type_2,
+            shovel_lifted_2,
             target_tiles=None,
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
-            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1, agent_type_1)
-            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2, agent_type_2)
+            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1, agent_type_1, shovel_lifted_1)
+            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2, agent_type_2, shovel_lifted_2)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -197,15 +205,17 @@ class Game:
             cd1 = cabin_dir_1[i]
             ld1 = loaded_1[i]
             at1 = agent_type_1[i]
+            sl1 = shovel_lifted_1[i]
             ap2 = agent_pos_2[i]
             bd2 = base_dir_2[i]
             cd2 = cabin_dir_2[i]
             ld2 = loaded_2[i]
             at2 = agent_type_2[i]
+            sl2 = shovel_lifted_2[i]
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, at1, ap2, bd2, cd2, ld2, at2, tt),
+                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, at1, sl1, ap2, bd2, cd2, ld2, at2, sl2, tt),
             )
             thread.start()
             threads.append(thread)
@@ -254,10 +264,15 @@ class Game:
             body_vertices_1 = agent1.agent["body"]["vertices"]
             body_color_1 = agent1.agent["body"]["color"]
             
-            min_x1 = min(v[0] for v in body_vertices_1)
-            min_y1 = min(v[1] for v in body_vertices_1)
-            max_x1 = max(v[0] for v in body_vertices_1)
-            max_y1 = max(v[1] for v in body_vertices_1)
+            # Calculate bounding box for all agent components (body, cabin, and optionally shovel)
+            all_vertices_1 = body_vertices_1 + agent1.agent["cabin"]["vertices"]
+            if "shovel" in agent1.agent:
+                all_vertices_1 += agent1.agent["shovel"]["vertices"]
+            
+            min_x1 = min(v[0] for v in all_vertices_1)
+            min_y1 = min(v[1] for v in all_vertices_1)
+            max_x1 = max(v[0] for v in all_vertices_1)
+            max_y1 = max(v[1] for v in all_vertices_1)
             
             surface_width1 = math.ceil(max_x1 - min_x1) + 2
             surface_height1 = math.ceil(max_y1 - min_y1) + 2
@@ -270,9 +285,18 @@ class Game:
             agent_y1_pos = min_y1 + total_offset_y
             agent_positions_1.append((agent_x1_pos, agent_y1_pos))
             
+            # Draw agent body
             offset_vertices_1 = [(v[0] - min_x1, v[1] - min_y1) for v in body_vertices_1]
             pg.draw.polygon(agent_surface1, body_color_1, offset_vertices_1)
             
+            # Draw shovel first (behind the body) if it exists
+            if "shovel" in agent1.agent:
+                shovel_vertices_1 = agent1.agent["shovel"]["vertices"]
+                shovel_offset_1 = [(v[0] - min_x1, v[1] - min_y1) for v in shovel_vertices_1]
+                shovel_color_1 = agent1.agent["shovel"]["color"]
+                pg.draw.polygon(agent_surface1, shovel_color_1, shovel_offset_1)
+            
+            # Draw cabin on top
             cabin_vertices_1 = agent1.agent["cabin"]["vertices"]
             cabin_offset_1 = [(v[0] - min_x1, v[1] - min_y1) for v in cabin_vertices_1]
             cabin_color_1 = agent1.agent["cabin"]["color"]
@@ -283,10 +307,15 @@ class Game:
             body_vertices_2 = agent2.agent["body"]["vertices"]
             body_color_2 = agent2.agent["body"]["color"]
 
-            min_x2 = min(v[0] for v in body_vertices_2)
-            min_y2 = min(v[1] for v in body_vertices_2)
-            max_x2 = max(v[0] for v in body_vertices_2)
-            max_y2 = max(v[1] for v in body_vertices_2)
+            # Calculate bounding box for all agent components (body, cabin, and optionally shovel)
+            all_vertices_2 = body_vertices_2 + agent2.agent["cabin"]["vertices"]
+            if "shovel" in agent2.agent:
+                all_vertices_2 += agent2.agent["shovel"]["vertices"]
+
+            min_x2 = min(v[0] for v in all_vertices_2)
+            min_y2 = min(v[1] for v in all_vertices_2)
+            max_x2 = max(v[0] for v in all_vertices_2)
+            max_y2 = max(v[1] for v in all_vertices_2)
 
             surface_width2 = math.ceil(max_x2 - min_x2) + 2
             surface_height2 = math.ceil(max_y2 - min_y2) + 2
@@ -299,9 +328,18 @@ class Game:
             agent_y2_pos = min_y2 + total_offset_y
             agent_positions_2.append((agent_x2_pos, agent_y2_pos))
 
+            # Draw agent body
             offset_vertices_2 = [(v[0] - min_x2, v[1] - min_y2) for v in body_vertices_2]
             pg.draw.polygon(agent_surface2, body_color_2, offset_vertices_2)
 
+            # Draw shovel first (behind the body) if it exists
+            if "shovel" in agent2.agent:
+                shovel_vertices_2 = agent2.agent["shovel"]["vertices"]
+                shovel_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in shovel_vertices_2]
+                shovel_color_2 = agent2.agent["shovel"]["color"]
+                pg.draw.polygon(agent_surface2, shovel_color_2, shovel_offset_2)
+
+            # Draw cabin on top
             cabin_vertices_2 = agent2.agent["cabin"]["vertices"]
             cabin_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in cabin_vertices_2]
             cabin_color_2 = agent2.agent["cabin"]["color"]

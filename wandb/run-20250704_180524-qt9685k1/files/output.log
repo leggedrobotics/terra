@@ -1,0 +1,48 @@
+Loading maps from ['/media/alessandro/Volume/Dokumente/TerraProject/datasets/relocations', '/media/alessandro/Volume/Dokumente/TerraProject/datasets/foundations', '/media/alessandro/Volume/Dokumente/TerraProject/datasets/trenches/single', '/media/alessandro/Volume/Dokumente/TerraProject/datasets/trenches/double', '/media/alessandro/Volume/Dokumente/TerraProject/datasets/foundations'].
+Loaded -1 maps from /media/alessandro/Volume/Dokumente/TerraProject/datasets/relocations.
+Data Loader: 0it [00:00, ?it/s]
+Traceback (most recent call last):
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/../terra-baselines/train_mixed_agents.py", line 420, in <module>
+    train_mixed_agents(config)
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/../terra-baselines/train_mixed_agents.py", line 308, in train_mixed_agents
+    rng, env, env_params, train_state = make_mixed_agent_states(config)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/../terra-baselines/train_mixed_agents.py", line 228, in make_mixed_agent_states
+    env = TerraEnvBatch(batch_cfg=batch_cfg)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/terra/env.py", line 342, in __init__
+    self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps, single_map_path)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/terra/maps_buffer.py", line 431, in init_maps_buffer
+    ) = load_maps_from_disk(folder_path)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/alessandro/Volume/Dokumente/TerraProject/terra/terra/maps_buffer.py", line 270, in load_maps_from_disk
+    trench_axes = -97.0 * jnp.ones(
+                          ^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/numpy/lax_numpy.py", line 2351, in ones
+    return lax.full(shape, 1, _jnp_dtype(dtype), sharding=_normalize_to_sharding(device))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 1257, in full
+    return broadcast(fill_value, shape)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 802, in broadcast
+    return broadcast_in_dim(operand, tuple(sizes) + np.shape(operand), dims)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 831, in broadcast_in_dim
+    return broadcast_in_dim_p.bind(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/core.py", line 422, in bind
+    return self.bind_with_trace(find_top_trace(args), args, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/core.py", line 425, in bind_with_trace
+    out = trace.process_primitive(self, map(trace.full_raise, args), params)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/core.py", line 913, in process_primitive
+    return primitive.impl(*tracers, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alessandro/miniconda3/envs/terra/lib/python3.12/site-packages/jax/_src/dispatch.py", line 87, in apply_primitive
+    outs = fun(*args)
+           ^^^^^^^^^^
+TypeError: broadcast_in_dim shape must have every element be nonnegative, got (-1, 3, 3).
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.

@@ -44,7 +44,7 @@ class ImmutableAgentConfig(NamedTuple):
     angles_cabin: int = 12
     max_wheel_angle: int = 2
     wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
-    num_state_obs: int = 6  # number of state observations (used to determine network input)
+    num_state_obs: int = 8  # number of state observations: [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded, agent_type, shovel_lifted]
 
 
 class AgentConfig(NamedTuple):
@@ -87,29 +87,18 @@ class Rewards(NamedTuple):
     )
     dump_correct: float  # dump where the target map is positive
 
+    # Skid steer specific rewards
+    skid_lift_correct: float  # reward for successfully lifting dirt (auto-loading or manual)
+    skid_dump_correct: float  # reward for successfully dumping in correct areas
+    skid_dump_wrong: float  # penalty for failed dump attempts
+    skid_shovel_control: float  # small reward for effective shovel control (lift/lower)
+    skid_auto_load: float  # reward for efficient auto-loading while moving
+
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
     normalizer: float  # constant scaling factor for all rewards
 
     @staticmethod
-    # def dense():
-    #     return Rewards(
-    #         existence=-0.0,
-    #         collision_move=-0.0,
-    #         move_while_loaded=0.0,
-    #         move=-0.0,
-    #         move_with_turned_wheels=-0.0,
-    #         collision_turn=-0.0,
-    #         base_turn=-0.0,
-    #         cabin_turn=-0.00,
-    #         wheel_turn=-0.00,
-    #         dig_wrong=-1.0,
-    #         dump_wrong=-1.0,
-    #         dig_correct=2.0,
-    #         dump_correct=2.0,
-    #         terminal=100.0,
-    #         normalizer=100.0,
-    #     )
     def dense():
         return Rewards(
             existence=-0.1,
@@ -125,6 +114,12 @@ class Rewards(NamedTuple):
             dump_wrong=-1.0,
             dig_correct=0.2,
             dump_correct=0.15,
+            # Skid steer specific rewards
+            skid_lift_correct=0.3,  # Good reward for successful dirt lifting
+            skid_dump_correct=0.25,  # Good reward for correct dumping
+            skid_dump_wrong=-0.5,  # Moderate penalty for failed dumps
+            skid_shovel_control=0.05,  # Small reward for shovel control
+            skid_auto_load=0.1,  # Reward for efficient auto-loading
             terminal=100.0,
             normalizer=100.0,
         )
@@ -145,6 +140,12 @@ class Rewards(NamedTuple):
             dump_wrong=-0.3,
             dig_correct=0.0,
             dump_correct=0.0,
+            # Skid steer specific rewards (more sparse)
+            skid_lift_correct=0.1,  # Lower reward in sparse mode
+            skid_dump_correct=0.05,  # Lower reward in sparse mode
+            skid_dump_wrong=-0.2,  # Lower penalty in sparse mode
+            skid_shovel_control=0.01,  # Very small reward in sparse mode
+            skid_auto_load=0.02,  # Very small reward in sparse mode
             terminal=100.0,
             normalizer=100.0,
         )
@@ -213,6 +214,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
+        {
+            "maps_path": "relocations",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         {
             "maps_path": "foundations",
             "max_steps_in_episode": 400,

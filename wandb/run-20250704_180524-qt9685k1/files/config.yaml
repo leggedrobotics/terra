@@ -1,0 +1,104 @@
+wandb_version: 1
+
+name:
+  desc: null
+  value: test-run-local-2025-07-04-18-05-23
+num_devices:
+  desc: null
+  value: 1
+project:
+  desc: null
+  value: mixed-agents
+group:
+  desc: null
+  value: tracked-skidsteer
+num_envs_per_device:
+  desc: null
+  value: 2048
+num_steps:
+  desc: null
+  value: 32
+update_epochs:
+  desc: null
+  value: 5
+num_minibatches:
+  desc: null
+  value: 32
+total_timesteps:
+  desc: null
+  value: 50000000000
+lr:
+  desc: null
+  value: 0.0002
+clip_eps:
+  desc: null
+  value: 0.3
+gamma:
+  desc: null
+  value: 0.995
+gae_lambda:
+  desc: null
+  value: 0.95
+ent_coef:
+  desc: null
+  value: 0.01
+vf_coef:
+  desc: null
+  value: 5.0
+max_grad_norm:
+  desc: null
+  value: 0.5
+eval_episodes:
+  desc: null
+  value: 100
+seed:
+  desc: null
+  value: 42
+log_train_interval:
+  desc: null
+  value: 1
+log_eval_interval:
+  desc: null
+  value: 25
+checkpoint_interval:
+  desc: null
+  value: 25
+agent1_type:
+  desc: null
+  value: 0
+agent2_type:
+  desc: null
+  value: 2
+use_agent_type_curriculum:
+  desc: null
+  value: false
+curriculum_switch_timestep:
+  desc: null
+  value: 10000000000
+_wandb:
+  desc: null
+  value:
+    python_version: 3.12.2
+    cli_version: 0.16.4
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1751645124.0
+    t:
+      1:
+      - 12
+      - 45
+      - 55
+      2:
+      - 12
+      - 45
+      - 55
+      3:
+      - 13
+      - 15
+      - 16
+      - 23
+      4: 3.12.2
+      5: 0.16.4
+      8:
+      - 5
+      13: linux-x86_64

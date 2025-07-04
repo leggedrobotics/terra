@@ -20,6 +20,9 @@ class AgentState(NamedTuple):
     where 0 means that it is aligned with the x axis, and for every positive
     increment, 90 degrees are added in the direction of the arrow going from
     the x axis to the y axes (anti-clockwise).
+    
+    shovel_lifted:
+    For skid steer only: 0 = shovel lowered (can auto-load), 1 = shovel lifted (can dump)
     """
 
     pos_base: IntMap
@@ -28,6 +31,7 @@ class AgentState(NamedTuple):
     wheel_angle: IntLowDim
     loaded: IntLowDim
     agent_type: IntLowDim  # 0=tracked, 1=wheeled, 2=skid steer
+    shovel_lifted: IntLowDim  # 0=lowered, 1=lifted (for skid steer only)
 
 
 class Agent(NamedTuple):
@@ -94,19 +98,21 @@ class Agent(NamedTuple):
         agent_state_1 = AgentState(
             pos_base=pos_base_1,
             angle_base=angle_base_1,
-            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
-            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
-            loaded=jnp.full((1,), 0, dtype=IntLowDim),
-            agent_type=agent_types[0],
+            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
+            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
+            loaded=jnp.full((1,), 0, dtype=jnp.int8),
+            agent_type=jnp.full((1,), agent_types[0], dtype=jnp.int8),  # Array like loaded
+            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
         )
         
         agent_state_2 = AgentState(
             pos_base=pos_base_2,
             angle_base=angle_base_2,
-            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
-            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
-            loaded=jnp.full((1,), 0, dtype=IntLowDim),
-            agent_type=agent_types[1],
+            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
+            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
+            loaded=jnp.full((1,), 0, dtype=jnp.int8),
+            agent_type=jnp.full((1,), agent_types[1], dtype=jnp.int8),  # Array like loaded
+            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
         )
 
         width = env_cfg.agent.width

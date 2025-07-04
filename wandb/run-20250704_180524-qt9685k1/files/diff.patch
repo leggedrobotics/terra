@@ -1,0 +1,1787 @@
+diff --git a/terra/agent.py b/terra/agent.py
+index 4a671f5..9d09697 100644
+--- a/terra/agent.py
++++ b/terra/agent.py
+@@ -20,6 +20,9 @@ class AgentState(NamedTuple):
+     where 0 means that it is aligned with the x axis, and for every positive
+     increment, 90 degrees are added in the direction of the arrow going from
+     the x axis to the y axes (anti-clockwise).
++    
++    shovel_lifted:
++    For skid steer only: 0 = shovel lowered (can auto-load), 1 = shovel lifted (can dump)
+     """
+ 
+     pos_base: IntMap
+@@ -28,6 +31,7 @@ class AgentState(NamedTuple):
+     wheel_angle: IntLowDim
+     loaded: IntLowDim
+     agent_type: IntLowDim  # 0=tracked, 1=wheeled, 2=skid steer
++    shovel_lifted: IntLowDim  # 0=lowered, 1=lifted (for skid steer only)
+ 
+ 
+ class Agent(NamedTuple):
+@@ -94,19 +98,21 @@ class Agent(NamedTuple):
+         agent_state_1 = AgentState(
+             pos_base=pos_base_1,
+             angle_base=angle_base_1,
+-            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+-            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
+-            loaded=jnp.full((1,), 0, dtype=IntLowDim),
+-            agent_type=agent_types[0],
++            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
++            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
++            loaded=jnp.full((1,), 0, dtype=jnp.int8),
++            agent_type=jnp.full((1,), agent_types[0], dtype=jnp.int8),  # Array like loaded
++            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
+         )
+         
+         agent_state_2 = AgentState(
+             pos_base=pos_base_2,
+             angle_base=angle_base_2,
+-            angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+-            wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
+-            loaded=jnp.full((1,), 0, dtype=IntLowDim),
+-            agent_type=agent_types[1],
++            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
++            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
++            loaded=jnp.full((1,), 0, dtype=jnp.int8),
++            agent_type=jnp.full((1,), agent_types[1], dtype=jnp.int8),  # Array like loaded
++            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
+         )
+ 
+         width = env_cfg.agent.width
+diff --git a/terra/config.py b/terra/config.py
+index add3056..d169ad2 100644
+--- a/terra/config.py
++++ b/terra/config.py
+@@ -44,7 +44,7 @@ class ImmutableAgentConfig(NamedTuple):
+     angles_cabin: int = 12
+     max_wheel_angle: int = 2
+     wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
+-    num_state_obs: int = 6  # number of state observations (used to determine network input)
++    num_state_obs: int = 8  # number of state observations: [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded, agent_type, shovel_lifted]
+ 
+ 
+ class AgentConfig(NamedTuple):
+@@ -87,29 +87,18 @@ class Rewards(NamedTuple):
+     )
+     dump_correct: float  # dump where the target map is positive
+ 
++    # Skid steer specific rewards
++    skid_lift_correct: float  # reward for successfully lifting dirt (auto-loading or manual)
++    skid_dump_correct: float  # reward for successfully dumping in correct areas
++    skid_dump_wrong: float  # penalty for failed dump attempts
++    skid_shovel_control: float  # small reward for effective shovel control (lift/lower)
++    skid_auto_load: float  # reward for efficient auto-loading while moving
++
+     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
+ 
+     normalizer: float  # constant scaling factor for all rewards
+ 
+     @staticmethod
+-    # def dense():
+-    #     return Rewards(
+-    #         existence=-0.0,
+-    #         collision_move=-0.0,
+-    #         move_while_loaded=0.0,
+-    #         move=-0.0,
+-    #         move_with_turned_wheels=-0.0,
+-    #         collision_turn=-0.0,
+-    #         base_turn=-0.0,
+-    #         cabin_turn=-0.00,
+-    #         wheel_turn=-0.00,
+-    #         dig_wrong=-1.0,
+-    #         dump_wrong=-1.0,
+-    #         dig_correct=2.0,
+-    #         dump_correct=2.0,
+-    #         terminal=100.0,
+-    #         normalizer=100.0,
+-    #     )
+     def dense():
+         return Rewards(
+             existence=-0.1,
+@@ -125,6 +114,12 @@ class Rewards(NamedTuple):
+             dump_wrong=-1.0,
+             dig_correct=0.2,
+             dump_correct=0.15,
++            # Skid steer specific rewards
++            skid_lift_correct=0.3,  # Good reward for successful dirt lifting
++            skid_dump_correct=0.25,  # Good reward for correct dumping
++            skid_dump_wrong=-0.5,  # Moderate penalty for failed dumps
++            skid_shovel_control=0.05,  # Small reward for shovel control
++            skid_auto_load=0.1,  # Reward for efficient auto-loading
+             terminal=100.0,
+             normalizer=100.0,
+         )
+@@ -145,6 +140,12 @@ class Rewards(NamedTuple):
+             dump_wrong=-0.3,
+             dig_correct=0.0,
+             dump_correct=0.0,
++            # Skid steer specific rewards (more sparse)
++            skid_lift_correct=0.1,  # Lower reward in sparse mode
++            skid_dump_correct=0.05,  # Lower reward in sparse mode
++            skid_dump_wrong=-0.2,  # Lower penalty in sparse mode
++            skid_shovel_control=0.01,  # Very small reward in sparse mode
++            skid_auto_load=0.02,  # Very small reward in sparse mode
+             terminal=100.0,
+             normalizer=100.0,
+         )
+@@ -213,6 +214,12 @@ class CurriculumGlobalConfig(NamedTuple):
+         #     "rewards_type": RewardsType.DENSE,
+         #     "apply_trench_rewards": False,
+         # },
++        {
++            "maps_path": "relocations",
++            "max_steps_in_episode": 400,
++            "rewards_type": RewardsType.DENSE,
++            "apply_trench_rewards": False,
++        },
+         {
+             "maps_path": "foundations",
+             "max_steps_in_episode": 400,
+diff --git a/terra/env.py b/terra/env.py
+index 8127b5d..13bfd7e 100644
+--- a/terra/env.py
++++ b/terra/env.py
+@@ -170,11 +170,13 @@ class TerraEnv(NamedTuple):
+             cabin_dir_1=obs["agent_state"][..., [3]],
+             loaded_1=obs["agent_state"][..., [5]],
+             agent_type_1=obs["agent_state"][..., [6]],
++            shovel_lifted_1=obs["agent_state"][..., [7]],
+             agent_pos_2=obs["agent_state_2"][..., [0, 1]],
+             base_dir_2=obs["agent_state_2"][..., [2]],
+             cabin_dir_2=obs["agent_state_2"][..., [3]],
+             loaded_2=obs["agent_state_2"][..., [5]],
+             agent_type_2=obs["agent_state_2"][..., [6]],
++            shovel_lifted_2=obs["agent_state_2"][..., [7]],
+             generate_gif=generate_gif,
+             target_tiles=target_tiles,
+         )
+@@ -278,6 +280,7 @@ class TerraEnv(NamedTuple):
+                 state.agent.agent_state.wheel_angle,
+                 state.agent.agent_state.loaded,
+                 state.agent.agent_state.agent_type,  # Add agent type for rendering
++                state.agent.agent_state.shovel_lifted,  # Add shovel state for rendering
+             ]
+         
+         )
+@@ -290,6 +293,7 @@ class TerraEnv(NamedTuple):
+                 state.agent.agent_state_2.wheel_angle,
+                 state.agent.agent_state_2.loaded,
+                 state.agent.agent_state_2.agent_type,  # Add agent type for rendering
++                state.agent.agent_state_2.shovel_lifted,  # Add shovel state for rendering
+             ]
+         
+         )
+diff --git a/terra/state.py b/terra/state.py
+index 631aef7..7f90c26 100644
+--- a/terra/state.py
++++ b/terra/state.py
+@@ -318,7 +318,7 @@ class State(NamedTuple):
+ 
+         # Compute candidate new position and immediately round it to discrete grid points.
+         candidate_pos = self.agent.agent_state.pos_base + delta_xy
+-        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
++        candidate_pos = jnp.round(candidate_pos).astype(IntMap)  # Fix: use IntMap not IntLowDim
+         candidate_pos = jnp.squeeze(candidate_pos, axis=0)
+ 
+         # Compute the agent's corners based on the candidate (rounded) position.
+@@ -385,7 +385,7 @@ class State(NamedTuple):
+         candidate_pos = center_of_rotation + new_relative_pos
+ 
+         # Round to grid position
+-        candidate_pos = jnp.round(candidate_pos).astype(IntLowDim)
++        candidate_pos = jnp.round(candidate_pos).astype(IntMap)  # Fix: use IntMap not IntLowDim
+ 
+         # Calculate new orientation angle in our discrete system
+         new_angle_base = jnp.round(
+@@ -421,9 +421,80 @@ class State(NamedTuple):
+             )
+         )
+ 
++    def _skid_steer_auto_load_dirt(self, new_state: "State") -> "State":
++        """
++        Auto-loading function for skid steer when moving with shovel lowered.
++        Uses a smaller rectangular workspace (2.0 x 1.5 tiles) around the agent.
++        """
++        # Only applies to skid steer with shovel lowered and not already loaded
++        is_skid_steer = new_state.agent.agent_state.agent_type[0] == 2
++        shovel_lowered = new_state.agent.agent_state.shovel_lifted[0] == 0
++        not_loaded = new_state.agent.agent_state.loaded[0] == 0
++        
++        should_auto_load = jnp.logical_and(
++            jnp.logical_and(is_skid_steer, shovel_lowered), 
++            not_loaded
++        )
++        
++        def _apply_auto_load():
++            # Use the closer cylindrical workspace for skid steer auto-loading
++            map_cyl_coords, map_local_coords = new_state._get_map_local_and_cyl_coords()
++            
++            # Get the skid steer cylindrical workspace
++            auto_load_mask = new_state._get_dig_dump_mask_skidsteer(map_cyl_coords, map_local_coords)
++            
++            # Apply skid steer dig masking (only allow loading from existing dirt)
++            auto_load_mask = new_state._mask_out_wrong_dig_tiles_skidsteer(auto_load_mask)
++            
++            # Calculate how much dirt to load
++            flattened_action_map = new_state.world.action_map.map.reshape(-1)
++            selected_tiles_sum = flattened_action_map @ auto_load_mask
++            
++            # Only proceed if there's dirt to load
++            def _perform_auto_load():
++                # Apply the auto-loading (similar to digging)
++                new_flattened_action_map = new_state._apply_dig_mask(
++                    flattened_action_map,
++                    auto_load_mask,
++                    moving_dumped_dirt=True  # We're moving existing dirt
++                )
++                
++                # CONSERVATION FIX: Load exactly the amount that was removed from the map
++                # When moving_dumped_dirt=True, _apply_dig_mask removes ALL dirt from masked tiles
++                # So we must load that same amount to maintain conservation
++                volume_loaded = selected_tiles_sum  # Load exactly what was removed
++                
++                # Reshape back to 2D map with correct dtype
++                new_action_map = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
++                # Ensure we maintain the original dtype
++                new_action_map = new_action_map.astype(new_state.world.action_map.map.dtype)
++                
++                return new_state._replace(
++                    world=new_state.world._replace(
++                        action_map=new_state.world.action_map._replace(map=new_action_map)
++                    ),
++                    agent=new_state.agent._replace(
++                        agent_state=new_state.agent.agent_state._replace(
++                            loaded=jnp.array([volume_loaded], dtype=new_state.agent.agent_state.loaded.dtype)
++                        )
++                    )
++                )
++            
++            # Only auto-load if there's actually dirt to load
++            return jax.lax.cond(
++                selected_tiles_sum > 0,
++                _perform_auto_load,
++                lambda: new_state
++            )
++        
++        return jax.lax.cond(should_auto_load, _apply_auto_load, lambda: new_state)
++
+     def _handle_move_forward(self) -> "State":
+         """
+-        Moves the base forward - if not loaded (or if skid steer)
++        Moves the base forward with realistic restrictions:
++        - Excavators/Wheeled: can only move when not loaded
++        - Skid steer: can move when not loaded OR when loaded with shovel lifted
++        - Skid steer with lowered shovel + loaded: BLOCKED (forces shovel lifting)
+         """
+ 
+         def _move_forward():
+@@ -431,20 +502,44 @@ class State(NamedTuple):
+             orientation_vector = self._base_orientation_to_one_hot_forward(
+                 base_orientation
+             )
+-            return self._move_on_orientation(orientation_vector)
++            new_state = self._move_on_orientation(orientation_vector)
++            
++            # Apply auto-loading for skid steer if moved successfully
++            return self._skid_steer_auto_load_dirt(new_state)
+ 
+-        # Use JAX conditional: skid steer (type 2) can move when loaded, others cannot
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        # Check agent conditions
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         is_loaded = self.agent.agent_state.loaded[0] > 0
++        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
++        
++        # Movement rules:
++        # - Non-skid steers: only when not loaded
++        # - Skid steer: not loaded OR (loaded AND shovel lifted)
++        # - Blocked: skid steer with loaded + lowered shovel
++        skid_steer_can_move = jnp.logical_or(
++            jnp.logical_not(is_loaded),  # Not loaded - can always move
++            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - optimal transport
++        )
+         
+-        # Skid steer can always move, others only when not loaded
+-        can_move = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        can_move = jnp.logical_or(
++            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
++            jnp.logical_and(is_skid_steer, skid_steer_can_move)  # Skid steer with restrictions
++        )
++        
++        # Final check: non-skid steers still can't move when loaded
++        can_move = jnp.logical_and(
++            can_move,
++            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        )
+         
+         return jax.lax.cond(can_move, _move_forward, self._do_nothing)
+ 
+     def _handle_move_backward(self) -> "State":
+         """
+-        Moves the base backward - if not loaded (or if skid steer)
++        Moves the base backward with realistic restrictions:
++        - Excavators/Wheeled: can only move when not loaded
++        - Skid steer: can move when not loaded OR when loaded with shovel lifted
++        - Skid steer with lowered shovel + loaded: BLOCKED (forces shovel lifting)
+         """
+ 
+         def _move_backward():
+@@ -452,14 +547,35 @@ class State(NamedTuple):
+             orientation_vector = self._base_orientation_to_one_hot_backwards(
+                 base_orientation
+             )
+-            return self._move_on_orientation(orientation_vector)
++            new_state = self._move_on_orientation(orientation_vector)
++            
++            # No auto-loading on backward movement - only forward movement should auto-load
++            return new_state
+ 
+-        # Use JAX conditional: skid steer (type 2) can move when loaded, others cannot
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        # Check agent conditions
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         is_loaded = self.agent.agent_state.loaded[0] > 0
++        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
++        
++        # Movement rules:
++        # - Non-skid steers: only when not loaded
++        # - Skid steer: not loaded OR (loaded AND shovel lifted)
++        # - Blocked: skid steer with loaded + lowered shovel
++        skid_steer_can_move = jnp.logical_or(
++            jnp.logical_not(is_loaded),  # Not loaded - can always move
++            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - optimal transport
++        )
+         
+-        # Skid steer can always move, others only when not loaded
+-        can_move = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        can_move = jnp.logical_or(
++            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
++            jnp.logical_and(is_skid_steer, skid_steer_can_move)  # Skid steer with restrictions
++        )
++        
++        # Final check: non-skid steers still can't move when loaded
++        can_move = jnp.logical_and(
++            can_move,
++            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        )
+         
+         return jax.lax.cond(can_move, _move_backward, self._do_nothing)
+ 
+@@ -542,12 +658,30 @@ class State(NamedTuple):
+                 )
+             )
+ 
+-        # Use JAX conditional: skid steer (type 2) can rotate when loaded, others cannot
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        # Check agent conditions
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         is_loaded = self.agent.agent_state.loaded[0] > 0
++        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
++        
++        # Rotation rules:
++        # - Non-skid steers: only when not loaded (existing logic)
++        # - Skid steer: not loaded OR (loaded AND shovel lifted)
++        # - Blocked: skid steer with loaded + lowered shovel (realistic constraint)
++        skid_steer_can_rotate = jnp.logical_or(
++            jnp.logical_not(is_loaded),  # Not loaded - can always rotate
++            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - safe rotation
++        )
+         
+-        # Skid steer can always rotate, others only when not loaded
+-        can_rotate = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        can_rotate = jnp.logical_or(
++            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
++            jnp.logical_and(is_skid_steer, skid_steer_can_rotate)  # Skid steer with realistic restrictions
++        )
++        
++        # Final check: non-skid steers still can't rotate when loaded
++        can_rotate = jnp.logical_and(
++            can_rotate,
++            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        )
+         
+         return jax.lax.cond(can_rotate, _rotate_clock, self._do_nothing)
+ 
+@@ -569,19 +703,37 @@ class State(NamedTuple):
+                 )
+             )
+ 
+-        # Use JAX conditional: skid steer (type 2) can rotate when loaded, others cannot
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        # Check agent conditions
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         is_loaded = self.agent.agent_state.loaded[0] > 0
++        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
++        
++        # Rotation rules:
++        # - Non-skid steers: only when not loaded (existing logic)
++        # - Skid steer: not loaded OR (loaded AND shovel lifted)
++        # - Blocked: skid steer with loaded + lowered shovel (realistic constraint)
++        skid_steer_can_rotate = jnp.logical_or(
++            jnp.logical_not(is_loaded),  # Not loaded - can always rotate
++            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - safe rotation
++        )
+         
+-        # Skid steer can always rotate, others only when not loaded
+-        can_rotate = jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        can_rotate = jnp.logical_or(
++            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
++            jnp.logical_and(is_skid_steer, skid_steer_can_rotate)  # Skid steer with realistic restrictions
++        )
++        
++        # Final check: non-skid steers still can't rotate when loaded
++        can_rotate = jnp.logical_and(
++            can_rotate,
++            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
++        )
+         
+         return jax.lax.cond(can_rotate, _rotate_anticlock, self._do_nothing)
+ 
+     def _handle_cabin_clock(self) -> "State":
+         """Handle cabin clockwise rotation. Does nothing for skid steer."""
+         # Skid steer cannot rotate cabin
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         
+         def _cabin_clock():
+             old_angle_cabin = self.agent.agent_state.angle_cabin
+@@ -602,7 +754,7 @@ class State(NamedTuple):
+     def _handle_cabin_anticlock(self) -> "State":
+         """Handle cabin anti-clockwise rotation. Does nothing for skid steer."""
+         # Skid steer cannot rotate cabin
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         
+         def _cabin_anticlock():
+             old_angle_cabin = self.agent.agent_state.angle_cabin
+@@ -851,30 +1003,158 @@ class State(NamedTuple):
+         Returns:
+             - new_flattened_map: (N, ) Array flattened new height map
+         """
+-        # Check if there is any target dump tile within the mask
+-        target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
+-        target_dump_volume = target_map_dump_mask.sum()
++        # Check if this is a skid steer - they can dump anywhere in workspace
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
++        
++        # For skid steers, use original dump mask without target map filtering
++        # For excavators/wheeled, apply target map filtering as before
++        def _apply_target_filtering():
++            # Check if there is any target dump tile within the mask
++            target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
++            target_dump_volume = target_map_dump_mask.sum()
++            return jax.lax.cond(
++                target_dump_volume > 0,
++                lambda: (IntMap(target_map_dump_mask), target_dump_volume),
++                lambda: (IntMap(dump_mask), dump_mask.sum()),
++            )
++        
++        def _use_original_mask():
++            # Use original dump mask without target map filtering
++            return (IntMap(dump_mask), dump_mask.sum())
++        
+         dump_mask, dump_volume = jax.lax.cond(
+-            target_dump_volume > 0,
+-            lambda: (IntMap(target_map_dump_mask), target_dump_volume),
+-            lambda: (IntMap(dump_mask), dump_mask.sum()),
++            is_skid_steer,
++            _use_original_mask,
++            _apply_target_filtering
+         )
+ 
+-        loaded_volume = self.agent.agent_state.loaded
+-        remaining_volume = loaded_volume % dump_volume
+-        even_volume_per_tile = (loaded_volume - remaining_volume) / dump_volume
+-
+-        delta_dig = self.env_cfg.agent.dig_depth * dump_mask * even_volume_per_tile
+-        delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
+-
+-        delta_dig_remaining = jnp.where(
+-            jnp.logical_and(jnp.cumsum(dump_mask) <= remaining_volume, dump_mask),
+-            1,
+-            delta_dig_remaining,
++        # Use the safely calculated values passed in from _apply_dump
++        # Don't recalculate here to avoid division by zero
++        # Simple Gaussian distribution within selected dump tiles
++        dump_volume = even_volume_per_tile * jnp.sum(dump_mask) + remaining_volume
++        
++        # Calculate workspace centroid for Gaussian center
++        map_2d_shape = self.world.action_map.map.shape
++        dump_mask_2d = dump_mask.reshape(map_2d_shape)
++        y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
++        centroid_y = jnp.sum(y_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
++        centroid_x = jnp.sum(x_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
++        
++        # Create Gaussian distribution (sigma=2)
++        distances_sq = (y_coords - centroid_y)**2 + (x_coords - centroid_x)**2
++        gaussian = jnp.exp(-distances_sq / 8.0)  # sigma=2 -> 2*sigma^2 = 8
++        masked_gaussian = gaussian * dump_mask_2d
++        normalized_weights = masked_gaussian / jnp.sum(masked_gaussian)
++        
++        # Distribute dirt with perfect conservation
++        volume_per_tile = normalized_weights.flatten() * dump_volume
++        floor_values = jnp.floor(volume_per_tile).astype(IntMap)
++        fractional_parts = volume_per_tile - floor_values
++        remaining_units = dump_volume - jnp.sum(floor_values)
++        
++        # JAX-compatible way to select top fractional parts for bonus units
++        sorted_indices = jnp.argsort(-fractional_parts)
++        bonus_mask = jnp.arange(len(floor_values)) < remaining_units
++        reordered_bonus = jnp.zeros_like(floor_values).at[sorted_indices].set(bonus_mask.astype(IntMap))
++        
++        new_flattened_map = (flattened_map + floor_values + reordered_bonus).astype(IntMap)
++        
++        # Apply soil mechanics to dumped areas (reshape to 2D for soil mechanics)
++        map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
++        affected_mask_2d = dump_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
++        
++        # Apply local soil mechanics to simulate realistic dirt settling
++        # IMPROVED: Only spread to immediately adjacent tiles (8-neighbors) to prevent dirt loss
++        # Create a more focused affected mask - only tiles that actually received dirt
++        actual_dirt_added = (new_flattened_map - flattened_map).reshape(self.world.action_map.map.shape)
++        tiles_with_new_dirt = actual_dirt_added > 0
++        
++        # Expand only to immediate neighbors (3x3 around each dumped tile)
++        expanded_affected_mask = self._expand_mask_for_soil_mechanics(tiles_with_new_dirt)
++        
++        map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_affected_mask)
++        
++        return map_with_soil_mechanics.reshape(-1)
++
++    def _apply_dig_mask_with_soil_mechanics(
++        self, 
++        flattened_map: Array, 
++        dig_mask: Array, 
++        moving_dumped_dirt: bool,
++        apply_soil_mechanics: bool = False
++    ) -> Array:
++        """
++        Enhanced version of _apply_dig_mask that optionally applies soil mechanics.
++        Used when lifting dumped dirt to simulate realistic soil behavior.
++        
++        Args:
++            - flattened_map: (N, ) Array flattened height map
++            - dig_mask: (N, ) Array of where to dig bools
++            - moving_dumped_dirt: bool, whether we're moving existing dirt
++            - apply_soil_mechanics: bool, whether to apply soil spreading after digging
++        Returns:
++            - new_flattened_map: (N, ) Array flattened new height map
++        """
++        # Apply the normal dig mask logic first
++        delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
++        new_flattened_map = jax.lax.cond(
++            moving_dumped_dirt,
++            lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
++            lambda: (flattened_map - delta_dig).astype(IntMap),
++        )
++        
++        # Apply soil mechanics only if requested (when lifting dumped dirt)
++        def _apply_soil_mechanics():
++            map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
++            affected_mask_2d = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
++            
++            # Expand affected area to include neighboring tiles for soil mechanics
++            # This simulates dirt redistributing around the area where dirt was lifted
++            expanded_mask = self._expand_mask_for_soil_mechanics(affected_mask_2d)
++            
++            map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_mask)
++            return map_with_soil_mechanics.reshape(-1)
++        
++        return jax.lax.cond(
++            apply_soil_mechanics,
++            _apply_soil_mechanics,
++            lambda: new_flattened_map
+         )
+ 
+-        return (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
+-
++    def _expand_mask_for_soil_mechanics(self, mask: Array) -> Array:
++        """
++        Expand the mask to include all valid neighbors (3x3 kernel).
++        Only includes neighbors that are valid for dumping (not obstacles, is dumpable).
++        """
++        H, W = mask.shape
++        padding_mask = self.world.padding_mask
++        dumpability_mask = self.world.dumpability_mask
++        
++        # Create validity mask - tiles where dirt can be placed
++        validity_mask = jnp.logical_and(
++            padding_mask == 0,  # Not an obstacle
++            dumpability_mask == 1  # Is dumpable
++        )
++        
++        # Use convolution to expand the mask to include neighbors
++        # Create a 3x3 kernel that includes center and all 8 neighbors
++        kernel = jnp.ones((3, 3), dtype=jnp.float32)
++        
++        # Convert mask to float for convolution
++        mask_float = mask.astype(jnp.float32)
++        
++        # Apply 2D convolution to expand the mask
++        # This is JAX-compatible and vectorized
++        expanded_float = jax.scipy.signal.correlate2d(
++            mask_float, kernel, mode='same', boundary='fill', fillvalue=0.0
++        )
++        
++        # Convert back to boolean - any neighbor (including self) was affected
++        expanded = expanded_float > 0
++        
++        # CRITICAL: Only include valid tiles in the expanded mask
++        # This ensures soil mechanics don't affect obstacles or non-dumpable areas
++        return jnp.logical_and(expanded, validity_mask)
+ 
+     def _get_map_local_and_cyl_coords_2(self):
+         """
+@@ -1058,20 +1338,109 @@ class State(NamedTuple):
+         # Reshape to match map dimensions
+         return dig_dump_mask.reshape(map_width, map_height)
+         
++    def _get_dig_dump_mask_rectangular_skidsteer(self, map_local_coords: Array) -> Array:
++        """
++        Creates a rectangular workspace for skid steer that rotates with the agent.
++        Uses local coordinates but with more stable rectangular logic.
++        
++        Args:
++            - map_local_coords: (2, N) Array with [x, y] rows in local coordinates
++        Returns:
++            - dig_mask: (N, ) Array of bools, where True means can interact here
++        """
++        tile_size = self.env_cfg.tile_size
++        
++        # Skid steer specific parameters - large, well-positioned rectangle
++        # Width: 8 tiles (wide and clearly visible)
++        # Depth: 6 tiles (substantial depth)
++        # Start: 5.0 tiles in front of agent (well separated from agent)
++        
++        workspace_width_tiles = 8.0
++        workspace_depth_tiles = 6.0
++        workspace_start_tiles = 5.0
++        
++        workspace_width = workspace_width_tiles * tile_size
++        workspace_depth = workspace_depth_tiles * tile_size
++        workspace_start = workspace_start_tiles * tile_size
++        
++        # Local coordinates relative to agent
++        local_x = map_local_coords[0]
++        local_y = map_local_coords[1]
++        
++        # Create rectangular workspace in front of agent (positive Y direction)
++        # X limits: within workspace width, centered on agent
++        x_mask = jnp.logical_and(
++            local_x >= -workspace_width / 2,
++            local_x <= workspace_width / 2
++        )
++        
++        # Y limits: from workspace_start to workspace_start + workspace_depth
++        y_mask = jnp.logical_and(
++            local_y >= workspace_start,
++            local_y <= workspace_start + workspace_depth
++        )
++        
++        # Combine to create rectangular workspace
++        rectangular_mask = jnp.logical_and(x_mask, y_mask)
++        
++        # Simplified agent exclusion - just exclude a small area around origin
++        # This avoids complex coordinate transformations that might cause shape changes
++        agent_exclusion_radius = 2.0 * tile_size  # 2 tile radius around agent
++        distance_from_agent = jnp.sqrt(local_x**2 + local_y**2)
++        agent_exclusion_mask = distance_from_agent > agent_exclusion_radius
++        
++        return jnp.logical_and(rectangular_mask, agent_exclusion_mask)
++
+     def _build_dig_dump_cone(self) -> Array:
+         """
+         Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
++        Uses different workspace shapes for different agent types:
++        - Excavator/Wheeled: Cylindrical cone (original parameters)
++        - Skid Steer: Cylindrical cone (closer, smaller parameters)
+         """
++        current_agent_type = self.agent.agent_state.agent_type[0]
++        
++        # Get coordinates for cylindrical approach (used by both agent types)
+         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
+-        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
++        
++        def _get_excavator_cone():
++            return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
++        
++        def _get_skidsteer_cone():
++            return self._get_dig_dump_mask_skidsteer(map_cyl_coords, map_local_coords_base)
++        
++        # Use JAX conditional to select workspace type based on agent type
++        return jax.lax.cond(
++            current_agent_type == 2,  # Skid steer
++            _get_skidsteer_cone,
++            _get_excavator_cone       # Default for excavator (0) and wheeled (1)
++        )
+     
+ 
+     def _build_dig_dump_cone_2(self) -> Array:
+         """
+         Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
++        Uses different workspace shapes for different agent types:
++        - Excavator/Wheeled: Cylindrical cone (original parameters)
++        - Skid Steer: Cylindrical cone (closer, smaller parameters)
+         """
++        current_agent_type = self.agent.agent_state_2.agent_type[0]
++        
++        # Get coordinates for cylindrical approach (used by both agent types)
+         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords_2()
+-        return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
++        
++        def _get_excavator_cone():
++            return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
++        
++        def _get_skidsteer_cone():
++            return self._get_dig_dump_mask_skidsteer(map_cyl_coords, map_local_coords_base)
++        
++        # Use JAX conditional to select workspace type based on agent type
++        return jax.lax.cond(
++            current_agent_type == 2,  # Skid steer
++            _get_skidsteer_cone,
++            _get_excavator_cone       # Default for excavator (0) and wheeled (1)
++        )
+ 
+     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
+         """
+@@ -1227,7 +1596,6 @@ class State(NamedTuple):
+             flattened_action_map,
+         )
+         return s
+-
+     def _handle_dump(self) -> "State":
+         dump_mask = self._build_dig_dump_cone()
+         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+@@ -1236,12 +1604,13 @@ class State(NamedTuple):
+         dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
+         dump_volume = dump_mask.sum()
+ 
+-        remaining_volume = self.agent.agent_state.loaded % dump_volume
+-        even_volume_per_tile = (
+-            self.agent.agent_state.loaded - remaining_volume
+-        ) / dump_volume
+-
+         def _apply_dump():
++            # Calculate volume distribution only when we actually have a valid dump area
++            remaining_volume = self.agent.agent_state.loaded % dump_volume
++            even_volume_per_tile = (
++                self.agent.agent_state.loaded - remaining_volume
++            ) / dump_volume
++            
+             flattened_action_map = self.world.action_map.map.reshape(-1)
+             new_map_global_coords = self._apply_dump_mask(
+                 flattened_action_map,
+@@ -1273,6 +1642,10 @@ class State(NamedTuple):
+ 
+         return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
+ 
++
++
++
++
+     def _handle_lift_dumped_dirt(self) -> "State":
+         """
+         For skid steer: ONLY lift dumped dirt from action_map > 0
+@@ -1293,8 +1666,9 @@ class State(NamedTuple):
+         )
+ 
+         def _apply_dig(volume, fam):
+-            new_map_global_coords = self._apply_dig_mask(
+-                fam, dig_mask, moving_dumped_dirt
++            # Use soil mechanics when lifting dumped dirt to simulate realistic soil behavior
++            new_map_global_coords = self._apply_dig_mask_with_soil_mechanics(
++                fam, dig_mask, moving_dumped_dirt, apply_soil_mechanics=True
+             )
+             new_map_global_coords = new_map_global_coords.reshape(
+                 self.world.action_map.map.shape
+@@ -1336,15 +1710,105 @@ class State(NamedTuple):
+         """
+         Handle the DO action based on agent type:
+         - Tracked/Wheeled (0,1): dig (not loaded) / dump (loaded)
+-        - Skid steer (2): lift dumped dirt (not loaded) / dump (loaded)
++        - Skid steer (2): simple shovel control:
++          * If shovel lifted + loaded: dump dirt and lower shovel
++          * If shovel lifted + not loaded: lower shovel  
++          * If shovel lowered: lift shovel (regardless of loading)
+         """
+-        is_skid_steer = self.agent.agent_state.agent_type == 2
+-        is_loaded = self.agent.agent_state.loaded[0] > 0
++        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+         
+         def _skid_steer_do():
+-            return jax.lax.cond(is_loaded, self._handle_dump, self._handle_lift_dumped_dirt)
++            is_loaded = self.agent.agent_state.loaded[0] > 0
++            shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
++            
++            def _dump_and_lower():
++                # Always try to dump dirt and then lower shovel regardless of dump success
++                dumped_state = self._handle_dump()
++                # Always lower the shovel after dump attempt
++                return dumped_state._replace(
++                    agent=dumped_state.agent._replace(
++                        agent_state=dumped_state.agent.agent_state._replace(
++                            shovel_lifted=jnp.array([0], dtype=IntLowDim)  # Lower shovel
++                        )
++                    )
++                )
++            
++            def _lift_shovel():
++                # Check if agent is loaded
++                agent_is_loaded = self.agent.agent_state.loaded[0] > 0
++                
++                def _lift_with_soil_mechanics():
++                    # Agent has dirt, so lifting will disturb surrounding soil
++                    # First lift the dirt normally
++                    lifted_state = self._handle_lift_dumped_dirt()
++                    
++                    # Apply soil mechanics to adjacent tiles since dirt was removed
++                    dig_mask = self._build_dig_dump_cone()
++                    dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
++                    
++                    # Reshape the 1D mask to 2D for soil mechanics processing
++                    map_height = self.world.height
++                    map_width = self.world.width
++                    dig_mask_2d = dig_mask.reshape((map_height, map_width))
++                    
++                    expanded_mask = self._expand_mask_for_soil_mechanics(dig_mask_2d)
++                    
++                    # Apply soil mechanics to smooth adjacent terrain
++                    smoothed_action_map = self._apply_local_soil_mechanics(
++                        lifted_state.world.action_map.map, expanded_mask
++                    )
++                    
++                    # Return state with smoothed terrain and lifted shovel
++                    return lifted_state._replace(
++                        world=lifted_state.world._replace(
++                            action_map=lifted_state.world.action_map._replace(
++                                map=smoothed_action_map
++                            )
++                        ),
++                        agent=lifted_state.agent._replace(
++                            agent_state=lifted_state.agent.agent_state._replace(
++                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
++                            )
++                        )
++                    )
++                
++                def _lift_without_soil_mechanics():
++                    # Agent has no dirt, just lift shovel without terrain disturbance
++                    return self._replace(
++                        agent=self.agent._replace(
++                            agent_state=self.agent.agent_state._replace(
++                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Lift shovel
++                            )
++                        )
++                    )
++                
++                # Apply soil mechanics only if agent is loaded (has dirt to lift)
++                return jax.lax.cond(
++                    agent_is_loaded,
++                    _lift_with_soil_mechanics,
++                    _lift_without_soil_mechanics
++                )
++            
++            def _lower_shovel():
++                # Lower shovel (keeping current loading state)
++                return self._replace(
++                    agent=self.agent._replace(
++                        agent_state=self.agent.agent_state._replace(
++                            shovel_lifted=jnp.array([0], dtype=IntLowDim)  # Lower shovel
++                        )
++                    )
++                )
++            
++            # Simple logic: if shovel is up, either dump (if loaded) or just lower it
++            # If shovel is down, always lift it (toggle behavior)
++            return jax.lax.cond(
++                shovel_lifted,
++                lambda: jax.lax.cond(is_loaded, _dump_and_lower, _lower_shovel),  # Shovel up: dump if loaded, else lower
++                _lift_shovel  # Shovel down: always lift (toggle)
++            )
+         
+         def _tracked_wheeled_do():
++            is_loaded = self.agent.agent_state.loaded[0] > 0
+             return jax.lax.cond(is_loaded, self._handle_dump, self._handle_dig)
+         
+         return jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
+@@ -1575,6 +2039,116 @@ class State(NamedTuple):
+             action,
+         )
+ 
++    def _handle_rewards_skid_steer_auto_load(
++        self, new_state: "State"
++    ) -> Float:
++        """Reward for successful auto-loading during movement"""
++        # Check if dirt was auto-loaded during movement
++        old_loaded = self.agent.agent_state.loaded[0]
++        new_loaded = new_state.agent.agent_state.loaded[0]
++        dirt_gained = new_loaded - old_loaded
++        
++        # Give reward proportional to dirt auto-loaded
++        return jax.lax.cond(
++            dirt_gained > 0,
++            lambda: dirt_gained * self.env_cfg.rewards.skid_auto_load,
++            lambda: 0.0
++        )
++
++    def _handle_rewards_skid_steer_dump(
++        self, new_state: "State", action: TrackedActionType
++    ) -> Float:
++        """Specialized dump rewards for skid steer"""
++        # Check if dump was successful (dirt was unloaded)
++        old_loaded = self.agent.agent_state.loaded[0]
++        new_loaded = new_state.agent.agent_state.loaded[0]
++        dirt_dumped = old_loaded - new_loaded
++        
++        def _successful_dump():
++            # Check if dumped in correct areas (target map > 0)
++            action_map_dump_progress = self._get_action_map_dump_progress(
++                self.world.action_map.map,
++                new_state.world.action_map.map,
++                self.world.target_map.map,
++            )
++            
++            # Reward based on correct placement
++            return jax.lax.cond(
++                action_map_dump_progress > 0,
++                lambda: action_map_dump_progress * self.env_cfg.rewards.skid_dump_correct,
++                lambda: dirt_dumped * self.env_cfg.rewards.skid_dump_wrong  # Dumped but not in correct area
++            )
++        
++        def _failed_dump():
++            # Tried to dump but failed (no dirt unloaded)
++            return self.env_cfg.rewards.skid_dump_wrong
++        
++        return jax.lax.cond(
++            dirt_dumped > 0,
++            _successful_dump,
++            _failed_dump
++        )
++
++    def _handle_rewards_skid_steer_lift(
++        self, new_state: "State"
++    ) -> Float:
++        """Reward for successfully lifting dirt (not auto-loading)"""
++        # Check if dirt was gained from manual lifting (DO action while shovel down)
++        old_loaded = self.agent.agent_state.loaded[0]
++        new_loaded = new_state.agent.agent_state.loaded[0]
++        dirt_gained = new_loaded - old_loaded
++        
++        # Only reward if shovel was lifted during this action (indicating manual lift)
++        old_shovel = self.agent.agent_state.shovel_lifted[0]
++        new_shovel = new_state.agent.agent_state.shovel_lifted[0]
++        shovel_was_lifted = new_shovel > old_shovel
++        
++        return jax.lax.cond(
++            jnp.logical_and(dirt_gained > 0, shovel_was_lifted),
++            lambda: dirt_gained * self.env_cfg.rewards.skid_lift_correct,
++            lambda: 0.0
++        )
++
++    def _handle_rewards_skid_steer_shovel_control(
++        self, new_state: "State"
++    ) -> Float:
++        """Small reward for effective shovel control"""
++        old_shovel = self.agent.agent_state.shovel_lifted[0]
++        new_shovel = new_state.agent.agent_state.shovel_lifted[0]
++        shovel_changed = old_shovel != new_shovel
++        
++        # Small reward for shovel state changes (encourages learning control)
++        return jax.lax.cond(
++            shovel_changed,
++            lambda: self.env_cfg.rewards.skid_shovel_control,
++            lambda: 0.0
++        )
++
++    def _handle_rewards_skid_steer_do(
++        self, new_state: "State", action: TrackedActionType
++    ) -> Float:
++        """Specialized DO action rewards for skid steer"""
++        reward = 0.0
++        
++        # Check what happened during DO action
++        old_loaded = self.agent.agent_state.loaded[0]
++        new_loaded = new_state.agent.agent_state.loaded[0]
++        
++        # Add dump rewards if dirt was unloaded
++        reward += jax.lax.cond(
++            old_loaded > new_loaded,
++            lambda: self._handle_rewards_skid_steer_dump(new_state, action),
++            lambda: 0.0
++        )
++        
++        # Add lift rewards if dirt was gained (manual lifting)
++        reward += self._handle_rewards_skid_steer_lift(new_state)
++        
++        # Add shovel control rewards
++        reward += self._handle_rewards_skid_steer_shovel_control(new_state)
++        
++        return reward
++
+     def _get_rewards_tracked(self, new_state: "State", action: ActionType) -> Float:
+         reward = 0.0
+         action = action[0]
+@@ -1719,14 +2293,22 @@ class State(NamedTuple):
+ 
+         reward = 0.0
+ 
+-        # Action-dependent
+-        reward += jax.lax.cond(
+-            action_handler.type[0] == 0,
+-            self._get_rewards_tracked,
+-            self._get_rewards_wheeled,
+-            new_state,
+-            action,
+-        )
++        # Action-dependent - route to appropriate reward function based on agent type
++        current_agent_type = self.agent.agent_state.agent_type[0]
++        
++        def get_tracked_rewards():
++            return self._get_rewards_tracked(new_state, action)
++        
++        def get_wheeled_rewards():
++            return self._get_rewards_wheeled(new_state, action)
++            
++        def get_skidsteer_rewards():
++            return self._get_rewards_skidsteer(new_state, action)
++        
++        # Route rewards based on agent type: 0=tracked, 1=wheeled, 2=skidsteer
++        reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards]
++        clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
++        reward += jax.lax.switch(clamped_agent_type, reward_functions)
+ 
+         # Terminal
+         reward += jax.lax.cond(
+@@ -1924,7 +2506,7 @@ class State(NamedTuple):
+         num_actions = dummy_action.get_num_actions()
+         
+         # Check agent type from the current agent state
+-        current_agent_type = self.agent.agent_state.agent_type
++        current_agent_type = self.agent.agent_state.agent_type[0]
+         
+         # Use JAX switch instead of if statements for JIT compatibility
+         def get_tracked_mask():
+@@ -1954,3 +2536,255 @@ class State(NamedTuple):
+             "task_done": task_done,
+         }
+         return infos
++
++    def _get_dig_dump_mask_cyl_skidsteer(self, map_cyl_coords: Array) -> Array:
++        """
++        Skid steer specific cylindrical workspace - similar size to excavator but slightly closer.
++        Uses nearly identical parameters to excavator with minor adjustments.
++
++        Args:
++            - map_cyl_coords: (2, N) Array with [r, theta] rows
++        Returns:
++            - dig_mask: (N, ) Array of bools, where True means dig here
++        """
++        # Use same radius as excavator
++        dig_portion_radius = self.env_cfg.agent.move_tiles  # Same as excavator
++        tile_size = self.env_cfg.tile_size
++
++        max_agent_dim = jnp.max(
++            jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
++        )
++        min_distance_from_agent = tile_size * max_agent_dim
++
++        # Slightly closer to agent than excavator but similar range
++        fixed_extension = 0.2  # Slightly closer than excavator's 0.5  
++        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
++        r_max = (fixed_extension + 0.8) * dig_portion_radius * tile_size + min_distance_from_agent  # Slimmer range than excavator's 1.0
++        
++        # Same angular range as excavator
++        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin  # Same as excavator
++        theta_min = -theta_max
++
++        dig_mask_r = jnp.logical_and(
++            map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
++        )
++        dig_mask_theta = jnp.logical_and(
++            map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
++        )
++
++        return jnp.logical_and(dig_mask_r, dig_mask_theta)
++
++    def _get_dig_dump_mask_skidsteer(
++        self, map_cyl_coords: Array, map_local_coords: Array
++    ) -> Array:
++        """
++        Skid steer workspace using closer cylindrical coordinates with agent exclusion.
++
++        Args:
++            - map_cyl_coords: (2, N) Array with [r, theta] rows
++            - map_local_coords: (2, N) Array with [x, y] rows
++        Returns:
++            - dig_mask: (N, ) Array of bools, where True means dig here
++        """
++        # Use skid steer specific cylindrical mask
++        dig_dump_mask_cyl = self._get_dig_dump_mask_cyl_skidsteer(map_cyl_coords)
++
++        # Apply same agent exclusion logic as excavator
++        agent_width = self.env_cfg.agent.width * self.env_cfg.tile_size
++        agent_height = self.env_cfg.agent.height * self.env_cfg.tile_size
++
++        dig_dump_mask_cart_x = map_local_coords[0].copy()
++        dig_dump_mask_cart_y = map_local_coords[1].copy()
++
++        eps = self.env_cfg.tile_size / 2  # add margin to avoid rounding errors
++
++        dig_dump_mask_cart_x = jnp.where(
++            jnp.logical_or(
++                dig_dump_mask_cart_x >= jnp.floor((agent_width + eps) / 2),
++                dig_dump_mask_cart_x <= -jnp.floor((agent_width + eps) / 2),
++            ),
++            1,
++            0,
++        )
++        dig_dump_mask_cart_y = jnp.where(
++            jnp.logical_or(
++                dig_dump_mask_cart_y >= jnp.floor((agent_height + eps) / 2),
++                dig_dump_mask_cart_y <= -jnp.floor((agent_height + eps) / 2),
++            ),
++            1,
++            0,
++        )
++        dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(
++            jnp.bool_
++        )
++        dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
++        return dig_dump_mask
++
++    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
++        """
++        Apply local soil mechanics with Gaussian spreading to recently affected dirt.
++        Only applies to areas where dirt was dumped or dumped dirt was lifted.
++        Respects Terra's validity constraints (obstacles, non-dumpable areas, etc.)
++        
++        Args:
++            action_map: (H, W) current height map
++            affected_mask: (H, W) boolean mask of tiles that were just affected
++            
++        Returns:
++            new_action_map: (H, W) height map with local spreading applied
++        """
++        # Get validity constraints from Terra's mask system
++        padding_mask = self.world.padding_mask.map  # Obstacles (1 = obstacle, 0 = valid)
++        dumpability_mask = self.world.dumpability_mask.map  # Dumpability (1 = dumpable, 0 = non-dumpable)
++        
++        # Create combined validity mask: valid tiles are those that are:
++        # - Not obstacles (padding_mask == 0)
++        # - Dumpable (dumpability_mask == 1) 
++        validity_mask = jnp.logical_and(
++            padding_mask == 0,  # Not an obstacle
++            dumpability_mask == 1  # Is dumpable
++        )
++        
++        # Gaussian kernel: [0.25, 1, 0.25] approximated as [1, 4, 1] / 6 for integer math
++        # Create 2D separable Gaussian kernel
++        kernel_1d = jnp.array([1, 4, 1], dtype=jnp.int32)  # Will divide by 6 later
++        
++        def _apply_single_iteration(current_map: Array) -> Array:
++            """Apply one iteration of local spreading using convolution"""
++            H, W = current_map.shape
++            
++            # First apply horizontal convolution
++            # Pad the map with edge values to handle boundaries
++            padded_map = jnp.pad(current_map, ((0, 0), (1, 1)), mode='edge')
++            
++            # Apply horizontal kernel manually (JAX-compatible)
++            horizontal_result = jnp.zeros((H, W), dtype=jnp.int32)
++            for i in range(W):
++                # Extract 3 adjacent columns and apply kernel
++                window = padded_map[:, i:i+3]  # Shape: (H, 3)
++                # Apply kernel [1, 4, 1] to each row
++                convolved = jnp.sum(window * kernel_1d[None, :], axis=1)  # Shape: (H,)
++                horizontal_result = horizontal_result.at[:, i].set(convolved)
++            
++            # Divide by 6 to normalize the kernel
++            horizontal_result = horizontal_result // 6
++            
++            # Then apply vertical convolution
++            # Pad horizontally processed result
++            padded_horizontal = jnp.pad(horizontal_result, ((1, 1), (0, 0)), mode='edge')
++            
++            # Apply vertical kernel
++            vertical_result = jnp.zeros((H, W), dtype=jnp.int32)
++            for j in range(H):
++                # Extract 3 adjacent rows and apply kernel
++                window = padded_horizontal[j:j+3, :]  # Shape: (3, W)
++                # Apply kernel [1, 4, 1] to each column
++                convolved = jnp.sum(window * kernel_1d[:, None], axis=0)  # Shape: (W,)
++                vertical_result = vertical_result.at[j, :].set(convolved)
++            
++            # Divide by 6 again to complete normalization
++            spread_result = vertical_result // 6
++            
++            # CRITICAL: Only allow spreading to valid tiles
++            # Invalid tiles retain their original values
++            return jnp.where(validity_mask, spread_result, current_map.astype(jnp.int32))
++        
++        # Only apply spreading where dirt was affected
++        affected_area = jnp.where(affected_mask, action_map, 0)
++        unaffected_area = jnp.where(affected_mask, 0, action_map)
++        
++        # Apply 3 iterations of local spreading only to affected area
++        spread_map = affected_area.astype(jnp.int32)
++        for _ in range(3):
++            spread_map = _apply_single_iteration(spread_map)
++        
++        # Ensure conservation: if total changed, redistribute the difference
++        original_total = affected_area.sum()
++        new_total = spread_map.sum()
++        
++        # If totals don't match due to integer division, redistribute the difference
++        total_diff = original_total - new_total
++        
++        def _redistribute_difference():
++            # Find valid tiles with dirt to adjust (respecting Terra constraints)
++            dirt_tiles = jnp.logical_and(spread_map > 0, validity_mask)
++            num_dirt_tiles = dirt_tiles.sum()
++            
++            # Only redistribute if we have valid dirt tiles to work with
++            def _do_redistribution():
++                # Distribute difference evenly (with remainder handling)
++                adjustment_per_tile = total_diff // num_dirt_tiles
++                remainder = total_diff % num_dirt_tiles
++                
++                # Apply base adjustment to all valid dirt tiles
++                adjusted_map = jnp.where(dirt_tiles, spread_map + adjustment_per_tile, spread_map)
++                
++                # Distribute remainder to first 'remainder' valid tiles with dirt
++                cumulative_dirt = jnp.cumsum(dirt_tiles.reshape(-1))
++                remainder_mask = (cumulative_dirt <= remainder).reshape(dirt_tiles.shape)
++                final_map = jnp.where(jnp.logical_and(dirt_tiles, remainder_mask), 
++                                    adjusted_map + 1, adjusted_map)
++                
++                return final_map.astype(action_map.dtype)  # Ensure consistent type
++            
++            return jax.lax.cond(
++                num_dirt_tiles > 0,
++                _do_redistribution,
++                lambda: spread_map.astype(action_map.dtype)  # Ensure consistent type
++            )
++        
++        # Apply redistribution only if there's a difference
++        conserved_spread_map = jax.lax.cond(
++            total_diff != 0,
++            _redistribute_difference,
++            lambda: spread_map.astype(action_map.dtype)  # Ensure consistent type
++        )
++        
++        # Convert back to original dtype and combine with unaffected area
++        result_map = unaffected_area.astype(action_map.dtype) + conserved_spread_map.astype(action_map.dtype)
++        return result_map
++
++    def _get_rewards_skidsteer(self, new_state: "State", action: ActionType) -> Float:
++        """Specialized reward function for skid steer operations"""
++        reward = 0.0
++        action = action[0]
++
++        # Movement rewards (same as tracked but with auto-loading bonus)
++        movement_reward = jax.lax.cond(
++            (action == TrackedActionType.FORWARD)
++            | (action == TrackedActionType.BACKWARD),
++            self._handle_rewards_move,
++            lambda new_state, action: 0.0,
++            new_state,
++            action,
++        )
++        reward += movement_reward
++        
++        # Auto-loading bonus for forward movement
++        reward += jax.lax.cond(
++            action == TrackedActionType.FORWARD,
++            lambda: self._handle_rewards_skid_steer_auto_load(new_state),
++            lambda: 0.0
++        )
++
++        # Base turn rewards (same as tracked)
++        reward += jax.lax.cond(
++            (action == TrackedActionType.CLOCK)
++            | (action == TrackedActionType.ANTICLOCK),
++            self._handle_rewards_base_turn,
++            lambda new_state, action: 0.0,
++            new_state,
++            action,
++        )
++
++        # Specialized DO action rewards for skid steer
++        reward += jax.lax.cond(
++            action == TrackedActionType.DO,
++            self._handle_rewards_skid_steer_do,
++            lambda new_state, action: 0.0,
++            new_state,
++            action,
++        )
++        
++        return reward
++
+diff --git a/terra/viz/game/agent.py b/terra/viz/game/agent.py
+index e85d048..035b470 100644
+--- a/terra/viz/game/agent.py
++++ b/terra/viz/game/agent.py
+@@ -1,5 +1,6 @@
+ import numpy as np
+ import math
++import pygame as pg
+ from .settings import COLORS
+ from .utils import agent_base_to_angle
+ from .utils import agent_cabin_to_angle
+@@ -14,7 +15,58 @@ class Agent:
+         self.angles_base = angles_base
+         self.angles_cabin = angles_cabin
+ 
+-    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded, agent_type=0):
++    def create_shovel(self, center_x, center_y, base_angle_degrees):
++        """
++        Create a shovel (rectangle) for skid steer agents.
++        The shovel is positioned in the same direction as the cabin triangle.
++        """
++        # Shovel dimensions - wider than the agent base
++        shovel_depth = (self.height * self.tile_size) * 0.4    # Increased from 0.25 to 0.4 (40% of agent height)
++        shovel_width = (self.width * self.tile_size) * 1.1     # 120% of agent width (wide perpendicular to movement)
++        
++        # Calculate shovel position using the same method as cabin triangle
++        agent_half_height = (self.height * self.tile_size) / 2
++        shovel_offset_distance = agent_half_height + shovel_depth / 2 + 1  # Small gap
++        
++        # Create shovel center point in the same direction as cabin front point
++        # Cabin front point is at (3/scaling, 0) in local coordinates
++        scaling = self.tile_size / 3
++        cabin_front_direction = pg.math.Vector2(3 / scaling, 0)
++        
++        # Normalize and scale to shovel offset distance
++        cabin_front_normalized = cabin_front_direction.normalize()
++        shovel_center_local = cabin_front_normalized * shovel_offset_distance
++        
++        # Rotate the shovel center using the same method as cabin
++        shovel_center_rotated = shovel_center_local.rotate(base_angle_degrees)
++        
++        # Calculate final shovel center position
++        center_vector = pg.math.Vector2(center_y, center_x)  # Note: (y, x) order
++        shovel_center_world = center_vector + shovel_center_rotated
++        
++        # Create shovel rectangle corners relative to shovel center
++        half_depth = shovel_depth / 2   # Half depth in movement direction 
++        half_width = shovel_width / 2   # Half width perpendicular to movement
++        
++        shovel_local_points = [
++            pg.math.Vector2(-half_depth, -half_width),  # back-left
++            pg.math.Vector2(half_depth, -half_width),   # front-left  
++            pg.math.Vector2(half_depth, half_width),    # front-right
++            pg.math.Vector2(-half_depth, half_width)    # back-right
++        ]
++        
++        # Rotate and position all shovel points
++        shovel_vertices = []
++        for local_point in shovel_local_points:
++            # Rotate the local point
++            rotated_point = local_point.rotate(base_angle_degrees)
++            # Position relative to shovel center
++            final_point = shovel_center_world + rotated_point
++            shovel_vertices.append((final_point.x, final_point.y))
++        
++        return shovel_vertices
++
++    def create_agent(self, px_center, py_center, angle_base, angle_cabin, loaded, agent_type=0, shovel_lifted=0):
+     # Convert angle_base index to degrees using the util function
+         base_angle_degrees = agent_base_to_angle(angle_base, self.angles_base)
+         
+@@ -84,14 +136,31 @@ class Agent:
+                 "color": cabin_color,
+             },
+         }
++        
++        # Add shovel for skid steer agents
++        if agent_type == 2:
++            shovel_vertices = self.create_shovel(center_x, center_y, base_angle_degrees)
++            
++            # Determine shovel color based on lifted state only
++            if shovel_lifted == 0:
++                shovel_color = COLORS["shovel"]["lowered"]  # Brown - shovel on ground
++            else:
++                shovel_color = COLORS["shovel"]["lifted"]   # Silver - shovel lifted
++            
++            out["shovel"] = {
++                "vertices": shovel_vertices,
++                "color": shovel_color,
++            }
++        
+         return out
+ 
+-    def update(self, agent_pos, base_dir, cabin_dir, loaded, agent_type=0):
++    def update(self, agent_pos, base_dir, cabin_dir, loaded, agent_type=0, shovel_lifted=0):
+         agent_pos = np.asarray(agent_pos, dtype=np.int32)
+         base_dir = np.asarray(base_dir, dtype=np.int32)
+         cabin_dir = np.asarray(cabin_dir, dtype=np.int32)
+         loaded = np.asarray(loaded, dtype=bool)
+         agent_type = np.asarray(agent_type, dtype=np.int32)
++        shovel_lifted = np.asarray(shovel_lifted, dtype=np.int32)
+         self.agent = self.create_agent(
+             agent_pos[0].item(),
+             agent_pos[1].item(),
+@@ -99,4 +168,5 @@ class Agent:
+             cabin_dir.item(),
+             loaded.item(),
+             agent_type.item(),  # Pass agent type
++            shovel_lifted.item(),  # Pass shovel state
+         )
+diff --git a/terra/viz/game/game.py b/terra/viz/game/game.py
+index c1df0d5..6fbba5a 100644
+--- a/terra/viz/game/game.py
++++ b/terra/viz/game/game.py
+@@ -89,11 +89,13 @@ class Game:
+         cabin_dir_1,
+         loaded_1,
+         agent_type_1,
++        shovel_lifted_1,
+         agent_pos_2,
+         base_dir_2,
+         cabin_dir_2,
+         loaded_2,
+         agent_type_2,
++        shovel_lifted_2,
+         generate_gif,
+         target_tiles=None,
+     ):
+@@ -108,11 +110,13 @@ class Game:
+             cabin_dir_1,
+             loaded_1,
+             agent_type_1,
++            shovel_lifted_1,
+             agent_pos_2,
+             base_dir_2,
+             cabin_dir_2,
+             loaded_2,
+             agent_type_2,
++            shovel_lifted_2,
+             target_tiles,
+         )
+         self.draw()
+@@ -153,11 +157,13 @@ class Game:
+         cabin_dir_1,
+         loaded_1,
+         agent_type_1,
++        shovel_lifted_1,
+         agent_pos_2,
+         base_dir_2,
+         cabin_dir_2,
+         loaded_2,
+         agent_type_2,
++        shovel_lifted_2,
+         target_tiles=None,
+     ):
+         def update_world_agent(
+@@ -173,16 +179,18 @@ class Game:
+             cabin_dir_1,
+             loaded_1,
+             agent_type_1,
++            shovel_lifted_1,
+             agent_pos_2,
+             base_dir_2,
+             cabin_dir_2,
+             loaded_2,
+             agent_type_2,
++            shovel_lifted_2,
+             target_tiles=None,
+         ):
+             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
+-            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1, agent_type_1)
+-            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2, agent_type_2)
++            agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1, agent_type_1, shovel_lifted_1)
++            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2, agent_type_2, shovel_lifted_2)
+             if target_tiles is not None:
+                 world.target_tiles = target_tiles
+ 
+@@ -197,15 +205,17 @@ class Game:
+             cd1 = cabin_dir_1[i]
+             ld1 = loaded_1[i]
+             at1 = agent_type_1[i]
++            sl1 = shovel_lifted_1[i]
+             ap2 = agent_pos_2[i]
+             bd2 = base_dir_2[i]
+             cd2 = cabin_dir_2[i]
+             ld2 = loaded_2[i]
+             at2 = agent_type_2[i]
++            sl2 = shovel_lifted_2[i]
+             tt = None if target_tiles is None else target_tiles[i]
+             thread = threading.Thread(
+                 target=update_world_agent,
+-                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, at1, ap2, bd2, cd2, ld2, at2, tt),
++                args=(self.worlds[i], self.agents_1[i], self.agents_2[i], ag, tg, pm, dm, ap1, bd1, cd1, ld1, at1, sl1, ap2, bd2, cd2, ld2, at2, sl2, tt),
+             )
+             thread.start()
+             threads.append(thread)
+@@ -254,10 +264,15 @@ class Game:
+             body_vertices_1 = agent1.agent["body"]["vertices"]
+             body_color_1 = agent1.agent["body"]["color"]
+             
+-            min_x1 = min(v[0] for v in body_vertices_1)
+-            min_y1 = min(v[1] for v in body_vertices_1)
+-            max_x1 = max(v[0] for v in body_vertices_1)
+-            max_y1 = max(v[1] for v in body_vertices_1)
++            # Calculate bounding box for all agent components (body, cabin, and optionally shovel)
++            all_vertices_1 = body_vertices_1 + agent1.agent["cabin"]["vertices"]
++            if "shovel" in agent1.agent:
++                all_vertices_1 += agent1.agent["shovel"]["vertices"]
++            
++            min_x1 = min(v[0] for v in all_vertices_1)
++            min_y1 = min(v[1] for v in all_vertices_1)
++            max_x1 = max(v[0] for v in all_vertices_1)
++            max_y1 = max(v[1] for v in all_vertices_1)
+             
+             surface_width1 = math.ceil(max_x1 - min_x1) + 2
+             surface_height1 = math.ceil(max_y1 - min_y1) + 2
+@@ -270,9 +285,18 @@ class Game:
+             agent_y1_pos = min_y1 + total_offset_y
+             agent_positions_1.append((agent_x1_pos, agent_y1_pos))
+             
++            # Draw agent body
+             offset_vertices_1 = [(v[0] - min_x1, v[1] - min_y1) for v in body_vertices_1]
+             pg.draw.polygon(agent_surface1, body_color_1, offset_vertices_1)
+             
++            # Draw shovel first (behind the body) if it exists
++            if "shovel" in agent1.agent:
++                shovel_vertices_1 = agent1.agent["shovel"]["vertices"]
++                shovel_offset_1 = [(v[0] - min_x1, v[1] - min_y1) for v in shovel_vertices_1]
++                shovel_color_1 = agent1.agent["shovel"]["color"]
++                pg.draw.polygon(agent_surface1, shovel_color_1, shovel_offset_1)
++            
++            # Draw cabin on top
+             cabin_vertices_1 = agent1.agent["cabin"]["vertices"]
+             cabin_offset_1 = [(v[0] - min_x1, v[1] - min_y1) for v in cabin_vertices_1]
+             cabin_color_1 = agent1.agent["cabin"]["color"]
+@@ -283,10 +307,15 @@ class Game:
+             body_vertices_2 = agent2.agent["body"]["vertices"]
+             body_color_2 = agent2.agent["body"]["color"]
+ 
+-            min_x2 = min(v[0] for v in body_vertices_2)
+-            min_y2 = min(v[1] for v in body_vertices_2)
+-            max_x2 = max(v[0] for v in body_vertices_2)
+-            max_y2 = max(v[1] for v in body_vertices_2)
++            # Calculate bounding box for all agent components (body, cabin, and optionally shovel)
++            all_vertices_2 = body_vertices_2 + agent2.agent["cabin"]["vertices"]
++            if "shovel" in agent2.agent:
++                all_vertices_2 += agent2.agent["shovel"]["vertices"]
++
++            min_x2 = min(v[0] for v in all_vertices_2)
++            min_y2 = min(v[1] for v in all_vertices_2)
++            max_x2 = max(v[0] for v in all_vertices_2)
++            max_y2 = max(v[1] for v in all_vertices_2)
+ 
+             surface_width2 = math.ceil(max_x2 - min_x2) + 2
+             surface_height2 = math.ceil(max_y2 - min_y2) + 2
+@@ -299,9 +328,18 @@ class Game:
+             agent_y2_pos = min_y2 + total_offset_y
+             agent_positions_2.append((agent_x2_pos, agent_y2_pos))
+ 
++            # Draw agent body
+             offset_vertices_2 = [(v[0] - min_x2, v[1] - min_y2) for v in body_vertices_2]
+             pg.draw.polygon(agent_surface2, body_color_2, offset_vertices_2)
+ 
++            # Draw shovel first (behind the body) if it exists
++            if "shovel" in agent2.agent:
++                shovel_vertices_2 = agent2.agent["shovel"]["vertices"]
++                shovel_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in shovel_vertices_2]
++                shovel_color_2 = agent2.agent["shovel"]["color"]
++                pg.draw.polygon(agent_surface2, shovel_color_2, shovel_offset_2)
++
++            # Draw cabin on top
+             cabin_vertices_2 = agent2.agent["cabin"]["vertices"]
+             cabin_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in cabin_vertices_2]
+             cabin_color_2 = agent2.agent["cabin"]["color"]
+diff --git a/terra/viz/game/settings.py b/terra/viz/game/settings.py
+index 95c6435..4a3a1d8 100644
+--- a/terra/viz/game/settings.py
++++ b/terra/viz/game/settings.py
+@@ -1,6 +1,20 @@
+ MAP_TILES = (
+     192  # 64 * 3, total number of tiles for a nice visualization (scales with MAP_EDGE)
+ )
++
++def darken_color(color, factor=0.7):
++    """
++    Make a color darker by multiplying RGB values by a factor.
++    Args:
++        color: RGB tuple like (255, 140, 0)
++        factor: Darkness factor (0.0 = black, 1.0 = original color)
++    Returns:
++        Darker RGB tuple
++    """
++    if isinstance(color, tuple) and len(color) == 3:
++        return tuple(int(c * factor) for c in color)
++    return color
++
+ COLORS = {
+     0: "#cfcfcf",  # neutral
+     5: "#E4DCCF",  # final dumping area to terminate the episode
+@@ -19,4 +33,8 @@ COLORS = {
+         "loaded": (255, 215, 0),  # Gold when loaded
+         "not_loaded": (255, 165, 0),  # Orange when not loaded
+     },
++    "shovel": {
++        "lowered": (139, 69, 19),      # Brown - shovel on ground 
++        "lifted": (192, 192, 192),     # Silver - shovel lifted
++    }
+ }
+diff --git a/terra/viz/game/world.py b/terra/viz/game/world.py
+index 318b858..c1fc186 100644
+--- a/terra/viz/game/world.py
++++ b/terra/viz/game/world.py
+@@ -22,14 +22,56 @@ class World:
+             (grid_x * self.tile_size, grid_y * self.tile_size + self.tile_size),
+         ]
+ 
++        # Handle custom colors (hex strings) or standard COLORS dictionary lookup
++        if isinstance(bitmap_code, str) and bitmap_code.startswith('#'):
++            # Custom color (hex string)
++            color = bitmap_code
++        elif isinstance(bitmap_code, (int, str)) and bitmap_code in COLORS:
++            # Standard color from dictionary
++            color = COLORS[bitmap_code]
++        else:
++            # Fallback to neutral color
++            color = COLORS[0]
++
+         out = {
+             "grid": [grid_x, grid_y],
+             "cart_rect": rect,
+-            "color": COLORS[bitmap_code],
++            "color": color,
+         }
+ 
+         return out
+ 
++    def _get_dirt_gradient_color(self, dirt_amount, max_dirt_amount):
++        """
++        Generate a gradient color for dirt amount.
++        Light blue for small amounts, dark blue for large amounts.
++        
++        Args:
++            dirt_amount: Current dirt amount on this tile
++            max_dirt_amount: Maximum dirt amount across all tiles for normalization
++        Returns:
++            Hex color string
++        """
++        if dirt_amount <= 0 or max_dirt_amount <= 0:
++            return COLORS[0]  # neutral color
++            
++        # Normalize dirt amount to 0-1 range
++        intensity = min(dirt_amount / max_dirt_amount, 1.0)
++        
++        # Define gradient from light blue to dark blue
++        # Light blue: RGB(173, 216, 230) -> #ADD8E6
++        # Dark blue: RGB(0, 43, 91) -> #002B5B (original dumped dirt color)
++        light_blue = (173, 216, 230)  # Light blue
++        dark_blue = (0, 43, 91)       # Dark blue (original)
++        
++        # Interpolate between light and dark blue
++        r = int(light_blue[0] + (dark_blue[0] - light_blue[0]) * intensity)
++        g = int(light_blue[1] + (dark_blue[1] - light_blue[1]) * intensity)
++        b = int(light_blue[2] + (dark_blue[2] - light_blue[2]) * intensity)
++        
++        # Convert to hex
++        return f"#{r:02x}{g:02x}{b:02x}"
++
+     def update(self, action_map, target_map, obstacles_mask, dumpability_mask):
+         action_map = np.asarray(action_map, dtype=np.int32)
+         action_map = action_map.swapaxes(0, 1)
+@@ -42,11 +84,16 @@ class World:
+             dumpability_mask = np.asarray(dumpability_mask, dtype=np.bool_)
+             dumpability_mask = dumpability_mask.swapaxes(0, 1)
+ 
++        # Find max dirt amount for gradient normalization
++        max_dirt_amount = np.max(action_map[action_map > 0]) if np.any(action_map > 0) else 1
++
+         world = []
+ 
+         for grid_x in range(self.grid_length_x):
+             world.append([])
+             for grid_y in range(self.grid_length_y):
++                dirt_amount = action_map[grid_x, grid_y]
++                
+                 if target_map[grid_x, grid_y] == -1:
+                     # to dig
+                     tile = 4
+@@ -66,10 +113,10 @@ class World:
+                 ):
+                     # non-dumpable (e.g. road)
+                     tile = 3
+-                if action_map[grid_x, grid_y] > 0:
+-                    # action map dump
+-                    tile = 1
+-                if action_map[grid_x, grid_y] < 0:
++                if dirt_amount > 0:
++                    # action map dump - use gradient based on dirt amount
++                    tile = self._get_dirt_gradient_color(dirt_amount, max_dirt_amount)
++                if dirt_amount < 0:
+                     # action map dug
+                     tile = -1
+ 
+diff --git a/terra/viz/main_manual.py b/terra/viz/main_manual.py
+index c324574..95544f7 100644
+--- a/terra/viz/main_manual.py
++++ b/terra/viz/main_manual.py
+@@ -118,7 +118,50 @@ def main():
+                         repeat_action(action),
+                         _rng,
+                     )
+-                    print("Reward: ", timestep.reward.item())
++                    # DEBUG: Show reward with agent type and reward function used
++                    agent_type = timestep.state.agent.agent_state.agent_type[0].item()  # Convert JAX array to Python int
++                    reward_value = timestep.reward.item()
++                    action_num = action.action[0].item()  # Convert JAX array to Python int
++                    
++                    agent_type_names = {0: "Tracked/Excavator", 1: "Wheeled", 2: "Skid Steer"}
++                    reward_function_names = {0: "_get_rewards_tracked()", 1: "_get_rewards_wheeled()", 2: "_get_rewards_skidsteer()"}
++                    
++                    agent_name = agent_type_names.get(agent_type, f"Unknown({agent_type})")
++                    reward_func = reward_function_names.get(agent_type, f"unknown_function({agent_type})")
++                    
++                    print(f"🎯 REWARD: {reward_value:.4f} | Agent: {agent_name} | Function: {reward_func}")
++                    
++                    # For skid steers, show additional debugging for specific reward components
++                    if agent_type == 2:  # Skid steer
++                        if action_num == 0:  # Forward action
++                            print("   💡 Skid Steer Forward: Auto-loading checked")
++                        elif action_num == 6:  # DO action  
++                            print("   💡 Skid Steer DO: Dump/Lift/Shovel rewards applied")
++                    
++                    # Show action details
++                    action_names = {
++                        0: "FORWARD", 1: "BACKWARD", 2: "CLOCK", 3: "ANTICLOCK", 
++                        4: "CABIN_CLOCK", 5: "CABIN_ANTICLOCK", 6: "DO"
++                    }
++                    action_name = action_names.get(action_num, f"ACTION_{action_num}")
++                    print(f"⚡ ACTION: {action_name} ({action_num})")
++                    
++                    # DEBUG: Show maximum dirt on any single tile
++                    action_map = timestep.state.world.action_map.map[0]  # First environment
++                    max_dirt = jnp.max(action_map)
++                    min_dirt = jnp.min(action_map)
++                    total_dirt = jnp.sum(action_map)
++                    print(f"🏔️  MAX DIRT ON TILE: {max_dirt}")
++                    print(f"⛳ MIN DIRT ON TILE: {min_dirt}")
++                    print(f"🌍 TOTAL DIRT: {total_dirt}")
++                    
++                    # Show agent loading state for context
++                    agent_loaded = timestep.state.agent.agent_state.loaded[0]
++                    shovel_lifted = timestep.state.agent.agent_state.shovel_lifted[0]
++                    total_dirt_with_agent = total_dirt + agent_loaded
++                    print(f"🚜 AGENT: Loaded={agent_loaded}, Shovel={'UP' if shovel_lifted else 'DOWN'}")
++                    print(f"🧮 TOTAL DIRT (map + agent): {total_dirt_with_agent}")
++                    print("-" * 40)
+ 
+             elif event.type == QUIT:
+                 playing = False
+@@ -126,6 +169,7 @@ def main():
+         env.terra_env.render_obs_pygame(
+             timestep.observation,
+             timestep.info,
++            generate_gif=False,
+         )
+ 
+ 
