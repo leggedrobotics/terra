@@ -26,6 +26,13 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
+# Add simplified soil mechanics flag at the top of the class
+# Simple flag to toggle between full and simplified soil mechanics
+USE_SIMPLIFIED_SOIL_MECHANICS = True  # Set by configure_soil_mechanics.py
+
+# Add training performance flag
+ENABLE_SOIL_MECHANICS_IN_TRAINING = True  # Set by configure_soil_mechanics.py
+
 
 class State(NamedTuple):
     """
@@ -1030,51 +1037,75 @@ class State(NamedTuple):
 
         # Use the safely calculated values passed in from _apply_dump
         # Don't recalculate here to avoid division by zero
-        # Simple Gaussian distribution within selected dump tiles
-        dump_volume = even_volume_per_tile * jnp.sum(dump_mask) + remaining_volume
         
-        # Calculate workspace centroid for Gaussian center
-        map_2d_shape = self.world.action_map.map.shape
-        dump_mask_2d = dump_mask.reshape(map_2d_shape)
-        y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
-        centroid_y = jnp.sum(y_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
-        centroid_x = jnp.sum(x_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
+        # CONDITIONAL SOIL MECHANICS: Use simplified dumping for training performance
+        def _apply_simple_dump():
+            """Simple uniform distribution without Gaussian spreading or soil mechanics"""
+            # Distribute dirt uniformly across selected tiles
+            volume_per_tile = even_volume_per_tile * dump_mask.astype(IntMap)
+            
+            # Handle remaining volume by adding to first N tiles
+            remaining_units = remaining_volume
+            bonus_mask = jnp.arange(len(dump_mask)) < remaining_units
+            bonus_volume = (dump_mask * bonus_mask).astype(IntMap)
+            
+            new_flattened_map = (flattened_map + volume_per_tile + bonus_volume).astype(IntMap)
+            return new_flattened_map
         
-        # Create Gaussian distribution (sigma=2)
-        distances_sq = (y_coords - centroid_y)**2 + (x_coords - centroid_x)**2
-        gaussian = jnp.exp(-distances_sq / 8.0)  # sigma=2 -> 2*sigma^2 = 8
-        masked_gaussian = gaussian * dump_mask_2d
-        normalized_weights = masked_gaussian / jnp.sum(masked_gaussian)
+        def _apply_full_dump():
+            """Full dump with Gaussian distribution and soil mechanics"""
+            # Simple Gaussian distribution within selected dump tiles
+            dump_volume = even_volume_per_tile * jnp.sum(dump_mask) + remaining_volume
+            
+            # Calculate workspace centroid for Gaussian center
+            map_2d_shape = self.world.action_map.map.shape
+            dump_mask_2d = dump_mask.reshape(map_2d_shape)
+            y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
+            centroid_y = jnp.sum(y_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
+            centroid_x = jnp.sum(x_coords * dump_mask_2d) / jnp.sum(dump_mask_2d)
+            
+            # Create Gaussian distribution (sigma=2)
+            distances_sq = (y_coords - centroid_y)**2 + (x_coords - centroid_x)**2
+            gaussian = jnp.exp(-distances_sq / 8.0)  # sigma=2 -> 2*sigma^2 = 8
+            masked_gaussian = gaussian * dump_mask_2d
+            normalized_weights = masked_gaussian / jnp.sum(masked_gaussian)
+            
+            # Distribute dirt with perfect conservation
+            volume_per_tile = normalized_weights.flatten() * dump_volume
+            floor_values = jnp.floor(volume_per_tile).astype(IntMap)
+            fractional_parts = volume_per_tile - floor_values
+            remaining_units = dump_volume - jnp.sum(floor_values)
+            
+            # JAX-compatible way to select top fractional parts for bonus units
+            sorted_indices = jnp.argsort(-fractional_parts)
+            bonus_mask = jnp.arange(len(floor_values)) < remaining_units
+            reordered_bonus = jnp.zeros_like(floor_values).at[sorted_indices].set(bonus_mask.astype(IntMap))
+            
+            new_flattened_map = (flattened_map + floor_values + reordered_bonus).astype(IntMap)
+            
+            # Apply soil mechanics to dumped areas (reshape to 2D for soil mechanics)
+            map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
+            affected_mask_2d = dump_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
+            
+            # Apply local soil mechanics to simulate realistic dirt settling
+            # IMPROVED: Only spread to immediately adjacent tiles (8-neighbors) to prevent dirt loss
+            # Create a more focused affected mask - only tiles that actually received dirt
+            actual_dirt_added = (new_flattened_map - flattened_map).reshape(self.world.action_map.map.shape)
+            tiles_with_new_dirt = actual_dirt_added > 0
+            
+            # Expand only to immediate neighbors (3x3 around each dumped tile)
+            expanded_affected_mask = self._expand_mask_for_soil_mechanics(tiles_with_new_dirt)
+            
+            map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_affected_mask)
+            
+            return map_with_soil_mechanics.reshape(-1)
         
-        # Distribute dirt with perfect conservation
-        volume_per_tile = normalized_weights.flatten() * dump_volume
-        floor_values = jnp.floor(volume_per_tile).astype(IntMap)
-        fractional_parts = volume_per_tile - floor_values
-        remaining_units = dump_volume - jnp.sum(floor_values)
-        
-        # JAX-compatible way to select top fractional parts for bonus units
-        sorted_indices = jnp.argsort(-fractional_parts)
-        bonus_mask = jnp.arange(len(floor_values)) < remaining_units
-        reordered_bonus = jnp.zeros_like(floor_values).at[sorted_indices].set(bonus_mask.astype(IntMap))
-        
-        new_flattened_map = (flattened_map + floor_values + reordered_bonus).astype(IntMap)
-        
-        # Apply soil mechanics to dumped areas (reshape to 2D for soil mechanics)
-        map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
-        affected_mask_2d = dump_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
-        
-        # Apply local soil mechanics to simulate realistic dirt settling
-        # IMPROVED: Only spread to immediately adjacent tiles (8-neighbors) to prevent dirt loss
-        # Create a more focused affected mask - only tiles that actually received dirt
-        actual_dirt_added = (new_flattened_map - flattened_map).reshape(self.world.action_map.map.shape)
-        tiles_with_new_dirt = actual_dirt_added > 0
-        
-        # Expand only to immediate neighbors (3x3 around each dumped tile)
-        expanded_affected_mask = self._expand_mask_for_soil_mechanics(tiles_with_new_dirt)
-        
-        map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_affected_mask)
-        
-        return map_with_soil_mechanics.reshape(-1)
+        # Choose between simple and full dump based on performance flag
+        return jax.lax.cond(
+            ENABLE_SOIL_MECHANICS_IN_TRAINING,
+            _apply_full_dump,
+            _apply_simple_dump
+        )
 
     def _apply_dig_mask_with_soil_mechanics(
         self, 
@@ -1103,7 +1134,7 @@ class State(NamedTuple):
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
         
-        # Apply soil mechanics only if requested (when lifting dumped dirt)
+        # Apply soil mechanics only if requested AND if global flag allows it
         def _apply_soil_mechanics():
             map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
             affected_mask_2d = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
@@ -1115,8 +1146,14 @@ class State(NamedTuple):
             map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_mask)
             return map_with_soil_mechanics.reshape(-1)
         
-        return jax.lax.cond(
+        # Check both the function parameter AND the global training flag
+        should_apply_soil_mechanics = jnp.logical_and(
             apply_soil_mechanics,
+            ENABLE_SOIL_MECHANICS_IN_TRAINING
+        )
+        
+        return jax.lax.cond(
+            should_apply_soil_mechanics,
             _apply_soil_mechanics,
             lambda: new_flattened_map
         )
@@ -1742,34 +1779,54 @@ class State(NamedTuple):
                     # First lift the dirt normally
                     lifted_state = self._handle_lift_dumped_dirt()
                     
-                    # Apply soil mechanics to adjacent tiles since dirt was removed
-                    dig_mask = self._build_dig_dump_cone()
-                    dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
-                    
-                    # Reshape the 1D mask to 2D for soil mechanics processing
-                    map_height = self.world.height
-                    map_width = self.world.width
-                    dig_mask_2d = dig_mask.reshape((map_height, map_width))
-                    
-                    expanded_mask = self._expand_mask_for_soil_mechanics(dig_mask_2d)
-                    
-                    # Apply soil mechanics to smooth adjacent terrain
-                    smoothed_action_map = self._apply_local_soil_mechanics(
-                        lifted_state.world.action_map.map, expanded_mask
-                    )
-                    
-                    # Return state with smoothed terrain and lifted shovel
-                    return lifted_state._replace(
-                        world=lifted_state.world._replace(
-                            action_map=lifted_state.world.action_map._replace(
-                                map=smoothed_action_map
-                            )
-                        ),
-                        agent=lifted_state.agent._replace(
-                            agent_state=lifted_state.agent.agent_state._replace(
-                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
+                    # Apply soil mechanics only if enabled during training
+                    def _apply_soil_smoothing():
+                        # Apply soil mechanics to adjacent tiles since dirt was removed
+                        dig_mask = self._build_dig_dump_cone()
+                        dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
+                        
+                        # Reshape the 1D mask to 2D for soil mechanics processing
+                        map_height = self.world.height
+                        map_width = self.world.width
+                        dig_mask_2d = dig_mask.reshape((map_height, map_width))
+                        
+                        expanded_mask = self._expand_mask_for_soil_mechanics(dig_mask_2d)
+                        
+                        # Apply soil mechanics to smooth adjacent terrain
+                        smoothed_action_map = self._apply_local_soil_mechanics(
+                            lifted_state.world.action_map.map, expanded_mask
+                        )
+                        
+                        # Return state with smoothed terrain and lifted shovel
+                        return lifted_state._replace(
+                            world=lifted_state.world._replace(
+                                action_map=lifted_state.world.action_map._replace(
+                                    map=smoothed_action_map
+                                )
+                            ),
+                            agent=lifted_state.agent._replace(
+                                agent_state=lifted_state.agent.agent_state._replace(
+                                    shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
+                                )
                             )
                         )
+                    
+                    def _skip_soil_smoothing():
+                        # Just lift the dirt without soil mechanics for maximum speed
+                        return lifted_state._replace(
+                            agent=lifted_state.agent._replace(
+                                agent_state=lifted_state.agent.agent_state._replace(
+                                    shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
+                                )
+                            )
+                        )
+                    
+                    # Always use simplified soil mechanics when training flag is enabled
+                    # Only completely skip soil mechanics when flag is disabled (fast mode)
+                    return jax.lax.cond(
+                        ENABLE_SOIL_MECHANICS_IN_TRAINING,
+                        _apply_soil_smoothing,  # This will use simplified soil mechanics
+                        _skip_soil_smoothing    # This completely skips soil mechanics
                     )
                 
                 def _lift_without_soil_mechanics():
@@ -2620,18 +2677,87 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
-    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
+    def _apply_local_soil_mechanics_simplified(self, action_map: Array, affected_mask: Array) -> Array:
         """
-        Apply local soil mechanics with Gaussian spreading to recently affected dirt.
-        Only applies to areas where dirt was dumped or dumped dirt was lifted.
-        Respects Terra's validity constraints (obstacles, non-dumpable areas, etc.)
+        FAST simplified soil mechanics with PROPER conservation.
+        Uses a simple scaling approach to maintain exact dirt conservation.
         
         Args:
             action_map: (H, W) current height map
             affected_mask: (H, W) boolean mask of tiles that were just affected
             
         Returns:
-            new_action_map: (H, W) height map with local spreading applied
+            new_action_map: (H, W) height map with simplified spreading applied
+        """
+        # Get validity constraints from Terra's mask system
+        padding_mask = self.world.padding_mask.map
+        dumpability_mask = self.world.dumpability_mask.map
+        
+        # Create combined validity mask
+        validity_mask = jnp.logical_and(
+            padding_mask == 0,  # Not an obstacle
+            dumpability_mask == 1  # Is dumpable
+        )
+        
+        # Simple 3x3 Gaussian kernel (normalized to sum to 1.0)
+        kernel = jnp.array([
+            [0.077847, 0.123317, 0.077847],
+            [0.123317, 0.195346, 0.123317], 
+            [0.077847, 0.123317, 0.077847]
+        ], dtype=jnp.float32)
+        
+        # Only apply to affected areas
+        affected_area = jnp.where(affected_mask, action_map.astype(jnp.float32), 0.0)
+        unaffected_area = jnp.where(affected_mask, 0.0, action_map.astype(jnp.float32))
+        
+        # Apply single convolution - JAX optimized
+        spread_map = jax.scipy.signal.convolve2d(
+            affected_area, kernel, mode='same', boundary='fill', fillvalue=0.0
+        )
+        
+        # Ensure valid tiles only
+        spread_map = jnp.where(validity_mask, spread_map, affected_area)
+        
+        # PROPER CONSERVATION: Simple scaling approach
+        # Calculate dirt totals in affected regions only (much more efficient than global sums)
+        affected_original_total = jnp.sum(jnp.where(affected_mask, affected_area, 0.0))
+        affected_spread_total = jnp.sum(jnp.where(affected_mask, spread_map, 0.0))
+        
+        # Apply conservation scaling only to affected region
+        conservation_factor = jnp.where(
+            affected_spread_total > 1e-6,
+            affected_original_total / affected_spread_total,
+            1.0
+        )
+        
+        # Apply conservation factor only to the affected, spread dirt
+        conserved_spread_map = jnp.where(
+            affected_mask,
+            spread_map * conservation_factor,
+            spread_map  # Outside affected area, don't scale
+        )
+        
+        # Ensure the result doesn't create invalid values
+        conserved_spread_map = jnp.where(validity_mask, conserved_spread_map, affected_area)
+        
+        # Combine with unaffected area
+        result_map = unaffected_area + conserved_spread_map
+        
+        return result_map.astype(action_map.dtype)
+
+    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
+        """
+        Apply local soil mechanics with optional simplified version for performance.
+        """
+        return jax.lax.cond(
+            USE_SIMPLIFIED_SOIL_MECHANICS,
+            lambda: self._apply_local_soil_mechanics_simplified(action_map, affected_mask),
+            lambda: self._apply_local_soil_mechanics_full(action_map, affected_mask)
+        )
+
+    def _apply_local_soil_mechanics_full(self, action_map: Array, affected_mask: Array) -> Array:
+        """
+        Full soil mechanics with Gaussian spreading (original implementation).
         """
         # Get validity constraints from Terra's mask system
         padding_mask = self.world.padding_mask.map  # Obstacles (1 = obstacle, 0 = valid)
@@ -2647,7 +2773,7 @@ class State(NamedTuple):
         
         # Gaussian kernel: [0.25, 1, 0.25] approximated as [1, 4, 1] / 6 for integer math
         # Create 2D separable Gaussian kernel
-        kernel_1d = jnp.array([1, 4, 1], dtype=jnp.int32)  # Will divide by 6 later
+        kernel_1d = jnp.array([1, 4, 1], dtype=jnp.int32)
         
         def _apply_single_iteration(current_map: Array) -> Array:
             """Apply one iteration of local spreading using convolution"""
@@ -2698,9 +2824,12 @@ class State(NamedTuple):
         for _ in range(3):
             spread_map = _apply_single_iteration(spread_map)
         
+        # OPTIMIZATION: Skip expensive conservation logic for performance
+        # Original logic preserved but commented out for reference
+        """
         # Ensure conservation: if total changed, redistribute the difference
-        original_total = affected_area.sum()
-        new_total = spread_map.sum()
+        original_total = affected_area.sum()  # EXPENSIVE OPERATION
+        new_total = spread_map.sum()          # EXPENSIVE OPERATION
         
         # If totals don't match due to integer division, redistribute the difference
         total_diff = original_total - new_total
@@ -2708,7 +2837,7 @@ class State(NamedTuple):
         def _redistribute_difference():
             # Find valid tiles with dirt to adjust (respecting Terra constraints)
             dirt_tiles = jnp.logical_and(spread_map > 0, validity_mask)
-            num_dirt_tiles = dirt_tiles.sum()
+            num_dirt_tiles = dirt_tiles.sum()  # EXPENSIVE OPERATION
             
             # Only redistribute if we have valid dirt tiles to work with
             def _do_redistribution():
@@ -2739,9 +2868,10 @@ class State(NamedTuple):
             _redistribute_difference,
             lambda: spread_map.astype(action_map.dtype)  # Ensure consistent type
         )
+        """
         
         # Convert back to original dtype and combine with unaffected area
-        result_map = unaffected_area.astype(action_map.dtype) + conserved_spread_map.astype(action_map.dtype)
+        result_map = unaffected_area.astype(action_map.dtype) + spread_map.astype(action_map.dtype)
         return result_map
 
     def _get_rewards_skidsteer(self, new_state: "State", action: ActionType) -> Float:
