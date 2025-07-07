@@ -197,74 +197,75 @@ class CurriculumGlobalConfig(NamedTuple):
     # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
         {
+            "maps_path": "relocations",
+            "max_steps_in_episode": 300,  # Shorter episodes for faster learning
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
             "maps_path": "foundations_dumpzones", 
             "max_steps_in_episode": 350,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         # Stage 1: Basic Skills - Learn individual capabilities
-        {
-            "maps_path": "relocations",
-            "max_steps_in_episode": 300,  # Shorter episodes for faster learning
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        
         
         # Stage 2: Foundation Coordination - Learn to work together on mixed tasks
-        {
-            "maps_path": "foundations", 
-            "max_steps_in_episode": 350,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations", 
+        #     "max_steps_in_episode": 350,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         
-        # Stage 3: Basic Excavation - Excavator leads, skid steer supports
-        {
-            "maps_path": "trenches/single",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,  # Enable trench-specific rewards
-        },
+        # # Stage 3: Basic Excavation - Excavator leads, skid steer supports
+        # {
+        #     "maps_path": "trenches/single",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,  # Enable trench-specific rewards
+        # },
         
-        # Stage 4: Mixed Practice - Alternate between specializations
-        {
-            "maps_path": "relocations",
-            "max_steps_in_episode": 350,
-            "rewards_type": RewardsType.DENSE, 
-            "apply_trench_rewards": False,
-        },
+        # # Stage 4: Mixed Practice - Alternate between specializations
+        # {
+        #     "maps_path": "relocations",
+        #     "max_steps_in_episode": 350,
+        #     "rewards_type": RewardsType.DENSE, 
+        #     "apply_trench_rewards": False,
+        # },
         
-        # Stage 5: Advanced Coordination - Complex mixed scenarios
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # # Stage 5: Advanced Coordination - Complex mixed scenarios
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         
-        # Stage 6: Complex Excavation - Advanced trench work
-        {
-            "maps_path": "trenches/double", 
-            "max_steps_in_episode": 500,  # Longer for complex tasks
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # # Stage 6: Complex Excavation - Advanced trench work
+        # {
+        #     "maps_path": "trenches/double", 
+        #     "max_steps_in_episode": 500,  # Longer for complex tasks
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         
-        # Stage 7: Mastery Testing - Return to basics with higher expectations
-        {
-            "maps_path": "relocations",
-            "max_steps_in_episode": 250,  # Shorter time pressure
-            "rewards_type": RewardsType.SPARSE,  # More challenging rewards
-            "apply_trench_rewards": False,
-        },
+        # # Stage 7: Mastery Testing - Return to basics with higher expectations
+        # {
+        #     "maps_path": "relocations",
+        #     "max_steps_in_episode": 250,  # Shorter time pressure
+        #     "rewards_type": RewardsType.SPARSE,  # More challenging rewards
+        #     "apply_trench_rewards": False,
+        # },
         
-        # Stage 8: Final Integration - All skills combined
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 400, 
-            "rewards_type": RewardsType.SPARSE,  # Sparse rewards for mastery
-            "apply_trench_rewards": False,
-        },
+        # # Stage 8: Final Integration - All skills combined
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 400, 
+        #     "rewards_type": RewardsType.SPARSE,  # Sparse rewards for mastery
+        #     "apply_trench_rewards": False,
+        # },
     ]
 
 '''
