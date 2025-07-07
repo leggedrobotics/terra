@@ -44,6 +44,12 @@ foundations:
   min_size: 8
   max_size: 64
   max_buildings: 3000
+  # Dump zone configuration
+  use_specific_dump_zones: false  # Set to true for skid steer training, false for excavator-only
+  n_dump_min: 2
+  n_dump_max: 4
+  size_dump_min: 8
+  size_dump_max: 12
 
 relocations:
   img_edge_min: 64

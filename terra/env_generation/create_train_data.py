@@ -14,6 +14,7 @@ from terra.env_generation.procedural_data import (
     save_or_display_image,
     convert_terra_pad_to_color,
 )
+from terra.env_generation.generate_relocations import add_dump_zones
 from terra.env_generation.convert_to_terra import (
     _convert_dumpability_to_terra,
     _convert_img_to_terra,
@@ -104,7 +105,12 @@ def create_foundations(config,
                       all_dumpable=False,
                       copy_metadata=True,
                       has_dumpability=False,
-                      center_padding=True):
+                      center_padding=True,
+                      use_specific_dump_zones=False,
+                      n_dump_min=2,
+                      n_dump_max=4,
+                      size_dump_min=8,
+                      size_dump_max=12):
     """
     Creates foundation environments using configurations from a YAML file.
 
@@ -123,16 +129,36 @@ def create_foundations(config,
     - copy_metadata (bool): Whether to copy metadata.
     - has_dumpability (bool): Whether the image has dumpability information.
     - center_padding (bool): Whether to center the padding.
+    - use_specific_dump_zones (bool): If True, creates specific dump zones like relocations.
+                                     If False, makes everything outside buildings dumpable (default).
+    - n_dump_min (int): Minimum number of specific dump zones (when use_specific_dump_zones=True).
+    - n_dump_max (int): Maximum number of specific dump zones (when use_specific_dump_zones=True).
+    - size_dump_min (int): Minimum size of specific dump zones (when use_specific_dump_zones=True).
+    - size_dump_max (int): Maximum size of specific dump zones (when use_specific_dump_zones=True).
     """
     # Extract configuration parameters
     foundation_config = config["foundations"]
     n_imgs = config["n_imgs"]
     size = foundation_config["max_size"]
     dataset_path = foundation_config["dataset_rel_path"]
+    
+    # Extract dump zone configuration if available
+    if "use_specific_dump_zones" in foundation_config:
+        use_specific_dump_zones = foundation_config["use_specific_dump_zones"]
+        n_dump_min = foundation_config.get("n_dump_min", n_dump_min)
+        n_dump_max = foundation_config.get("n_dump_max", n_dump_max)
+        size_dump_min = foundation_config.get("size_dump_min", size_dump_min)
+        size_dump_max = foundation_config.get("size_dump_max", size_dump_max)
 
     # Define save folder for the envs using os.path.join
-    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
-    save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_large")
+    if use_specific_dump_zones:
+        save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones")
+        save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_large")
+        print(f"Using SPECIFIC DUMP ZONES mode - saving to: foundations_dumpzones/")
+    else:
+        save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations")
+        save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_large")
+        print(f"Using EVERYTHING DUMPABLE mode - saving to: foundations/")
 
     # Choose different downsampling factors for different curriculum levels
     downsampling_factors = {
@@ -241,17 +267,36 @@ def create_foundations(config,
                 expansion_factor, 1
             )
             img_terra_pad = convert_terra_pad_to_color(img_terra_pad, color_dict)
-            dumping_image = initialize_image(size, size, color_dict["dumping"])
+            
+            if use_specific_dump_zones:
+                # Create specific dump zones like relocations (for skid steer training)
+                # Start with neutral background everywhere except dig zones
+                neutral_mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
+                img_terra_pad[neutral_mask] = color_dict["neutral"]
+                
+                # Add specific dump zones
+                img_terra_pad, dump_cumulative_mask = add_dump_zones(
+                    img_terra_pad, n_dump_min, n_dump_max, size_dump_min, size_dump_max
+                )
+            else:
+                # Make everything outside buildings dumpable (original behavior)
+                dumping_image = initialize_image(size, size, color_dict["dumping"])
+                # Create a mask where img_terra_pad is not equal to color_dict["digging"]
+                mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
+                # Use the mask to assign values from dumping_image to img_terra_pad
+                img_terra_pad[mask] = dumping_image[mask]
 
-            # Create a mask where img_terra_pad is not equal to color_dict["digging"]
-            mask = np.all(img_terra_pad != color_dict["digging"], axis=-1)
-
-            # Use the mask to assign values from dumping_image to img_terra_pad
-            img_terra_pad[mask] = dumping_image[mask]
-
-            cumulative_mask = np.zeros_like(img_terra_pad, dtype=np.bool_)
-            # where the img_terra_pad is [255, 255, 255] set to True across the three channels
-            cumulative_mask[img_terra_pad == 255] = True
+            if use_specific_dump_zones:
+                # Initialize cumulative mask with dump zones and dig zones
+                cumulative_mask = np.zeros(img_terra_pad.shape[:2], dtype=np.bool_)
+                # Mark dig zones (white areas) and dump zones as occupied
+                cumulative_mask[np.all(img_terra_pad == color_dict["digging"], axis=-1)] = True
+                cumulative_mask = dump_cumulative_mask | cumulative_mask
+            else:
+                # Original behavior: mark dig zones as occupied
+                cumulative_mask = np.zeros(img_terra_pad.shape[:2], dtype=np.bool_)
+                # where the img_terra_pad is [255, 255, 255] set to True across the three channels
+                cumulative_mask[np.all(img_terra_pad == color_dict["digging"], axis=-1)] = True
             occ, cumulative_mask = add_obstacles(
                 img_terra_pad,
                 cumulative_mask,

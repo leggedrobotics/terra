@@ -207,7 +207,20 @@ def _convert_all_imgs_to_terra(
 
 def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
     print("Converting foundations...")
-    foundations_levels = ["foundations", "foundations_large"]
+    # Check which foundation types exist and convert them
+    possible_levels = ["foundations", "foundations_large", "foundations_dumpzones", "foundations_dumpzones_large"]
+    foundations_levels = []
+    
+    for level in possible_levels:
+        level_path = Path(dataset_folder) / level
+        if level_path.exists():
+            foundations_levels.append(level)
+            print(f"  Found {level} folder - will convert to train/{level}")
+    
+    if not foundations_levels:
+        print("  No foundation folders found - skipping foundation conversion")
+        return
+        
     for level in foundations_levels:
         img_folder = Path(dataset_folder) / level / "images"
         metadata_folder = Path(dataset_folder) / level / "metadata"

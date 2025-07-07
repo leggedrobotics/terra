@@ -17,7 +17,7 @@ def darken_color(color, factor=0.7):
 
 COLORS = {
     0: "#cfcfcf",  # neutral
-    5: "#E4DCCF",  # final dumping area to terminate the episode
+    5: "#ccffcc",  # final dumping area to terminate the episode (very light green)
     3: "#ab9f95",  # non-dumpable (e.g. road)
     4: "#8800ff",  # to dig
     2: "#000000",  # obstacle
