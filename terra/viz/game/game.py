@@ -229,8 +229,8 @@ class Game:
             agent.angles_base, 
             agent.angles_cabin
         )
-        print("base_dir:", base_dir, "cabin_dir:", cabin_dir)
-        print("corrected_base_dir:", corrected_base_dir, "corrected_cabin_dir:", corrected_cabin_dir)
+        #print("base_dir:", base_dir, "cabin_dir:", cabin_dir)
+        #print("corrected_base_dir:", corrected_base_dir, "corrected_cabin_dir:", corrected_cabin_dir)
         
         # Update it with the specific position and angles
         temp_agent.update([0, 0], corrected_base_dir, corrected_cabin_dir, loaded)  # Position doesn't matter for surface creation

@@ -241,18 +241,24 @@ class CurriculumGlobalConfig(NamedTuple):
     #     },
     # ]
     levels = [
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # {
         #     "maps_path": "trenches/double",
         #     "max_steps_in_episode": 400,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": True,
         # },
+        {
+            "maps_path": "trenches/single",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
     ]
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]

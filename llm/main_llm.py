@@ -42,50 +42,18 @@ from llm.env_manager_llm import EnvironmentsManager
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed, 
-                run, current_experiment_number, small_env_config=None):
+                run, current_experiment_number, env_manager, global_env_config,small_env_config=None):
     """
     Run an experiment with completely separate environments for global and small maps.
     """
+
+
     (FORCE_DELEGATE_TO_RL, FORCE_DELEGATE_TO_LLM, LLM_CALL_FREQUENCY,
      USE_MANUAL_PARTITIONING, MAX_NUM_PARTITIONS, VISUALIZE_PARTITIONS,
      USE_IMAGE_PROMPT , APP_NAME, USER_ID, SESSION_ID,
      GRID_RENDERING, ORIGINAL_MAP_SIZE, 
      USE_RENDERING, USE_DISPLAY,
     ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD, USE_RANDOM_PARTITIONING) = setup_experiment_config()
-
-    # Track intervention statistics
-    total_interventions = 0
-    partition_interventions = {}
-
-    agent_checkpoint_path = run
-    model_params = None
-    config = None
-
-    print(f"Loading RL agent configuration from: {agent_checkpoint_path}")
-    log = load_pkl_object(agent_checkpoint_path)
-    config = log["train_config"]
-    model_params = log["model"]
-
-    # Create the original environment configs for the full map
-    global_env_config = jax.tree_map(
-        lambda x: x[0][None, ...].repeat(1, 0), log["env_config"]
-    ) 
-
-    config.num_test_rollouts = 1
-    config.num_devices = 1
-    config.num_embeddings_agent_min = 60
-
-    # Initialize the environment manager ONCE with all maps
-    print("Initializing environment manager with all maps...")
-    env_manager = EnvironmentsManager(
-        seed=seed,
-        global_env_config=global_env_config,
-        small_env_config=small_env_config,
-        shuffle_maps=False,
-        rendering=USE_RENDERING,
-        display=USE_DISPLAY
-    )
-    print("Environment manager initialized.")
 
     # Initialize once with proper batching
     rng = jax.random.PRNGKey(seed)
@@ -171,8 +139,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
         
         # Reset to next map (reusing the same environment)
         try:
-            if current_map_index > 0:  # Don't reset on first map since it's already initialized
-                reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
+            #if current_map_index > 0:  # Don't reset on first map since it's already initialized
+            reset_to_next_map(current_map_index, seed, env_manager, global_env_config,
                        initial_custom_pos, initial_custom_angle)
 
             env_manager.global_env.terra_env.render_obs_pygame(
@@ -748,8 +716,48 @@ if __name__ == "__main__":
 
     base_seed = args.seed
 
+    USE_RENDERING = True  # Set to True to enable rendering
+    USE_DISPLAY = True  # Set to True to enable display updates
+
+    # Track intervention statistics
+    total_interventions = 0
+    partition_interventions = {}
+
+    agent_checkpoint_path = args.run_name
+    model_params = None
+    config = None
+
+    print(f"Loading RL agent configuration from: {agent_checkpoint_path}")
+    log = load_pkl_object(agent_checkpoint_path)
+    config = log["train_config"]
+    model_params = log["model"]
+
+    # Create the original environment configs for the full map
+    global_env_config = jax.tree_map(
+        lambda x: x[0][None, ...].repeat(1, 0), log["env_config"]
+    ) 
+
+    config.num_test_rollouts = 1
+    config.num_devices = 1
+    config.num_embeddings_agent_min = 60
+
+    # Initialize the environment manager ONCE with all maps
+    print("Initializing environment manager with all maps...")
+    env_manager = EnvironmentsManager(
+        seed=base_seed,
+        global_env_config=global_env_config,
+        small_env_config=None,
+        shuffle_maps=False,
+        rendering=USE_RENDERING,
+        display=USE_DISPLAY
+    )
+    print("Environment manager initialized.")
+
     for i in range(NUM_ENVS):
         print(f"Running experiment {i+1}/{NUM_ENVS} with args: {args}")
+        global_env_config = jax.tree_map(
+            lambda x: x[0][None, ...].repeat(1, 0), log["env_config"]
+        ) 
         info = run_experiment(
                     args.model_name, 
                     args.model_key, 
@@ -757,7 +765,8 @@ if __name__ == "__main__":
                     #base_seed + i * 1000,  # Ensure different seeds
                     base_seed,
                     args.run_name,
-                    i+1
+                    i+1,
+                    env_manager, global_env_config
                 )
         # Collect results from this experiment
         episode_done_once = info["episode_done_once"]
