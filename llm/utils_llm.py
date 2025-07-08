@@ -1890,7 +1890,7 @@ def filter_empty_partitions(partitions, target_map, min_targets=1):
     return valid_partitions, partition_stats
 
 def compute_random_subtasks_validated(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, target_map, 
-                                     seed=None, min_targets=1, max_attempts=10):
+                                     seed=None, min_targets=1, max_attempts=20):
     """
     Compute random subtasks and validate they contain dig targets.
     Will retry with different random splits if partitions are empty.
@@ -1914,6 +1914,9 @@ def compute_random_subtasks_validated(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, target_
     
     if NUM_PARTITIONS not in [1, 2, 4]:
         raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
+    
+    min_targets = int(jnp.sum(target_map == -1) * 0.2)
+    print(f"Minimum targets per partition: {min_targets}")
     
     print(f"\nGenerating {NUM_PARTITIONS} random partitions with target validation...")
     
