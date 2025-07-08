@@ -2664,77 +2664,49 @@ class State(NamedTuple):
         return dig_dump_mask
 
     def _apply_local_soil_mechanics_simplified(self, action_map: Array, affected_mask: Array) -> Array:
-        """
-        FAST simplified soil mechanics with PROPER conservation.
-        Uses a simple scaling approach to maintain exact dirt conservation.
-        
-        Args:
-            action_map: (H, W) current height map
-            affected_mask: (H, W) boolean mask of tiles that were just affected
-            
-        Returns:
-            new_action_map: (H, W) height map with simplified spreading applied
-        """
-        # Get validity constraints from Terra's mask system
-        padding_mask = self.world.padding_mask.map
-        dumpability_mask = self.world.dumpability_mask.map
-        
-        # Create combined validity mask
-        validity_mask = jnp.logical_and(
-            padding_mask == 0,  # Not an obstacle
-            dumpability_mask == 1  # Is dumpable
-        )
-        
-        # Simple 3x3 Gaussian kernel (normalized to sum to 1.0)
-        kernel = jnp.array([
-            [0.077847, 0.123317, 0.077847],
-            [0.123317, 0.195346, 0.123317], 
-            [0.077847, 0.123317, 0.077847]
-        ], dtype=jnp.float32)
-        
-        # Only apply to affected areas
-        affected_area = jnp.where(affected_mask, action_map.astype(jnp.float32), 0.0)
-        unaffected_area = jnp.where(affected_mask, 0.0, action_map.astype(jnp.float32))
-        
-        # Apply single convolution - JAX optimized
-        spread_map = jax.scipy.signal.convolve2d(
-            affected_area, kernel, mode='same', boundary='fill', fillvalue=0.0
-        )
-        
-        # Ensure valid tiles only
-        spread_map = jnp.where(validity_mask, spread_map, affected_area)
-        
-        # PROPER CONSERVATION: Simple scaling approach
-        # Calculate dirt totals in affected regions only (much more efficient than global sums)
-        affected_original_total = jnp.sum(jnp.where(affected_mask, affected_area, 0.0))
-        affected_spread_total = jnp.sum(jnp.where(affected_mask, spread_map, 0.0))
-        
-        # Apply conservation scaling only to affected region
-        conservation_factor = jnp.where(
-            affected_spread_total > 1e-6,
-            affected_original_total / affected_spread_total,
-            1.0
-        )
-        
-        # Apply conservation factor only to the affected, spread dirt
-        conserved_spread_map = jnp.where(
-            affected_mask,
-            spread_map * conservation_factor,
-            spread_map  # Outside affected area, don't scale
-        )
-        
-        # Ensure the result doesn't create invalid values
-        conserved_spread_map = jnp.where(validity_mask, conserved_spread_map, affected_area)
-        
-        # Combine with unaffected area
-        result_map = unaffected_area + conserved_spread_map
-        
-        return result_map.astype(action_map.dtype)
+        if action_map.ndim != 2:
+            return action_map
+        def collapse_body(map_2d, mask):
+            mask = mask.astype(jnp.bool_)
+            n_iters = 3  # Number of collapse iterations
+            def collapse_step(i, map_2d):
+                """One iteration of soil collapse - move dirt between neighbors."""
+                # JAX-compatible defensive check: ensure map_2d is always treated as 2D
+                # Use jax.lax.cond to handle potential dimension issues during tracing
+                def handle_valid_2d(map_2d):
+                    # Process the valid 2D map with soil mechanics
+                    result = map_2d
+                    # Check all 4 directional neighbors
+                    for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        # Get neighbor heights by shifting the map
+                        shifted = jnp.roll(result, shift=(dy, dx), axis=(0, 1))
+                        diff = shifted - result
+                        neighbor_mask = jnp.roll(mask, shift=(dy, dx), axis=(0, 1))
+                        move = (diff >= 2) & mask & neighbor_mask
+                        result = result + move.astype(result.dtype)
+                        result = jnp.roll(result, shift=(dy, dx), axis=(0, 1)) - move.astype(result.dtype)
+                        result = jnp.roll(result, shift=(-dy, -dx), axis=(0, 1))
+                    return result
+                
+                def handle_invalid_shape(map_2d):
+                    # Return a safe default - this should never execute at runtime
+                    # but is needed for JAX tracing completeness
+                    return jnp.zeros_like(action_map, dtype=map_2d.dtype)
+                
+                # JAX-compatible shape check using jnp.where for static shape determination
+                is_valid_2d = (jnp.ndim(map_2d) == 2) & (jnp.shape(map_2d)[0] > 0) & (jnp.shape(map_2d)[1] > 0)
+                return jax.lax.cond(is_valid_2d, handle_valid_2d, handle_invalid_shape, map_2d)
+            map_2d = jax.lax.fori_loop(0, n_iters, collapse_step, map_2d)
+            return map_2d.astype(action_map.dtype)
+        has_affected = jnp.any(affected_mask)
+        def do_collapse(_):
+            return collapse_body(action_map, affected_mask)
+        return jax.lax.cond(has_affected, do_collapse, lambda _: action_map, operand=None)
 
     def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
-        """
-        Apply simplified soil mechanics for performance.
-        """
+        # Defensive: skip soil mechanics if not 2D
+        if action_map.ndim != 2:
+            return action_map
         return jax.lax.cond(
             ENABLE_SOIL_MECHANICS_IN_TRAINING,
             lambda: self._apply_local_soil_mechanics_simplified(action_map, affected_mask),

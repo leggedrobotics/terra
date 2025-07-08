@@ -88,6 +88,8 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
+        # DEBUG: Print shape and type of action_map before State.new
+        print(f"[TerraEnv.reset] action_map shape: {getattr(action_map, 'shape', 'no shape')}, type: {type(action_map)}")
         state = State.new(
             key,
             env_cfg,
