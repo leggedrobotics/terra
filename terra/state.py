@@ -82,9 +82,11 @@ class State(NamedTuple):
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
         )
 
+        # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
+        agent_types = getattr(env_cfg, 'agent_types', (0, 2))
         agent, key = Agent.new(
             key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map,
-            agent_types=(0, 2)  # Agent 1: tracked (0), Agent 2: skid steer (2)
+            agent_types=agent_types
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
@@ -2376,15 +2378,13 @@ class State(NamedTuple):
 
         return reward
 
-    @staticmethod
-    def _is_done_task(action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array):
+    def _is_done_task(self, action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array):
         """
-        Checks if the target map matches the action map,
-        but only on the relevant tiles.
+        Checks if the task is complete based on the type of task:
+        1. Traditional tasks: target map requirements must be met
+        2. Relocation tasks: all dirt must be in dump zones (no dirt in neutral areas)
 
-        On top of that, the agent should not be loaded.
-
-        The relevant tiles are defined as the tiles where the target map is not zero.
+        On top of that, both agents should not be loaded.
         """
 
         def _check_done_dump():
@@ -2394,49 +2394,90 @@ class State(NamedTuple):
             done_dump = jnp.all(actual_dumps >= dump_requirements)
             return done_dump
 
-        done_dump = jax.lax.cond(
-            jnp.all(target_map <= 0),  # No dump requirements
-            lambda: True,
-            _check_done_dump,
-        )
-
-        # For dig completion: action_map must be <= target_map for all target_map < 0
-        # (since target_map < 0 means "dig to this depth" and action_map < 0 means "dug to this depth")
         def _check_done_dig():
+            # For dig completion: action_map must be <= target_map for all target_map < 0
+            # (since target_map < 0 means "dig to this depth" and action_map < 0 means "dug to this depth")
             dig_requirements = jnp.where(target_map < 0, target_map, 0)
             actual_digs = jnp.where(target_map < 0, action_map, 0)
             done_dig = jnp.all(actual_digs <= dig_requirements)
             return done_dig
-        
-        done_dig = jax.lax.cond(
-            jnp.all(target_map >= 0),  # No dig requirements
-            lambda: True,
-            _check_done_dig,
-        )
-        done_unload = agent_loaded[0] == 0
-        done_unload2 = agent_laoded_2[0] == 0
-        
-        # Check if this is a dig-only task (no dumping requirements)
-        has_dump_requirements = jnp.any(target_map > 0)
-        # Check if this is a dump-only task (no digging requirements) 
-        has_dig_requirements = jnp.any(target_map < 0)
-        
-        # Task completion logic:
-        # - If both dig and dump requirements exist: both must be done
-        # - If only dig requirements: only digging must be done
-        # - If only dump requirements: only dumping must be done
-        # - If neither (relocation): both conditions are trivially satisfied
-        task_requirements_met = jax.lax.cond(
-            jnp.logical_and(has_dig_requirements, has_dump_requirements),
-            lambda: jnp.logical_and(done_dig, done_dump),  # Both required
-            lambda: jax.lax.cond(
-                has_dig_requirements,
-                lambda: done_dig,      # Only digging required
-                lambda: done_dump      # Only dumping required (or neither)
+
+        def _check_relocation_done():
+            """
+            For relocation tasks: Check if all dirt is in dump zones.
+            Optimized version that early exits and avoids full map operations.
+            """
+            # Early exit: if both agents are loaded, task cannot be complete
+            agents_loaded = (agent_loaded[0] > 0) | (agent_laoded_2[0] > 0)
+            
+            def _do_expensive_check():
+                # Only do expensive operations when agents are unloaded
+                # Get dump zones (dumpability_mask == 1) - cache this since it doesn't change
+                dump_zones = self.world.dumpability_mask.map
+                
+                # Find dirt locations in non-dump zones (optimized: check violation directly)
+                # dirt in non-dump zones = (action_map > 0) & (dump_zones == 0)
+                dirt_in_neutral = jnp.logical_and(action_map > 0, dump_zones == 0)
+                
+                # Task complete if NO dirt exists in neutral areas
+                return jnp.logical_not(jnp.any(dirt_in_neutral))
+            
+            def _early_exit():
+                return False  # Task not complete if agents still loaded
+            
+            # Only do expensive check if agents are unloaded
+            return jax.lax.cond(
+                agents_loaded,
+                _early_exit,
+                _do_expensive_check
             )
+
+        # Check if this is a relocation task:
+        # Relocation tasks have dump zones (target_map > 0) but no dig requirements (no target_map < 0)
+        has_dump_requirements = jnp.any(target_map > 0)
+        has_dig_requirements = jnp.any(target_map < 0)
+        is_relocation_task = jnp.logical_and(has_dump_requirements, jnp.logical_not(has_dig_requirements))
+
+        # Choose termination logic based on task type
+        def _traditional_task_logic():
+            # Traditional logic for tasks with specific target map requirements
+            done_dump = jax.lax.cond(
+                jnp.all(target_map <= 0),  # No dump requirements
+                lambda: True,
+                _check_done_dump,
+            )
+            
+            done_dig = jax.lax.cond(
+                jnp.all(target_map >= 0),  # No dig requirements
+                lambda: True,
+                _check_done_dig,
+            )
+            
+            # Task completion logic for traditional tasks
+            return jax.lax.cond(
+                jnp.logical_and(has_dig_requirements, has_dump_requirements),
+                lambda: jnp.logical_and(done_dig, done_dump),  # Both required
+                lambda: jax.lax.cond(
+                    has_dig_requirements,
+                    lambda: done_dig,      # Only digging required
+                    lambda: done_dump      # Only dumping required
+                )
+            )
+
+        def _relocation_task_logic():
+            # New logic for relocation tasks - check if all dirt is in dump zones
+            return _check_relocation_done()
+
+        # Select appropriate task completion logic
+        task_requirements_met = jax.lax.cond(
+            is_relocation_task,
+            _relocation_task_logic,
+            _traditional_task_logic
         )
         
         # Task is complete when requirements are met AND both agents are unloaded
+        done_unload = agent_loaded[0] == 0
+        done_unload2 = agent_laoded_2[0] == 0
         done_task = task_requirements_met & done_unload & done_unload2
         return done_task
 

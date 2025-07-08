@@ -175,6 +175,10 @@ class EnvConfig(NamedTuple):
 
     max_steps_in_episode: int = 0  # changed by CurriculumManager
     tile_size: float = 0  # updated in the code
+    
+    # Agent types configuration: (agent1_type, agent2_type)
+    # 0=tracked, 1=wheeled, 2=skidsteer
+    agent_types: tuple = (0, 2)  # Default: tracked + skidsteer
 
     @classmethod
     def new(cls):
@@ -200,12 +204,12 @@ class CurriculumGlobalConfig(NamedTuple):
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
-        {
-            "maps_path": "foundations_dumpzones", 
-            "max_steps_in_episode": 350,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones", 
+        #     "max_steps_in_episode": 350,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # Stage 1: Basic Skills - Learn individual capabilities
         
         
