@@ -716,8 +716,13 @@ if __name__ == "__main__":
 
     base_seed = args.seed
 
-    USE_RENDERING = True  # Set to True to enable rendering
-    USE_DISPLAY = True  # Set to True to enable display updates
+    (_, _, _, _, _, _,
+     _ , _, _, _,
+     _, _, 
+     USE_RENDERING, USE_DISPLAY,
+    _, _, _, _, _) = setup_experiment_config()
+
+
 
     # Track intervention statistics
     total_interventions = 0

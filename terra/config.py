@@ -247,18 +247,36 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
+        {
+            "maps_path": "trenches/double",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },       
         # {
-        #     "maps_path": "trenches/double",
+        #     "maps_path": "trenches/double_diagonal",
         #     "max_steps_in_episode": 400,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": True,
         # },
-        {
-            "maps_path": "trenches/single",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        #         {
+        #     "maps_path": "trenches/triple",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        #                 {
+        #     "maps_path": "trenches/triple_diagonal",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+        # {
+        #     "maps_path": "trenches/single",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
     ]
 class BatchConfig(NamedTuple):
     action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
