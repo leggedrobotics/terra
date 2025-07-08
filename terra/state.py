@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
+from jax import lax
 
 from terra.actions import Action
 from terra.actions import ActionType
@@ -75,6 +76,8 @@ class State(NamedTuple):
         dumpability_mask_init: Array,
         action_map: Array,
     ) -> "State":
+        # TEMP HACK: Set all dirt height 1 to 5 for testing
+        action_map = jnp.where(action_map == 1, 5, action_map)
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
         )
@@ -109,6 +112,8 @@ class State(NamedTuple):
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
+        # TEMP HACK: Set all dirt height 1 to 5 for testing
+        action_map = jnp.where(action_map == 1, 5, action_map)
         return self.new(
             key=key,
             env_cfg=env_cfg,
@@ -427,7 +432,7 @@ class State(NamedTuple):
     def _skid_steer_auto_load_dirt(self, new_state: "State") -> "State":
         """
         Auto-loading function for skid steer when moving with shovel lowered.
-        Uses a smaller rectangular workspace (2.0 x 1.5 tiles) around the agent.
+        Applies soil mechanics directly when dirt is loaded.
         """
         # Only applies to skid steer with shovel lowered and not already loaded
         is_skid_steer = new_state.agent.agent_state.agent_type[0] == 2
@@ -449,47 +454,54 @@ class State(NamedTuple):
             # Apply skid steer dig masking (only allow loading from existing dirt)
             auto_load_mask = new_state._mask_out_wrong_dig_tiles_skidsteer(auto_load_mask)
             
-            # Calculate how much dirt to load
-            flattened_action_map = new_state.world.action_map.map.reshape(-1)
-            selected_tiles_sum = flattened_action_map @ auto_load_mask
+            # Calculate how much dirt to load (from current state)
+            current_flattened_action_map = new_state.world.action_map.map.reshape(-1)
+            actual_dirt_to_remove = current_flattened_action_map @ auto_load_mask
             
-            # Only proceed if there's dirt to load
             def _perform_auto_load():
-                # Apply the auto-loading (similar to digging)
-                new_flattened_action_map = new_state._apply_dig_mask(
-                    flattened_action_map,
-                    auto_load_mask,
-                    moving_dumped_dirt=True  # We're moving existing dirt
-                )
-                
-                # CONSERVATION FIX: Load exactly the amount that was removed from the map
-                # When moving_dumped_dirt=True, _apply_dig_mask removes ALL dirt from masked tiles
-                # So we must load that same amount to maintain conservation
-                volume_loaded = selected_tiles_sum  # Load exactly what was removed
-                
-                # Reshape back to 2D map with correct dtype
-                new_action_map = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
-                # Ensure we maintain the original dtype
-                new_action_map = new_action_map.astype(new_state.world.action_map.map.dtype)
-                
-                return new_state._replace(
-                    world=new_state.world._replace(
-                        action_map=new_state.world.action_map._replace(map=new_action_map)
-                    ),
-                    agent=new_state.agent._replace(
-                        agent_state=new_state.agent.agent_state._replace(
-                            loaded=jnp.array([volume_loaded], dtype=new_state.agent.agent_state.loaded.dtype)
+                # Only perform auto-load if there is dirt to remove
+                def _do_load():
+                    # First remove dirt cleanly (without soil mechanics)
+                    new_flattened_action_map = new_state._apply_dig_mask(
+                        current_flattened_action_map,
+                        auto_load_mask,
+                        moving_dumped_dirt=True  # We're moving existing dirt
+                    )
+                    new_map_2d = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
+                    
+                    # Apply soil mechanics directly using the auto-load mask (the actual holes)
+                    def _apply_soil_collapse():
+                        auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
+                        expanded_mask = new_state._expand_mask_for_soil_mechanics(auto_load_mask_2d)
+                        collapsed_map = new_state._apply_local_soil_mechanics(
+                            new_map_2d, expanded_mask
+                        )
+                        return collapsed_map
+                    
+                    def _skip_soil_collapse():
+                        return new_map_2d
+                    
+                    final_map = jax.lax.cond(
+                        ENABLE_SOIL_MECHANICS_IN_TRAINING,
+                        _apply_soil_collapse,
+                        _skip_soil_collapse
+                    )
+                    final_map = final_map.astype(new_state.world.action_map.map.dtype)
+                    return new_state._replace(
+                        world=new_state.world._replace(
+                            action_map=new_state.world.action_map._replace(map=final_map),
+                        ),
+                        agent=new_state.agent._replace(
+                            agent_state=new_state.agent.agent_state._replace(
+                                loaded=jnp.array([actual_dirt_to_remove], dtype=new_state.agent.agent_state.loaded.dtype),
+                            )
                         )
                     )
-                )
-            
-            # Only auto-load if there's actually dirt to load
-            return jax.lax.cond(
-                selected_tiles_sum > 0,
-                _perform_auto_load,
-                lambda: new_state
-            )
-        
+                def _no_load():
+                    # No dirt to load, keep loaded value unchanged
+                    return new_state
+                return jax.lax.cond(actual_dirt_to_remove > 0, _do_load, _no_load)
+            return _perform_auto_load()
         return jax.lax.cond(should_auto_load, _apply_auto_load, lambda: new_state)
 
     def _handle_move_forward(self) -> "State":
@@ -1083,19 +1095,20 @@ class State(NamedTuple):
         flattened_map: Array, 
         dig_mask: Array, 
         moving_dumped_dirt: bool,
-        apply_soil_mechanics: bool = False
+        apply_soil_mechanics: bool = True,
+        collapse_threshold: float = 2.0,
+        collapse_alpha: float = 0.5,
+        use_iterative_collapse: bool = True
     ) -> Array:
         """
-        Enhanced version of _apply_dig_mask that optionally applies soil mechanics.
-        Used when lifting dumped dirt to simulate realistic soil behavior.
-        
-        Args:
-            - flattened_map: (N, ) Array flattened height map
-            - dig_mask: (N, ) Array of where to dig bools
-            - moving_dumped_dirt: bool, whether we're moving existing dirt
-            - apply_soil_mechanics: bool, whether to apply soil spreading after digging
-        Returns:
-            - new_flattened_map: (N, ) Array flattened new height map
+        Enhanced version of _apply_dig_mask that optionally applies simple or iterative soil mechanics.
+        When enabled, after lifting dirt, dirt from adjacent border tiles collapses into the cone if the border is much higher.
+        If use_iterative_collapse is True, perform up to 3 local relaxation steps starting from the cone.
+        JAX/JIT compatible, global mask-based, efficient.
+        Parameters:
+            collapse_threshold: difference required to trigger collapse
+            collapse_alpha: fraction of difference to move
+            use_iterative_collapse: if True, use iterative local relaxation (3 steps)
         """
         # Apply the normal dig mask logic first
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
@@ -1104,28 +1117,87 @@ class State(NamedTuple):
             lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
-        
-        # Apply soil mechanics only if requested AND if global flag allows it
-        def _apply_soil_mechanics():
+
+        def _apply_simple_collapse():
+            # Reshape to 2D
             map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
-            affected_mask_2d = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
-            
-            # Expand affected area to include neighboring tiles for soil mechanics
-            # This simulates dirt redistributing around the area where dirt was lifted
-            expanded_mask = self._expand_mask_for_soil_mechanics(affected_mask_2d)
-            
-            map_with_soil_mechanics = self._apply_local_soil_mechanics(map_2d, expanded_mask)
-            return map_with_soil_mechanics.reshape(-1)
-        
-        # Check both the function parameter AND the global training flag
-        should_apply_soil_mechanics = jnp.logical_and(
-            apply_soil_mechanics,
-            ENABLE_SOIL_MECHANICS_IN_TRAINING
-        )
-        
+            cone_mask = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
+            # Border mask: dilate cone, subtract cone
+            kernel = jnp.ones((3, 3), dtype=jnp.float32)
+            dilated = jax.scipy.signal.convolve2d(cone_mask.astype(jnp.float32), kernel, mode='same', boundary='fill', fillvalue=0.0) > 0
+            border_mask = jnp.logical_and(dilated, ~cone_mask)
+            # For each cone tile, check max neighbor (border) height
+            # Use 2D convolution to get max border height for each cone tile
+            border_heights = jnp.where(border_mask, map_2d, -jnp.inf)
+            # Replace maximum_filter with lax.reduce_window
+            max_border = lax.reduce_window(
+                border_heights,
+                -jnp.inf,
+                lax.max,
+                window_dimensions=(3, 3),
+                window_strides=(1, 1),
+                padding='SAME'
+            )
+            # Only consider for cone tiles
+            max_border = jnp.where(cone_mask, max_border, 0.0)
+            # Compute difference
+            diff = max_border - map_2d
+            flow = jnp.where((cone_mask) & (diff > collapse_threshold), collapse_alpha * diff, 0.0)
+            # Subtract from border, add to cone
+            # For each cone tile, find which border tile(s) contributed max (could be multiple)
+            # For simplicity, just subtract total flow from all border tiles equally (approximate)
+            # Distribute flow equally to all border tiles
+            total_flow = jnp.sum(flow)
+            n_border = jnp.sum(border_mask)
+            border_flow = jnp.where(border_mask, -total_flow / jnp.maximum(n_border, 1), 0.0)
+            # Update map
+            new_map_2d = map_2d + flow + border_flow
+            return new_map_2d.reshape(-1).astype(IntMap)
+
+        def _apply_iterative_collapse():
+            map_2d = new_flattened_map.reshape(self.world.action_map.map.shape).astype(jnp.float32)
+            cone_mask = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
+            # Border mask: dilate cone, subtract cone
+            kernel = jnp.ones((3, 3), dtype=jnp.float32)
+            dilated = jax.scipy.signal.convolve2d(cone_mask.astype(jnp.float32), kernel, mode='same', boundary='fill', fillvalue=0.0) > 0
+            border_mask = jnp.logical_and(dilated, ~cone_mask)
+            update_mask = jnp.logical_or(cone_mask, border_mask)
+
+            def body_fn(i, map_2d):
+                # For each cone tile, get max neighbor in update region
+                border_heights = jnp.where(border_mask, map_2d, -jnp.inf)
+                max_border = lax.reduce_window(
+                    border_heights,
+                    -jnp.inf,
+                    lax.max,
+                    window_dimensions=(3, 3),
+                    window_strides=(1, 1),
+                    padding='SAME'
+                )
+                # Only consider for cone tiles
+                max_border = jnp.where(cone_mask, max_border, 0.0)
+                diff = max_border - map_2d
+                flow = jnp.where((cone_mask) & (diff > collapse_threshold), collapse_alpha * diff, 0.0)
+                # Subtract from border, add to cone
+                total_flow = jnp.sum(flow)
+                n_border = jnp.sum(border_mask)
+                border_flow = jnp.where(border_mask, -total_flow / jnp.maximum(n_border, 1), 0.0)
+                # Only update in update_mask region
+                new_map_2d = jnp.where(update_mask, map_2d + flow + border_flow, map_2d)
+                return new_map_2d
+            # Run 3 iterations
+            map_2d_final = lax.fori_loop(0, 3, body_fn, map_2d)
+            return map_2d_final.reshape(-1).astype(IntMap)
+
+        def _apply_soil_mech_dispatch():
+            return jax.lax.cond(
+                use_iterative_collapse,
+                _apply_iterative_collapse,
+                _apply_simple_collapse
+            )
         return jax.lax.cond(
-            should_apply_soil_mechanics,
-            _apply_soil_mechanics,
+            apply_soil_mechanics,
+            _apply_soil_mech_dispatch,
             lambda: new_flattened_map
         )
 
@@ -1135,8 +1207,8 @@ class State(NamedTuple):
         Only includes neighbors that are valid for dumping (not obstacles, is dumpable).
         """
         H, W = mask.shape
-        padding_mask = self.world.padding_mask
-        dumpability_mask = self.world.dumpability_mask
+        padding_mask = self.world.padding_mask.map
+        dumpability_mask = self.world.dumpability_mask.map
         
         # Create validity mask - tiles where dirt can be placed
         validity_mask = jnp.logical_and(
@@ -1521,11 +1593,11 @@ class State(NamedTuple):
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
         """
-        For skid steer: ONLY allow lifting from action_map > 0 (dumped dirt)
+        For skid steer: Allow lifting from any dirt (action_map != 0)
         NEVER allow digging new holes (target_map < 0)
         """
-        # Only allow lifting from existing dumped dirt (action_map > 0)
-        dig_mask_action_map = self.world.action_map.map > 0
+        # Allow lifting from any dirt (action_map != 0) - both natural and dumped
+        dig_mask_action_map = self.world.action_map.map != 0
         
         # Respect max dig limit
         max_dig_limit_mask = (
@@ -1534,7 +1606,7 @@ class State(NamedTuple):
 
         return (
             dig_mask
-            * dig_mask_action_map.reshape(-1)  # Only dumped dirt tiles
+            * dig_mask_action_map.reshape(-1)  # Any dirt tiles (natural or dumped)
             * max_dig_limit_mask
         ).astype(jnp.bool_)
 
@@ -1566,31 +1638,62 @@ class State(NamedTuple):
         )
 
         def _apply_dig(volume, fam):
+            # First remove dirt cleanly (without soil mechanics)
             new_map_global_coords = self._apply_dig_mask(
                 fam, dig_mask, moving_dumped_dirt
             )
             new_map_global_coords = new_map_global_coords.reshape(
-                self.world.target_map.map.shape
+                self.world.action_map.map.shape
             )
+            
+            # Now apply soil mechanics using the saved cone mask
+            def _apply_soil_collapse():
+                # Use the saved cone mask for soil mechanics
+                cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+                
+                # Apply soil mechanics to collapse dirt into the hole
+                expanded_mask = self._expand_mask_for_soil_mechanics(cone_mask_2d)
+                collapsed_map = self._apply_local_soil_mechanics(
+                    new_map_global_coords, expanded_mask
+                )
+                return collapsed_map
+            
+            def _skip_soil_collapse():
+                return new_map_global_coords
+            
+            # Apply soil mechanics only if enabled during training
+            final_map = jax.lax.cond(
+                ENABLE_SOIL_MECHANICS_IN_TRAINING,
+                _apply_soil_collapse,
+                _skip_soil_collapse
+            )
+            
+            # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
+            # The soil mechanics might move additional dirt from border into cone
+            # So we need to calculate the difference between original and new map
+            original_total = jnp.sum(fam)
+            new_total = jnp.sum(final_map.reshape(-1))
+            actual_volume_loaded = original_total - new_total  # This is the actual amount removed
+            
             new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
+                final_map,
             )
 
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
-                        map=IntLowDim(new_map_global_coords)
+                        map=IntLowDim(final_map)
                     ),
                     dumpability_mask=self.world.dumpability_mask._replace(
                         map=jnp.bool_(new_dumpability_mask),
                     ),
                     last_dig_mask=self.world.last_dig_mask._replace(
-                        map=jnp.bool_(dig_mask.reshape(self.world.target_map.map.shape)),
+                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape)),
                     )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
+                        loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim)
                     ),
                     moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
                 )
@@ -1656,63 +1759,16 @@ class State(NamedTuple):
 
     def _handle_lift_dumped_dirt(self) -> "State":
         """
-        For skid steer: ONLY lift dumped dirt from action_map > 0
-        CANNOT dig new holes like excavators
+        For skid steer: Lifting the shovel only toggles the shovel state to up.
+        Does NOT move dirt or change loaded. All loading is handled in auto-load.
         """
-        dig_mask = self._build_dig_dump_cone()
-        dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
-        flattened_action_map = self.world.action_map.map.reshape(-1)
-        selected_tiles_sum = flattened_action_map @ dig_mask
-        moving_dumped_dirt = selected_tiles_sum > 0
-        
-        # Use same volume logic as normal dig: if moving dumped dirt, move it all at once
-        # Ensure both branches return the same dtype (int32)
-        dig_volume = jax.lax.cond(
-            moving_dumped_dirt,
-            lambda: selected_tiles_sum.astype(jnp.int32),
-            lambda: dig_mask.sum().astype(jnp.int32),
-        )
-
-        def _apply_dig(volume, fam):
-            # Use soil mechanics when lifting dumped dirt to simulate realistic soil behavior
-            new_map_global_coords = self._apply_dig_mask_with_soil_mechanics(
-                fam, dig_mask, moving_dumped_dirt, apply_soil_mechanics=True
-            )
-            new_map_global_coords = new_map_global_coords.reshape(
-                self.world.action_map.map.shape
-            )
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                new_map_global_coords,
-            )
-
-            return self._replace(
-                world=self.world._replace(
-                    action_map=self.world.action_map._replace(
-                        map=IntLowDim(new_map_global_coords)
-                    ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
-                    ),
-                    last_dig_mask=self.world.last_dig_mask._replace(
-                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape)),
-                    )
-                ),
-                agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.full((1,), fill_value=volume, dtype=IntLowDim)
-                    ),
-                    moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
+        return self._replace(
+            agent=self.agent._replace(
+                agent_state=self.agent.agent_state._replace(
+                    shovel_lifted=jnp.array([1], dtype=IntLowDim)
                 )
             )
-
-        s = jax.lax.cond(
-            dig_volume > 0,
-            lambda v, fam: _apply_dig(v, fam),
-            lambda v, fam: self._do_nothing(),
-            dig_volume,
-            flattened_action_map,
         )
-        return s
 
     def _handle_do(self) -> "State":
         """
@@ -1747,57 +1803,16 @@ class State(NamedTuple):
                 
                 def _lift_with_soil_mechanics():
                     # Agent has dirt, so lifting will disturb surrounding soil
-                    # First lift the dirt normally
+                    # First lift the dirt with soil mechanics (already applied in _handle_lift_dumped_dirt)
                     lifted_state = self._handle_lift_dumped_dirt()
                     
-                    # Apply soil mechanics only if enabled during training
-                    def _apply_soil_smoothing():
-                        # Apply soil mechanics to adjacent tiles since dirt was removed
-                        dig_mask = self._build_dig_dump_cone()
-                        dig_mask = self._mask_out_wrong_dig_tiles_skidsteer(dig_mask)
-                        
-                        # Reshape the 1D mask to 2D for soil mechanics processing
-                        map_height = self.world.height
-                        map_width = self.world.width
-                        dig_mask_2d = dig_mask.reshape((map_height, map_width))
-                        
-                        expanded_mask = self._expand_mask_for_soil_mechanics(dig_mask_2d)
-                        
-                        # Apply soil mechanics to smooth adjacent terrain
-                        smoothed_action_map = self._apply_local_soil_mechanics(
-                            lifted_state.world.action_map.map, expanded_mask
-                        )
-                        
-                        # Return state with smoothed terrain and lifted shovel
-                        return lifted_state._replace(
-                            world=lifted_state.world._replace(
-                                action_map=lifted_state.world.action_map._replace(
-                                    map=smoothed_action_map
-                                )
-                            ),
-                            agent=lifted_state.agent._replace(
-                                agent_state=lifted_state.agent.agent_state._replace(
-                                    shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
-                                )
+                    # Just lift the shovel (soil mechanics already applied)
+                    return lifted_state._replace(
+                        agent=lifted_state.agent._replace(
+                            agent_state=lifted_state.agent.agent_state._replace(
+                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
                             )
                         )
-                    
-                    def _skip_soil_smoothing():
-                        # Just lift the dirt without soil mechanics for maximum speed
-                        return lifted_state._replace(
-                            agent=lifted_state.agent._replace(
-                                agent_state=lifted_state.agent.agent_state._replace(
-                                    shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
-                                )
-                            )
-                        )
-                    
-                    # Always use simplified soil mechanics when training flag is enabled
-                    # Only completely skip soil mechanics when flag is disabled (fast mode)
-                    return jax.lax.cond(
-                        ENABLE_SOIL_MECHANICS_IN_TRAINING,
-                        _apply_soil_smoothing,  # This will use simplified soil mechanics
-                        _skip_soil_smoothing    # This completely skips soil mechanics
                     )
                 
                 def _lift_without_soil_mechanics():

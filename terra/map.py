@@ -101,7 +101,7 @@ class GridWorld(NamedTuple):
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
         interaction_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
-
+        
         world = cls(
             target_map=target_map,
             action_map=action_map,
