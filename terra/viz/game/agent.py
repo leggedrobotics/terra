@@ -22,7 +22,7 @@ class Agent:
         """
         # Shovel dimensions - wider than the agent base
         shovel_depth = (self.height * self.tile_size) * 0.4    # Increased from 0.25 to 0.4 (40% of agent height)
-        shovel_width = (self.width * self.tile_size) * 1.1     # 120% of agent width (wide perpendicular to movement)
+        shovel_width = (self.width * self.tile_size) * 1.05     # 120% of agent width (wide perpendicular to movement)
         
         # Calculate shovel position using the same method as cabin triangle
         agent_half_height = (self.height * self.tile_size) / 2

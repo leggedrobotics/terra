@@ -2388,25 +2388,56 @@ class State(NamedTuple):
         """
 
         def _check_done_dump():
-            relevant_action_map_positive_inverse = jnp.where(
-                target_map > 0, 0, action_map
-            )
-            done_dump = jnp.all(relevant_action_map_positive_inverse <= 0)
+            # For dump completion: action_map must be >= target_map for all target_map > 0
+            dump_requirements = jnp.where(target_map > 0, target_map, 0)
+            actual_dumps = jnp.where(target_map > 0, action_map, 0)
+            done_dump = jnp.all(actual_dumps >= dump_requirements)
             return done_dump
 
         done_dump = jax.lax.cond(
-            jnp.all(target_map <= 0),
+            jnp.all(target_map <= 0),  # No dump requirements
             lambda: True,
             _check_done_dump,
         )
 
-        relevant_action_map_negative = jnp.where(target_map < 0, action_map, 0)
-        target_map_negative = jnp.clip(target_map, a_max=0)
-
-        done_dig = jnp.all(target_map_negative - relevant_action_map_negative >= 0)
+        # For dig completion: action_map must be <= target_map for all target_map < 0
+        # (since target_map < 0 means "dig to this depth" and action_map < 0 means "dug to this depth")
+        def _check_done_dig():
+            dig_requirements = jnp.where(target_map < 0, target_map, 0)
+            actual_digs = jnp.where(target_map < 0, action_map, 0)
+            done_dig = jnp.all(actual_digs <= dig_requirements)
+            return done_dig
+        
+        done_dig = jax.lax.cond(
+            jnp.all(target_map >= 0),  # No dig requirements
+            lambda: True,
+            _check_done_dig,
+        )
         done_unload = agent_loaded[0] == 0
         done_unload2 = agent_laoded_2[0] == 0
-        done_task = done_dump & done_dig & done_unload  & done_unload2
+        
+        # Check if this is a dig-only task (no dumping requirements)
+        has_dump_requirements = jnp.any(target_map > 0)
+        # Check if this is a dump-only task (no digging requirements) 
+        has_dig_requirements = jnp.any(target_map < 0)
+        
+        # Task completion logic:
+        # - If both dig and dump requirements exist: both must be done
+        # - If only dig requirements: only digging must be done
+        # - If only dump requirements: only dumping must be done
+        # - If neither (relocation): both conditions are trivially satisfied
+        task_requirements_met = jax.lax.cond(
+            jnp.logical_and(has_dig_requirements, has_dump_requirements),
+            lambda: jnp.logical_and(done_dig, done_dump),  # Both required
+            lambda: jax.lax.cond(
+                has_dig_requirements,
+                lambda: done_dig,      # Only digging required
+                lambda: done_dump      # Only dumping required (or neither)
+            )
+        )
+        
+        # Task is complete when requirements are met AND both agents are unloaded
+        done_task = task_requirements_met & done_unload & done_unload2
         return done_task
 
     def _is_done(

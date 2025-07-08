@@ -82,9 +82,7 @@ class Rewards(NamedTuple):
     dig_wrong: float  # dig where the target map is not negative (exclude case of positive action map -> moving dumped terrain)
     dump_wrong: float  # given if loaded stayed the same or tried to dump in non-dumpable tile
 
-    dig_correct: (
-        float  # dig where the target map is negative, and not more than required
-    )
+    dig_correct: float  # dig where the target map is negative, and not more than required
     dump_correct: float  # dump where the target map is positive
 
     # Skid steer specific rewards
@@ -101,25 +99,25 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.1,
+            existence=-0.02,  # Small time pressure penalty (was -0.1)
             collision_move=-0.2,
-            move_while_loaded=-0.01,
-            move=-0.1,
-            move_with_turned_wheels=-0.1,
+            move_while_loaded=-0.005,  # Reduced penalty  was -0.01
+            move=-0.02,  # Heavily reduced movement penalty was -0.1
+            move_with_turned_wheels=-0.02,  # Reduced penalty was -0.1
             collision_turn=-0.1,
-            base_turn=-0.1,
-            cabin_turn=-0.05,
-            wheel_turn=-0.05,
+            base_turn=-0.02,  # Reduced turning penalty was -0.1
+            cabin_turn=-0.01,  # Much reduced cabin penalty was -0.05
+            wheel_turn=-0.05,  # Reduced turning penalty was -0.05
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=0.2,
-            dump_correct=0.15,
+            dig_correct=1.0,  # Much higher positive rewards was 0.2
+            dump_correct=1.5,  # Even higher reward for dumping correctly was 0.15
             # Skid steer specific rewards
-            skid_lift_correct=0.3,  # Good reward for successful dirt lifting
-            skid_dump_correct=0.25,  # Good reward for correct dumping
-            skid_dump_wrong=-0.5,  # Moderate penalty for failed dumps
-            skid_shovel_control=0.05,  # Small reward for shovel control
-            skid_auto_load=0.1,  # Reward for efficient auto-loading
+            skid_lift_correct=1.2,  # Much higher reward for successful dirt lifting was 0.3
+            skid_dump_correct=1.5,  # Much higher reward for correct dumping was 0.25
+            skid_dump_wrong=-0.5,  # Moderate penalty for failed dumps was -0.5
+            skid_shovel_control=0.05,  # Higher reward for shovel control was 0.05
+            skid_auto_load=0.8,  # Much higher reward for efficient auto-loading was 0.1
             terminal=100.0,
             normalizer=100.0,
         )

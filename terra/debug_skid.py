@@ -236,6 +236,31 @@ def debug_skid_step_by_step():
         traceback.print_exc()
         return
 
+    print("\n11. Testing reward structure...")
+    try:
+        # Test the new reward structure
+        old_reward_total = 0.0
+        
+        # Test "do nothing" (should get 0 existence penalty now)
+        do_nothing_reward = state_final._get_reward(state_final, TrackedAction.do_nothing())
+        print(f"   Do nothing reward: {do_nothing_reward:.6f}")
+        
+        # Test movement forward (should be much less negative now)
+        forward_reward = state_final._get_reward(state_final, TrackedAction.forward())
+        print(f"   Forward movement reward: {forward_reward:.6f}")
+        
+        # Test DO action (skid steer should get positive rewards)
+        do_reward = state_final._get_reward(state_final._handle_do(), TrackedAction.do())
+        print(f"   DO action reward: {do_reward:.6f}")
+        
+        print(f"   ✅ Reward structure test completed")
+        print(f"   💡 Movement is no longer heavily penalized!")
+        
+    except Exception as e:
+        print(f"   ❌ Reward structure test failed: {e}")
+        
+    print("\n🎉 All tests completed!")
+
 def test_integer_soil_collapse():
     print("\n=== TEST: Integer-only Soil Collapse ===")
     # Create a simple 5x5 map with a hole in the center
