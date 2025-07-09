@@ -1725,8 +1725,8 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
         if is_vertical:
             # Vertical split - choose random x coordinate
             # Ensure both partitions have reasonable size (at least 20% of map width)
-            min_split = int(ORIGINAL_MAP_SIZE * 0.2)
-            max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+            min_split = int(ORIGINAL_MAP_SIZE * 0.3)
+            max_split = int(ORIGINAL_MAP_SIZE * 0.7)
             split_x = random.randint(min_split, max_split)
             start_y = ORIGINAL_MAP_SIZE // 2
             start_x1 = split_x // 2
@@ -1750,8 +1750,8 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
             ]
         else:
             # Horizontal split - choose random y coordinate
-            min_split = int(ORIGINAL_MAP_SIZE * 0.2)
-            max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+            min_split = int(ORIGINAL_MAP_SIZE * 0.3)
+            max_split = int(ORIGINAL_MAP_SIZE * 0.7)
             split_y = random.randint(min_split, max_split)
 
             # Calculate start positions
@@ -1781,8 +1781,8 @@ def compute_random_subtasks(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, seed=None):
     # Four partitions - create 2x2 grid with random split lines
     elif NUM_PARTITIONS == 4:
         # Choose two random split lines (one vertical, one horizontal)
-        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
-        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        min_split = int(ORIGINAL_MAP_SIZE * 0.3)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.7)
         
         split_x = random.randint(min_split, max_split)
         split_y = random.randint(min_split, max_split)
@@ -1890,7 +1890,7 @@ def filter_empty_partitions(partitions, target_map, min_targets=1):
     return valid_partitions, partition_stats
 
 def compute_random_subtasks_validated(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, target_map, 
-                                     seed=None, min_targets=1, max_attempts=20):
+                                     seed=None, min_targets=1, max_attempts=100):
     """
     Compute random subtasks and validate they contain dig targets.
     Will retry with different random splits if partitions are empty.
@@ -1915,7 +1915,7 @@ def compute_random_subtasks_validated(ORIGINAL_MAP_SIZE, NUM_PARTITIONS, target_
     if NUM_PARTITIONS not in [1, 2, 4]:
         raise ValueError("Invalid number of partitions. Must be 1, 2 or 4.")
     
-    min_targets = int(jnp.sum(target_map == -1) * 0.2)
+    min_targets = int(jnp.sum(target_map == -1) * 0.3)
     print(f"Minimum targets per partition: {min_targets}")
     
     print(f"\nGenerating {NUM_PARTITIONS} random partitions with target validation...")
@@ -1985,8 +1985,8 @@ def _generate_random_2_partitions(ORIGINAL_MAP_SIZE):
     
     if is_vertical:
         # Vertical split
-        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
-        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        min_split = int(ORIGINAL_MAP_SIZE * 0.3)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.7)
         split_x = random.randint(min_split, max_split)
         
         start_y = ORIGINAL_MAP_SIZE // 2
@@ -2011,8 +2011,8 @@ def _generate_random_2_partitions(ORIGINAL_MAP_SIZE):
         ]
     else:
         # Horizontal split
-        min_split = int(ORIGINAL_MAP_SIZE * 0.2)
-        max_split = int(ORIGINAL_MAP_SIZE * 0.8)
+        min_split = int(ORIGINAL_MAP_SIZE * 0.3)
+        max_split = int(ORIGINAL_MAP_SIZE * 0.7)
         split_y = random.randint(min_split, max_split)
         
         start_x = ORIGINAL_MAP_SIZE // 2
@@ -2080,3 +2080,17 @@ def _generate_random_4_partitions(ORIGINAL_MAP_SIZE):
             'status': 'pending'
         }
     ]
+def save_traversability_mask(traversability_mask, output_path, partition_index, map_step=None):
+
+    os.makedirs(output_path, exist_ok=True)
+    output_path = f"{output_path}/traversability_mask_partition_{partition_index}_step_{map_step}.png"
+
+    h, w = traversability_mask.shape
+    rgb_image = np.zeros((h, w, 3), dtype=np.uint8)
+
+    rgb_image[traversability_mask == -1] = [0, 0, 255]     # Red for agent occupancy
+    rgb_image[traversability_mask == 0]  = [255, 255, 255] # White for traversable
+    rgb_image[traversability_mask == 1]  = [0, 0, 0]       # Black for non-traversable
+
+    cv2.imwrite(output_path, rgb_image)
+    print(f"Traversability mask saved to {output_path}")

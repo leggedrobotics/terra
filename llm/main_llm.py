@@ -214,6 +214,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                 partition_state = partition_states[partition_idx]
                 synched = False
                 print(f"  Processing partition {partition_idx} (partition step {partition_state['step_count']})")
+
                 
                 #print("Recovering partition state...")
                 for other_partition_idx in active_partitions:
@@ -237,6 +238,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
 
                     map_obs_seq.append(current_observation)
+                    #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction', partition_idx, map_step)
+
 
                     # Extract partition info and create subsurface
                     partition_info = env_manager.partitions[partition_idx]
