@@ -70,11 +70,14 @@ class World:
         b = int(light_blue[2] + (dark_blue[2] - light_blue[2]) * intensity)
         
         # Convert to hex
-        return f"#{r:02x}{g:02x}{b:02x}"
+        hex_color = f"#{r:02x}{g:02x}{b:02x}"
+        
+        return hex_color
 
     def update(self, action_map, target_map, obstacles_mask, dumpability_mask):
         action_map = np.asarray(action_map, dtype=np.int32)
         action_map = action_map.swapaxes(0, 1)
+        
         target_map = np.asarray(target_map, dtype=np.int32)
         target_map = target_map.swapaxes(0, 1)
         if obstacles_mask is not None:
@@ -84,7 +87,7 @@ class World:
             dumpability_mask = np.asarray(dumpability_mask, dtype=np.bool_)
             dumpability_mask = dumpability_mask.swapaxes(0, 1)
 
-        # Find max dirt amount for gradient normalization
+        # Find max dirt amount for gradient normalization (per-frame)
         max_dirt_amount = np.max(action_map[action_map > 0]) if np.any(action_map > 0) else 1
 
         world = []

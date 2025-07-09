@@ -2096,7 +2096,7 @@ class State(NamedTuple):
         # Give reward proportional to dirt auto-loaded
         return jax.lax.cond(
             dirt_gained > 0,
-            lambda: dirt_gained * self.env_cfg.rewards.skid_auto_load,
+            lambda: self.env_cfg.rewards.skid_auto_load, #dirt_gained * 
             lambda: 0.0
         )
 
@@ -2120,8 +2120,8 @@ class State(NamedTuple):
             # Reward based on correct placement
             return jax.lax.cond(
                 action_map_dump_progress > 0,
-                lambda: action_map_dump_progress * self.env_cfg.rewards.skid_dump_correct,
-                lambda: dirt_dumped * self.env_cfg.rewards.skid_dump_wrong  # Dumped but not in correct area
+                lambda: self.env_cfg.rewards.skid_dump_correct, # action_map_dump_progress * s
+                lambda: self.env_cfg.rewards.skid_dump_wrong  # Dumped but not in correct area dirt_dumped * 
             )
         
         def _failed_dump():
@@ -2150,7 +2150,7 @@ class State(NamedTuple):
         
         return jax.lax.cond(
             jnp.logical_and(dirt_gained > 0, shovel_was_lifted),
-            lambda: dirt_gained * self.env_cfg.rewards.skid_lift_correct,
+            lambda: self.env_cfg.rewards.skid_lift_correct, #dirt_gained * 
             lambda: 0.0
         )
 
@@ -2404,7 +2404,7 @@ class State(NamedTuple):
 
         def _check_relocation_done():
             """
-            For relocation tasks: Check if all dirt is in dump zones.
+            For relocation tasks: Check if all dirt is in designated dump zones (target_map > 0).
             Optimized version that early exits and avoids full map operations.
             """
             # Early exit: if both agents are loaded, task cannot be complete
@@ -2412,15 +2412,32 @@ class State(NamedTuple):
             
             def _do_expensive_check():
                 # Only do expensive operations when agents are unloaded
-                # Get dump zones (dumpability_mask == 1) - cache this since it doesn't change
-                dump_zones = self.world.dumpability_mask.map
+                # Get designated dump zones from target_map (target_map > 0)
+                designated_dump_zones = target_map > 0
                 
-                # Find dirt locations in non-dump zones (optimized: check violation directly)
-                # dirt in non-dump zones = (action_map > 0) & (dump_zones == 0)
-                dirt_in_neutral = jnp.logical_and(action_map > 0, dump_zones == 0)
+                # Check total dirt in environment
+                total_dirt = jnp.sum(action_map > 0)
                 
-                # Task complete if NO dirt exists in neutral areas
-                return jnp.logical_not(jnp.any(dirt_in_neutral))
+                # If there's no dirt at all, something is wrong - don't terminate
+                # (Relocation tasks should always have dirt to move)
+                def _check_dirt_distribution():
+                    # Find dirt locations outside designated dump zones
+                    # dirt_outside_designated = (action_map > 0) & (target_map <= 0)
+                    dirt_outside_designated = jnp.logical_and(action_map > 0, jnp.logical_not(designated_dump_zones))
+                    
+                    # Task complete if NO dirt exists outside designated dump zones
+                    return jnp.logical_not(jnp.any(dirt_outside_designated))
+                
+                def _no_dirt_case():
+                    # If no dirt exists, don't terminate (likely environment initialization issue)
+                    return False
+                
+                # Only check dirt distribution if there's actually dirt in the environment
+                return jax.lax.cond(
+                    total_dirt > 0,
+                    _check_dirt_distribution,
+                    _no_dirt_case
+                )
             
             def _early_exit():
                 return False  # Task not complete if agents still loaded
@@ -2790,11 +2807,11 @@ class State(NamedTuple):
         reward = 0.0
         action = action[0]
 
-        # Movement rewards (same as tracked but with auto-loading bonus)
+        # Movement rewards (skidsteer-specific, no move_while_loaded penalty)
         movement_reward = jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
-            self._handle_rewards_move,
+            self._handle_rewards_move_skidsteer,  # Use skidsteer-specific movement rewards
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -2827,5 +2844,50 @@ class State(NamedTuple):
             action,
         )
         
+        # Reward for moving or rotating while loaded and shovel is up, only if actually moved or rotated
+        reward += jax.lax.cond(
+            (
+                ((action == TrackedActionType.FORWARD) | (action == TrackedActionType.BACKWARD))
+                & (self.agent.agent_state.loaded[0] > 0)
+                & (self.agent.agent_state.shovel_lifted[0] > 0)
+                & self._check_agent_moved_on_move_action(self, new_state)
+            )
+            |
+            (
+                ((action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK))
+                & (self.agent.agent_state.loaded[0] > 0)
+                & (self.agent.agent_state.shovel_lifted[0] > 0)
+                & self._check_agent_turn_on_turn_action(self, new_state)
+            ),
+            lambda: self.env_cfg.rewards.skid_move_loaded_shovel_up,
+            lambda: 0.0
+        )
+        
+        return reward
+
+    def _handle_rewards_move_skidsteer(
+        self, new_state: "State", action: TrackedActionType
+    ) -> Float:
+        """Movement rewards for skidsteer - excludes move penalties to encourage transport"""
+        reward = 0.0
+        # Collision
+        reward += jax.lax.cond(
+            ~self._check_agent_moved_on_move_action(self, new_state),
+            lambda: self.env_cfg.rewards.collision_move,
+            lambda: self.env_cfg.rewards.skid_move,
+        )
+
+        # NO move_while_loaded penalty for skidsteer (removed to encourage transport)
+        # NO base move penalty for skidsteer (removed to encourage transport)
+
+        # Moving with turned wheels (not applicable to skidsteer, but keeping for consistency)
+        reward += jax.lax.cond(
+            jnp.any(self.agent.agent_state.wheel_angle != 0),
+            lambda: self.env_cfg.rewards.move_with_turned_wheels,
+            lambda: 0.0,
+        )
+
+        # NO base move penalty for skidsteer
+
         return reward
 

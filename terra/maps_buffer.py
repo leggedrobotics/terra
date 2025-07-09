@@ -48,6 +48,8 @@ class MapsBuffer(NamedTuple):
         dumpability_masks_init: Array,
         action_maps: Array,
     ) -> "MapsBuffer":
+        # PATCH: Set all action_map values of 1 to 5 at load time
+        action_maps = jnp.where(action_maps == 1, 5, action_maps)   #DELETE IF NOT NEEDED ANYMORE
         return MapsBuffer(
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
