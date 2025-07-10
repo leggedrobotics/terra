@@ -209,18 +209,18 @@ class Game:
         # Use the correct attribute names from the Agent class
         # Apply rotation offset to discrete indices
 
-        if self.maps_size_px >= 128:
-            corrected_base_dir = apply_rotation_offset_to_index(
+        # if self.maps_size_px >= 64:
+        corrected_base_dir = apply_rotation_offset_to_index(
                 base_dir, self.rotation_offset_steps, agent.angles_base
             )
-            corrected_cabin_dir = apply_rotation_offset_to_index(
+        corrected_cabin_dir = apply_rotation_offset_to_index(
                 cabin_dir, -self.rotation_offset_steps, agent.angles_cabin
             )
-        elif self.maps_size_px == 64:
-            corrected_cabin_dir = cabin_dir
-            corrected_base_dir = base_dir
-        else:
-            print("WARNING: Unknown maps_size_px, using base_dir and cabin_dir as is.")
+        # elif self.maps_size_px == 64:
+        #     corrected_cabin_dir = cabin_dir
+        #     corrected_base_dir = base_dir
+        # else:
+        #     print("WARNING: Unknown maps_size_px, using base_dir and cabin_dir as is.")
 
         temp_agent = Agent(
             agent.width if hasattr(agent, 'width') else agent.w, 
@@ -233,7 +233,9 @@ class Game:
         #print("corrected_base_dir:", corrected_base_dir, "corrected_cabin_dir:", corrected_cabin_dir)
         
         # Update it with the specific position and angles
-        temp_agent.update([0, 0], corrected_base_dir, corrected_cabin_dir, loaded)  # Position doesn't matter for surface creation
+        #temp_agent.update([0, 0], corrected_base_dir, corrected_cabin_dir, loaded)  # Position doesn't matter for surface creation
+        temp_agent.update([0, 0], base_dir, cabin_dir, loaded)  # Position doesn't matter for surface creation
+
         
         # Get vertices for the body and cabin
         body_vertices = temp_agent.agent["body"]["vertices"]
@@ -243,6 +245,7 @@ class Game:
         
         # Calculate bounding box
         all_vertices = body_vertices + cabin_vertices
+        #all_vertices = body_vertices
         min_x = min(v[0] for v in all_vertices)
         min_y = min(v[1] for v in all_vertices)
         max_x = max(v[0] for v in all_vertices)
@@ -265,18 +268,127 @@ class Game:
         
         return agent_surface, (min_x, min_y)
 
+    # def _render_agents_for_env(self, env_idx, world, agent, total_offset_x, total_offset_y, info):
+    #     """Render all agents for a specific environment and return surfaces and positions."""
+    #     agent_surfaces = []
+    #     agent_positions = []
+        
+    #     print(f"\n=== _render_agents_for_env called for env_idx {env_idx} ===")
+
+    #     # Check if we have additional agents in info - if so, skip primary agent to avoid duplication
+    #     has_additional_agents = (info and 'additional_agents' in info and 
+    #                            'positions' in info['additional_agents'] and 
+    #                            len(info['additional_agents']['positions']) > 0)
+        
+    #     # Only render the primary agent if we don't have additional agents
+    #     if not has_additional_agents:
+    #         # Render the primary agent (from the original arrays)
+    #         body_vertices = agent.agent["body"]["vertices"]
+    #         ca = agent.agent["body"]["color"]
+            
+    #         # Calculate the bounding box
+    #         min_x = min(v[0] for v in body_vertices)
+    #         min_y = min(v[1] for v in body_vertices)
+    #         max_x = max(v[0] for v in body_vertices)
+    #         max_y = max(v[1] for v in body_vertices)
+            
+    #         # Calculate surface size with a small padding
+    #         surface_width = math.ceil(max_x - min_x) + 2
+    #         surface_height = math.ceil(max_y - min_y) + 2
+            
+    #         # Create surface for the primary agent
+    #         primary_surface = pg.Surface((surface_width, surface_height), pg.SRCALPHA)
+
+            
+    #         # Calculate surface position
+    #         agent_x = min_x + total_offset_x
+    #         agent_y = min_y + total_offset_y
+            
+    #         # Adjust vertices for the agent's surface
+    #         offset_vertices = [(v[0] - min_x, v[1] - min_y) for v in body_vertices]
+            
+    #         # Draw primary agent body as polygon
+    #         pg.draw.polygon(primary_surface, ca, offset_vertices)
+            
+    #         # Get cabin vertices and adjust for agent surface
+    #         cabin = agent.agent["cabin"]["vertices"]
+    #         cabin_offset = [(v[0] - min_x, v[1] - min_y) for v in cabin]
+    #         cabin_color = agent.agent["cabin"]["color"]
+    #         pg.draw.polygon(primary_surface, cabin_color, cabin_offset)
+            
+    #         agent_surfaces.append(primary_surface)
+    #         agent_positions.append((agent_x, agent_y))
+        
+    #     # Render additional agents if they exist in info
+    #     if info and 'additional_agents' in info:
+    #         additional_agents = info['additional_agents']
+            
+    #         # Check for the required keys in your specific format
+    #         if ('positions' in additional_agents and 
+    #             'angles base' in additional_agents and 
+    #             'angles cabin' in additional_agents and
+    #             'loaded' in additional_agents):
+                
+    #             positions = additional_agents['positions']
+    #             angles_base = additional_agents['angles base']
+    #             angles_cabin = additional_agents['angles cabin']
+    #             loaded_states = additional_agents['loaded']
+                
+    #             # Handle both single environment and multi-environment cases
+    #             if env_idx == 0:  # For single environment or first environment
+    #                 # Convert numpy arrays/lists to Python lists if needed
+    #                 if hasattr(positions, 'tolist'):
+    #                     positions = positions.tolist()
+    #                 if hasattr(angles_base, 'tolist'):
+    #                     angles_base = angles_base.tolist()
+    #                 if hasattr(angles_cabin, 'tolist'):
+    #                     angles_cabin = angles_cabin.tolist()
+    #                 if hasattr(loaded_states, 'tolist'):
+    #                     loaded_states = loaded_states.tolist()
+                    
+    #                 # Render each additional agent
+    #                 for i, pos in enumerate(positions):
+    #                     if i < len(angles_base) and i < len(angles_cabin) and i < len(loaded_states):
+    #                         base_dir = angles_base[i]
+    #                         cabin_dir = angles_cabin[i]
+    #                         loaded = bool(loaded_states[i])
+                            
+    #                         # Create agent surface with specific angles
+    #                         additional_surface, offset = self._create_agent_surface(
+    #                             agent, base_dir, cabin_dir, loaded
+    #                         )
+                            
+    #                         # Calculate position on screen
+    #                         # pos is already in pixel coordinates based on your example
+    #                         screen_x = pos[0] * self.tile_size + total_offset_x + offset[0]
+    #                         screen_y = pos[1] * self.tile_size + total_offset_y + offset[1]
+    #                         # screen_x = pos[0] * self.tile_size + total_offset_x
+    #                         # screen_y = pos[1] * self.tile_size + total_offset_y
+                            
+    #                         agent_surfaces.append(additional_surface)
+    #                         agent_positions.append((screen_x, screen_y))
+        
+    #     return agent_surfaces, agent_positions
+
     def _render_agents_for_env(self, env_idx, world, agent, total_offset_x, total_offset_y, info):
         """Render all agents for a specific environment and return surfaces and positions."""
         agent_surfaces = []
         agent_positions = []
         
+        #print(f"\n=== _render_agents_for_env called for env_idx {env_idx} ===")
+        
         # Check if we have additional agents in info - if so, skip primary agent to avoid duplication
         has_additional_agents = (info and 'additional_agents' in info and 
-                               'positions' in info['additional_agents'] and 
-                               len(info['additional_agents']['positions']) > 0)
+                            'positions' in info['additional_agents'] and 
+                            len(info['additional_agents']['positions']) > 0)
+        
+        #print(f"Has additional agents: {has_additional_agents}")
+        #if has_additional_agents:
+            #print(f"Number of additional agents: {len(info['additional_agents']['positions'])}")
         
         # Only render the primary agent if we don't have additional agents
         if not has_additional_agents:
+            #print("Rendering primary agent")
             # Render the primary agent (from the original arrays)
             body_vertices = agent.agent["body"]["vertices"]
             ca = agent.agent["body"]["color"]
@@ -313,6 +425,7 @@ class Game:
             
             agent_surfaces.append(primary_surface)
             agent_positions.append((agent_x, agent_y))
+            #print(f"Primary agent rendered at position: ({agent_x}, {agent_y})")
         
         # Render additional agents if they exist in info
         if info and 'additional_agents' in info:
@@ -329,8 +442,16 @@ class Game:
                 angles_cabin = additional_agents['angles cabin']
                 loaded_states = additional_agents['loaded']
                 
+                # print(f"Additional agents data found")
+                # print(f"Positions: {positions}")
+                # print(f"Angles base: {angles_base}")
+                # print(f"Angles cabin: {angles_cabin}")
+                # print(f"Loaded states: {loaded_states}")
+                
                 # Handle both single environment and multi-environment cases
                 if env_idx == 0:  # For single environment or first environment
+                    #print(f"Processing additional agents for env_idx 0")
+                    
                     # Convert numpy arrays/lists to Python lists if needed
                     if hasattr(positions, 'tolist'):
                         positions = positions.tolist()
@@ -343,25 +464,39 @@ class Game:
                     
                     # Render each additional agent
                     for i, pos in enumerate(positions):
+                        #print(f"\nRendering additional agent {i} at position {pos}")
+                        
                         if i < len(angles_base) and i < len(angles_cabin) and i < len(loaded_states):
                             base_dir = angles_base[i]
                             cabin_dir = angles_cabin[i]
                             loaded = bool(loaded_states[i])
+                            
+                            #print(f"  Base dir: {base_dir}, Cabin dir: {cabin_dir}, Loaded: {loaded}")
                             
                             # Create agent surface with specific angles
                             additional_surface, offset = self._create_agent_surface(
                                 agent, base_dir, cabin_dir, loaded
                             )
                             
+                            #print(f"  Surface created with offset: {offset}")
+                            
                             # Calculate position on screen
                             # pos is already in pixel coordinates based on your example
                             screen_x = pos[0] * self.tile_size + total_offset_x + offset[0]
                             screen_y = pos[1] * self.tile_size + total_offset_y + offset[1]
-                            # screen_x = pos[0] * self.tile_size + total_offset_x
-                            # screen_y = pos[1] * self.tile_size + total_offset_y
+                            
+                            # print(f"  Screen position: ({screen_x}, {screen_y})")
+                            # print(f"  Tile size: {self.tile_size}, total_offset: ({total_offset_x}, {total_offset_y})")
                             
                             agent_surfaces.append(additional_surface)
                             agent_positions.append((screen_x, screen_y))
+                        #else:
+                            #print(f"  WARNING: Missing angle or loaded data for agent {i}")
+                else:
+                    print(f"Skipping additional agents for env_idx {env_idx}")
+        
+        #print(f"Total agents rendered: {len(agent_surfaces)}")
+        #print(f"Agent positions: {agent_positions}")
         
         return agent_surfaces, agent_positions
 

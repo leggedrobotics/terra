@@ -399,6 +399,33 @@ class EnvironmentsManager:
             'padding_mask': create_sub_task_padding_mask_64x64(self.global_maps['padding_mask'], region_coords),
             'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
         }
+
+        # sub_maps = {
+        #     'target_map': self.global_maps['target_map'], 
+        #     'action_map': self.global_maps['action_map'],
+        #     'dumpability_mask': self.global_maps['dumpability_mask'], 
+        #     'dumpability_mask_init': self.global_maps['dumpability_mask_init'], 
+        #     'padding_mask': self.global_maps['padding_mask'], 
+        #     'traversability_mask': self.global_maps['traversability_mask'], 
+        # }
+
+        # sub_maps = {
+        #     'target_map': extract_target_map_region_64x64(self.global_maps['target_map'], region_coords),
+        #     'action_map': extract_action_map_region_64x64(self.global_maps['action_map'], region_coords),
+        #     'dumpability_mask': extract_dumpability_mask_region_64x64(self.global_maps['dumpability_mask'], region_coords),
+        #     'dumpability_mask_init': extract_dumpability_mask_region_64x64(self.global_maps['dumpability_mask_init'], region_coords),
+        #     'padding_mask': extract_padding_mask_region_64x64(self.global_maps['padding_mask'], region_coords),
+        #     'traversability_mask': extract_traversability_mask_region_64x64(self.global_maps['traversability_mask'], region_coords),
+        # }
+
+        save_mask(np.array(sub_maps['target_map']),'target', 'after_init', partition_idx, 0)
+        save_mask(np.array(sub_maps['action_map']),'action', 'after_init', partition_idx, 0)
+        save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'after_init', partition_idx, 0)
+        save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'after_init', partition_idx, 0)
+        save_mask(np.array(sub_maps['padding_mask']),'padding', 'after_init', partition_idx, 0)
+        save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'after_init', partition_idx, 0)
+
+
         #DIAGNOSTIC: Check sub-map validity
         # print(f"=== SUB-MAP DIAGNOSTICS ===")
         # for name, map_data in sub_maps.items():
@@ -526,37 +553,101 @@ class EnvironmentsManager:
         return self.global_timestep
     
 
+    # def map_position_small_to_global(self, small_pos, region_coords):
+    #     """
+    #     Map agent position from small map coordinates to global map coordinates.
+    #     Returns position in (x, y) format for rendering.
+    #  """
+    #     y_start, x_start, y_end, x_end = region_coords
+    
+    #     # Extract position values
+    #     if hasattr(small_pos, 'shape'):
+    #         if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
+    #             small_pos_y = float(small_pos[0])
+    #             small_pos_x = float(small_pos[1])
+    #         else:
+    #             small_pos_y = float(small_pos.flatten()[0])
+    #             small_pos_x = float(small_pos.flatten()[1])
+    #     else:
+    #         small_pos_y = float(small_pos[0])
+    #         small_pos_x = float(small_pos[1])
+    
+    #     # Simple mapping: just add the region offset
+    #     global_pos_y = small_pos_y + y_start
+    #     global_pos_x = small_pos_x + x_start
+    
+    #     # Ensure position is within valid bounds
+    #     global_pos_y = max(0, min(127, global_pos_y))
+    #     global_pos_x = max(0, min(127, global_pos_x))
+    
+    #     # Return as (x, y) for rendering instead of (y, x)
+    #     return (int(global_pos_x), int(global_pos_y))
+
+
+    # def map_position_small_to_global(self, small_pos, region_coords):
+    #     """
+    #     Map agent position from small map coordinates to global map coordinates.
+    #     Since create_sub_task_* functions preserve positions, the agent position
+    #     in the small environment is already in global coordinates.
+    #     Returns position in (x, y) format for rendering.
+    #     """
+    #     # Extract position values
+    #     if hasattr(small_pos, 'shape'):
+    #         if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
+    #             # Check if position is stored as [x, y] or [y, x]
+    #             # Based on the agent state structure, pos_base appears to be [x, y]
+    #             pos_x = float(small_pos[0])
+    #             pos_y = float(small_pos[1])
+    #         else:
+    #             pos_x = float(small_pos.flatten()[0])
+    #             pos_y = float(small_pos.flatten()[1])
+    #     else:
+    #         pos_x = float(small_pos[0])
+    #         pos_y = float(small_pos[1])
+        
+    #     # Since the small environment preserves global coordinates,
+    #     # we don't need to add any offset - just ensure bounds
+    #     global_pos_x = max(0, min(64, pos_x))
+    #     global_pos_y = max(0, min(64, pos_y))
+        
+    #     # Return as (x, y) for rendering
+    #     return (int(global_pos_x), int(global_pos_y))
+    
     def map_position_small_to_global(self, small_pos, region_coords):
         """
         Map agent position from small map coordinates to global map coordinates.
+        Assumes the small map places the region at (0,0), so we need to add offsets.
         Returns position in (x, y) format for rendering.
-     """
+        """
         y_start, x_start, y_end, x_end = region_coords
-    
-        # Extract position values
+        
+        # Extract position values - assuming agent position is [x, y]
         if hasattr(small_pos, 'shape'):
             if len(small_pos.shape) == 1 and small_pos.shape[0] == 2:
-                small_pos_y = float(small_pos[0])
-                small_pos_x = float(small_pos[1])
+                local_x = float(small_pos[0])
+                local_y = float(small_pos[1])
             else:
-                small_pos_y = float(small_pos.flatten()[0])
-                small_pos_x = float(small_pos.flatten()[1])
+                local_x = float(small_pos.flatten()[0])
+                local_y = float(small_pos.flatten()[1])
         else:
-            small_pos_y = float(small_pos[0])
-            small_pos_x = float(small_pos[1])
-    
-        # Simple mapping: just add the region offset
-        global_pos_y = small_pos_y + y_start
-        global_pos_x = small_pos_x + x_start
-    
+            local_x = float(small_pos[0])
+            local_y = float(small_pos[1])
+        
+        # Add region offset to get global position
+        # global_x = local_x + x_start
+        # global_y = local_y + y_start
+        global_x = local_x
+        global_y = local_y 
+        #print(f"Mapping small position {small_pos} to global coordinates: ({global_x}, {global_y}) with region {region_coords}")
+        
         # Ensure position is within valid bounds
-        global_pos_y = max(0, min(127, global_pos_y))
-        global_pos_x = max(0, min(127, global_pos_x))
-    
-        # Return as (x, y) for rendering instead of (y, x)
-        return (int(global_pos_x), int(global_pos_y))
-
-
+        #global_x = max(0, min(63, global_x))
+        #global_y = max(0, min(63, global_y))
+        
+        # Return as (x, y) for rendering
+        #return (int(global_x), int(global_y))
+                # Return as (y, x) for rendering
+        return (int(global_y), int(global_x))
 
     def is_small_task_completed(self):
         """Check if the current small environment task is completed."""
@@ -601,6 +692,9 @@ class EnvironmentsManager:
                     small_angle_base = small_agent_state.angle_base
                     small_angle_cabin = small_agent_state.angle_cabin
                     small_loaded = small_agent_state.loaded
+                    # print("original small pos:", small_pos)
+                    # print("original small angle base:", small_angle_base)
+                    # print("original small angle cabin:", small_angle_cabin)
                 
                     # Map position to global coordinates
                     global_pos = self.map_position_small_to_global(small_pos, region_coords)
@@ -635,6 +729,8 @@ class EnvironmentsManager:
                             small_loaded = False
                     else:
                         small_loaded = int(small_loaded)
+
+                    #print(global_pos, angle_base_val, angle_cabin_val, small_loaded)
                 
                     all_agent_positions.append(global_pos)
                     all_agent_angles_base.append(angle_base_val)
@@ -680,7 +776,7 @@ class EnvironmentsManager:
             self.global_env.all_agent_angles_cabin = all_agent_angles_cabin
             self.global_env.all_agent_loaded = all_agent_loaded
 
-            #print(f"Global environment updated with {len(all_agent_positions)} active agents.")
+            print(f"Global environment updated with {len(all_agent_positions)} active agents.")
         
         except Exception as e:
             print(f"Warning: Could not update global environment display: {e}")
@@ -699,8 +795,8 @@ class EnvironmentsManager:
                 y_start, x_start, y_end, x_end = partition['region_coords']
             
                 # Calculate actual region dimensions
-                region_height = y_end - y_start + 1
-                region_width = x_end - x_start + 1
+                # region_height = y_end - y_start + 1
+                # region_width = x_end - x_start + 1
             
                 # print(f"Partition {partition_idx} region: ({y_start}, {x_start}) to ({y_end}, {x_end})")
                 # print(f"Expected region size: {region_height} x {region_width}")
@@ -725,34 +821,37 @@ class EnvironmentsManager:
             
                 # Extract only the relevant portion from the 64x64 small maps
                 # that corresponds to the actual region size
-                extract_height = min(region_height, 64)
-                extract_width = min(region_width, 64)
+                # extract_height = min(region_height, 64)
+                # extract_width = min(region_width, 64)
             
                 for map_name, small_map in small_maps.items():
                     # Extract the portion that matches the region size
-                    extracted_region = small_map[:extract_height, :extract_width]
+                    #extracted_region = small_map[:extract_height, :extract_width]
+                    extracted_region = small_map[region_slice]
+
                 
                     #print(f"  Extracted {map_name}: {extracted_region.shape} -> Global region: {region_height}x{region_width}")
-                
+                    self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
+
                     # Update the global map with the extracted region
-                    try:
-                        self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
-                    except ValueError as e:
-                        #print(f"  WARNING: Shape mismatch for {map_name}: {e}")
-                        # Try to handle the mismatch by padding or cropping
-                        if extracted_region.shape[0] != region_height or extracted_region.shape[1] != region_width:
-                            # Pad or crop to match the region size
-                            if extracted_region.shape[0] < region_height or extracted_region.shape[1] < region_width:
-                                # Pad with zeros
-                                padded_region = jnp.zeros((region_height, region_width), dtype=extracted_region.dtype)
-                                padded_region = padded_region.at[:extracted_region.shape[0], :extracted_region.shape[1]].set(extracted_region)
-                                extracted_region = padded_region
-                            else:
-                                # Crop to fit
-                                extracted_region = extracted_region[:region_height, :region_width]
+                    # try:
+                    #     self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
+                    # except ValueError as e:
+                    #     #print(f"  WARNING: Shape mismatch for {map_name}: {e}")
+                    #     # Try to handle the mismatch by padding or cropping
+                    #     if extracted_region.shape[0] != region_height or extracted_region.shape[1] != region_width:
+                    #         # Pad or crop to match the region size
+                    #         if extracted_region.shape[0] < region_height or extracted_region.shape[1] < region_width:
+                    #             # Pad with zeros
+                    #             padded_region = jnp.zeros((region_height, region_width), dtype=extracted_region.dtype)
+                    #             padded_region = padded_region.at[:extracted_region.shape[0], :extracted_region.shape[1]].set(extracted_region)
+                    #             extracted_region = padded_region
+                    #         else:
+                    #             # Crop to fit
+                    #             extracted_region = extracted_region[:region_height, :region_width]
                         
-                            #print(f"  Adjusted {map_name}: {extracted_region.shape}")
-                            self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
+                    #         #print(f"  Adjusted {map_name}: {extracted_region.shape}")
+                    #         self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(extracted_region)
 
 
     def render_global_environment_with_multiple_agents(self, partition_states, VISUALIZE_PARTITIONS=False):
@@ -783,7 +882,7 @@ class EnvironmentsManager:
                 }
                 #print(f"Passing {len(self.global_env.all_agent_positions)} agents to renderer")
             else:
-                #print("Warning: Agent attributes not properly initialized for rendering")
+                print("Warning: Agent attributes not properly initialized for rendering")
                 # Initialize empty lists to prevent further errors
                 info['additional_agents'] = {
                     'positions': [],
