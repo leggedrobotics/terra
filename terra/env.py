@@ -168,7 +168,7 @@ class TerraEnv(NamedTuple):
             cabin_dir=obs["agent_state"][..., [3]],
             loaded=obs["agent_state"][..., [5]],
             target_tiles=target_tiles,
-            generate_gif=generate_gif,
+            generate_gif=generate_gif
         )
 
     @partial(jax.jit, static_argnums=(0,))

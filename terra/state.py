@@ -26,6 +26,10 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
+# Flag to enable soil mechanics
+ENABLE_SOIL_MECHANICS = True
+# If TRUE: Call _apply_dump() with use_condensed_dump=True to use a more concentrated dump that works better for soil mechanics
+
 
 class State(NamedTuple):
     """
@@ -704,6 +708,7 @@ class State(NamedTuple):
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         return dig_dump_mask
 
+#START SOIL MECHANICS
     def _apply_dig_mask(
         self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
     ) -> Array:
@@ -719,13 +724,94 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
-        m = jax.lax.cond(
+        new_flattened_map = jax.lax.cond(
             moving_dumped_dirt,
             lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
-            #  (flattened_map * (~dig_mask)).astype(flattened_map.dtype),
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
-        return m
+        #Optionally apply soil mechanics using the global flag
+        def apply_soil_mech():
+            map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
+            dig_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+            return self._apply_local_soil_mechanics_simplified(map_2d, dig_mask_2d).reshape(-1)
+        return jax.lax.cond(
+            ENABLE_SOIL_MECHANICS,
+            apply_soil_mech,
+            lambda: new_flattened_map
+        )
+
+    def _expand_mask_for_soil_mechanics(self, mask: Array) -> Array:
+        """
+        Expand the mask to include all valid neighbors (3x3 kernel).
+        Only includes neighbors that are valid for dumping (not obstacles, is dumpable).
+        """
+        H, W = mask.shape
+        padding_mask = self.world.padding_mask.map
+        dumpability_mask = self.world.dumpability_mask.map
+        
+        # Create validity mask - tiles where dirt can be placed
+        validity_mask = jnp.logical_and(
+            padding_mask == 0,  # Not an obstacle
+            dumpability_mask == 1  # Is dumpable
+        )
+        
+        # Use convolution to expand the mask to include neighbors
+        # Create a 3x3 kernel that includes center and all 8 neighbors
+        kernel = jnp.ones((3, 3), dtype=jnp.float32)
+        
+        # Convert mask to float for convolution
+        mask_float = mask.astype(jnp.float32)
+        
+        # Apply 2D convolution to expand the mask
+        # This is JAX-compatible and vectorized
+        expanded_float = jax.scipy.signal.correlate2d(
+            mask_float, kernel, mode='same', boundary='fill', fillvalue=0.0
+        )
+        
+        # Convert back to boolean - any neighbor (including self) was affected
+        expanded = expanded_float > 0
+        
+        # CRITICAL: Only include valid tiles in the expanded mask
+        # This ensures soil mechanics don't affect obstacles or non-dumpable areas
+        return jnp.logical_and(expanded, validity_mask)
+
+    def _apply_local_soil_mechanics_simplified(self, action_map: Array, affected_mask: Array) -> Array:
+        if action_map.ndim != 2:
+            return action_map
+        def collapse_body(map_2d, mask):
+            mask = mask.astype(jnp.bool_)
+            n_iters = 3  # Number of collapse iterations
+            def collapse_step(i, map_2d):
+                """One iteration of soil collapse - move dirt between neighbors."""
+                # JAX-compatible defensive check: ensure map_2d is always treated as 2D
+                # Use jax.lax.cond to handle potential dimension issues during tracing
+                def handle_valid_2d(map_2d):
+                    # Process the valid 2D map with soil mechanics
+                    result = map_2d
+                    # Check all 4 directional neighbors
+                    for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                        # Get neighbor heights by shifting the map
+                        shifted = jnp.roll(result, shift=(dy, dx), axis=(0, 1))
+                        diff = shifted - result
+                        neighbor_mask = jnp.roll(mask, shift=(dy, dx), axis=(0, 1))
+                        move = (diff >= 2) & mask & neighbor_mask
+                        result = result + move.astype(result.dtype)
+                        result = jnp.roll(result, shift=(dy, dx), axis=(0, 1)) - move.astype(result.dtype)
+                        result = jnp.roll(result, shift=(-dy, -dx), axis=(0, 1))
+                    return result
+                def handle_invalid_shape(map_2d):
+                    # Return a safe default - this should never execute at runtime
+                    # but is needed for JAX tracing completeness
+                    return jnp.zeros_like(action_map, dtype=map_2d.dtype)
+                # JAX-compatible shape check using jnp.where for static shape determination
+                is_valid_2d = (jnp.ndim(map_2d) == 2) & (jnp.shape(map_2d)[0] > 0) & (jnp.shape(map_2d)[1] > 0)
+                return jax.lax.cond(is_valid_2d, handle_valid_2d, handle_invalid_shape, map_2d)
+            map_2d = jax.lax.fori_loop(0, n_iters, collapse_step, map_2d)
+            return map_2d.astype(action_map.dtype)
+        has_affected = jnp.any(affected_mask)
+        def do_collapse(_):
+            return collapse_body(action_map, affected_mask)
+        return jax.lax.cond(has_affected, do_collapse, lambda _: action_map, operand=None)
 
     def _apply_dump_mask(
         self,
@@ -734,6 +820,7 @@ class State(NamedTuple):
         even_volume_per_tile: IntLowDim,
         remaining_volume: IntLowDim,
         target_map: Array,
+        use_condensed_dump: bool = False
     ) -> Array:
         """
         TODO: delta_dig_remaining now is added with a naive approach - should be added
@@ -744,32 +831,99 @@ class State(NamedTuple):
             - dump_mask: (N, ) Array of where to dump bools
             - even_volume_per_tile: IntLowDim, volume to add to each of the tiles in the mask (per tile)
             - remaining_volume: IntLowDim, remaining volume to add to some of the tiles in the mask (total)
+            - use_condensed_dump: If True, use concentrated dump with soil collapse; else use original logic.
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        # Check if there is any target dump tile within the mask
-        target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
-        target_dump_volume = target_map_dump_mask.sum()
-        dump_mask, dump_volume = jax.lax.cond(
-            target_dump_volume > 0,
-            lambda: (IntMap(target_map_dump_mask), target_dump_volume),
-            lambda: (IntMap(dump_mask), dump_mask.sum()),
+        map_2d_shape = self.world.action_map.map.shape
+        dump_mask_2d = dump_mask.reshape(map_2d_shape)
+
+        def _apply_simple_dump():
+            # Original logic
+            target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
+            target_dump_volume = target_map_dump_mask.sum()
+            dump_mask_final, dump_volume = jax.lax.cond(
+                target_dump_volume > 0,
+                lambda: (IntMap(target_map_dump_mask), target_dump_volume),
+                lambda: (IntMap(dump_mask), dump_mask.sum()),
+            )
+
+            loaded_volume = self.agent.agent_state.loaded
+            remaining_volume_final = loaded_volume % dump_volume
+            even_volume_per_tile_final = (loaded_volume - remaining_volume_final) / dump_volume
+
+            delta_dig = self.env_cfg.agent.dig_depth * dump_mask_final * even_volume_per_tile_final
+            delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
+
+            delta_dig_remaining = jnp.where(
+                jnp.logical_and(jnp.cumsum(dump_mask_final) <= remaining_volume_final, dump_mask_final),
+                1,
+                delta_dig_remaining,
+            )
+
+            simple_result = (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
+            # Optionally apply soil mechanics using the global flag
+            def apply_soil_mech():
+                map_2d = simple_result.reshape(self.world.action_map.map.shape)
+                mask_2d = dump_mask_final.reshape(self.world.action_map.map.shape)
+                return self._apply_local_soil_mechanics_simplified(map_2d, self._expand_mask_for_soil_mechanics(mask_2d)).reshape(-1)
+            return jax.lax.cond(
+                ENABLE_SOIL_MECHANICS,
+                apply_soil_mech,
+                lambda: simple_result
+            )
+
+        def _apply_concentrated_dump():
+            y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
+            centroid_y = jnp.sum(y_coords * dump_mask_2d) / jnp.maximum(jnp.sum(dump_mask_2d), 1)
+            centroid_x = jnp.sum(x_coords * dump_mask_2d) / jnp.maximum(jnp.sum(dump_mask_2d), 1)
+            distance_from_center = jnp.sqrt((y_coords - centroid_y)**2 + (x_coords - centroid_x)**2)
+            concentrated_mask_2d = jnp.logical_and(
+                dump_mask_2d,
+                distance_from_center <= 2.0
+            )
+            # Fallback to closest tile if no tiles are within 2.0 units from the centroid
+            def _fallback_to_closest_tile():
+                distances_in_mask = jnp.where(dump_mask_2d, distance_from_center, jnp.inf)
+                min_dist_idx_flat = jnp.argmin(distances_in_mask)
+                y_closest, x_closest = jnp.unravel_index(min_dist_idx_flat, map_2d_shape)
+                new_distance_from_center = jnp.sqrt((y_coords - y_closest)**2 + (x_coords - x_closest)**2)
+                return jnp.logical_and(
+                    dump_mask_2d,
+                    new_distance_from_center <= 2.0
+                )
+            final_concentrated_mask_2d = jax.lax.cond(
+                jnp.any(concentrated_mask_2d),
+                lambda: concentrated_mask_2d,
+                _fallback_to_closest_tile
+            )
+            total_volume_to_dump = even_volume_per_tile * jnp.sum(dump_mask) + remaining_volume
+            concentrated_tiles_count = jnp.maximum(jnp.sum(final_concentrated_mask_2d), 1)
+            even_volume_per_concentrated_tile = total_volume_to_dump // concentrated_tiles_count
+            remaining_concentrated_volume = total_volume_to_dump % concentrated_tiles_count
+            volume_per_tile_2d = (even_volume_per_concentrated_tile * final_concentrated_mask_2d).astype(IntMap)
+            concentrated_mask_flat = final_concentrated_mask_2d.flatten()
+            bonus_indices = jnp.where(
+                concentrated_mask_flat, 
+                jnp.cumsum(concentrated_mask_flat.astype(jnp.int32)), 
+                concentrated_mask_flat.size + 1
+            )
+            bonus_mask_flat = bonus_indices <= remaining_concentrated_volume
+            bonus_volume_2d = bonus_mask_flat.reshape(map_2d_shape).astype(IntMap)
+            new_map_2d = flattened_map.reshape(map_2d_shape).astype(IntMap) + volume_per_tile_2d + bonus_volume_2d
+            final_map_2d = jax.lax.cond(
+                ENABLE_SOIL_MECHANICS,
+                lambda: self._apply_local_soil_mechanics_simplified(new_map_2d, self._expand_mask_for_soil_mechanics(final_concentrated_mask_2d)),
+                lambda: new_map_2d
+            )
+            return final_map_2d.flatten()
+
+        return jax.lax.cond(
+            use_condensed_dump,
+            _apply_concentrated_dump,
+            _apply_simple_dump
         )
-
-        loaded_volume = self.agent.agent_state.loaded
-        remaining_volume = loaded_volume % dump_volume
-        even_volume_per_tile = (loaded_volume - remaining_volume) / dump_volume
-
-        delta_dig = self.env_cfg.agent.dig_depth * dump_mask * even_volume_per_tile
-        delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
-
-        delta_dig_remaining = jnp.where(
-            jnp.logical_and(jnp.cumsum(dump_mask) <= remaining_volume, dump_mask),
-            1,
-            delta_dig_remaining,
-        )
-
-        return (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
+#END SOIL MECHANICS
 
     def _get_map_local_and_cyl_coords(self):
         """
@@ -963,6 +1117,7 @@ class State(NamedTuple):
                 even_volume_per_tile,
                 remaining_volume,
                 self.world.target_map.map,
+                use_condensed_dump=True
             )
             new_map_global_coords = new_map_global_coords.reshape(
                 self.world.target_map.map.shape
