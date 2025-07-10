@@ -103,7 +103,9 @@ def create_sub_task_target_map_64x64(global_target_map_data: jnp.ndarray,
     y_start, x_start, y_end, x_end = region_coords
     
     # Initialize a 64x64 map with all zeros (free space)
-    sub_task_map = jnp.zeros((64, 64), dtype=global_target_map_data.dtype)
+    #sub_task_map = jnp.zeros((64, 64), dtype=global_target_map_data.dtype)
+    # Initialize a 64x64 map with all ones (dump space)
+    sub_task_map = jnp.ones((64, 64), dtype=global_target_map_data.dtype)
     
     # Define slice object for region
     region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
@@ -358,10 +360,10 @@ def create_sub_task_traversability_mask_64x64(traversability_mask_data: jnp.ndar
     y_start, x_start, y_end, x_end = region_coords
 
     # Start with a mask where everything is non-traversable (1)
-    #sub_task_mask = jnp.ones((64, 64), dtype=traversability_mask_data.dtype)
+    sub_task_mask = jnp.ones((64, 64), dtype=traversability_mask_data.dtype)
     
     # Start with a mask where everything is traversable (0)
-    sub_task_mask = jnp.ones((64, 64), dtype=traversability_mask_data.dtype)
+    #sub_task_mask = jnp.zeros((64, 64), dtype=traversability_mask_data.dtype)
 
 
     # Define region slice
@@ -1599,6 +1601,95 @@ def simple_sync_overlapping_regions(partition_states, env_manager, source_partit
     
     print(f"  ✓ Synced overlapping region from partition {source_partition_idx} to {target_partition_idx}")
 
+
+def full_sync_partitions(partition_states, env_manager, source_partition_idx, target_partition_idx):
+    """
+    Full synchronization: Copy entire partition state from source to target.
+    This version preserves existing agents in the target partition.
+    """
+    # Check if both partitions are active
+    if (source_partition_idx not in partition_states or 
+        target_partition_idx not in partition_states or
+        partition_states[source_partition_idx]['status'] != 'active' or
+        partition_states[target_partition_idx]['status'] != 'active'):
+        print(f"  ✗ Cannot sync: One or both partitions inactive")
+        return
+    
+    # Get source and target states
+    source_state = partition_states[source_partition_idx]['timestep'].state
+    target_state = partition_states[target_partition_idx]['timestep'].state
+    
+    # Check if partitions have the same dimensions
+    source_shape = source_state.world.traversability_mask.map.shape
+    target_shape = target_state.world.traversability_mask.map.shape
+    
+    if source_shape != target_shape:
+        print(f"  ✗ Cannot sync: Partition dimensions differ - source: {source_shape}, target: {target_shape}")
+        return
+    
+    # Define which maps to sync
+    maps_to_sync = [
+        'traversability_mask',
+        'action_map',
+        'target_map',
+        'dumpability_mask',
+        'dumpability_mask_init'
+    ]
+    
+    # Process each map
+    for map_name in maps_to_sync:
+        # Get source map
+        source_map = getattr(source_state.world, map_name).map
+        
+        # Get target map
+        target_map = getattr(target_state.world, map_name).map.copy()
+        
+        if map_name == 'traversability_mask':
+            # Special handling for traversability mask
+            # We need to:
+            # 1. Preserve target's own agent(s) (-1)
+            # 2. Convert source agents to free space or obstacles
+            # 3. Update everything else from source
+            
+            target_has_agent = (target_map == -1)
+            source_has_agent = (source_map == -1)
+            
+            # Convert source data: agent positions become free space
+            source_terrain = jnp.where(source_has_agent, 0, source_map)
+            
+            # Create new map: keep target's agents, use source terrain elsewhere
+            new_map = jnp.where(target_has_agent, -1, source_terrain)
+            
+            # Debug output
+            old_agents = jnp.sum(target_map == -1)
+            new_agents = jnp.sum(new_map == -1)
+            old_obstacles = jnp.sum(target_map == 1)
+            new_obstacles = jnp.sum(new_map == 1)
+            
+            print(f"  Traversability sync {source_partition_idx}->{target_partition_idx}:")
+            print(f"    Agents: {old_agents} -> {new_agents} (preserved)")
+            print(f"    Obstacles: {old_obstacles} -> {new_obstacles}")
+        else:
+            # For other maps, direct copy from source
+            new_map = source_map.copy()
+        
+        # Update the world state
+        updated_world = env_manager._update_world_map(target_state.world, map_name, new_map)
+        target_state = target_state._replace(world=updated_world)
+    
+    # Also sync agent states if needed (excluding target's own agents)
+    # This depends on your agent state structure
+    if hasattr(source_state, 'agents') and hasattr(target_state, 'agents'):
+        # Preserve target's agents while updating positions/states from source
+        # This is application-specific and may need adjustment
+        pass
+    
+    # Update the timestep with the new state
+    updated_timestep = partition_states[target_partition_idx]['timestep']._replace(state=target_state)
+    partition_states[target_partition_idx]['timestep'] = updated_timestep
+    
+    print(f"  ✓ Fully synced partition {source_partition_idx} to {target_partition_idx}")
+
 def reconstruct_observation_from_synced_state(timestep):
     """
     Reconstruct observation from synced state, specifically updating traversability_mask.
@@ -1614,10 +1705,10 @@ def reconstruct_observation_from_synced_state(timestep):
     observation['traversability_mask'] = state.world.traversability_mask.map
     
     # Also update other maps that might be affected by sync
-    observation['action_map'] = state.world.action_map.map
-    observation['target_map'] = state.world.target_map.map
-    observation['dumpability_mask'] = state.world.dumpability_mask.map
-    observation['padding_mask'] = state.world.padding_mask.map
+    #observation['action_map'] = state.world.action_map.map
+    #observation['target_map'] = state.world.target_map.map
+    #observation['dumpability_mask'] = state.world.dumpability_mask.map
+    #observation['padding_mask'] = state.world.padding_mask.map
     
     # Keep local maps as-is (they might be computed differently)
     # observation['local_map_*'] fields remain unchanged

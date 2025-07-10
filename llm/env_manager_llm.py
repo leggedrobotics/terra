@@ -391,32 +391,24 @@ class EnvironmentsManager:
         custom_angle = partition['start_angle']
 
         # Extract sub-maps from global maps (64x64)
+        # sub_maps = {
+        #     'target_map': create_sub_task_target_map_64x64(self.global_maps['target_map'], region_coords),
+        #     'action_map': create_sub_task_action_map_64x64(self.global_maps['action_map'], region_coords),
+        #     'dumpability_mask': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask'], region_coords),
+        #     'dumpability_mask_init': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask_init'], region_coords),
+        #     'padding_mask': create_sub_task_padding_mask_64x64(self.global_maps['padding_mask'], region_coords),
+        #     'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
+        # }
+
         sub_maps = {
-            'target_map': create_sub_task_target_map_64x64(self.global_maps['target_map'], region_coords),
-            'action_map': create_sub_task_action_map_64x64(self.global_maps['action_map'], region_coords),
-            'dumpability_mask': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask'], region_coords),
-            'dumpability_mask_init': create_sub_task_dumpability_mask_64x64(self.global_maps['dumpability_mask_init'], region_coords),
-            'padding_mask': create_sub_task_padding_mask_64x64(self.global_maps['padding_mask'], region_coords),
-            'traversability_mask': create_sub_task_traversability_mask_64x64(self.global_maps['traversability_mask'], region_coords),
+            'target_map': create_sub_task_target_map_64x64(self.global_maps['target_map'], region_coords),                              #ok
+            'action_map': self.global_maps['action_map'],
+            'dumpability_mask': self.global_maps['dumpability_mask'],
+            'dumpability_mask_init': self.global_maps['dumpability_mask_init'],
+            'padding_mask': self.global_maps['padding_mask'],
+            'traversability_mask': self.global_maps['traversability_mask'],                                                             #OK, keep the full traversability mask
         }
 
-        # sub_maps = {
-        #     'target_map': self.global_maps['target_map'], 
-        #     'action_map': self.global_maps['action_map'],
-        #     'dumpability_mask': self.global_maps['dumpability_mask'], 
-        #     'dumpability_mask_init': self.global_maps['dumpability_mask_init'], 
-        #     'padding_mask': self.global_maps['padding_mask'], 
-        #     'traversability_mask': self.global_maps['traversability_mask'], 
-        # }
-
-        # sub_maps = {
-        #     'target_map': extract_target_map_region_64x64(self.global_maps['target_map'], region_coords),
-        #     'action_map': extract_action_map_region_64x64(self.global_maps['action_map'], region_coords),
-        #     'dumpability_mask': extract_dumpability_mask_region_64x64(self.global_maps['dumpability_mask'], region_coords),
-        #     'dumpability_mask_init': extract_dumpability_mask_region_64x64(self.global_maps['dumpability_mask_init'], region_coords),
-        #     'padding_mask': extract_padding_mask_region_64x64(self.global_maps['padding_mask'], region_coords),
-        #     'traversability_mask': extract_traversability_mask_region_64x64(self.global_maps['traversability_mask'], region_coords),
-        # }
 
         save_mask(np.array(sub_maps['target_map']),'target', 'after_init', partition_idx, 0)
         save_mask(np.array(sub_maps['action_map']),'action', 'after_init', partition_idx, 0)
@@ -1045,3 +1037,207 @@ class EnvironmentsManager:
         obstacle_surface = small_font.render(obstacle_text, True, (255, 100, 100))
         screen.blit(obstacle_surface, (x_offset + 10, y_offset + height - 20))
     
+    # Updated synchronization methods for the new global map approach
+
+    def sync_agents_in_global_environment(self, partition_states):
+        """
+        New synchronization approach for shared global maps.
+        Focus on agent positioning and collision detection rather than map synchronization.
+        """
+        print(f"\n=== SYNCING AGENTS IN GLOBAL ENVIRONMENT ===")
+        
+        # Collect all active agent positions and their occupied cells
+        all_agent_positions = {}
+        all_occupied_cells = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_timestep = partition_state['timestep']
+            traversability = current_timestep.state.world.traversability_mask.map
+            
+            # Find where this agent is (value = -1)
+            agent_mask = (traversability == -1)
+            agent_positions = jnp.where(agent_mask)
+            
+            if len(agent_positions[0]) > 0:
+                # Store agent position info
+                all_agent_positions[partition_idx] = {
+                    'positions': agent_positions,
+                    'count': len(agent_positions[0])
+                }
+                
+                # Store occupied cells for this agent
+                occupied_cells = []
+                for i in range(len(agent_positions[0])):
+                    cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+                    occupied_cells.append(cell)
+                all_occupied_cells[partition_idx] = occupied_cells
+        
+        # Update each partition's traversability mask with other agents
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            self._update_partition_with_other_agents(
+                target_partition_idx, target_partition_state, 
+                all_occupied_cells, partition_states
+            )
+        
+        print(f"Agent synchronization completed for {len(all_agent_positions)} active agents")
+
+    def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
+                                        all_occupied_cells, partition_states):
+        """
+        Update a partition's traversability mask to show other agents as obstacles.
+        """
+        current_timestep = target_partition_state['timestep']
+        current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+        
+        agents_added = 0
+        cells_added = 0
+        
+        # Add other agents as obstacles
+        for other_partition_idx, occupied_cells in all_occupied_cells.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Don't add self
+                
+            for cell_y, cell_x in occupied_cells:
+                # Check if this cell is within the partition's area of interest
+                if self._should_show_agent_in_partition(target_partition_idx, cell_y, cell_x):
+                    # Only mark as obstacle if it's currently free space or traversable
+                    if current_traversability[cell_y, cell_x] == 0:
+                        current_traversability = current_traversability.at[cell_y, cell_x].set(1)
+                        cells_added += 1
+            
+            if cells_added > 0:
+                agents_added += 1
+        
+        # Update the world state if changes were made
+        if agents_added > 0:
+            updated_world = self._update_world_map(
+                current_timestep.state.world, 
+                'traversability_mask', 
+                current_traversability
+            )
+            updated_state = current_timestep.state._replace(world=updated_world)
+            updated_timestep = current_timestep._replace(state=updated_state)
+            
+            partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+            print(f"  ✓ Added {agents_added} agents ({cells_added} cells) to partition {target_partition_idx}")
+
+    def _should_show_agent_in_partition(self, partition_idx, agent_y, agent_x):
+        """
+        Determine if an agent at the given position should be visible to the partition.
+        
+        For global maps, you might want to:
+        1. Show all agents everywhere (return True)
+        2. Show agents only within a certain distance of the partition's region
+        3. Show agents only within the partition's assigned region
+        """
+        # Option 1: Show all agents everywhere (recommended for global maps)
+        return True
+        
+        # Option 2: Show agents within partition region + buffer
+        # if partition_idx < len(self.partitions):
+        #     partition = self.partitions[partition_idx]
+        #     y_start, x_start, y_end, x_end = partition['region_coords']
+        #     
+        #     # Add buffer around partition region
+        #     buffer = 10
+        #     return (y_start - buffer <= agent_y <= y_end + buffer and 
+        #             x_start - buffer <= agent_x <= x_end + buffer)
+        # 
+        # return False
+
+    def update_global_maps_from_partition_changes(self, partition_states):
+        """
+        Update the global maps with changes from all partitions.
+        Since most maps are now shared, focus on target_map updates.
+        """
+        print(f"\n=== UPDATING GLOBAL MAPS FROM PARTITION CHANGES ===")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            # Get current state from partition
+            current_timestep = partition_state['timestep']
+            partition_maps = {
+                'target_map': current_timestep.state.world.target_map.map,
+                'action_map': current_timestep.state.world.action_map.map,
+                'dumpability_mask': current_timestep.state.world.dumpability_mask.map,
+            }
+            
+            # Update global maps with partition's changes
+            # Since target_map is localized, we need to merge changes back to global
+            partition = self.partitions[partition_idx]
+            region_coords = partition['region_coords']
+            self._merge_partition_target_changes_to_global(
+                partition_maps['target_map'], region_coords
+            )
+            
+            # For other maps, since they're shared, they should already be in sync
+            # but we can update the global reference if needed
+            self.global_maps['action_map'] = partition_maps['action_map']
+            self.global_maps['dumpability_mask'] = partition_maps['dumpability_mask']
+
+    def _merge_partition_target_changes_to_global(self, partition_target_map, region_coords):
+        """
+        Merge changes from a partition's target_map back to the global target_map.
+        """
+        y_start, x_start, y_end, x_end = region_coords
+        region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+        
+        # Extract the relevant region from the partition's target map
+        partition_region = partition_target_map[region_slice]
+        
+        # Update the global target map
+        self.global_maps['target_map'] = self.global_maps['target_map'].at[region_slice].set(partition_region)
+
+    # Updated main synchronization function to replace the old one
+    def add_agents_using_global_sync(self, partition_states):
+        """
+        Replacement for add_agents_using_existing_representation.
+        Designed for the new global map approach.
+        """
+        self.sync_agents_in_global_environment(partition_states)
+
+    # Simplified overlap detection for global maps
+    def compute_agent_visibility_relationships(self):
+        """
+        Since maps are global, we don't need complex overlap detection.
+        Instead, determine which agents should be visible to each partition.
+        """
+        print(f"\n=== COMPUTING AGENT VISIBILITY ===")
+        
+        # For global maps, all agents are potentially visible to all partitions
+        self.agent_visibility_map = {i: set(range(len(self.partitions))) 
+                                    for i in range(len(self.partitions))}
+        
+        # Remove self-visibility
+        for i in range(len(self.partitions)):
+            self.agent_visibility_map[i].discard(i)
+        
+        print(f"All agents will be visible to all partitions in global map mode")
+
+    # Updated step function that uses the new sync approach
+    def step_with_global_sync(self, partition_idx: int, action, partition_states: dict):
+        """
+        Step function adapted for global maps with proper synchronization.
+        """
+        # Regular step (unchanged)
+        new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+        # Update partition state
+        partition_states[partition_idx]['timestep'] = new_timestep
+        
+        # Sync agents across all partitions
+        self.add_agents_using_global_sync(partition_states)
+        
+        # Update global maps if needed
+        self.update_global_maps_from_partition_changes(partition_states)
+        
+        return new_timestep
