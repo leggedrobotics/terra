@@ -1039,94 +1039,199 @@ class EnvironmentsManager:
     
     # Updated synchronization methods for the new global map approach
 
-    def sync_agents_in_global_environment(self, partition_states):
-        """
-        New synchronization approach for shared global maps.
-        Focus on agent positioning and collision detection rather than map synchronization.
-        """
-        print(f"\n=== SYNCING AGENTS IN GLOBAL ENVIRONMENT ===")
+    # def sync_agents_in_global_environment(self, partition_states):
+    #     """
+    #     New synchronization approach for shared global maps.
+    #     Focus on agent positioning and collision detection rather than map synchronization.
+    #     """
+    #     print(f"\n=== SYNCING AGENTS IN GLOBAL ENVIRONMENT ===")
         
-        # Collect all active agent positions and their occupied cells
-        all_agent_positions = {}
-        all_occupied_cells = {}
+    #     # Collect all active agent positions and their occupied cells
+    #     all_agent_positions = {}
+    #     all_occupied_cells = {}
         
-        for partition_idx, partition_state in partition_states.items():
-            if partition_state['status'] != 'active':
-                continue
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] != 'active':
+    #             continue
                 
-            current_timestep = partition_state['timestep']
-            traversability = current_timestep.state.world.traversability_mask.map
+    #         current_timestep = partition_state['timestep']
+    #         traversability = current_timestep.state.world.traversability_mask.map
             
-            # Find where this agent is (value = -1)
-            agent_mask = (traversability == -1)
-            agent_positions = jnp.where(agent_mask)
+    #         # Find where this agent is (value = -1)
+    #         agent_mask = (traversability == -1)
+    #         agent_positions = jnp.where(agent_mask)
             
-            if len(agent_positions[0]) > 0:
-                # Store agent position info
-                all_agent_positions[partition_idx] = {
-                    'positions': agent_positions,
-                    'count': len(agent_positions[0])
-                }
+    #         if len(agent_positions[0]) > 0:
+    #             # Store agent position info
+    #             all_agent_positions[partition_idx] = {
+    #                 'positions': agent_positions,
+    #                 'count': len(agent_positions[0])
+    #             }
                 
-                # Store occupied cells for this agent
-                occupied_cells = []
-                for i in range(len(agent_positions[0])):
-                    cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
-                    occupied_cells.append(cell)
-                all_occupied_cells[partition_idx] = occupied_cells
+    #             # Store occupied cells for this agent
+    #             occupied_cells = []
+    #             for i in range(len(agent_positions[0])):
+    #                 cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+    #                 occupied_cells.append(cell)
+    #             all_occupied_cells[partition_idx] = occupied_cells
         
-        # Update each partition's traversability mask with other agents
-        for target_partition_idx, target_partition_state in partition_states.items():
-            if target_partition_state['status'] != 'active':
-                continue
+    #     # Update each partition's traversability mask with other agents
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
                 
-            self._update_partition_with_other_agents(
-                target_partition_idx, target_partition_state, 
-                all_occupied_cells, partition_states
-            )
+    #         self._update_partition_with_other_agents(
+    #             target_partition_idx, target_partition_state, 
+    #             all_occupied_cells, partition_states
+    #         )
         
-        print(f"Agent synchronization completed for {len(all_agent_positions)} active agents")
+    #     print(f"Agent synchronization completed for {len(all_agent_positions)} active agents")
 
-    def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
-                                        all_occupied_cells, partition_states):
-        """
-        Update a partition's traversability mask to show other agents as obstacles.
-        """
-        current_timestep = target_partition_state['timestep']
-        current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+    # def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
+    #                                     all_occupied_cells, partition_states):
+    #     """
+    #     Update a partition's traversability mask to show other agents as obstacles.
+    #     """
+    #     current_timestep = target_partition_state['timestep']
+    #     current_traversability = current_timestep.state.world.traversability_mask.map.copy()
         
-        agents_added = 0
-        cells_added = 0
+    #     agents_added = 0
+    #     cells_added = 0
         
-        # Add other agents as obstacles
-        for other_partition_idx, occupied_cells in all_occupied_cells.items():
-            if other_partition_idx == target_partition_idx:
-                continue  # Don't add self
+    #     # Add other agents as obstacles
+    #     for other_partition_idx, occupied_cells in all_occupied_cells.items():
+    #         if other_partition_idx == target_partition_idx:
+    #             continue  # Don't add self
                 
-            for cell_y, cell_x in occupied_cells:
-                # Check if this cell is within the partition's area of interest
-                if self._should_show_agent_in_partition(target_partition_idx, cell_y, cell_x):
-                    # Only mark as obstacle if it's currently free space or traversable
-                    if current_traversability[cell_y, cell_x] == 0:
-                        current_traversability = current_traversability.at[cell_y, cell_x].set(1)
-                        cells_added += 1
+    #         for cell_y, cell_x in occupied_cells:
+    #             # Check if this cell is within the partition's area of interest
+    #             if self._should_show_agent_in_partition(target_partition_idx, cell_y, cell_x):
+    #                 # Only mark as obstacle if it's currently free space or traversable
+    #                 if current_traversability[cell_y, cell_x] == 0:
+    #                     current_traversability = current_traversability.at[cell_y, cell_x].set(1)
+    #                     cells_added += 1
             
-            if cells_added > 0:
-                agents_added += 1
+    #         if cells_added > 0:
+    #             agents_added += 1
         
-        # Update the world state if changes were made
-        if agents_added > 0:
-            updated_world = self._update_world_map(
-                current_timestep.state.world, 
-                'traversability_mask', 
-                current_traversability
-            )
-            updated_state = current_timestep.state._replace(world=updated_world)
-            updated_timestep = current_timestep._replace(state=updated_state)
+    #     # Update the world state if changes were made
+    #     if agents_added > 0:
+    #         updated_world = self._update_world_map(
+    #             current_timestep.state.world, 
+    #             'traversability_mask', 
+    #             current_traversability
+    #         )
+    #         updated_state = current_timestep.state._replace(world=updated_world)
+    #         updated_timestep = current_timestep._replace(state=updated_state)
             
-            partition_states[target_partition_idx]['timestep'] = updated_timestep
+    #         partition_states[target_partition_idx]['timestep'] = updated_timestep
             
-            print(f"  ✓ Added {agents_added} agents ({cells_added} cells) to partition {target_partition_idx}")
+    #         print(f"  ✓ Added {agents_added} agents ({cells_added} cells) to partition {target_partition_idx}")
+
+    # def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
+    #                                 all_occupied_cells, partition_states):
+    #     """
+    #     Update a partition's traversability mask to show other agents as obstacles.
+    #     Fixed to prevent agent traces by clearing previous agent obstacles.
+    #     """
+    #     current_timestep = target_partition_state['timestep']
+    #     current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+        
+    #     # STEP 1: Clear all agent obstacles (value = 1) that were added in previous sync cycles
+    #     # Keep permanent terrain obstacles and current agent position (-1)
+        
+    #     # Simple approach: Clear all obstacles marked as "1" (assumes these are agent obstacles)
+    #     # and keep -1 (current agent) and any other permanent obstacle values
+    #     current_traversability = jnp.where(
+    #         current_traversability == 1,  # Agent obstacles from previous syncs
+    #         0,  # Clear to free space
+    #         current_traversability  # Keep current agent (-1) and permanent obstacles
+    #     )
+        
+    #     # STEP 2: Add current positions of OTHER agents as obstacles
+    #     agents_added = 0
+    #     cells_added = 0
+        
+    #     for other_partition_idx, occupied_cells in all_occupied_cells.items():
+    #         if other_partition_idx == target_partition_idx:
+    #             continue  # Don't add self as obstacle
+                
+    #         for cell_y, cell_x in occupied_cells:
+    #             # Check if this cell should be visible in this partition
+    #             if self._should_show_agent_in_partition(target_partition_idx, cell_y, cell_x):
+    #                 # Check bounds
+    #                 if (0 <= cell_y < current_traversability.shape[0] and 
+    #                     0 <= cell_x < current_traversability.shape[1]):
+    #                     # Mark as obstacle (value = 1) - this represents another agent
+    #                     current_traversability = current_traversability.at[cell_y, cell_x].set(1)
+    #                     cells_added += 1
+            
+    #         if cells_added > 0:
+    #             agents_added += 1
+        
+    #     # Always update the world state (even if no agents added, we might have cleared old obstacles)
+    #     updated_world = self._update_world_map(
+    #         current_timestep.state.world, 
+    #         'traversability_mask', 
+    #         current_traversability
+    #     )
+    #     updated_state = current_timestep.state._replace(world=updated_world)
+    #     updated_timestep = current_timestep._replace(state=updated_state)
+        
+    #     partition_states[target_partition_idx]['timestep'] = updated_timestep
+        
+    #     if agents_added > 0:
+    #         print(f"  ✓ Added {agents_added} current agents ({cells_added} cells) to partition {target_partition_idx}")
+    #     else:
+    #         print(f"  ✓ Cleared old agent traces from partition {target_partition_idx}")
+
+    # def sync_agents_in_global_environment(self, partition_states):
+    #     """
+    #     Updated synchronization with proper cleanup of agent traces.
+    #     Now properly clears old agent obstacles before adding current positions.
+    #     """
+    #     print(f"\n=== SYNCING AGENTS IN GLOBAL ENVIRONMENT ===")
+        
+    #     # Collect all active agent positions and their occupied cells
+    #     all_agent_positions = {}
+    #     all_occupied_cells = {}
+        
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] != 'active':
+    #             continue
+                
+    #         current_timestep = partition_state['timestep']
+    #         traversability = current_timestep.state.world.traversability_mask.map
+            
+    #         # Find where this agent is (value = -1)
+    #         agent_mask = (traversability == -1)
+    #         agent_positions = jnp.where(agent_mask)
+            
+    #         if len(agent_positions[0]) > 0:
+    #             # Store agent position info
+    #             all_agent_positions[partition_idx] = {
+    #                 'positions': agent_positions,
+    #                 'count': len(agent_positions[0])
+    #             }
+                
+    #             # Store occupied cells for this agent
+    #             occupied_cells = []
+    #             for i in range(len(agent_positions[0])):
+    #                 cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+    #                 occupied_cells.append(cell)
+    #             all_occupied_cells[partition_idx] = occupied_cells
+        
+    #     # Update each partition's traversability mask with other agents
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
+                
+    #         self._update_partition_with_other_agents(
+    #             target_partition_idx, target_partition_state, 
+    #             all_occupied_cells, partition_states
+    #         )
+        
+    #     print(f"Agent synchronization completed for {len(all_agent_positions)} active agents")
 
     def _should_show_agent_in_partition(self, partition_idx, agent_y, agent_x):
         """
@@ -1236,6 +1341,362 @@ class EnvironmentsManager:
         
         # Sync agents across all partitions
         self.add_agents_using_global_sync(partition_states)
+        
+        # Update global maps if needed
+        self.update_global_maps_from_partition_changes(partition_states)
+        
+        return new_timestep
+    
+
+    def initialize_base_traversability_masks(self, partition_states):
+        """
+        Store the initial clean traversability masks for each partition.
+        This captures the original terrain obstacles before any agent synchronization.
+        Call this ONCE after partition initialization but BEFORE any agent sync.
+        """
+        if not hasattr(self, 'base_traversability_masks'):
+            self.base_traversability_masks = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] == 'active':
+                # Get the current traversability mask
+                current_mask = partition_state['timestep'].state.world.traversability_mask.map.copy()
+                
+                # Clean any agent markers but keep terrain obstacles
+                # -1 = current agent position (clear to 0)
+                # 1 = could be terrain obstacles or agent obstacles (we assume these are terrain at initialization)
+                # 0 = free space (keep as is)
+                clean_mask = jnp.where(
+                    current_mask == -1,  # Current agent position
+                    0,  # Clear agent position to free space
+                    current_mask  # Keep everything else (terrain obstacles = 1, free space = 0)
+                )
+                
+                self.base_traversability_masks[partition_idx] = clean_mask
+                print(f"Stored base traversability mask for partition {partition_idx}")
+
+    def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
+                                        all_occupied_cells, partition_states):
+        """
+        Update a partition's traversability mask to show other agents as obstacles.
+        Now properly preserves original terrain obstacles.
+        """
+        current_timestep = target_partition_state['timestep']
+        
+        # STEP 1: Start from the clean base mask (has original terrain obstacles but no agent obstacles)
+        if hasattr(self, 'base_traversability_masks') and target_partition_idx in self.base_traversability_masks:
+            # Start from clean base (original terrain obstacles preserved)
+            current_traversability = self.base_traversability_masks[target_partition_idx].copy()
+            
+            # Add back the current agent's position (-1)
+            original_traversability = current_timestep.state.world.traversability_mask.map
+            agent_mask = (original_traversability == -1)
+            current_traversability = jnp.where(
+                agent_mask,
+                -1,  # Restore current agent position
+                current_traversability  # Keep clean base with terrain obstacles
+            )
+        else:
+            # Fallback: use current mask but this might not work perfectly
+            print(f"Warning: No base mask for partition {target_partition_idx}, using current mask")
+            current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+            
+            # Try to clear only agent obstacles (this is less reliable)
+            # Keep -1 (current agent) and assume original 1s are terrain
+            # This fallback is not ideal - base masks are recommended
+        
+        # STEP 2: Add current positions of OTHER agents as obstacles
+        agents_added = 0
+        cells_added = 0
+        
+        for other_partition_idx, occupied_cells in all_occupied_cells.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Don't add self as obstacle
+                
+            for cell_y, cell_x in occupied_cells:
+                # Check if this cell should be visible in this partition
+                if self._should_show_agent_in_partition(target_partition_idx, cell_y, cell_x):
+                    # Check bounds
+                    if (0 <= cell_y < current_traversability.shape[0] and 
+                        0 <= cell_x < current_traversability.shape[1]):
+                        # Mark as obstacle (value = 1) - this represents another agent
+                        # Only set if it's currently free space (0) to avoid overwriting terrain
+                        if current_traversability[cell_y, cell_x] == 0:
+                            current_traversability = current_traversability.at[cell_y, cell_x].set(1)
+                            cells_added += 1
+            
+            if cells_added > 0:
+                agents_added += 1
+        
+        # STEP 3: Update the world state
+        updated_world = self._update_world_map(
+            current_timestep.state.world, 
+            'traversability_mask', 
+            current_traversability
+        )
+        updated_state = current_timestep.state._replace(world=updated_world)
+        updated_timestep = current_timestep._replace(state=updated_state)
+        
+        partition_states[target_partition_idx]['timestep'] = updated_timestep
+        
+        if agents_added > 0:
+            print(f"  ✓ Added {agents_added} other agents ({cells_added} cells) to partition {target_partition_idx}")
+
+    def sync_agents_in_global_environment(self, partition_states):
+        """
+        Updated synchronization that preserves original terrain obstacles.
+        """
+        print(f"\n=== SYNCING AGENTS IN GLOBAL ENVIRONMENT ===")
+        
+        # Initialize base masks if not done yet (IMPORTANT: do this early, before any sync operations)
+        if not hasattr(self, 'base_traversability_masks'):
+            print("Initializing base traversability masks...")
+            self.initialize_base_traversability_masks(partition_states)
+        
+        # Collect all active agent positions and their occupied cells
+        all_agent_positions = {}
+        all_occupied_cells = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_timestep = partition_state['timestep']
+            traversability = current_timestep.state.world.traversability_mask.map
+            
+            # Find where this agent is (value = -1)
+            agent_mask = (traversability == -1)
+            agent_positions = jnp.where(agent_mask)
+            
+            if len(agent_positions[0]) > 0:
+                # Store agent position info
+                all_agent_positions[partition_idx] = {
+                    'positions': agent_positions,
+                    'count': len(agent_positions[0])
+                }
+                
+                # Store occupied cells for this agent
+                occupied_cells = []
+                for i in range(len(agent_positions[0])):
+                    cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+                    occupied_cells.append(cell)
+                all_occupied_cells[partition_idx] = occupied_cells
+        
+        # Update each partition's traversability mask with other agents
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            self._update_partition_with_other_agents(
+                target_partition_idx, target_partition_state, 
+                all_occupied_cells, partition_states
+            )
+        
+        print(f"Agent synchronization completed for {len(all_agent_positions)} active agents")
+
+
+    # Add these methods to your EnvironmentsManager class
+
+    def sync_targets_across_partitions(self, partition_states):
+        """
+        Synchronize targets across partitions by marking other partitions' targets as obstacles.
+        This prevents agents from working on targets assigned to other partitions.
+        """
+        print(f"\n=== SYNCING TARGETS ACROSS PARTITIONS ===")
+        
+        # Collect all partition targets
+        all_partition_targets = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_timestep = partition_state['timestep']
+            target_map = current_timestep.state.world.target_map.map
+            
+            # Store the target map for this partition
+            all_partition_targets[partition_idx] = target_map
+        
+        # Update each partition to mark other partitions' targets as obstacles
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            self._update_partition_with_other_targets(
+                target_partition_idx, target_partition_state, 
+                all_partition_targets, partition_states
+            )
+        
+        print(f"Target synchronization completed for {len(all_partition_targets)} active partitions")
+
+    def _update_partition_with_other_targets(self, target_partition_idx, target_partition_state, 
+                                        all_partition_targets, partition_states):
+        """
+        Update a partition's traversability mask to mark other partitions' targets as obstacles.
+        """
+        current_timestep = target_partition_state['timestep']
+        
+        # Start from the current traversability mask
+        current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+        
+        targets_blocked = 0
+        cells_blocked = 0
+        
+        # Add other partitions' targets as obstacles
+        for other_partition_idx, other_target_map in all_partition_targets.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Don't block own targets
+            
+            # Get the current partition's own target map to avoid conflicts
+            own_target_map = current_timestep.state.world.target_map.map
+            
+            # Find other partition's targets (both dig targets -1 and dump targets 1)
+            other_dig_targets = (other_target_map == -1)
+            other_dump_targets = (other_target_map == 1)
+            other_all_targets = other_dig_targets | other_dump_targets
+            
+            # Only block targets that are not also targets in current partition
+            own_targets = (own_target_map == -1) | (own_target_map == 1)
+            
+            # Find positions to block: other partition's targets that aren't current partition's targets
+            positions_to_block = other_all_targets & ~own_targets
+            
+            # Find valid positions to block in the traversability mask
+            for y in range(current_traversability.shape[0]):
+                for x in range(current_traversability.shape[1]):
+                    if positions_to_block[y, x]:
+                        # Only mark as obstacle if it's currently free space (0) or traversable
+                        # Don't overwrite agent positions (-1) or existing obstacles (1)
+                        if current_traversability[y, x] == 0:
+                            current_traversability = current_traversability.at[y, x].set(1)
+                            cells_blocked += 1
+            
+            if cells_blocked > 0:
+                targets_blocked += 1
+        
+        # Update the world state
+        updated_world = self._update_world_map(
+            current_timestep.state.world, 
+            'traversability_mask', 
+            current_traversability
+        )
+        updated_state = current_timestep.state._replace(world=updated_world)
+        updated_timestep = current_timestep._replace(state=updated_state)
+        
+        partition_states[target_partition_idx]['timestep'] = updated_timestep
+        
+        if targets_blocked > 0:
+            print(f"  ✓ Blocked {cells_blocked} target cells from {targets_blocked} other partitions in partition {target_partition_idx}")
+
+    def sync_targets_in_overlapping_regions_only(self, partition_states):
+        """
+        Alternative approach: Only block targets in overlapping regions between partitions.
+        This is more conservative and only affects shared areas.
+        """
+        print(f"\n=== SYNCING TARGETS IN OVERLAPPING REGIONS ===")
+        
+        for (i, j), overlap_info in self.overlap_regions.items():
+            if i >= j:  # Only process each pair once
+                continue
+                
+            if (i not in partition_states or j not in partition_states or
+                partition_states[i]['status'] != 'active' or 
+                partition_states[j]['status'] != 'active'):
+                continue
+            
+            # Sync targets in both directions for overlapping partitions
+            self._sync_targets_in_overlap_region(partition_states, i, j, overlap_info)
+            self._sync_targets_in_overlap_region(partition_states, j, i, overlap_info)
+
+    def _sync_targets_in_overlap_region(self, partition_states, target_partition_idx, 
+                                    source_partition_idx, overlap_info):
+        """
+        Block source partition's targets in the overlapping region of target partition.
+        """
+        target_state = partition_states[target_partition_idx]['timestep'].state
+        source_state = partition_states[source_partition_idx]['timestep'].state
+        
+        # Get the correct slices based on partition order
+        if target_partition_idx < source_partition_idx:
+            target_slice = overlap_info['partition_i_slice']
+            source_slice = overlap_info['partition_j_slice']
+        else:
+            target_slice = overlap_info['partition_j_slice']
+            source_slice = overlap_info['partition_i_slice']
+        
+        # Get target maps
+        target_traversability = target_state.world.traversability_mask.map.copy()
+        source_target_map = source_state.world.target_map.map
+        target_own_targets = target_state.world.target_map.map
+        
+        # Extract overlapping regions
+        source_overlap_targets = source_target_map[source_slice]
+        target_overlap_traversability = target_traversability[target_slice]
+        target_overlap_own_targets = target_own_targets[target_slice]
+        
+        # Find source targets in overlap region (both dig and dump targets)
+        source_targets_in_overlap = (source_overlap_targets == -1) | (source_overlap_targets == 1)
+        
+        # Don't block if target partition also has targets in the same location
+        target_own_targets_in_overlap = (target_overlap_own_targets == -1) | (target_overlap_own_targets == 1)
+        
+        # Block only source targets that don't conflict with target's own targets
+        targets_to_block = source_targets_in_overlap & ~target_own_targets_in_overlap
+        
+        # Update traversability mask in overlap region
+        new_overlap_traversability = jnp.where(
+            targets_to_block & (target_overlap_traversability == 0),  # Only block free space
+            1,  # Mark as obstacle
+            target_overlap_traversability  # Keep existing values
+        )
+        
+        # Update the full traversability mask
+        target_traversability = target_traversability.at[target_slice].set(new_overlap_traversability)
+        
+        # Count blocked cells
+        blocked_cells = jnp.sum(targets_to_block & (target_overlap_traversability == 0))
+        
+        if blocked_cells > 0:
+            # Update the world state
+            updated_world = self._update_world_map(
+                target_state.world, 
+                'traversability_mask', 
+                target_traversability
+            )
+            updated_state = target_state._replace(world=updated_world)
+            updated_timestep = partition_states[target_partition_idx]['timestep']._replace(state=updated_state)
+            
+            partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+            print(f"  ✓ Blocked {blocked_cells} target cells from partition {source_partition_idx} in overlap region of partition {target_partition_idx}")
+
+    # Update the main synchronization method to include target synchronization
+    def add_agents_and_targets_using_global_sync(self, partition_states):
+        """
+        Enhanced synchronization that handles both agents and targets.
+        """
+        # First sync agents (existing functionality)
+        self.sync_agents_in_global_environment(partition_states)
+        
+        # Then sync targets to prevent conflicts
+        self.sync_targets_across_partitions(partition_states)
+        
+        # Alternative: Only sync targets in overlapping regions
+        # self.sync_targets_in_overlapping_regions_only(partition_states)
+
+    # Update the step function to use the enhanced synchronization
+    def step_with_enhanced_sync(self, partition_idx: int, action, partition_states: dict):
+        """
+        Step function with enhanced synchronization for both agents and targets.
+        """
+        # Regular step (unchanged)
+        new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+        # Update partition state
+        partition_states[partition_idx]['timestep'] = new_timestep
+        
+        # Enhanced sync that includes both agents and targets
+        self.add_agents_and_targets_using_global_sync(partition_states)
         
         # Update global maps if needed
         self.update_global_maps_from_partition_changes(partition_states)

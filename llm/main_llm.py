@@ -88,7 +88,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
     global_step = 0
     playing = True
     current_map_index = 0
-    max_maps = 10  # Set a reasonable limit for number of maps to process
+    max_maps = 10 # Set a reasonable limit for number of maps to process
     
     # For visualization and metrics across all maps
     all_frames = []
@@ -156,6 +156,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         APP_NAME, USER_ID, SESSION_ID, screen,
                         USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS, USE_RANDOM_PARTITIONING, sub_task_seed)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
+
+            env_manager.initialize_base_traversability_masks(partition_states)
             
             if partition_states is None:
                 print(f"Failed to initialize map {current_map_index}, moving to next map")
@@ -194,7 +196,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                   f"Processing {len(active_partitions)} active partitions")
             
             #env_manager.add_agents_using_existing_representation(partition_states)
-            env_manager.add_agents_using_global_sync(partition_states)
+            #env_manager.add_agents_using_global_sync(partition_states)
+            env_manager.add_agents_and_targets_using_global_sync(partition_states)
+
             sub_maps = env_manager.small_env_timestep.observation
             # save_mask(np.array(sub_maps['target_map']),'target', 'after_glob_sync', 99, map_step)
             # save_mask(np.array(sub_maps['action_map']),'action', 'after_glob_sync', 99, map_step)
@@ -225,14 +229,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                 synched = False
                 print(f"  Processing partition {partition_idx} (partition step {partition_state['step_count']})")
 
-                if map_step <=3:
-                    sub_maps = env_manager.small_env_timestep.observation
-                    save_mask(np.array(sub_maps['target_map']),'target', 'before_sync_init', partition_idx, map_step)
-                    save_mask(np.array(sub_maps['action_map']),'action', 'before_sync_init', partition_idx, map_step)
-                    save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'before_sync_init', partition_idx, map_step)
-                    #save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'before_sync_init', partition_idx, map_step)
-                    save_mask(np.array(sub_maps['padding_mask']),'padding', 'before_sync_init', partition_idx, 0)
-                    save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'before_sync_init', partition_idx, map_step)
+                # if map_step <=3:
+                #     sub_maps = env_manager.small_env_timestep.observation
+                #     save_mask(np.array(sub_maps['target_map']),'target', 'before_sync_init', partition_idx, map_step)
+                #     save_mask(np.array(sub_maps['action_map']),'action', 'before_sync_init', partition_idx, map_step)
+                #     save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'before_sync_init', partition_idx, map_step)
+                #     #save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'before_sync_init', partition_idx, map_step)
+                #     save_mask(np.array(sub_maps['padding_mask']),'padding', 'before_sync_init', partition_idx, 0)
+                #     save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'before_sync_init', partition_idx, map_step)
                 
                 #print("Recovering partition state...")
                 # for other_partition_idx in active_partitions:
@@ -408,7 +412,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
                             current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
 
-                            if map_step <=3:
+                            if map_step <=20 and current_map_index == 0:
                                         sub_maps = current_observation
                                         save_mask(np.array(sub_maps['target_map']),'target', 'before_RL', partition_idx, map_step)
                                         save_mask(np.array(sub_maps['action_map']),'action', 'before_RL', partition_idx, map_step)
@@ -498,8 +502,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
                     wrapped_action = wrap_action_llm(action_rl, action_type)
                     #new_timestep = env_manager.step_simple(partition_idx, wrapped_action, partition_states)
-                    new_timestep = env_manager.step_with_global_sync(partition_idx, wrapped_action, partition_states)
-
+                    #new_timestep = env_manager.step_with_global_sync(partition_idx, wrapped_action, partition_states)
+                    new_timestep = env_manager.step_with_enhanced_sync(partition_idx, wrapped_action, partition_states)
+                    
                     partition_states[partition_idx]['timestep'] = new_timestep
                     partition_state['step_count'] += 1
                 

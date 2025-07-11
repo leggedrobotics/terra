@@ -1336,7 +1336,7 @@ def capture_screen(surface):
     img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     return img_array
 
-def save_video(frames, output_path, fps=10):
+def save_video(frames, output_path, fps=1):
     """Saves a list of frames as a video."""
     if len(frames) == 0:
         print("No frames to save.")
@@ -1705,10 +1705,10 @@ def reconstruct_observation_from_synced_state(timestep):
     observation['traversability_mask'] = state.world.traversability_mask.map
     
     # Also update other maps that might be affected by sync
-    #observation['action_map'] = state.world.action_map.map
-    #observation['target_map'] = state.world.target_map.map
-    #observation['dumpability_mask'] = state.world.dumpability_mask.map
-    #observation['padding_mask'] = state.world.padding_mask.map
+    observation['action_map'] = state.world.action_map.map
+    observation['target_map'] = state.world.target_map.map
+    observation['dumpability_mask'] = state.world.dumpability_mask.map
+    observation['padding_mask'] = state.world.padding_mask.map
     
     # Keep local maps as-is (they might be computed differently)
     # observation['local_map_*'] fields remain unchanged
