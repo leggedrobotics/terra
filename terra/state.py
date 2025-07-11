@@ -2100,26 +2100,6 @@ class State(NamedTuple):
             _failed_dump
         )
 
-    def _handle_rewards_skid_steer_lift(
-        self, new_state: "State"
-    ) -> Float:
-        """Reward for successfully lifting dirt (not auto-loading)"""
-        # Check if dirt was gained from manual lifting (DO action while shovel down)
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state.loaded[0]
-        dirt_gained = new_loaded - old_loaded
-        
-        # Only reward if shovel was lifted during this action (indicating manual lift)
-        old_shovel = self.agent.agent_state.shovel_lifted[0]
-        new_shovel = new_state.agent.agent_state.shovel_lifted[0]
-        shovel_was_lifted = new_shovel > old_shovel
-        
-        return jax.lax.cond(
-            jnp.logical_and(dirt_gained > 0, shovel_was_lifted),
-            lambda: self.env_cfg.rewards.skid_lift_correct, #dirt_gained * 
-            lambda: 0.0
-        )
-
     def _handle_rewards_skid_steer_shovel_control(
         self, new_state: "State"
     ) -> Float:
@@ -2152,8 +2132,7 @@ class State(NamedTuple):
             lambda: 0.0
         )
         
-        # Add lift rewards if dirt was gained (manual lifting)
-        reward += self._handle_rewards_skid_steer_lift(new_state)
+       
         
         # Add shovel control rewards
         reward += self._handle_rewards_skid_steer_shovel_control(new_state)
@@ -2341,6 +2320,9 @@ class State(NamedTuple):
 
         # Constant scaling factor
         reward /= self.env_cfg.rewards.normalizer
+
+      
+        
 
         return reward
 
@@ -2740,6 +2722,13 @@ class State(NamedTuple):
             lambda: self._handle_rewards_skid_steer_auto_load(new_state),
             lambda: 0.0
         )
+
+        # Holding dirt penalty
+        reward += jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0,
+            lambda: self.env_cfg.rewards.holding_dirt,
+            lambda: 0.0)
+        
 
         # Base turn rewards (same as tracked)
         reward += jax.lax.cond(

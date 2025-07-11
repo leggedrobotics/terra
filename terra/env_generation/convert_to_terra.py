@@ -295,6 +295,31 @@ def generate_relocations_terra(dataset_folder, size, n_imgs):
         actions_folder=actions_folder
     )
 
+def generate_relocations_easy_terra(dataset_folder, size, n_imgs):
+    print("Converting relocations_easy...")
+    img_folder = Path(dataset_folder) / "relocations_easy" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations_easy" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations_easy" / "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations_easy" / "dumpability"
+    actions_folder = Path(dataset_folder) / "relocations_easy" / "actions"
+    destination_folder = Path(dataset_folder) / "train" / "relocations_easy"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=actions_folder
+    )
+
 def generate_custom_terra(dataset_folder, size, n_imgs):
     print("Converting custom maps...")
     img_folder = Path(dataset_folder) / ".." / "custom" / "images"
@@ -329,6 +354,8 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
     )
     print("Trenches processed successfully.")
     generate_relocations_terra(dataset_folder, size, n_imgs)
-    print("Custom maps processed successfully.")
+    print("Relocations processed successfully.")
+    generate_relocations_easy_terra(dataset_folder, size, n_imgs)
+    print("Relocations_easy processed successfully.")
     generate_custom_terra(dataset_folder, size, n_imgs)
     print("Custom maps processed successfully.")

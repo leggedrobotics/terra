@@ -87,17 +87,18 @@ class Rewards(NamedTuple):
 
     # Skid steer specific rewards
     skid_move: float  # reward for skidsteer movement
-    skid_lift_correct: float  # reward for successfully lifting dirt (auto-loading or manual)
     skid_dump_correct: float  # reward for successfully dumping in correct areas
     skid_dump_wrong: float  # penalty for failed dump attempts
     skid_shovel_control: float  # small reward for effective shovel control (lift/lower)
     skid_auto_load: float  # reward for efficient auto-loading while moving
+    holding_dirt: float  # penalty per step for being loaded (holding dirt)
     skid_lift_shovel_with_dirt: float  # reward for lifting the shovel while loaded
     skid_move_loaded_shovel_up: float  # reward for moving while loaded and shovel is up
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
     normalizer: float  # constant scaling factor for all rewards
+    
 
     @staticmethod
     def dense():
@@ -115,17 +116,19 @@ class Rewards(NamedTuple):
             dump_wrong=-1.0,
             dig_correct=0.2,  # Much higher positive rewards was 0.2
             dump_correct=0.15,  # Even higher reward for dumping correctly was 0.15
+
             # Skid steer specific rewards
-            skid_move=0.03,  # Small positive reward for skidsteer movement
-            skid_lift_correct=0.2,  # Much higher reward for successful dirt lifting was 0.3
-            skid_dump_correct=0.4,  # Much higher reward for correct dumping was 0.25
-            skid_dump_wrong=-0.3,  # Moderate penalty for failed dumps was -0.5
-            skid_shovel_control=0.01,  # Higher reward for shovel control was 0.05
-            skid_auto_load=0.3,  # Much higher reward for efficient auto-loading was 0.1
-            skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt
-            skid_move_loaded_shovel_up=0.25,  # New: reward for moving while loaded and shovel is up
+            skid_move=0.005,                 # Small positive reward for movement
+            skid_dump_correct=1.0,             # Large reward for correct dumping
+            skid_dump_wrong=-0.3,            # Moderate penalty for failed dumps
+            skid_shovel_control=0.005,       # Small reward for shovel control
+            skid_auto_load=0.1,              # Small reward for auto-loading
+            holding_dirt=-0.02,              # Per-step penalty for holding dirt
+            skid_lift_shovel_with_dirt=0.0,  # No reward for this event
+            skid_move_loaded_shovel_up=0.01, # Small reward for moving while loaded and shovel is up
             terminal=100.0,
             normalizer=100.0,
+            
         )
 
     @staticmethod
@@ -146,11 +149,11 @@ class Rewards(NamedTuple):
             dump_correct=0.0,
             # Skid steer specific rewards (more sparse)
             skid_move=0.01,  # Small reward for skidsteer movement in sparse mode
-            skid_lift_correct=0.1,  # Lower reward in sparse mode
             skid_dump_correct=0.05,  # Lower reward in sparse mode
             skid_dump_wrong=-0.2,  # Lower penalty in sparse mode
             skid_shovel_control=0.01,  # Very small reward in sparse mode
             skid_auto_load=0.02,  # Very small reward in sparse mode
+            holding_dirt=-0.01,
             skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt
             skid_move_loaded_shovel_up=0.02,  # New: reward for moving while loaded and shovel is up
             terminal=100.0,
@@ -200,16 +203,22 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 15  # Reduced from 20 for faster progression
-    decrease_level_threshold: int = 30  # Reduced from 50 for quicker regression
+    increase_level_threshold: int = 20  # Reduced from 20 for faster progression
+    decrease_level_threshold: int = 35  # Reduced from 50 for quicker regression
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
         {
+            "maps_path": "relocations_easy",
+            "max_steps_in_episode": 300,  # Shorter episodes for faster learning
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        {
             "maps_path": "relocations",
-            "max_steps_in_episode": 550,  # Shorter episodes for faster learning
+            "max_steps_in_episode": 500,  # Shorter episodes for faster learning
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
