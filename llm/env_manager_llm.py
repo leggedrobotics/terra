@@ -2844,7 +2844,49 @@ class EnvironmentsManager:
         
         print(f"Global maps updated from all partitions")
 
-    # Additional helper method for debugging sync issues
+    # # Additional helper method for debugging sync issues
+    # def verify_global_sync_consistency(self, partition_states):
+    #     """
+    #     Verify that all partitions have consistent global map data.
+    #     Useful for debugging synchronization issues.
+    #     """
+    #     print(f"\n=== VERIFYING GLOBAL SYNC CONSISTENCY ===")
+        
+    #     consistent = True
+    #     maps_to_check = ['target_map', 'action_map', 'dumpability_mask']
+        
+    #     for map_name in maps_to_check:
+    #         global_map = self.global_maps[map_name]
+            
+    #         for partition_idx, partition_state in partition_states.items():
+    #             if partition_state['status'] != 'active':
+    #                 continue
+                    
+    #             partition_map = getattr(partition_state['timestep'].state.world, map_name).map
+                
+    #             # Compare maps (excluding agent positions for traversability)
+    #             if map_name == 'traversability_mask':
+    #                 # For traversability, only compare terrain (ignore agent positions)
+    #                 global_terrain = jnp.where(global_map == -1, 0, global_map)
+    #                 partition_terrain = jnp.where(partition_map == -1, 0, partition_map)
+    #                 maps_match = jnp.array_equal(global_terrain, partition_terrain)
+    #             else:
+    #                 maps_match = jnp.array_equal(global_map, partition_map)
+                
+    #             if not maps_match:
+    #                 differences = jnp.sum(global_map != partition_map)
+    #                 print(f"  ❌ {map_name} mismatch in partition {partition_idx}: {differences} different cells")
+    #                 consistent = False
+    #             else:
+    #                 print(f"  ✅ {map_name} consistent in partition {partition_idx}")
+        
+    #     if consistent:
+    #         print("  🎉 All partitions are globally synchronized!")
+    #     else:
+    #         print("  ⚠️  Synchronization issues detected!")
+        
+    #     return consistent
+    
     def verify_global_sync_consistency(self, partition_states):
         """
         Verify that all partitions have consistent global map data.
@@ -2853,37 +2895,83 @@ class EnvironmentsManager:
         print(f"\n=== VERIFYING GLOBAL SYNC CONSISTENCY ===")
         
         consistent = True
-        maps_to_check = ['target_map', 'action_map', 'dumpability_mask']
+        maps_to_check = ['action_map', 'dumpability_mask', 'dumpability_mask_init']
+        
+        # Check if we have global maps
+        if not hasattr(self, 'global_maps'):
+            print("❌ No global_maps attribute found!")
+            return False
         
         for map_name in maps_to_check:
+            if map_name not in self.global_maps:
+                print(f"❌ {map_name} not found in global_maps")
+                consistent = False
+                continue
+                
             global_map = self.global_maps[map_name]
             
             for partition_idx, partition_state in partition_states.items():
                 if partition_state['status'] != 'active':
                     continue
                     
-                partition_map = getattr(partition_state['timestep'].state.world, map_name).map
-                
-                # Compare maps (excluding agent positions for traversability)
-                if map_name == 'traversability_mask':
-                    # For traversability, only compare terrain (ignore agent positions)
-                    global_terrain = jnp.where(global_map == -1, 0, global_map)
-                    partition_terrain = jnp.where(partition_map == -1, 0, partition_map)
-                    maps_match = jnp.array_equal(global_terrain, partition_terrain)
-                else:
+                try:
+                    partition_map = getattr(partition_state['timestep'].state.world, map_name).map
+                    
+                    # Compare maps
                     maps_match = jnp.array_equal(global_map, partition_map)
-                
-                if not maps_match:
-                    differences = jnp.sum(global_map != partition_map)
-                    print(f"  ❌ {map_name} mismatch in partition {partition_idx}: {differences} different cells")
+                    
+                    if not maps_match:
+                        differences = jnp.sum(global_map != partition_map)
+                        print(f"  ❌ {map_name} mismatch in partition {partition_idx}: {differences} different cells")
+                        consistent = False
+                    else:
+                        print(f"  ✅ {map_name} consistent in partition {partition_idx}")
+                        
+                except Exception as e:
+                    print(f"  ❌ Error checking {map_name} in partition {partition_idx}: {e}")
                     consistent = False
-                else:
-                    print(f"  ✅ {map_name} consistent in partition {partition_idx}")
+        
+        # Special check for traversability (should have same terrain, different agents)
+        print(f"\n--- Checking traversability consistency (terrain only) ---")
+        if 'traversability_mask' in self.global_maps:
+            global_traversability = self.global_maps['traversability_mask']
+            
+            for partition_idx, partition_state in partition_states.items():
+                if partition_state['status'] != 'active':
+                    continue
+                    
+                try:
+                    partition_traversability = partition_state['timestep'].state.world.traversability_mask.map
+                    
+                    # Compare only terrain (ignore agent positions)
+                    global_terrain = jnp.where(global_traversability == -1, 0, global_traversability)
+                    partition_terrain = jnp.where(partition_traversability == -1, 0, partition_traversability)
+                    
+                    # Also ignore dumped soil and other dynamic obstacles for this check
+                    global_base = jnp.where(global_terrain == 1, 1, 0)  # Only permanent terrain
+                    partition_base = jnp.where(partition_terrain == 1, 1, 0)  # Only permanent terrain
+                    
+                    if hasattr(self, 'base_traversability_masks') and partition_idx in self.base_traversability_masks:
+                        base_mask = self.base_traversability_masks[partition_idx]
+                        base_terrain = jnp.where(base_mask == 1, 1, 0)
+                        
+                        terrain_match = jnp.array_equal(base_terrain, partition_base)
+                        if terrain_match:
+                            print(f"  ✅ Traversability base terrain consistent in partition {partition_idx}")
+                        else:
+                            differences = jnp.sum(base_terrain != partition_base)
+                            print(f"  ⚠️  Traversability base terrain differs in partition {partition_idx}: {differences} cells")
+                    else:
+                        print(f"  ⚠️  No base mask for partition {partition_idx} to compare traversability")
+                        
+                except Exception as e:
+                    print(f"  ❌ Error checking traversability in partition {partition_idx}: {e}")
+                    consistent = False
         
         if consistent:
-            print("  🎉 All partitions are globally synchronized!")
+            print("🎉 All global sync checks passed!")
         else:
-            print("  ⚠️  Synchronization issues detected!")
+            print("❌ Some global sync issues detected!")
         
         return consistent
     
@@ -3180,6 +3268,54 @@ class EnvironmentsManager:
         
         return updated_world
     
+    # def verify_partition_target_isolation(self, partition_states):
+    #     """
+    #     Verify that each partition only sees their own targets, not targets from other partitions.
+    #     """
+    #     print(f"\n=== VERIFYING TARGET MAP ISOLATION ===")
+        
+    #     all_correct = True
+        
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] != 'active':
+    #             continue
+                
+    #         current_target_map = partition_state['timestep'].state.world.target_map.map
+            
+    #         if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
+    #             original_target_map = self.partition_target_maps[partition_idx]
+                
+    #             # Check if current target map matches the original partition-specific one
+    #             if jnp.array_equal(current_target_map, original_target_map):
+    #                 print(f"  ✅ Partition {partition_idx}: Target map unchanged (correct)")
+    #             else:
+    #                 differences = jnp.sum(current_target_map != original_target_map)
+    #                 print(f"  ❌ Partition {partition_idx}: Target map changed! {differences} different cells")
+    #                 all_correct = False
+                    
+    #                 # Debug: check what changed
+    #                 gained_dig_targets = jnp.sum((current_target_map == -1) & (original_target_map != -1))
+    #                 gained_dump_targets = jnp.sum((current_target_map == 1) & (original_target_map != 1))
+                    
+    #                 if gained_dig_targets > 0 or gained_dump_targets > 0:
+    #                     print(f"    Gained {gained_dig_targets} dig targets, {gained_dump_targets} dump targets")
+    #                     print(f"    This suggests targets from other partitions are bleeding in!")
+    #         else:
+    #             print(f"  ⚠️  Partition {partition_idx}: No original target map stored")
+    #             all_correct = False
+            
+    #         # Count current targets
+    #         current_dig_targets = jnp.sum(current_target_map == -1)
+    #         current_dump_targets = jnp.sum(current_target_map == 1)
+    #         print(f"    Current targets: {current_dig_targets} dig, {current_dump_targets} dump")
+        
+    #     if all_correct:
+    #         print("🎉 All partitions have isolated target maps!")
+    #     else:
+    #         print("❌ Target map isolation violated!")
+        
+    #     return all_correct
+
     def verify_partition_target_isolation(self, partition_states):
         """
         Verify that each partition only sees their own targets, not targets from other partitions.
@@ -3192,34 +3328,46 @@ class EnvironmentsManager:
             if partition_state['status'] != 'active':
                 continue
                 
-            current_target_map = partition_state['timestep'].state.world.target_map.map
-            
-            if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
-                original_target_map = self.partition_target_maps[partition_idx]
+            try:
+                current_target_map = partition_state['timestep'].state.world.target_map.map
                 
-                # Check if current target map matches the original partition-specific one
-                if jnp.array_equal(current_target_map, original_target_map):
-                    print(f"  ✅ Partition {partition_idx}: Target map unchanged (correct)")
+                if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
+                    original_target_map = self.partition_target_maps[partition_idx]
+                    
+                    # Check if current target map matches the original partition-specific one
+                    if jnp.array_equal(current_target_map, original_target_map):
+                        print(f"  ✅ Partition {partition_idx}: Target map unchanged (correct)")
+                    else:
+                        differences = jnp.sum(current_target_map != original_target_map)
+                        print(f"  ❌ Partition {partition_idx}: Target map changed! {differences} different cells")
+                        all_correct = False
+                        
+                        # Debug: check what changed
+                        gained_dig_targets = jnp.sum((current_target_map == -1) & (original_target_map != -1))
+                        gained_dump_targets = jnp.sum((current_target_map == 1) & (original_target_map != 1))
+                        lost_dig_targets = jnp.sum((current_target_map != -1) & (original_target_map == -1))
+                        lost_dump_targets = jnp.sum((current_target_map != 1) & (original_target_map == 1))
+                        
+                        if gained_dig_targets > 0 or gained_dump_targets > 0:
+                            print(f"    Gained {gained_dig_targets} dig targets, {gained_dump_targets} dump targets")
+                            print(f"    This suggests targets from other partitions are bleeding in!")
+                        
+                        if lost_dig_targets > 0 or lost_dump_targets > 0:
+                            print(f"    Lost {lost_dig_targets} dig targets, {lost_dump_targets} dump targets")
+                            print(f"    This suggests partition targets are being overwritten!")
                 else:
-                    differences = jnp.sum(current_target_map != original_target_map)
-                    print(f"  ❌ Partition {partition_idx}: Target map changed! {differences} different cells")
+                    print(f"  ⚠️  Partition {partition_idx}: No original target map stored")
                     all_correct = False
-                    
-                    # Debug: check what changed
-                    gained_dig_targets = jnp.sum((current_target_map == -1) & (original_target_map != -1))
-                    gained_dump_targets = jnp.sum((current_target_map == 1) & (original_target_map != 1))
-                    
-                    if gained_dig_targets > 0 or gained_dump_targets > 0:
-                        print(f"    Gained {gained_dig_targets} dig targets, {gained_dump_targets} dump targets")
-                        print(f"    This suggests targets from other partitions are bleeding in!")
-            else:
-                print(f"  ⚠️  Partition {partition_idx}: No original target map stored")
+                
+                # Count current targets
+                current_dig_targets = jnp.sum(current_target_map == -1)
+                current_dump_targets = jnp.sum(current_target_map == 1)
+                current_free = jnp.sum(current_target_map == 0)
+                print(f"    Current targets: {current_dig_targets} dig, {current_dump_targets} dump, {current_free} free")
+                
+            except Exception as e:
+                print(f"  ❌ Error checking partition {partition_idx}: {e}")
                 all_correct = False
-            
-            # Count current targets
-            current_dig_targets = jnp.sum(current_target_map == -1)
-            current_dump_targets = jnp.sum(current_target_map == 1)
-            print(f"    Current targets: {current_dig_targets} dig, {current_dump_targets} dump")
         
         if all_correct:
             print("🎉 All partitions have isolated target maps!")
