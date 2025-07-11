@@ -157,8 +157,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS, USE_RANDOM_PARTITIONING, sub_task_seed)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
 
-            env_manager.initialize_base_traversability_masks(partition_states)
-            
+            #env_manager.initialize_base_traversability_masks(partition_states)
+            env_manager.initialize_partition_specific_target_maps(partition_states)
+
             if partition_states is None:
                 print(f"Failed to initialize map {current_map_index}, moving to next map")
                 current_map_index += 1
@@ -197,7 +198,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             
             #env_manager.add_agents_using_existing_representation(partition_states)
             #env_manager.add_agents_using_global_sync(partition_states)
-            env_manager.add_agents_and_targets_using_global_sync(partition_states)
+            #env_manager.add_agents_and_targets_using_global_sync(partition_states)
 
             sub_maps = env_manager.small_env_timestep.observation
             # save_mask(np.array(sub_maps['target_map']),'target', 'after_glob_sync', 99, map_step)
@@ -264,7 +265,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     # else:
                     #     current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
 
-                    current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                    #current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                    current_observation = partition_state['timestep'].observation
+
 
                     map_obs_seq.append(current_observation)
                     #save_traversability_mask(np.array(current_observation['traversability_mask']), 'after_reconstruction', partition_idx, map_step)
@@ -403,14 +406,16 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     if llm_decision == "delegate_to_rl":
                         print(f"    Partition {partition_idx} - Delegating to RL agent")
                         try:
-                            env_manager.add_agents_using_existing_representation(partition_states)
+                            #env_manager.add_agents_using_existing_representation(partition_states)
 
                             # if not synched:
                             #     current_observation = env_manager.small_env_timestep.observation
                             # else:
                             #     current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
 
-                            current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                            #current_observation = reconstruct_observation_from_synced_state(partition_state['timestep'])
+                            current_observation = partition_state['timestep'].observation
+
 
                             if map_step <=20 and current_map_index == 0:
                                         sub_maps = current_observation
@@ -503,8 +508,26 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     wrapped_action = wrap_action_llm(action_rl, action_type)
                     #new_timestep = env_manager.step_simple(partition_idx, wrapped_action, partition_states)
                     #new_timestep = env_manager.step_with_global_sync(partition_idx, wrapped_action, partition_states)
-                    new_timestep = env_manager.step_with_enhanced_sync(partition_idx, wrapped_action, partition_states)
-                    
+                    #new_timestep = env_manager.step_with_enhanced_sync(partition_idx, wrapped_action, partition_states)
+                    #new_timestep = env_manager.step_with_full_global_sync(partition_idx, wrapped_action, partition_states)
+
+                    print(f"\n=== STEPPING PARTITION {partition_idx} ===")
+
+                    # Before step
+                    #env_manager.debug_traversability_step_by_step(partition_states, "BEFORE_STEP")
+
+                    # Take step with full sync
+                    new_timestep = env_manager.step_with_full_global_sync(partition_idx, wrapped_action, partition_states)
+
+                    # After step
+                    #env_manager.debug_traversability_step_by_step(partition_states, "AFTER_STEP")
+
+                    # Add comprehensive verification every 10 steps:
+                    if map_step % 10 == 0:
+                        sync_ok = env_manager.comprehensive_sync_verification(partition_states, map_step)
+                        if not sync_ok:
+                            print(f"⚠️  Sync issues detected at step {map_step}")
+
                     partition_states[partition_idx]['timestep'] = new_timestep
                     partition_state['step_count'] += 1
                 
@@ -542,7 +565,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     
                                 
                     # env_manager.add_agents_using_existing_representation(partition_states)
-                    env_manager.add_agents_using_global_sync(partition_states)
+                    #env_manager.add_agents_using_global_sync(partition_states)
 
                     # Check completion conditions
                     partition_completed = False
@@ -629,13 +652,24 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
 
             dug_tiles_per_action_map = (env_manager.global_maps['action_map'] == -1).sum()
-  
+
+            if map_step % 10 == 0:  # Check every 10 steps
+                print(f"\n--- Sync Check at Step {map_step} ---")
+                env_manager.verify_global_sync_consistency(partition_states)
+                env_manager.verify_partition_target_isolation(partition_states)  # ← ADD THIS LINE
+            if map_step <= 20:  # Debug first 20 steps
+                env_manager.debug_target_map_changes(partition_states, f"STEP_{map_step}")
         # Add map data to global collections
         all_frames.extend(map_frames)
         all_reward_seq.extend(map_reward_seq)
         all_global_step_rewards.extend(map_global_step_rewards)
         all_obs_seq.extend(map_obs_seq)
         all_action_list.extend(map_action_list)
+
+        print(f"\nFinal sync verification for map {current_map_index}:")
+        sync_ok = env_manager.verify_global_sync_consistency(partition_states)
+        if not sync_ok:
+            print("⚠️  Warning: Map completed with sync inconsistencies!")
         
         # Move to next map
         current_map_index += 1

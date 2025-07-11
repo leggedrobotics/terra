@@ -1348,6 +1348,33 @@ class EnvironmentsManager:
         return new_timestep
     
 
+    # def initialize_base_traversability_masks(self, partition_states):
+    #     """
+    #     Store the initial clean traversability masks for each partition.
+    #     This captures the original terrain obstacles before any agent synchronization.
+    #     Call this ONCE after partition initialization but BEFORE any agent sync.
+    #     """
+    #     if not hasattr(self, 'base_traversability_masks'):
+    #         self.base_traversability_masks = {}
+        
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] == 'active':
+    #             # Get the current traversability mask
+    #             current_mask = partition_state['timestep'].state.world.traversability_mask.map.copy()
+                
+    #             # Clean any agent markers but keep terrain obstacles
+    #             # -1 = current agent position (clear to 0)
+    #             # 1 = could be terrain obstacles or agent obstacles (we assume these are terrain at initialization)
+    #             # 0 = free space (keep as is)
+    #             clean_mask = jnp.where(
+    #                 current_mask == -1,  # Current agent position
+    #                 0,  # Clear agent position to free space
+    #                 current_mask  # Keep everything else (terrain obstacles = 1, free space = 0)
+    #             )
+                
+    #             self.base_traversability_masks[partition_idx] = clean_mask
+    #             print(f"Stored base traversability mask for partition {partition_idx}")
+
     def initialize_base_traversability_masks(self, partition_states):
         """
         Store the initial clean traversability masks for each partition.
@@ -1357,23 +1384,35 @@ class EnvironmentsManager:
         if not hasattr(self, 'base_traversability_masks'):
             self.base_traversability_masks = {}
         
+        print("Initializing base traversability masks...")
+        
         for partition_idx, partition_state in partition_states.items():
             if partition_state['status'] == 'active':
                 # Get the current traversability mask
                 current_mask = partition_state['timestep'].state.world.traversability_mask.map.copy()
                 
-                # Clean any agent markers but keep terrain obstacles
-                # -1 = current agent position (clear to 0)
-                # 1 = could be terrain obstacles or agent obstacles (we assume these are terrain at initialization)
+                # Clean ANY agent markers to get pure terrain
+                # -1 = agent position (clear to 0)
+                # 1 = could be terrain or agent obstacles (assume terrain at initialization)
                 # 0 = free space (keep as is)
+                
+                # Create a completely clean mask - only terrain obstacles, no agents
                 clean_mask = jnp.where(
-                    current_mask == -1,  # Current agent position
-                    0,  # Clear agent position to free space
-                    current_mask  # Keep everything else (terrain obstacles = 1, free space = 0)
+                    current_mask == -1,  # Remove any agent positions
+                    0,  # Set to free space
+                    jnp.where(
+                        current_mask == 1,  # Keep terrain obstacles
+                        1,
+                        0  # Everything else becomes free space
+                    )
                 )
                 
                 self.base_traversability_masks[partition_idx] = clean_mask
-                print(f"Stored base traversability mask for partition {partition_idx}")
+                print(f"  Stored clean base mask for partition {partition_idx}")
+                
+                # Count terrain obstacles for verification
+                terrain_obstacles = jnp.sum(clean_mask == 1)
+                print(f"    Terrain obstacles: {terrain_obstacles}")
 
     def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
                                         all_occupied_cells, partition_states):
@@ -1702,3 +1741,1139 @@ class EnvironmentsManager:
         self.update_global_maps_from_partition_changes(partition_states)
         
         return new_timestep
+    
+
+    # def step_with_full_global_sync(self, partition_idx: int, action, partition_states: dict):
+    #     """
+    #     Enhanced step function with complete global synchronization.
+    #     This ensures all changes are properly propagated across all partitions.
+    #     """
+    #     # Step 1: Take the action in the partition
+    #     new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+    #     # Step 2: Update the partition state
+    #     partition_states[partition_idx]['timestep'] = new_timestep
+        
+    #     # Step 3: Extract changes from this partition and update global maps
+    #     self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+    #     # Step 4: Propagate global map changes to ALL partitions
+    #     self._sync_all_partitions_from_global_maps(partition_states)
+        
+    #     # Step 5: Sync agent positions across all partitions
+    #     self._sync_agent_positions_across_partitions(partition_states)
+        
+    #     return new_timestep
+
+    # def step_with_full_global_sync(self, partition_idx: int, action, partition_states: dict):
+    #     """
+    #     FIXED: Enhanced step function with complete global synchronization and proper traversability handling.
+    #     This ensures all changes are properly propagated across all partitions without agent traces.
+    #     """
+    #     # Step 1: Take the action in the partition
+    #     new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+    #     # Step 2: Update the partition state
+    #     partition_states[partition_idx]['timestep'] = new_timestep
+        
+    #     # Step 3: Extract changes from this partition and update global maps
+    #     self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+    #     # Step 4: Propagate global map changes to ALL partitions (EXCLUDING traversability)
+    #     self._sync_all_partitions_from_global_maps_excluding_traversability(partition_states)
+        
+    #     # Step 5: Properly sync agent positions with clean traversability handling
+    #     self._sync_agent_positions_across_partitions(partition_states)
+        
+    #     # Step 6: Update observations to match synced states
+    #     self._update_all_observations(partition_states)
+        
+    #     return new_timestep
+
+
+    def step_with_full_global_sync(self, partition_idx: int, action, partition_states: dict):
+        """
+        UPDATED: Enhanced step function that properly handles dumped soil as obstacles.
+        """
+        # Step 1: Take the action in the partition
+        new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+        # Step 2: Update the partition state
+        partition_states[partition_idx]['timestep'] = new_timestep
+        
+        # Step 3: Extract changes from this partition and update global maps
+        self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+        # Step 4: Propagate global map changes to ALL partitions (EXCLUDING traversability)
+        self._sync_all_partitions_from_global_maps_excluding_traversability(partition_states)
+        
+        # Step 5: Properly sync agent positions AND dumped soil obstacles
+        self._sync_agent_positions_across_partitions(partition_states)
+        
+        # Step 6: Update observations to match synced states
+        self._update_all_observations(partition_states)
+        
+        return new_timestep
+    
+        # Also add this comprehensive verification method for your main loop
+    def comprehensive_sync_verification(self, partition_states, step_number):
+        """
+        Comprehensive verification that checks all aspects of synchronization.
+        Use this periodically in your main loop to catch any sync issues.
+        """
+        print(f"\n=== COMPREHENSIVE SYNC VERIFICATION - STEP {step_number} ===")
+        
+        # 1. Check basic traversability correctness
+        traversability_ok = self.verify_traversability_with_dumped_soil(partition_states)
+        
+        # 2. Check global map consistency
+        global_sync_ok = self.verify_global_sync_consistency(partition_states)
+        
+        # 3. Check action/traversability consistency
+        self.debug_action_traversability_consistency(partition_states, f"STEP_{step_number}")
+        
+        # 4. Check for dumped soil obstacles specifically
+        print(f"\n--- DUMPED SOIL OBSTACLE CHECK ---")
+        total_dumped_areas = 0
+        total_dumped_obstacles = 0
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            timestep = partition_state['timestep']
+            action_map = timestep.state.world.action_map.map
+            traversability = timestep.state.world.traversability_mask.map
+            
+            # Count dumped areas
+            dumped_areas = jnp.sum(action_map > 0)
+            total_dumped_areas += dumped_areas
+            
+            # Count how many are obstacles
+            dumped_positions = jnp.where(action_map > 0)
+            dumped_as_obstacles = 0
+            
+            if len(dumped_positions[0]) > 0:
+                for i in range(len(dumped_positions[0])):
+                    y, x = dumped_positions[0][i], dumped_positions[1][i]
+                    if traversability[y, x] == 1:
+                        dumped_as_obstacles += 1
+            
+            total_dumped_obstacles += dumped_as_obstacles
+            
+            print(f"  Partition {partition_idx}: {dumped_areas} dumped areas, {dumped_as_obstacles} as obstacles")
+        
+        print(f"  TOTAL: {total_dumped_areas} dumped areas, {total_dumped_obstacles} marked as obstacles")
+        
+        if total_dumped_areas == total_dumped_obstacles:
+            print("  ✅ All dumped soil correctly marked as obstacles")
+            dumped_soil_ok = True
+        else:
+            print("  ❌ Some dumped soil not marked as obstacles")
+            dumped_soil_ok = False
+        
+        # Overall result
+        all_ok = traversability_ok and global_sync_ok and dumped_soil_ok
+        
+        if all_ok:
+            print("🎉 ALL SYNCHRONIZATION CHECKS PASSED!")
+        else:
+            print("❌ SYNCHRONIZATION ISSUES DETECTED!")
+        
+        return all_ok
+
+
+    # def _sync_all_partitions_from_global_maps_excluding_traversability(self, partition_states):
+    #     """
+    #     Synchronize ALL partitions with updated global maps, but EXCLUDE traversability.
+    #     Traversability will be handled separately by agent sync to avoid conflicts.
+    #     """
+    #     print(f"  Syncing global maps to all partitions (excluding traversability)")
+        
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
+                
+    #         # Get current state
+    #         current_timestep = target_partition_state['timestep']
+    #         current_state = current_timestep.state
+            
+    #         # Create updated world state with global map data (EXCLUDING traversability)
+    #         updated_world = self._create_world_with_global_maps(current_state.world, target_partition_idx)
+            
+    #         # Create updated state and timestep
+    #         updated_state = current_state._replace(world=updated_world)
+    #         updated_timestep = current_timestep._replace(state=updated_state)
+            
+    #         # Update the partition state
+    #         partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+    #         print(f"    Synced global maps to partition {target_partition_idx}")
+
+    def _sync_all_partitions_from_global_maps_excluding_traversability(self, partition_states):
+        """
+        UPDATED: Synchronize ALL partitions with updated global maps, but preserve partition-specific targets.
+        """
+        print(f"  Syncing global maps to all partitions (excluding traversability and preserving partition targets)")
+        
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            # Get current state
+            current_timestep = target_partition_state['timestep']
+            current_state = current_timestep.state
+            
+            # Create updated world state with global maps but preserve partition-specific targets
+            updated_world = self._create_world_with_global_maps_preserve_targets(current_state.world, target_partition_idx)
+            
+            # Create updated state and timestep
+            updated_state = current_state._replace(world=updated_world)
+            updated_timestep = current_timestep._replace(state=updated_state)
+            
+            # Update the partition state
+            partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+            print(f"    Synced global maps to partition {target_partition_idx} (targets preserved)")
+
+    def _update_all_observations(self, partition_states):
+        """
+        Update observations for all partitions to match their synced states.
+        """
+        print(f"  Updating observations for all partitions")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_timestep = partition_state['timestep']
+            
+            # Create updated observation that matches the synced state
+            updated_observation = self._create_observation_from_synced_state(
+                current_timestep.observation, 
+                current_timestep.state.world
+            )
+            
+            # Update the timestep with the new observation
+            updated_timestep = current_timestep._replace(observation=updated_observation)
+            partition_states[partition_idx]['timestep'] = updated_timestep
+    def debug_traversability_step_by_step(self, partition_states, step_name=""):
+        """
+        Debug method to track traversability changes step by step.
+        Call this at different points in your sync process.
+        """
+        print(f"\n--- TRAVERSABILITY DEBUG: {step_name} ---")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            traversability = partition_state['timestep'].state.world.traversability_mask.map
+            
+            free_count = jnp.sum(traversability == 0)
+            obstacle_count = jnp.sum(traversability == 1) 
+            agent_count = jnp.sum(traversability == -1)
+            
+            print(f"  Partition {partition_idx}: Free={free_count}, Obstacles={obstacle_count}, Agents={agent_count}")
+            
+            # Check for unexpected values
+            unique_values = jnp.unique(traversability)
+            expected_values = jnp.array([-1, 0, 1])
+            unexpected = jnp.setdiff1d(unique_values, expected_values)
+            
+            if len(unexpected) > 0:
+                print(f"    ⚠️  Unexpected traversability values: {unexpected}")
+
+    # def _update_global_maps_from_single_partition(self, source_partition_idx, partition_states):
+    #     """
+    #     Update global maps with changes from a single partition that just took an action.
+    #     """
+    #     if source_partition_idx not in partition_states:
+    #         return
+            
+    #     source_state = partition_states[source_partition_idx]['timestep'].state
+    #     partition = self.partitions[source_partition_idx]
+    #     region_coords = partition['region_coords']
+    #     y_start, x_start, y_end, x_end = region_coords
+        
+    #     print(f"  Updating global maps from partition {source_partition_idx}")
+        
+    #     # Define which maps to update globally
+    #     maps_to_update = [
+    #         'target_map',
+    #         'action_map', 
+    #         'dumpability_mask',
+    #         'dumpability_mask_init'
+    #     ]
+        
+    #     # Update each map in the global storage
+    #     for map_name in maps_to_update:
+    #         # Get the current map from the partition
+    #         partition_map = getattr(source_state.world, map_name).map
+            
+    #         # Extract the region that corresponds to this partition
+    #         # Since we're using global coordinates, extract the relevant region
+    #         region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+    #         partition_region = partition_map[region_slice]
+            
+    #         # Update the global map with this region
+    #         self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(partition_region)
+            
+    #         print(f"    Updated global {map_name} from partition {source_partition_idx}")
+    def _update_global_maps_from_single_partition(self, source_partition_idx, partition_states):
+        """
+        FIXED: Update global maps but handle target_map specially.
+        Target maps should remain partition-specific and not be fully synchronized.
+        """
+        if source_partition_idx not in partition_states:
+            return
+            
+        source_state = partition_states[source_partition_idx]['timestep'].state
+        partition = self.partitions[source_partition_idx]
+        region_coords = partition['region_coords']
+        y_start, x_start, y_end, x_end = region_coords
+        
+        print(f"  Updating global maps from partition {source_partition_idx}")
+        
+        # Define which maps to update globally (EXCLUDE target_map)
+        maps_to_update = [
+            'action_map', 
+            'dumpability_mask',
+            'dumpability_mask_init'
+        ]
+        
+        # Update each map in the global storage (EXCLUDING target_map)
+        for map_name in maps_to_update:
+            # Get the current map from the partition
+            partition_map = getattr(source_state.world, map_name).map
+            
+            # Extract the region that corresponds to this partition
+            region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+            partition_region = partition_map[region_slice]
+            
+            # Update the global map with this region
+            self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(partition_region)
+            
+            print(f"    Updated global {map_name} from partition {source_partition_idx}")
+        
+        # Handle target_map specially - update global but don't sync back to other partitions
+        target_map = source_state.world.target_map.map
+        region_slice = (slice(y_start, y_end + 1), slice(x_start, x_end + 1))
+        target_region = target_map[region_slice]
+        
+        # Update global target map for tracking purposes, but partitions keep their own
+        self.global_maps['target_map'] = self.global_maps['target_map'].at[region_slice].set(target_region)
+        print(f"    Updated global target_map from partition {source_partition_idx} (for tracking only)")
+
+    # def _sync_all_partitions_from_global_maps(self, partition_states):
+    #     """
+    #     Synchronize ALL partitions with the updated global maps.
+    #     This ensures all partitions see the latest changes from other partitions.
+    #     """
+    #     print(f"  Syncing all partitions from updated global maps")
+        
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
+                
+    #         # Get current state
+    #         current_timestep = target_partition_state['timestep']
+    #         current_state = current_timestep.state
+            
+    #         # Create updated world state with global map data
+    #         updated_world = self._create_world_with_global_maps(current_state.world, target_partition_idx)
+            
+    #         # Create updated state and timestep
+    #         updated_state = current_state._replace(world=updated_world)
+    #         updated_timestep = current_timestep._replace(state=updated_state)
+            
+    #         # Update the partition state
+    #         partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+    #         print(f"    Synced partition {target_partition_idx} with global maps")
+
+    def _sync_all_partitions_from_global_maps(self, partition_states):
+        """
+        Synchronize ALL partitions with the updated global maps.
+        This ensures all partitions see the latest changes from other partitions.
+        Now also updates observations to match the synced state.
+        """
+        print(f"  Syncing all partitions from updated global maps")
+        
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            # Get current state
+            current_timestep = target_partition_state['timestep']
+            current_state = current_timestep.state
+            
+            # Create updated world state with global map data
+            updated_world = self._create_world_with_global_maps(current_state.world, target_partition_idx)
+            
+            # Create updated state
+            updated_state = current_state._replace(world=updated_world)
+            
+            # Create updated observation that matches the synced state
+            updated_observation = self._create_observation_from_synced_state(current_timestep.observation, updated_world)
+            
+            # Create the complete updated timestep
+            updated_timestep = current_timestep._replace(
+                state=updated_state,
+                observation=updated_observation
+            )
+            
+            # Update the partition state
+            partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+            print(f"    Synced partition {target_partition_idx} with global maps and updated observation")
+
+    def _create_observation_from_synced_state(self, original_observation, synced_world):
+        """
+        Create an updated observation dictionary that reflects the synced world state.
+        """
+        # Start with the original observation (copy all fields)
+        updated_observation = {}
+        for key, value in original_observation.items():
+            updated_observation[key] = value
+        
+        # Update the critical fields with synced data
+        updated_observation['traversability_mask'] = synced_world.traversability_mask.map
+        updated_observation['action_map'] = synced_world.action_map.map
+        updated_observation['target_map'] = synced_world.target_map.map
+        updated_observation['dumpability_mask'] = synced_world.dumpability_mask.map
+        updated_observation['padding_mask'] = synced_world.padding_mask.map
+        
+        return updated_observation
+
+
+    # def _create_world_with_global_maps(self, current_world, partition_idx):
+    #     """
+    #     Create a new world state that uses the current global maps.
+    #     Preserves agent positions and other partition-specific data.
+    #     """
+    #     # Get current agent position from traversability mask to preserve it
+    #     current_traversability = current_world.traversability_mask.map
+    #     agent_positions = (current_traversability == -1)
+        
+    #     # Start with the global traversability mask
+    #     updated_traversability = self.global_maps['traversability_mask'].copy()
+        
+    #     # Restore this partition's agent positions
+    #     updated_traversability = jnp.where(
+    #         agent_positions,
+    #         -1,  # Agent position
+    #         updated_traversability  # Global data
+    #     )
+        
+    #     # Update all maps with global data
+    #     updated_world = current_world._replace(
+    #         target_map=current_world.target_map._replace(map=self.global_maps['target_map']),
+    #         action_map=current_world.action_map._replace(map=self.global_maps['action_map']),
+    #         dumpability_mask=current_world.dumpability_mask._replace(map=self.global_maps['dumpability_mask']),
+    #         dumpability_mask_init=current_world.dumpability_mask_init._replace(map=self.global_maps['dumpability_mask_init']),
+    #         traversability_mask=current_world.traversability_mask._replace(map=updated_traversability),
+    #         # Keep padding_mask as-is since it's typically static
+    #         padding_mask=current_world.padding_mask._replace(map=self.global_maps['padding_mask'])
+    #     )
+        
+    #     return updated_world
+
+    def _create_world_with_global_maps(self, current_world, partition_idx):
+        """
+        UPDATED: Create a new world state that uses the current global maps.
+        Now properly handles traversability to avoid agent trace issues.
+        """
+        # DON'T update traversability here - let the agent sync handle it properly
+        # This prevents interference between map sync and agent sync
+        
+        updated_world = current_world._replace(
+            target_map=current_world.target_map._replace(map=self.global_maps['target_map']),
+            action_map=current_world.action_map._replace(map=self.global_maps['action_map']),
+            dumpability_mask=current_world.dumpability_mask._replace(map=self.global_maps['dumpability_mask']),
+            dumpability_mask_init=current_world.dumpability_mask_init._replace(map=self.global_maps['dumpability_mask_init']),
+            padding_mask=current_world.padding_mask._replace(map=self.global_maps['padding_mask'])
+            # NOTE: traversability_mask will be handled separately by agent sync
+        )
+        
+        return updated_world
+
+
+    # def _sync_agent_positions_across_partitions(self, partition_states):
+    #     """
+    #     Sync agent positions across all partitions so they can see each other.
+    #     """
+    #     print(f"  Syncing agent positions across all partitions")
+        
+    #     # Collect all agent positions
+    #     all_agent_positions = {}
+        
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] != 'active':
+    #             continue
+                
+    #         current_timestep = partition_state['timestep']
+    #         traversability = current_timestep.state.world.traversability_mask.map
+            
+    #         # Find this partition's agent positions
+    #         agent_mask = (traversability == -1)
+    #         agent_positions = jnp.where(agent_mask)
+            
+    #         if len(agent_positions[0]) > 0:
+    #             occupied_cells = []
+    #             for i in range(len(agent_positions[0])):
+    #                 cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+    #                 occupied_cells.append(cell)
+    #             all_agent_positions[partition_idx] = occupied_cells
+        
+    #     # Update each partition with other agents' positions
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
+                
+    #         self._add_other_agents_to_partition(target_partition_idx, target_partition_state, 
+    #                                         all_agent_positions, partition_states)
+
+    
+    # def _sync_agent_positions_across_partitions(self, partition_states):
+    #     """
+    #     FIXED: Properly sync agent positions with clean base masks and correct obstacle representation.
+    #     """
+    #     print(f"  Syncing agent positions across all partitions")
+        
+    #     # Ensure base masks are initialized
+    #     if not hasattr(self, 'base_traversability_masks'):
+    #         print("  WARNING: Base masks not initialized, initializing now...")
+    #         self.initialize_base_traversability_masks(partition_states)
+        
+    #     # Collect all current agent positions
+    #     all_agent_positions = {}
+        
+    #     for partition_idx, partition_state in partition_states.items():
+    #         if partition_state['status'] != 'active':
+    #             continue
+                
+    #         current_timestep = partition_state['timestep']
+    #         traversability = current_timestep.state.world.traversability_mask.map
+            
+    #         # Find this partition's agent positions (value = -1)
+    #         agent_mask = (traversability == -1)
+    #         agent_positions = jnp.where(agent_mask)
+            
+    #         if len(agent_positions[0]) > 0:
+    #             occupied_cells = []
+    #             for i in range(len(agent_positions[0])):
+    #                 cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+    #                 occupied_cells.append(cell)
+    #             all_agent_positions[partition_idx] = occupied_cells
+    #             print(f"    Agent {partition_idx}: {len(occupied_cells)} occupied cells")
+        
+    #     # Update each partition with clean traversability
+    #     for target_partition_idx, target_partition_state in partition_states.items():
+    #         if target_partition_state['status'] != 'active':
+    #             continue
+                
+    #         self._update_partition_traversability_clean(
+    #             target_partition_idx, target_partition_state, 
+    #             all_agent_positions, partition_states
+    #         )
+
+    def _sync_agent_positions_across_partitions(self, partition_states):
+        """
+        UPDATED: Properly sync agent positions with dumped soil handling.
+        """
+        print(f"  Syncing agent positions and dumped soil across all partitions")
+        
+        # Ensure base masks are initialized
+        if not hasattr(self, 'base_traversability_masks'):
+            print("  WARNING: Base masks not initialized, initializing now...")
+            self.initialize_base_traversability_masks(partition_states)
+        
+        # Collect all current agent positions
+        all_agent_positions = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_timestep = partition_state['timestep']
+            traversability = current_timestep.state.world.traversability_mask.map
+            
+            # Find this partition's agent positions (value = -1)
+            agent_mask = (traversability == -1)
+            agent_positions = jnp.where(agent_mask)
+            
+            if len(agent_positions[0]) > 0:
+                occupied_cells = []
+                for i in range(len(agent_positions[0])):
+                    cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+                    occupied_cells.append(cell)
+                all_agent_positions[partition_idx] = occupied_cells
+                print(f"    Agent {partition_idx}: {len(occupied_cells)} occupied cells")
+        
+        # Update each partition with clean traversability including dumped soil
+        for target_partition_idx, target_partition_state in partition_states.items():
+            if target_partition_state['status'] != 'active':
+                continue
+                
+            self._update_partition_traversability_with_dumped_soil(
+                target_partition_idx, target_partition_state, 
+                all_agent_positions, partition_states
+            )
+
+
+    def _update_partition_traversability_clean(self, target_partition_idx, target_partition_state, 
+                                         all_agent_positions, partition_states):
+        """
+        FIXED: Clean approach to updating traversability with proper agent representation.
+        """
+        current_timestep = target_partition_state['timestep']
+        
+        # STEP 1: Start from completely clean base mask (original terrain only)
+        if target_partition_idx in self.base_traversability_masks:
+            clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
+            print(f"    Starting from clean base for partition {target_partition_idx}")
+        else:
+            print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
+            current_mask = current_timestep.state.world.traversability_mask.map
+            clean_traversability = jnp.where(
+                (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
+                0,  # Set to free space
+                current_mask  # Keep original terrain
+            )
+        
+        # STEP 2: Add THIS partition's agent positions as agents (-1)
+        if target_partition_idx in all_agent_positions:
+            own_positions = all_agent_positions[target_partition_idx]
+            for cell_y, cell_x in own_positions:
+                if (0 <= cell_y < clean_traversability.shape[0] and 
+                    0 <= cell_x < clean_traversability.shape[1]):
+                    clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
+            
+            print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
+        
+        # STEP 3: Add OTHER agents as OBSTACLES (1), not agents
+        other_agents_added = 0
+        other_cells_added = 0
+        
+        for other_partition_idx, other_positions in all_agent_positions.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Skip own agent
+                
+            for cell_y, cell_x in other_positions:
+                # Check bounds
+                if (0 <= cell_y < clean_traversability.shape[0] and 
+                    0 <= cell_x < clean_traversability.shape[1]):
+                    
+                    # Add as OBSTACLE (1), not agent (-1)
+                    # Only if it's currently free space (0) - don't overwrite own agent or terrain
+                    current_value = clean_traversability[cell_y, cell_x]
+                    if current_value == 0:  # Free space
+                        clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
+                        other_cells_added += 1
+                    elif current_value == -1:  # Don't overwrite own agent
+                        print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
+            
+            if other_cells_added > 0:
+                other_agents_added += 1
+        
+        # STEP 4: Update the world state
+        updated_world = self._update_world_map(
+            current_timestep.state.world, 
+            'traversability_mask', 
+            clean_traversability
+        )
+        updated_state = current_timestep.state._replace(world=updated_world)
+        updated_timestep = current_timestep._replace(state=updated_state)
+        
+        partition_states[target_partition_idx]['timestep'] = updated_timestep
+        
+        # Debug output
+        terrain_count = jnp.sum(clean_traversability == 1) - other_cells_added
+        own_agent_count = jnp.sum(clean_traversability == -1)
+        other_obstacle_count = other_cells_added
+        
+        print(f"    Partition {target_partition_idx} traversability:")
+        print(f"      Terrain obstacles: {terrain_count}")
+        print(f"      Own agent cells: {own_agent_count}")
+        print(f"      Other agents (as obstacles): {other_obstacle_count}")
+        
+        if other_agents_added > 0:
+            print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
+
+    def _add_other_agents_to_partition(self, target_partition_idx, target_partition_state, 
+                                    all_agent_positions, partition_states):
+        """
+        Add other agents as obstacles in the target partition's traversability mask.
+        """
+        current_timestep = target_partition_state['timestep']
+        
+        # Start from base traversability if available, otherwise use current
+        if hasattr(self, 'base_traversability_masks') and target_partition_idx in self.base_traversability_masks:
+            current_traversability = self.base_traversability_masks[target_partition_idx].copy()
+            
+            # Restore this partition's own agent
+            original_traversability = current_timestep.state.world.traversability_mask.map
+            agent_mask = (original_traversability == -1)
+            current_traversability = jnp.where(agent_mask, -1, current_traversability)
+        else:
+            current_traversability = current_timestep.state.world.traversability_mask.map.copy()
+        
+        # Add other agents as obstacles
+        agents_added = 0
+        cells_added = 0
+        
+        for other_partition_idx, occupied_cells in all_agent_positions.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Don't add self
+                
+            for cell_y, cell_x in occupied_cells:
+                # Check bounds and add as obstacle if it's currently free space
+                if (0 <= cell_y < current_traversability.shape[0] and 
+                    0 <= cell_x < current_traversability.shape[1]):
+                    if current_traversability[cell_y, cell_x] == 0:
+                        current_traversability = current_traversability.at[cell_y, cell_x].set(1)
+                        cells_added += 1
+            
+            if cells_added > 0:
+                agents_added += 1
+        
+        # Update the world state
+        if agents_added > 0 or hasattr(self, 'base_traversability_masks'):
+            updated_world = self._update_world_map(
+                current_timestep.state.world, 
+                'traversability_mask', 
+                current_traversability
+            )
+            updated_state = current_timestep.state._replace(world=updated_world)
+            updated_timestep = current_timestep._replace(state=updated_state)
+            
+            partition_states[target_partition_idx]['timestep'] = updated_timestep
+            
+            if agents_added > 0:
+                print(f"    Added {agents_added} other agents ({cells_added} cells) to partition {target_partition_idx}")
+
+    def update_global_maps_from_all_small_environments_fixed(self, partition_states):
+        """
+        Fixed version that properly updates global maps from all partitions.
+        This should be called periodically to ensure global state consistency.
+        """
+        print(f"\nUpdating global maps from all {len(partition_states)} active partitions...")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active' or partition_state['timestep'] is None:
+                continue
+                
+            self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+        print(f"Global maps updated from all partitions")
+
+    # Additional helper method for debugging sync issues
+    def verify_global_sync_consistency(self, partition_states):
+        """
+        Verify that all partitions have consistent global map data.
+        Useful for debugging synchronization issues.
+        """
+        print(f"\n=== VERIFYING GLOBAL SYNC CONSISTENCY ===")
+        
+        consistent = True
+        maps_to_check = ['target_map', 'action_map', 'dumpability_mask']
+        
+        for map_name in maps_to_check:
+            global_map = self.global_maps[map_name]
+            
+            for partition_idx, partition_state in partition_states.items():
+                if partition_state['status'] != 'active':
+                    continue
+                    
+                partition_map = getattr(partition_state['timestep'].state.world, map_name).map
+                
+                # Compare maps (excluding agent positions for traversability)
+                if map_name == 'traversability_mask':
+                    # For traversability, only compare terrain (ignore agent positions)
+                    global_terrain = jnp.where(global_map == -1, 0, global_map)
+                    partition_terrain = jnp.where(partition_map == -1, 0, partition_map)
+                    maps_match = jnp.array_equal(global_terrain, partition_terrain)
+                else:
+                    maps_match = jnp.array_equal(global_map, partition_map)
+                
+                if not maps_match:
+                    differences = jnp.sum(global_map != partition_map)
+                    print(f"  ❌ {map_name} mismatch in partition {partition_idx}: {differences} different cells")
+                    consistent = False
+                else:
+                    print(f"  ✅ {map_name} consistent in partition {partition_idx}")
+        
+        if consistent:
+            print("  🎉 All partitions are globally synchronized!")
+        else:
+            print("  ⚠️  Synchronization issues detected!")
+        
+        return consistent
+    
+    def verify_traversability_correctness(self, partition_states):
+        """
+        Verify that traversability masks are correct:
+        - No agent traces (old -1 values)
+        - Other agents appear as obstacles (1), not agents (-1)
+        - Each partition has exactly one agent area (-1)
+        """
+        print(f"\n=== VERIFYING TRAVERSABILITY CORRECTNESS ===")
+        
+        all_correct = True
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            traversability = partition_state['timestep'].state.world.traversability_mask.map
+            
+            # Count different values
+            free_space = jnp.sum(traversability == 0)
+            obstacles = jnp.sum(traversability == 1)
+            agents = jnp.sum(traversability == -1)
+            
+            print(f"  Partition {partition_idx}:")
+            print(f"    Free space (0): {free_space}")
+            print(f"    Obstacles (1): {obstacles}")
+            print(f"    Agent cells (-1): {agents}")
+            
+            # Check for reasonable agent size (should be small area, not traces)
+            if agents > 50:  # Adjust threshold based on your agent size
+                print(f"    ⚠️  Too many agent cells - possible trace issue")
+                all_correct = False
+            elif agents == 0:
+                print(f"    ⚠️  No agent found")
+                all_correct = False
+            else:
+                print(f"    ✅ Agent size looks correct")
+        
+        return all_correct
+    
+    def _update_partition_traversability_with_dumped_soil(self, target_partition_idx, target_partition_state, 
+                                                     all_agent_positions, partition_states):
+        """
+        FIXED: Clean approach to updating traversability that includes dumped soil as obstacles.
+        
+        Traversability logic:
+        - 0: Free space (can drive through)
+        - 1: Obstacles (terrain + other agents + dumped soil)
+        - -1: Current agent position
+        """
+        current_timestep = target_partition_state['timestep']
+        
+        # STEP 1: Start from completely clean base mask (original terrain only)
+        if target_partition_idx in self.base_traversability_masks:
+            clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
+            print(f"    Starting from clean base for partition {target_partition_idx}")
+        else:
+            print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
+            current_mask = current_timestep.state.world.traversability_mask.map
+            clean_traversability = jnp.where(
+                (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
+                0,  # Set to free space
+                current_mask  # Keep original terrain
+            )
+        
+        # STEP 2: Add dumped soil areas as obstacles
+        action_map = current_timestep.state.world.action_map.map
+        dumped_areas = (action_map > 0)  # Positive values = dumped soil
+        
+        # Mark dumped soil areas as obstacles (1)
+        clean_traversability = jnp.where(
+            dumped_areas,
+            1,  # Dumped soil = obstacle
+            clean_traversability  # Keep existing values
+        )
+        
+        dumped_obstacle_count = jnp.sum(dumped_areas)
+        if dumped_obstacle_count > 0:
+            print(f"    Added {dumped_obstacle_count} dumped soil obstacles to partition {target_partition_idx}")
+        
+        # STEP 3: Add THIS partition's agent positions as agents (-1)
+        if target_partition_idx in all_agent_positions:
+            own_positions = all_agent_positions[target_partition_idx]
+            for cell_y, cell_x in own_positions:
+                if (0 <= cell_y < clean_traversability.shape[0] and 
+                    0 <= cell_x < clean_traversability.shape[1]):
+                    clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
+            
+            print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
+        
+        # STEP 4: Add OTHER agents as OBSTACLES (1), not agents
+        other_agents_added = 0
+        other_cells_added = 0
+        
+        for other_partition_idx, other_positions in all_agent_positions.items():
+            if other_partition_idx == target_partition_idx:
+                continue  # Skip own agent
+                
+            for cell_y, cell_x in other_positions:
+                # Check bounds
+                if (0 <= cell_y < clean_traversability.shape[0] and 
+                    0 <= cell_x < clean_traversability.shape[1]):
+                    
+                    # Add as OBSTACLE (1), not agent (-1)
+                    # Only if it's currently free space (0) - don't overwrite own agent or existing obstacles
+                    current_value = clean_traversability[cell_y, cell_x]
+                    if current_value == 0:  # Free space
+                        clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
+                        other_cells_added += 1
+                    elif current_value == -1:  # Don't overwrite own agent
+                        print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
+            
+            if other_cells_added > 0:
+                other_agents_added += 1
+        
+        # STEP 5: Update the world state
+        updated_world = self._update_world_map(
+            current_timestep.state.world, 
+            'traversability_mask', 
+            clean_traversability
+        )
+        updated_state = current_timestep.state._replace(world=updated_world)
+        updated_timestep = current_timestep._replace(state=updated_state)
+        
+        partition_states[target_partition_idx]['timestep'] = updated_timestep
+        
+        # Debug output with dumped soil info
+        terrain_count = jnp.sum(self.base_traversability_masks.get(target_partition_idx, jnp.zeros_like(clean_traversability)) == 1)
+        dumped_soil_count = jnp.sum(dumped_areas)
+        own_agent_count = jnp.sum(clean_traversability == -1)
+        other_obstacle_count = other_cells_added
+        total_obstacles = jnp.sum(clean_traversability == 1)
+        
+        print(f"    Partition {target_partition_idx} traversability:")
+        print(f"      Original terrain obstacles: {terrain_count}")
+        print(f"      Dumped soil obstacles: {dumped_soil_count}")
+        print(f"      Other agents (as obstacles): {other_obstacle_count}")
+        print(f"      Total obstacles: {total_obstacles}")
+        print(f"      Own agent cells: {own_agent_count}")
+        
+        if other_agents_added > 0:
+            print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
+
+
+
+    def verify_traversability_with_dumped_soil(self, partition_states):
+        """
+        UPDATED: Verify that traversability masks correctly include dumped soil as obstacles.
+        """
+        print(f"\n=== VERIFYING TRAVERSABILITY WITH DUMPED SOIL ===")
+        
+        all_correct = True
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            timestep = partition_state['timestep']
+            traversability = timestep.state.world.traversability_mask.map
+            action_map = timestep.state.world.action_map.map
+            
+            # Count different values
+            free_space = jnp.sum(traversability == 0)
+            obstacles = jnp.sum(traversability == 1)
+            agents = jnp.sum(traversability == -1)
+            
+            # Count dumped soil in action map
+            dumped_soil = jnp.sum(action_map > 0)
+            dug_areas = jnp.sum(action_map == -1)
+            
+            print(f"  Partition {partition_idx}:")
+            print(f"    Traversability - Free: {free_space}, Obstacles: {obstacles}, Agents: {agents}")
+            print(f"    Action map - Dumped soil: {dumped_soil}, Dug areas: {dug_areas}")
+            
+            # Verify dumped soil is marked as obstacles in traversability
+            dumped_positions = jnp.where(action_map > 0)
+            dumped_soil_obstacles = 0
+            
+            if len(dumped_positions[0]) > 0:
+                for i in range(len(dumped_positions[0])):
+                    y, x = dumped_positions[0][i], dumped_positions[1][i]
+                    if traversability[y, x] == 1:  # Should be obstacle
+                        dumped_soil_obstacles += 1
+                    elif traversability[y, x] == 0:  # Should NOT be free space
+                        print(f"    ❌ Dumped soil at ({y}, {x}) is marked as free space!")
+                        all_correct = False
+            
+            print(f"    Dumped soil correctly marked as obstacles: {dumped_soil_obstacles}/{dumped_soil}")
+            
+            # Check for reasonable agent size
+            if agents > 50:
+                print(f"    ⚠️  Too many agent cells - possible trace issue")
+                all_correct = False
+            elif agents == 0:
+                print(f"    ⚠️  No agent found")
+                all_correct = False
+            else:
+                print(f"    ✅ Agent size looks correct")
+            
+            # Check dumped soil consistency
+            if dumped_soil_obstacles == dumped_soil:
+                print(f"    ✅ All dumped soil correctly marked as obstacles")
+            else:
+                print(f"    ❌ Some dumped soil not marked as obstacles")
+                all_correct = False
+        
+        if all_correct:
+            print("🎉 All traversability checks passed (including dumped soil)!")
+        else:
+            print("❌ Some traversability issues detected!")
+        
+        return all_correct
+
+    def debug_action_traversability_consistency(self, partition_states, step_name=""):
+        """
+        Debug method to check consistency between action_map and traversability_mask.
+        """
+        print(f"\n--- ACTION/TRAVERSABILITY DEBUG: {step_name} ---")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            timestep = partition_state['timestep']
+            traversability = timestep.state.world.traversability_mask.map
+            action_map = timestep.state.world.action_map.map
+            
+            # Check dumped soil consistency
+            dumped_positions = jnp.where(action_map > 0)
+            inconsistencies = 0
+            
+            if len(dumped_positions[0]) > 0:
+                for i in range(len(dumped_positions[0])):
+                    y, x = dumped_positions[0][i], dumped_positions[1][i]
+                    if traversability[y, x] != 1:  # Should be obstacle
+                        inconsistencies += 1
+            
+            print(f"  Partition {partition_idx}:")
+            print(f"    Dumped soil areas: {len(dumped_positions[0]) if len(dumped_positions[0]) > 0 else 0}")
+            print(f"    Inconsistencies: {inconsistencies}")
+            
+            if inconsistencies > 0:
+                print(f"    ❌ {inconsistencies} dumped soil areas not marked as obstacles!")
+            else:
+                print(f"    ✅ All dumped soil correctly marked as obstacles")
+
+
+    def initialize_partition_specific_target_maps(self, partition_states):
+        """
+        Store the original partition-specific target maps.
+        Each partition should only see their own targets, never targets from other partitions.
+        Call this ONCE after partition initialization.
+        """
+        if not hasattr(self, 'partition_target_maps'):
+            self.partition_target_maps = {}
+        
+        print("Storing partition-specific target maps...")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] == 'active':
+                # Store the original target map for this partition
+                original_target_map = partition_state['timestep'].state.world.target_map.map.copy()
+                self.partition_target_maps[partition_idx] = original_target_map
+                
+                # Count targets for verification
+                dig_targets = jnp.sum(original_target_map == -1)
+                dump_targets = jnp.sum(original_target_map == 1)
+                
+                print(f"  Partition {partition_idx}: {dig_targets} dig targets, {dump_targets} dump targets")
+
+    def _create_world_with_global_maps_preserve_targets(self, current_world, partition_idx):
+        """
+        FIXED: Create a new world state that uses global maps but preserves partition-specific targets.
+        """
+        # Get the original partition-specific target map
+        if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
+            partition_target_map = self.partition_target_maps[partition_idx]
+            print(f"    Preserving original target map for partition {partition_idx}")
+        else:
+            # Fallback to current target map
+            partition_target_map = current_world.target_map.map
+            print(f"    WARNING: Using current target map for partition {partition_idx} (no stored original)")
+        
+        updated_world = current_world._replace(
+            target_map=current_world.target_map._replace(map=partition_target_map),  # Keep partition-specific
+            action_map=current_world.action_map._replace(map=self.global_maps['action_map']),
+            dumpability_mask=current_world.dumpability_mask._replace(map=self.global_maps['dumpability_mask']),
+            dumpability_mask_init=current_world.dumpability_mask_init._replace(map=self.global_maps['dumpability_mask_init']),
+            padding_mask=current_world.padding_mask._replace(map=self.global_maps['padding_mask'])
+            # NOTE: traversability_mask will be handled separately by agent sync
+        )
+        
+        return updated_world
+    
+    def verify_partition_target_isolation(self, partition_states):
+        """
+        Verify that each partition only sees their own targets, not targets from other partitions.
+        """
+        print(f"\n=== VERIFYING TARGET MAP ISOLATION ===")
+        
+        all_correct = True
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_target_map = partition_state['timestep'].state.world.target_map.map
+            
+            if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
+                original_target_map = self.partition_target_maps[partition_idx]
+                
+                # Check if current target map matches the original partition-specific one
+                if jnp.array_equal(current_target_map, original_target_map):
+                    print(f"  ✅ Partition {partition_idx}: Target map unchanged (correct)")
+                else:
+                    differences = jnp.sum(current_target_map != original_target_map)
+                    print(f"  ❌ Partition {partition_idx}: Target map changed! {differences} different cells")
+                    all_correct = False
+                    
+                    # Debug: check what changed
+                    gained_dig_targets = jnp.sum((current_target_map == -1) & (original_target_map != -1))
+                    gained_dump_targets = jnp.sum((current_target_map == 1) & (original_target_map != 1))
+                    
+                    if gained_dig_targets > 0 or gained_dump_targets > 0:
+                        print(f"    Gained {gained_dig_targets} dig targets, {gained_dump_targets} dump targets")
+                        print(f"    This suggests targets from other partitions are bleeding in!")
+            else:
+                print(f"  ⚠️  Partition {partition_idx}: No original target map stored")
+                all_correct = False
+            
+            # Count current targets
+            current_dig_targets = jnp.sum(current_target_map == -1)
+            current_dump_targets = jnp.sum(current_target_map == 1)
+            print(f"    Current targets: {current_dig_targets} dig, {current_dump_targets} dump")
+        
+        if all_correct:
+            print("🎉 All partitions have isolated target maps!")
+        else:
+            print("❌ Target map isolation violated!")
+        
+        return all_correct
+
+    def debug_target_map_changes(self, partition_states, step_name=""):
+        """
+        Debug method to track when and how target maps change.
+        """
+        print(f"\n--- TARGET MAP DEBUG: {step_name} ---")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            current_target_map = partition_state['timestep'].state.world.target_map.map
+            
+            dig_targets = jnp.sum(current_target_map == -1)
+            dump_targets = jnp.sum(current_target_map == 1)
+            free_space = jnp.sum(current_target_map == 0)
+            
+            print(f"  Partition {partition_idx}: Dig={dig_targets}, Dump={dump_targets}, Free={free_space}")
+            
+            # Check for unexpected values
+            unique_values = jnp.unique(current_target_map)
+            expected_values = jnp.array([-1, 0, 1])
+            unexpected = jnp.setdiff1d(unique_values, expected_values)
+            
+            if len(unexpected) > 0:
+                print(f"    ⚠️  Unexpected target map values: {unexpected}")
