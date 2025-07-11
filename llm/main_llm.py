@@ -160,6 +160,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             #env_manager.initialize_base_traversability_masks(partition_states)
             env_manager.initialize_partition_specific_target_maps(partition_states)
 
+
             if partition_states is None:
                 print(f"Failed to initialize map {current_map_index}, moving to next map")
                 current_map_index += 1
@@ -188,6 +189,11 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
         while playing and active_partitions and map_step < max_steps_per_map and global_step < num_timesteps:
             # Handle quit events
+
+            # if map_step == 1:  # Check on first step
+            #     env_manager.debug_base_mask_initialization(partition_states)
+
+
             if USE_RENDERING:
                 for event in pg.event.get():
                     if event.type == QUIT or (event.type == pg.KEYDOWN and event.key == K_q):
@@ -657,6 +663,9 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                 print(f"\n--- Sync Check at Step {map_step} ---")
                 env_manager.verify_global_sync_consistency(partition_states)
                 env_manager.verify_partition_target_isolation(partition_states)  # ← ADD THIS LINE
+                #env_manager.verify_target_blocking(partition_states)  # ← ADD THIS LINE
+                env_manager.verify_dig_target_blocking(partition_states)
+
             if map_step <= 20:  # Debug first 20 steps
                 env_manager.debug_target_map_changes(partition_states, f"STEP_{map_step}")
         # Add map data to global collections
