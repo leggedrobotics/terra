@@ -410,12 +410,12 @@ class EnvironmentsManager:
         }
 
 
-        save_mask(np.array(sub_maps['target_map']),'target', 'after_init', partition_idx, 0)
-        save_mask(np.array(sub_maps['action_map']),'action', 'after_init', partition_idx, 0)
-        save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'after_init', partition_idx, 0)
-        save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'after_init', partition_idx, 0)
-        save_mask(np.array(sub_maps['padding_mask']),'padding', 'after_init', partition_idx, 0)
-        save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['target_map']),'target', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['action_map']),'action', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['padding_mask']),'padding', 'after_init', partition_idx, 0)
+        # save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'after_init', partition_idx, 0)
 
 
         #DIAGNOSTIC: Check sub-map validity
@@ -1100,7 +1100,7 @@ class EnvironmentsManager:
         if not hasattr(self, 'base_traversability_masks'):
             self.base_traversability_masks = {}
         
-        print("Initializing base traversability masks...")
+        #print("Initializing base traversability masks...")
         
         for partition_idx, partition_state in partition_states.items():
             if partition_state['status'] == 'active':
@@ -1124,11 +1124,11 @@ class EnvironmentsManager:
                 )
                 
                 self.base_traversability_masks[partition_idx] = clean_mask
-                print(f"  Stored clean base mask for partition {partition_idx}")
+                #print(f"  Stored clean base mask for partition {partition_idx}")
                 
                 # Count terrain obstacles for verification
                 terrain_obstacles = jnp.sum(clean_mask == 1)
-                print(f"    Terrain obstacles: {terrain_obstacles}")
+                #print(f"    Terrain obstacles: {terrain_obstacles}")
 
     def _update_partition_with_other_agents(self, target_partition_idx, target_partition_state, 
                                         all_occupied_cells, partition_states):
@@ -1423,7 +1423,7 @@ class EnvironmentsManager:
             
             partition_states[target_partition_idx]['timestep'] = updated_timestep
             
-            print(f"  ✓ Blocked {blocked_cells} target cells from partition {source_partition_idx} in overlap region of partition {target_partition_idx}")
+            #print(f"  ✓ Blocked {blocked_cells} target cells from partition {source_partition_idx} in overlap region of partition {target_partition_idx}")
 
     # Update the main synchronization method to include target synchronization
     def add_agents_and_targets_using_global_sync(self, partition_states):
@@ -1568,9 +1568,9 @@ class EnvironmentsManager:
         # STEP 1: Start from completely clean base mask (original terrain only)
         if target_partition_idx in self.base_traversability_masks:
             clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
-            print(f"    Starting from clean base for partition {target_partition_idx}")
+            #print(f"    Starting from clean base for partition {target_partition_idx}")
         else:
-            print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
+            #print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
             current_mask = current_timestep.state.world.traversability_mask.map
             clean_traversability = jnp.where(
                 (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
@@ -1590,8 +1590,8 @@ class EnvironmentsManager:
         )
         
         dumped_obstacle_count = jnp.sum(dumped_areas)
-        if dumped_obstacle_count > 0:
-            print(f"    Added {dumped_obstacle_count} dumped soil obstacles to partition {target_partition_idx}")
+        # if dumped_obstacle_count > 0:
+        #     print(f"    Added {dumped_obstacle_count} dumped soil obstacles to partition {target_partition_idx}")
         
         # STEP 3: FIXED - Add other partitions' DIG TARGETS (-1) as obstacles, but NOT dump targets (1)
         other_dig_targets_blocked = 0
@@ -1619,11 +1619,11 @@ class EnvironmentsManager:
                 dig_targets_blocked_from_this_partition = jnp.sum(other_dig_targets)
                 other_dig_targets_blocked += dig_targets_blocked_from_this_partition
                 
-                if dig_targets_blocked_from_this_partition > 0:
-                    print(f"    Blocked {dig_targets_blocked_from_this_partition} DIG TARGETS from partition {other_partition_idx}")
+                #if dig_targets_blocked_from_this_partition > 0:
+                    #print(f"    Blocked {dig_targets_blocked_from_this_partition} DIG TARGETS from partition {other_partition_idx}")
         
-        if other_dig_targets_blocked > 0:
-            print(f"    Total other dig targets blocked: {other_dig_targets_blocked}")
+        # if other_dig_targets_blocked > 0:
+        #     #print(f"    Total other dig targets blocked: {other_dig_targets_blocked}")
         
         # STEP 4: Add THIS partition's agent positions as agents (-1)
         if target_partition_idx in all_agent_positions:
@@ -1633,7 +1633,7 @@ class EnvironmentsManager:
                     0 <= cell_x < clean_traversability.shape[1]):
                     clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
             
-            print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
+            #print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
         
         # STEP 5: Add OTHER agents as OBSTACLES (1), not agents
         other_agents_added = 0
@@ -1654,8 +1654,8 @@ class EnvironmentsManager:
                     if current_value == 0:  # Free space
                         clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
                         other_cells_added += 1
-                    elif current_value == -1:  # Don't overwrite own agent
-                        print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
+                    #elif current_value == -1:  # Don't overwrite own agent
+                        #print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
             
             if other_cells_added > 0:
                 other_agents_added += 1
@@ -1680,25 +1680,25 @@ class EnvironmentsManager:
         free_space = jnp.sum(clean_traversability == 0)
         total_cells = clean_traversability.size
         
-        print(f"    Partition {target_partition_idx} traversability summary:")
-        print(f"      Original terrain obstacles: {terrain_count}")
-        print(f"      Dumped soil obstacles: {dumped_soil_count}")
-        print(f"      Other partitions' DIG TARGETS blocked: {other_dig_targets_blocked}")
-        print(f"      Other agents (as obstacles): {other_obstacle_count}")
-        print(f"      Total obstacles: {total_obstacles}")
-        print(f"      Own agent cells: {own_agent_count}")
-        print(f"      Free space: {free_space} ({free_space/total_cells:.1%})")
+        # print(f"    Partition {target_partition_idx} traversability summary:")
+        # print(f"      Original terrain obstacles: {terrain_count}")
+        # print(f"      Dumped soil obstacles: {dumped_soil_count}")
+        # print(f"      Other partitions' DIG TARGETS blocked: {other_dig_targets_blocked}")
+        # print(f"      Other agents (as obstacles): {other_obstacle_count}")
+        # print(f"      Total obstacles: {total_obstacles}")
+        # print(f"      Own agent cells: {own_agent_count}")
+        # print(f"      Free space: {free_space} ({free_space/total_cells:.1%})")
         
-        if free_space < total_cells * 0.3:  # Less than 30% free space
-            print(f"      ⚠️  Warning: Low free space percentage")
-        else:
-            print(f"      ✅ Good free space percentage")
+        # if free_space < total_cells * 0.3:  # Less than 30% free space
+        #     print(f"      ⚠️  Warning: Low free space percentage")
+        # else:
+        #     print(f"      ✅ Good free space percentage")
 
     def _sync_all_partitions_from_global_maps_excluding_traversability(self, partition_states):
         """
         UPDATED: Synchronize ALL partitions with updated global maps, but preserve partition-specific targets.
         """
-        print(f"  Syncing global maps to all partitions (excluding traversability and preserving partition targets)")
+        #print(f"  Syncing global maps to all partitions (excluding traversability and preserving partition targets)")
         
         for target_partition_idx, target_partition_state in partition_states.items():
             if target_partition_state['status'] != 'active':
@@ -1718,13 +1718,13 @@ class EnvironmentsManager:
             # Update the partition state
             partition_states[target_partition_idx]['timestep'] = updated_timestep
             
-            print(f"    Synced global maps to partition {target_partition_idx} (targets preserved)")
+            #print(f"    Synced global maps to partition {target_partition_idx} (targets preserved)")
 
     def _update_all_observations(self, partition_states):
         """
         Update observations for all partitions to match their synced states.
         """
-        print(f"  Updating observations for all partitions")
+        #print(f"  Updating observations for all partitions")
         
         for partition_idx, partition_state in partition_states.items():
             if partition_state['status'] != 'active':
@@ -1782,7 +1782,7 @@ class EnvironmentsManager:
         region_coords = partition['region_coords']
         y_start, x_start, y_end, x_end = region_coords
         
-        print(f"  Updating global maps from partition {source_partition_idx}")
+        #print(f"  Updating global maps from partition {source_partition_idx}")
         
         # Define which maps to update globally (EXCLUDE target_map)
         maps_to_update = [
@@ -1803,7 +1803,7 @@ class EnvironmentsManager:
             # Update the global map with this region
             self.global_maps[map_name] = self.global_maps[map_name].at[region_slice].set(partition_region)
             
-            print(f"    Updated global {map_name} from partition {source_partition_idx}")
+            #print(f"    Updated global {map_name} from partition {source_partition_idx}")
         
         # Handle target_map specially - update global but don't sync back to other partitions
         target_map = source_state.world.target_map.map
@@ -1812,7 +1812,7 @@ class EnvironmentsManager:
         
         # Update global target map for tracking purposes, but partitions keep their own
         self.global_maps['target_map'] = self.global_maps['target_map'].at[region_slice].set(target_region)
-        print(f"    Updated global target_map from partition {source_partition_idx} (for tracking only)")
+        #print(f"    Updated global target_map from partition {source_partition_idx} (for tracking only)")
 
 
     def _sync_all_partitions_from_global_maps(self, partition_states):
@@ -1849,7 +1849,7 @@ class EnvironmentsManager:
             # Update the partition state
             partition_states[target_partition_idx]['timestep'] = updated_timestep
             
-            print(f"    Synced partition {target_partition_idx} with global maps and updated observation")
+            #print(f"    Synced partition {target_partition_idx} with global maps and updated observation")
 
     def _create_observation_from_synced_state(self, original_observation, synced_world):
         """
@@ -1894,11 +1894,11 @@ class EnvironmentsManager:
         """
         UPDATED: Properly sync agent positions with dumped soil and dig target blocking only.
         """
-        print(f"  Syncing agent positions, dumped soil, and blocking other DIG TARGETS across all partitions")
+        #print(f"  Syncing agent positions, dumped soil, and blocking other DIG TARGETS across all partitions")
         
         # Ensure base masks are initialized
         if not hasattr(self, 'base_traversability_masks'):
-            print("  WARNING: Base masks not initialized, initializing now...")
+            #print("  WARNING: Base masks not initialized, initializing now...")
             self.initialize_base_traversability_masks(partition_states)
         
         # Collect all current agent positions
@@ -1921,7 +1921,7 @@ class EnvironmentsManager:
                     cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
                     occupied_cells.append(cell)
                 all_agent_positions[partition_idx] = occupied_cells
-                print(f"    Agent {partition_idx}: {len(occupied_cells)} occupied cells")
+                #print(f"    Agent {partition_idx}: {len(occupied_cells)} occupied cells")
         
         # Update each partition with clean traversability including only dig target obstacles
         for target_partition_idx, target_partition_state in partition_states.items():
@@ -1944,9 +1944,9 @@ class EnvironmentsManager:
         # STEP 1: Start from completely clean base mask (original terrain only)
         if target_partition_idx in self.base_traversability_masks:
             clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
-            print(f"    Starting from clean base for partition {target_partition_idx}")
+            #print(f"    Starting from clean base for partition {target_partition_idx}")
         else:
-            print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
+            #print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
             current_mask = current_timestep.state.world.traversability_mask.map
             clean_traversability = jnp.where(
                 (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
@@ -1962,7 +1962,7 @@ class EnvironmentsManager:
                     0 <= cell_x < clean_traversability.shape[1]):
                     clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
             
-            print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
+            #print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
         
         # STEP 3: Add OTHER agents as OBSTACLES (1), not agents
         other_agents_added = 0
@@ -1983,8 +1983,8 @@ class EnvironmentsManager:
                     if current_value == 0:  # Free space
                         clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
                         other_cells_added += 1
-                    elif current_value == -1:  # Don't overwrite own agent
-                        print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
+                    # elif current_value == -1:  # Don't overwrite own agent
+                    #     print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
             
             if other_cells_added > 0:
                 other_agents_added += 1
@@ -2005,13 +2005,13 @@ class EnvironmentsManager:
         own_agent_count = jnp.sum(clean_traversability == -1)
         other_obstacle_count = other_cells_added
         
-        print(f"    Partition {target_partition_idx} traversability:")
-        print(f"      Terrain obstacles: {terrain_count}")
-        print(f"      Own agent cells: {own_agent_count}")
-        print(f"      Other agents (as obstacles): {other_obstacle_count}")
+        # print(f"    Partition {target_partition_idx} traversability:")
+        # print(f"      Terrain obstacles: {terrain_count}")
+        # print(f"      Own agent cells: {own_agent_count}")
+        # print(f"      Other agents (as obstacles): {other_obstacle_count}")
         
-        if other_agents_added > 0:
-            print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
+        #if other_agents_added > 0:
+            #print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
 
     def _add_other_agents_to_partition(self, target_partition_idx, target_partition_state, 
                                     all_agent_positions, partition_states):
@@ -2070,7 +2070,7 @@ class EnvironmentsManager:
         Fixed version that properly updates global maps from all partitions.
         This should be called periodically to ensure global state consistency.
         """
-        print(f"\nUpdating global maps from all {len(partition_states)} active partitions...")
+        #print(f"\nUpdating global maps from all {len(partition_states)} active partitions...")
         
         for partition_idx, partition_state in partition_states.items():
             if partition_state['status'] != 'active' or partition_state['timestep'] is None:
@@ -2078,7 +2078,7 @@ class EnvironmentsManager:
                 
             self._update_global_maps_from_single_partition(partition_idx, partition_states)
         
-        print(f"Global maps updated from all partitions")
+        #print(f"Global maps updated from all partitions")
 
 
     def verify_global_sync_consistency(self, partition_states):
@@ -2086,7 +2086,7 @@ class EnvironmentsManager:
         Verify that all partitions have consistent global map data.
         Useful for debugging synchronization issues.
         """
-        print(f"\n=== VERIFYING GLOBAL SYNC CONSISTENCY ===")
+        #print(f"\n=== VERIFYING GLOBAL SYNC CONSISTENCY ===")
         
         consistent = True
         maps_to_check = ['action_map', 'dumpability_mask', 'dumpability_mask_init']
@@ -2208,108 +2208,108 @@ class EnvironmentsManager:
         
         return all_correct
     
-    def _update_partition_traversability_with_dumped_soil(self, target_partition_idx, target_partition_state, 
-                                                     all_agent_positions, partition_states):
-        """
-        FIXED: Clean approach to updating traversability that includes dumped soil as obstacles.
+    # def _update_partition_traversability_with_dumped_soil(self, target_partition_idx, target_partition_state, 
+    #                                                  all_agent_positions, partition_states):
+    #     """
+    #     FIXED: Clean approach to updating traversability that includes dumped soil as obstacles.
         
-        Traversability logic:
-        - 0: Free space (can drive through)
-        - 1: Obstacles (terrain + other agents + dumped soil)
-        - -1: Current agent position
-        """
-        current_timestep = target_partition_state['timestep']
+    #     Traversability logic:
+    #     - 0: Free space (can drive through)
+    #     - 1: Obstacles (terrain + other agents + dumped soil)
+    #     - -1: Current agent position
+    #     """
+    #     current_timestep = target_partition_state['timestep']
         
-        # STEP 1: Start from completely clean base mask (original terrain only)
-        if target_partition_idx in self.base_traversability_masks:
-            clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
-            print(f"    Starting from clean base for partition {target_partition_idx}")
-        else:
-            print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
-            current_mask = current_timestep.state.world.traversability_mask.map
-            clean_traversability = jnp.where(
-                (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
-                0,  # Set to free space
-                current_mask  # Keep original terrain
-            )
+    #     # STEP 1: Start from completely clean base mask (original terrain only)
+    #     if target_partition_idx in self.base_traversability_masks:
+    #         clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
+    #         #print(f"    Starting from clean base for partition {target_partition_idx}")
+    #     else:
+    #         #print(f"    WARNING: No base mask for partition {target_partition_idx}, creating clean mask")
+    #         current_mask = current_timestep.state.world.traversability_mask.map
+    #         clean_traversability = jnp.where(
+    #             (current_mask == -1) | (current_mask == 1),  # Remove all agent markers
+    #             0,  # Set to free space
+    #             current_mask  # Keep original terrain
+    #         )
         
-        # STEP 2: Add dumped soil areas as obstacles
-        action_map = current_timestep.state.world.action_map.map
-        dumped_areas = (action_map > 0)  # Positive values = dumped soil
+    #     # STEP 2: Add dumped soil areas as obstacles
+    #     action_map = current_timestep.state.world.action_map.map
+    #     dumped_areas = (action_map > 0)  # Positive values = dumped soil
         
-        # Mark dumped soil areas as obstacles (1)
-        clean_traversability = jnp.where(
-            dumped_areas,
-            1,  # Dumped soil = obstacle
-            clean_traversability  # Keep existing values
-        )
+    #     # Mark dumped soil areas as obstacles (1)
+    #     clean_traversability = jnp.where(
+    #         dumped_areas,
+    #         1,  # Dumped soil = obstacle
+    #         clean_traversability  # Keep existing values
+    #     )
         
-        dumped_obstacle_count = jnp.sum(dumped_areas)
-        if dumped_obstacle_count > 0:
-            print(f"    Added {dumped_obstacle_count} dumped soil obstacles to partition {target_partition_idx}")
+    #     dumped_obstacle_count = jnp.sum(dumped_areas)
+    #     # if dumped_obstacle_count > 0:
+    #     #     print(f"    Added {dumped_obstacle_count} dumped soil obstacles to partition {target_partition_idx}")
         
-        # STEP 3: Add THIS partition's agent positions as agents (-1)
-        if target_partition_idx in all_agent_positions:
-            own_positions = all_agent_positions[target_partition_idx]
-            for cell_y, cell_x in own_positions:
-                if (0 <= cell_y < clean_traversability.shape[0] and 
-                    0 <= cell_x < clean_traversability.shape[1]):
-                    clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
+    #     # STEP 3: Add THIS partition's agent positions as agents (-1)
+    #     if target_partition_idx in all_agent_positions:
+    #         own_positions = all_agent_positions[target_partition_idx]
+    #         for cell_y, cell_x in own_positions:
+    #             if (0 <= cell_y < clean_traversability.shape[0] and 
+    #                 0 <= cell_x < clean_traversability.shape[1]):
+    #                 clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
             
-            print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
+    #         #print(f"    Added {len(own_positions)} own agent cells to partition {target_partition_idx}")
         
-        # STEP 4: Add OTHER agents as OBSTACLES (1), not agents
-        other_agents_added = 0
-        other_cells_added = 0
+    #     # STEP 4: Add OTHER agents as OBSTACLES (1), not agents
+    #     other_agents_added = 0
+    #     other_cells_added = 0
         
-        for other_partition_idx, other_positions in all_agent_positions.items():
-            if other_partition_idx == target_partition_idx:
-                continue  # Skip own agent
+    #     for other_partition_idx, other_positions in all_agent_positions.items():
+    #         if other_partition_idx == target_partition_idx:
+    #             continue  # Skip own agent
                 
-            for cell_y, cell_x in other_positions:
-                # Check bounds
-                if (0 <= cell_y < clean_traversability.shape[0] and 
-                    0 <= cell_x < clean_traversability.shape[1]):
+    #         for cell_y, cell_x in other_positions:
+    #             # Check bounds
+    #             if (0 <= cell_y < clean_traversability.shape[0] and 
+    #                 0 <= cell_x < clean_traversability.shape[1]):
                     
-                    # Add as OBSTACLE (1), not agent (-1)
-                    # Only if it's currently free space (0) - don't overwrite own agent or existing obstacles
-                    current_value = clean_traversability[cell_y, cell_x]
-                    if current_value == 0:  # Free space
-                        clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
-                        other_cells_added += 1
-                    elif current_value == -1:  # Don't overwrite own agent
-                        print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
+    #                 # Add as OBSTACLE (1), not agent (-1)
+    #                 # Only if it's currently free space (0) - don't overwrite own agent or existing obstacles
+    #                 current_value = clean_traversability[cell_y, cell_x]
+    #                 if current_value == 0:  # Free space
+    #                     clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
+    #                     other_cells_added += 1
+    #                 elif current_value == -1:  # Don't overwrite own agent
+    #                     print(f"      Conflict: Other agent at own agent position ({cell_y}, {cell_x})")
             
-            if other_cells_added > 0:
-                other_agents_added += 1
+    #         if other_cells_added > 0:
+    #             other_agents_added += 1
         
-        # STEP 5: Update the world state
-        updated_world = self._update_world_map(
-            current_timestep.state.world, 
-            'traversability_mask', 
-            clean_traversability
-        )
-        updated_state = current_timestep.state._replace(world=updated_world)
-        updated_timestep = current_timestep._replace(state=updated_state)
+    #     # STEP 5: Update the world state
+    #     updated_world = self._update_world_map(
+    #         current_timestep.state.world, 
+    #         'traversability_mask', 
+    #         clean_traversability
+    #     )
+    #     updated_state = current_timestep.state._replace(world=updated_world)
+    #     updated_timestep = current_timestep._replace(state=updated_state)
         
-        partition_states[target_partition_idx]['timestep'] = updated_timestep
+    #     partition_states[target_partition_idx]['timestep'] = updated_timestep
         
-        # Debug output with dumped soil info
-        terrain_count = jnp.sum(self.base_traversability_masks.get(target_partition_idx, jnp.zeros_like(clean_traversability)) == 1)
-        dumped_soil_count = jnp.sum(dumped_areas)
-        own_agent_count = jnp.sum(clean_traversability == -1)
-        other_obstacle_count = other_cells_added
-        total_obstacles = jnp.sum(clean_traversability == 1)
+    #     # Debug output with dumped soil info
+    #     terrain_count = jnp.sum(self.base_traversability_masks.get(target_partition_idx, jnp.zeros_like(clean_traversability)) == 1)
+    #     dumped_soil_count = jnp.sum(dumped_areas)
+    #     own_agent_count = jnp.sum(clean_traversability == -1)
+    #     other_obstacle_count = other_cells_added
+    #     total_obstacles = jnp.sum(clean_traversability == 1)
         
-        print(f"    Partition {target_partition_idx} traversability:")
-        print(f"      Original terrain obstacles: {terrain_count}")
-        print(f"      Dumped soil obstacles: {dumped_soil_count}")
-        print(f"      Other agents (as obstacles): {other_obstacle_count}")
-        print(f"      Total obstacles: {total_obstacles}")
-        print(f"      Own agent cells: {own_agent_count}")
+    #     # print(f"    Partition {target_partition_idx} traversability:")
+    #     # print(f"      Original terrain obstacles: {terrain_count}")
+    #     # print(f"      Dumped soil obstacles: {dumped_soil_count}")
+    #     # print(f"      Other agents (as obstacles): {other_obstacle_count}")
+    #     # print(f"      Total obstacles: {total_obstacles}")
+    #     # print(f"      Own agent cells: {own_agent_count}")
         
-        if other_agents_added > 0:
-            print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
+    #     # if other_agents_added > 0:
+    #     #     print(f"    ✅ Added {other_agents_added} other agents as obstacles ({other_cells_added} cells)")
 
 
 
@@ -2338,9 +2338,9 @@ class EnvironmentsManager:
             dumped_soil = jnp.sum(action_map > 0)
             dug_areas = jnp.sum(action_map == -1)
             
-            print(f"  Partition {partition_idx}:")
-            print(f"    Traversability - Free: {free_space}, Obstacles: {obstacles}, Agents: {agents}")
-            print(f"    Action map - Dumped soil: {dumped_soil}, Dug areas: {dug_areas}")
+            # print(f"  Partition {partition_idx}:")
+            # print(f"    Traversability - Free: {free_space}, Obstacles: {obstacles}, Agents: {agents}")
+            # print(f"    Action map - Dumped soil: {dumped_soil}, Dug areas: {dug_areas}")
             
             # Verify dumped soil is marked as obstacles in traversability
             dumped_positions = jnp.where(action_map > 0)
@@ -2355,11 +2355,11 @@ class EnvironmentsManager:
                         print(f"    ❌ Dumped soil at ({y}, {x}) is marked as free space!")
                         all_correct = False
             
-            print(f"    Dumped soil correctly marked as obstacles: {dumped_soil_obstacles}/{dumped_soil}")
+            #print(f"    Dumped soil correctly marked as obstacles: {dumped_soil_obstacles}/{dumped_soil}")
             
             # Check for reasonable agent size
             if agents > 50:
-                print(f"    ⚠️  Too many agent cells - possible trace issue")
+                #print(f"    ⚠️  Too many agent cells - possible trace issue")
                 all_correct = False
             elif agents == 0:
                 print(f"    ⚠️  No agent found")
@@ -2405,9 +2405,9 @@ class EnvironmentsManager:
                     if traversability[y, x] != 1:  # Should be obstacle
                         inconsistencies += 1
             
-            print(f"  Partition {partition_idx}:")
-            print(f"    Dumped soil areas: {len(dumped_positions[0]) if len(dumped_positions[0]) > 0 else 0}")
-            print(f"    Inconsistencies: {inconsistencies}")
+            # print(f"  Partition {partition_idx}:")
+            # print(f"    Dumped soil areas: {len(dumped_positions[0]) if len(dumped_positions[0]) > 0 else 0}")
+            # print(f"    Inconsistencies: {inconsistencies}")
             
             if inconsistencies > 0:
                 print(f"    ❌ {inconsistencies} dumped soil areas not marked as obstacles!")
@@ -2424,7 +2424,7 @@ class EnvironmentsManager:
         if not hasattr(self, 'partition_target_maps'):
             self.partition_target_maps = {}
         
-        print("Storing partition-specific target maps...")
+        #print("Storing partition-specific target maps...")
         
         for partition_idx, partition_state in partition_states.items():
             if partition_state['status'] == 'active':
@@ -2436,7 +2436,7 @@ class EnvironmentsManager:
                 dig_targets = jnp.sum(original_target_map == -1)
                 dump_targets = jnp.sum(original_target_map == 1)
                 
-                print(f"  Partition {partition_idx}: {dig_targets} dig targets, {dump_targets} dump targets")
+                #print(f"  Partition {partition_idx}: {dig_targets} dig targets, {dump_targets} dump targets")
 
     def _create_world_with_global_maps_preserve_targets(self, current_world, partition_idx):
         """
@@ -2445,11 +2445,11 @@ class EnvironmentsManager:
         # Get the original partition-specific target map
         if hasattr(self, 'partition_target_maps') and partition_idx in self.partition_target_maps:
             partition_target_map = self.partition_target_maps[partition_idx]
-            print(f"    Preserving original target map for partition {partition_idx}")
+            #print(f"    Preserving original target map for partition {partition_idx}")
         else:
             # Fallback to current target map
             partition_target_map = current_world.target_map.map
-            print(f"    WARNING: Using current target map for partition {partition_idx} (no stored original)")
+            #print(f"    WARNING: Using current target map for partition {partition_idx} (no stored original)")
         
         updated_world = current_world._replace(
             target_map=current_world.target_map._replace(map=partition_target_map),  # Keep partition-specific
@@ -2595,14 +2595,14 @@ class EnvironmentsManager:
         """
         current_timestep = target_partition_state['timestep']
         
-        print(f"\n=== DEBUG TRAVERSABILITY FOR PARTITION {target_partition_idx} ===")
+        #print(f"\n=== DEBUG TRAVERSABILITY FOR PARTITION {target_partition_idx} ===")
         
         # STEP 1: Check base mask
         if target_partition_idx in self.base_traversability_masks:
             clean_traversability = self.base_traversability_masks[target_partition_idx].copy()
-            print(f"  Using stored base mask for partition {target_partition_idx}")
+            #print(f"  Using stored base mask for partition {target_partition_idx}")
         else:
-            print(f"  WARNING: No base mask for partition {target_partition_idx}")
+            #print(f"  WARNING: No base mask for partition {target_partition_idx}")
             current_mask = current_timestep.state.world.traversability_mask.map
             clean_traversability = jnp.where(
                 (current_mask == -1) | (current_mask == 1),
@@ -2616,20 +2616,20 @@ class EnvironmentsManager:
         base_agents = jnp.sum(clean_traversability == -1)
         total_cells = clean_traversability.size
         
-        print(f"  BASE MASK: Free={base_free}, Obstacles={base_obstacles}, Agents={base_agents}, Total={total_cells}")
+        #print(f"  BASE MASK: Free={base_free}, Obstacles={base_obstacles}, Agents={base_agents}, Total={total_cells}")
         
-        if base_free < total_cells * 0.5:  # Less than 50% free space is suspicious
-            print(f"  ⚠️  WARNING: Base mask has very little free space ({base_free}/{total_cells} = {base_free/total_cells:.1%})")
+        # if base_free < total_cells * 0.5:  # Less than 50% free space is suspicious
+        #     print(f"  ⚠️  WARNING: Base mask has very little free space ({base_free}/{total_cells} = {base_free/total_cells:.1%})")
         
         # STEP 2: Check dumped soil
         action_map = current_timestep.state.world.action_map.map
         dumped_areas = (action_map > 0)
         dumped_count = jnp.sum(dumped_areas)
         
-        print(f"  DUMPED SOIL: {dumped_count} cells")
+        #print(f"  DUMPED SOIL: {dumped_count} cells")
         
-        if dumped_count > total_cells * 0.3:  # More than 30% dumped is suspicious
-            print(f"  ⚠️  WARNING: Excessive dumped soil ({dumped_count}/{total_cells} = {dumped_count/total_cells:.1%})")
+        # if dumped_count > total_cells * 0.3:  # More than 30% dumped is suspicious
+        #     print(f"  ⚠️  WARNING: Excessive dumped soil ({dumped_count}/{total_cells} = {dumped_count/total_cells:.1%})")
         
         # Apply dumped soil obstacles
         clean_traversability = jnp.where(dumped_areas, 1, clean_traversability)
@@ -2637,7 +2637,7 @@ class EnvironmentsManager:
         after_dumped_free = jnp.sum(clean_traversability == 0)
         after_dumped_obstacles = jnp.sum(clean_traversability == 1)
         
-        print(f"  AFTER DUMPED: Free={after_dumped_free}, Obstacles={after_dumped_obstacles}")
+        #print(f"  AFTER DUMPED: Free={after_dumped_free}, Obstacles={after_dumped_obstacles}")
         
         # STEP 3: Check target blocking
         other_targets_blocked = 0
@@ -2647,7 +2647,7 @@ class EnvironmentsManager:
                 other_partition_state['status'] != 'active'):
                 continue
                 
-            print(f"  Checking targets from partition {other_partition_idx}...")
+            #print(f"  Checking targets from partition {other_partition_idx}...")
             
             if hasattr(self, 'partition_target_maps') and other_partition_idx in self.partition_target_maps:
                 other_target_map = self.partition_target_maps[other_partition_idx]
@@ -2657,20 +2657,20 @@ class EnvironmentsManager:
                 other_dump = jnp.sum(other_target_map == 1)
                 other_free = jnp.sum(other_target_map == 0)
                 
-                print(f"    Other partition {other_partition_idx} targets: Dig={other_dig}, Dump={other_dump}, Free={other_free}")
+                #print(f"    Other partition {other_partition_idx} targets: Dig={other_dig}, Dump={other_dump}, Free={other_free}")
                 
                 # Check if shapes match
                 if other_target_map.shape != clean_traversability.shape:
-                    print(f"    ❌ SHAPE MISMATCH: other_target_map={other_target_map.shape}, traversability={clean_traversability.shape}")
+                    #print(f"    ❌ SHAPE MISMATCH: other_target_map={other_target_map.shape}, traversability={clean_traversability.shape}")
                     continue
                 
                 other_all_targets = (other_target_map == -1) | (other_target_map == 1)
                 targets_to_block = jnp.sum(other_all_targets)
                 
-                print(f"    Blocking {targets_to_block} targets from partition {other_partition_idx}")
+                #print(f"    Blocking {targets_to_block} targets from partition {other_partition_idx}")
                 
                 if targets_to_block > total_cells * 0.5:  # More than 50% is suspicious
-                    print(f"    ⚠️  WARNING: Blocking excessive targets ({targets_to_block}/{total_cells} = {targets_to_block/total_cells:.1%})")
+                    #print(f"    ⚠️  WARNING: Blocking excessive targets ({targets_to_block}/{total_cells} = {targets_to_block/total_cells:.1%})")
                     
                     # Show a sample of what's being blocked
                     sample_positions = jnp.where(other_all_targets)
@@ -2678,7 +2678,7 @@ class EnvironmentsManager:
                         sample_indices = jnp.arange(0, min(5, len(sample_positions[0])))
                         for i in sample_indices:
                             y, x = sample_positions[0][i], sample_positions[1][i]
-                            print(f"      Sample blocked position: ({y}, {x}) = {other_target_map[y, x]}")
+                            #print(f"      Sample blocked position: ({y}, {x}) = {other_target_map[y, x]}")
                 
                 # Apply target blocking
                 clean_traversability = jnp.where(other_all_targets, 1, clean_traversability)
@@ -2689,8 +2689,8 @@ class EnvironmentsManager:
         after_targets_free = jnp.sum(clean_traversability == 0)
         after_targets_obstacles = jnp.sum(clean_traversability == 1)
         
-        print(f"  AFTER TARGET BLOCKING: Free={after_targets_free}, Obstacles={after_targets_obstacles}")
-        print(f"  Total targets blocked: {other_targets_blocked}")
+        # print(f"  AFTER TARGET BLOCKING: Free={after_targets_free}, Obstacles={after_targets_obstacles}")
+        # print(f"  Total targets blocked: {other_targets_blocked}")
         
         # STEP 4: Add own agent
         if target_partition_idx in all_agent_positions:
@@ -2699,7 +2699,7 @@ class EnvironmentsManager:
                 if (0 <= cell_y < clean_traversability.shape[0] and 
                     0 <= cell_x < clean_traversability.shape[1]):
                     clean_traversability = clean_traversability.at[cell_y, cell_x].set(-1)
-            print(f"  Added {len(own_positions)} own agent cells")
+            # print(f"  Added {len(own_positions)} own agent cells")
         
         # STEP 5: Add other agents
         other_agents_added = 0
@@ -2714,25 +2714,25 @@ class EnvironmentsManager:
                         clean_traversability = clean_traversability.at[cell_y, cell_x].set(1)
                         other_agents_added += 1
         
-        print(f"  Added {other_agents_added} other agent obstacle cells")
+        # print(f"  Added {other_agents_added} other agent obstacle cells")
         
         # FINAL RESULT
         final_free = jnp.sum(clean_traversability == 0)
         final_obstacles = jnp.sum(clean_traversability == 1)
-        final_agents = jnp.sum(clean_traversability == -1)
+        # final_agents = jnp.sum(clean_traversability == -1)
         
-        print(f"  FINAL RESULT: Free={final_free}, Obstacles={final_obstacles}, Agents={final_agents}")
-        print(f"  Free space percentage: {final_free/total_cells:.1%}")
+        # print(f"  FINAL RESULT: Free={final_free}, Obstacles={final_obstacles}, Agents={final_agents}")
+        # print(f"  Free space percentage: {final_free/total_cells:.1%}")
         
-        if final_free < total_cells * 0.1:  # Less than 10% free space
-            print(f"  🚨 CRITICAL: Almost no free space! Something is wrong!")
+        # if final_free < total_cells * 0.1:  # Less than 10% free space
+        #     print(f"  🚨 CRITICAL: Almost no free space! Something is wrong!")
             
-            # Emergency diagnostic
-            print(f"  DIAGNOSTIC BREAKDOWN:")
-            print(f"    Original base free space: {base_free}")
-            print(f"    Lost to dumped soil: {base_free - after_dumped_free}")
-            print(f"    Lost to target blocking: {after_dumped_free - after_targets_free}")
-            print(f"    Lost to other agents: {other_agents_added}")
+        #     # Emergency diagnostic
+        #     print(f"  DIAGNOSTIC BREAKDOWN:")
+        #     print(f"    Original base free space: {base_free}")
+        #     print(f"    Lost to dumped soil: {base_free - after_dumped_free}")
+        #     print(f"    Lost to target blocking: {after_dumped_free - after_targets_free}")
+        #     print(f"    Lost to other agents: {other_agents_added}")
         
         # Update the world state
         updated_world = self._update_world_map(

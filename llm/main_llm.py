@@ -426,14 +426,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
 
                             #if map_step <=20 and current_map_index == 0:
-                            if current_map_index == 0:
-                                        sub_maps = current_observation
-                                        save_mask(np.array(sub_maps['target_map']),'target', 'before_RL', partition_idx, map_step)
-                                        save_mask(np.array(sub_maps['action_map']),'action', 'before_RL', partition_idx, map_step)
-                                        save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'before_RL', partition_idx, map_step)
-                                        #save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'before_sync_init', partition_idx, map_step)
-                                        save_mask(np.array(sub_maps['padding_mask']),'padding', 'before_RL', partition_idx, 0)
-                                        save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'before_RL', partition_idx, map_step)
+                            # if current_map_index == 0:
+                            #             sub_maps = current_observation
+                            #             save_mask(np.array(sub_maps['target_map']),'target', 'before_RL', partition_idx, map_step)
+                            #             save_mask(np.array(sub_maps['action_map']),'action', 'before_RL', partition_idx, map_step)
+                            #             save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'before_RL', partition_idx, map_step)
+                            #             #save_mask(np.array(sub_maps['dumpability_mask_init']),'dumpability_init', 'before_sync_init', partition_idx, map_step)
+                            #             save_mask(np.array(sub_maps['padding_mask']),'padding', 'before_RL', partition_idx, 0)
+                            #             save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'before_RL', partition_idx, map_step)
 
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
@@ -520,7 +520,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     #new_timestep = env_manager.step_with_enhanced_sync(partition_idx, wrapped_action, partition_states)
                     #new_timestep = env_manager.step_with_full_global_sync(partition_idx, wrapped_action, partition_states)
 
-                    print(f"\n=== STEPPING PARTITION {partition_idx} ===")
+                    #print(f"\n=== STEPPING PARTITION {partition_idx} ===")
 
                     # Before step
                     #env_manager.debug_traversability_step_by_step(partition_states, "BEFORE_STEP")
@@ -532,10 +532,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                     #env_manager.debug_traversability_step_by_step(partition_states, "AFTER_STEP")
 
                     # Add comprehensive verification every 10 steps:
-                    if map_step % 10 == 0:
-                        sync_ok = env_manager.comprehensive_sync_verification(partition_states, map_step)
-                        if not sync_ok:
-                            print(f"⚠️  Sync issues detected at step {map_step}")
+                    # if map_step % 10 == 0:
+                    #     sync_ok = env_manager.comprehensive_sync_verification(partition_states, map_step)
+                    #     if not sync_ok:
+                    #         print(f"⚠️  Sync issues detected at step {map_step}")
 
                     partition_states[partition_idx]['timestep'] = new_timestep
                     partition_state['step_count'] += 1
@@ -663,15 +663,14 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
 
             dug_tiles_per_action_map = (env_manager.global_maps['action_map'] == -1).sum()
 
-            if map_step % 10 == 0:  # Check every 10 steps
-                print(f"\n--- Sync Check at Step {map_step} ---")
-                env_manager.verify_global_sync_consistency(partition_states)
-                env_manager.verify_partition_target_isolation(partition_states)  # ← ADD THIS LINE
-                #env_manager.verify_target_blocking(partition_states)  # ← ADD THIS LINE
-                env_manager.verify_dig_target_blocking(partition_states)
+            # if map_step % 10 == 0:  # Check every 10 steps
+            #     print(f"\n--- Sync Check at Step {map_step} ---")
+            #     env_manager.verify_global_sync_consistency(partition_states)
+            #     env_manager.verify_partition_target_isolation(partition_states)  # ← ADD THIS LINE
+            #     #env_manager.verify_dig_target_blocking(partition_states)
 
-            if map_step <= 20:  # Debug first 20 steps
-                env_manager.debug_target_map_changes(partition_states, f"STEP_{map_step}")
+            # if map_step <= 20:  # Debug first 20 steps
+            #     env_manager.debug_target_map_changes(partition_states, f"STEP_{map_step}")
         # Add map data to global collections
         all_frames.extend(map_frames)
         all_reward_seq.extend(map_reward_seq)
@@ -679,10 +678,10 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
         all_obs_seq.extend(map_obs_seq)
         all_action_list.extend(map_action_list)
 
-        print(f"\nFinal sync verification for map {current_map_index}:")
-        sync_ok = env_manager.verify_global_sync_consistency(partition_states)
-        if not sync_ok:
-            print("⚠️  Warning: Map completed with sync inconsistencies!")
+        # print(f"\nFinal sync verification for map {current_map_index}:")
+        # sync_ok = env_manager.verify_global_sync_consistency(partition_states)
+        # if not sync_ok:
+        #     print("⚠️  Warning: Map completed with sync inconsistencies!")
         
         # Move to next map
         current_map_index += 1
