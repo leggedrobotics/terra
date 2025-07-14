@@ -231,6 +231,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
             current_step_reward = 0.0
 
 
+
+
             for partition_idx in active_partitions:
                 partition_state = partition_states[partition_idx]
                 synched = False
@@ -423,7 +425,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                             current_observation = partition_state['timestep'].observation
 
 
-                            if map_step <=20 and current_map_index == 0:
+                            #if map_step <=20 and current_map_index == 0:
+                            if current_map_index == 0:
                                         sub_maps = current_observation
                                         save_mask(np.array(sub_maps['target_map']),'target', 'before_RL', partition_idx, map_step)
                                         save_mask(np.array(sub_maps['action_map']),'action', 'before_RL', partition_idx, map_step)
@@ -604,6 +607,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         env_manager.partitions[partition_idx]['status'] = 'failed'
                     partition_state['status'] = 'failed'
                     partitions_to_remove.append(partition_idx)
+
 
             # Remove completed/failed partitions
             for partition_idx in partitions_to_remove:

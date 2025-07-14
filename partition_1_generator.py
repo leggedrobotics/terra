@@ -21,7 +21,7 @@ def find_partition_1_files(directory: str) -> List[str]:
     Returns:
         List of sorted file paths for partition 1
     """
-    pattern = os.path.join(directory, "traversability_mask_partition_1_step_*.png")
+    pattern = os.path.join(directory, "traversability_partition_1_step_*.png")
     files = glob.glob(pattern)
     
     # Sort files numerically by step number
@@ -164,7 +164,7 @@ def main():
     args = parser.parse_args()
     
     print(f"Processing PARTITION 1 files from: {args.directory}")
-    print("Looking for pattern: traversability_mask_partition_1_step_*.png")
+    print("Looking for pattern: traversability_partition_1_step_*.png")
     
     png_files = find_partition_1_files(args.directory)
     

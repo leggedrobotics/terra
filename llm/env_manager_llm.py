@@ -2831,3 +2831,157 @@ class EnvironmentsManager:
             print(f"  Partition {target_partition_idx}: Total {dig_targets_blocked} dig targets blocked, {dump_targets_not_blocked} dump targets remain free")
         
         print("✅ Dig target blocking verification complete")
+
+
+    def debug_agent_positions_before_sync(self, partition_states, step_num):
+        """
+        Debug method to print agent positions before synchronization.
+        """
+        print(f"\n=== AGENT POSITIONS DEBUG - STEP {step_num} ===")
+        
+        all_positions = {}
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            # Get agent position from state
+            agent_pos = partition_state['timestep'].state.agent.agent_state.pos_base
+            
+            # Get partition region coordinates
+            partition = self.partitions[partition_idx]
+            region_coords = partition['region_coords']
+            
+            # Convert to global coordinates (if using local coordinates)
+            # This might be where the bug is!
+            global_pos = self.map_position_small_to_global(agent_pos, region_coords)
+            
+            print(f"  Agent {partition_idx}:")
+            print(f"    Local position: {agent_pos}")
+            print(f"    Region coords: {region_coords}")
+            print(f"    Global position: {global_pos}")
+            
+            # Get traversability mask to see where agent appears
+            traversability = partition_state['timestep'].state.world.traversability_mask.map
+            agent_cells = jnp.where(traversability == -1)
+            
+            print(f"    Agent cells in traversability mask: {len(agent_cells[0])} cells")
+            if len(agent_cells[0]) > 0:
+                for i in range(min(5, len(agent_cells[0]))):  # Show first 5 cells
+                    y, x = agent_cells[0][i], agent_cells[1][i]
+                    print(f"      Cell {i}: ({y}, {x})")
+            
+            all_positions[partition_idx] = {
+                'local_pos': agent_pos,
+                'global_pos': global_pos,
+                'occupied_cells': [(int(agent_cells[0][i]), int(agent_cells[1][i])) 
+                                for i in range(len(agent_cells[0]))]
+            }
+        
+        # Check for overlaps
+        print(f"\n--- OVERLAP DETECTION ---")
+        partitions = list(all_positions.keys())
+        for i in range(len(partitions)):
+            for j in range(i + 1, len(partitions)):
+                p1, p2 = partitions[i], partitions[j]
+                
+                cells1 = set(all_positions[p1]['occupied_cells'])
+                cells2 = set(all_positions[p2]['occupied_cells'])
+                
+                overlap = cells1.intersection(cells2)
+                if overlap:
+                    print(f"  ❌ OVERLAP between agents {p1} and {p2}: {overlap}")
+                else:
+                    print(f"  ✅ No overlap between agents {p1} and {p2}")
+        
+        return all_positions
+
+    def debug_traversability_after_sync(self, partition_states, step_num):
+        """
+        Debug method to verify traversability masks after synchronization.
+        """
+        print(f"\n=== TRAVERSABILITY DEBUG AFTER SYNC - STEP {step_num} ===")
+        
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            traversability = partition_state['timestep'].state.world.traversability_mask.map
+            
+            # Count different values
+            free_space = jnp.sum(traversability == 0)
+            obstacles = jnp.sum(traversability == 1)
+            agents = jnp.sum(traversability == -1)
+            
+            print(f"  Partition {partition_idx} traversability:")
+            print(f"    Free space (0): {free_space}")
+            print(f"    Obstacles (1): {obstacles}")  
+            print(f"    Agent cells (-1): {agents}")
+            
+            # Check if other agents appear as obstacles
+            agent_positions = jnp.where(traversability == -1)
+            obstacle_positions = jnp.where(traversability == 1)
+            
+            print(f"    Agent cells: {[(int(agent_positions[0][i]), int(agent_positions[1][i])) for i in range(len(agent_positions[0]))]}")
+            
+            if len(obstacle_positions[0]) > 0:
+                print(f"    First 5 obstacle cells: {[(int(obstacle_positions[0][i]), int(obstacle_positions[1][i])) for i in range(min(5, len(obstacle_positions[0])))]}")
+
+    # Add this to your main loop for debugging:
+    def debug_sync_effectiveness(self, partition_states, step_num):
+        """
+        Complete debugging method to call in your main loop.
+        """
+        print(f"\n{'='*80}")
+        print(f"SYNC DEBUG - STEP {step_num}")
+        print(f"{'='*80}")
+        
+        # Debug before sync
+        positions_before = self.debug_agent_positions_before_sync(partition_states, step_num)
+        
+        # Debug after sync  
+        self.debug_traversability_after_sync(partition_states, step_num)
+        
+        # Verify sync worked
+        all_agent_positions = {}
+        for partition_idx, partition_state in partition_states.items():
+            if partition_state['status'] != 'active':
+                continue
+                
+            traversability = partition_state['timestep'].state.world.traversability_mask.map
+            agent_mask = (traversability == -1)
+            agent_positions = jnp.where(agent_mask)
+            
+            if len(agent_positions[0]) > 0:
+                occupied_cells = []
+                for i in range(len(agent_positions[0])):
+                    cell = (int(agent_positions[0][i]), int(agent_positions[1][i]))
+                    occupied_cells.append(cell)
+                all_agent_positions[partition_idx] = occupied_cells
+        
+        # Final overlap check
+        print(f"\n--- FINAL OVERLAP CHECK ---")
+        partitions = list(all_agent_positions.keys())
+        overlaps_found = 0
+        
+        for i in range(len(partitions)):
+            for j in range(i + 1, len(partitions)):
+                p1, p2 = partitions[i], partitions[j]
+                
+                if p1 in all_agent_positions and p2 in all_agent_positions:
+                    cells1 = set(all_agent_positions[p1])
+                    cells2 = set(all_agent_positions[p2])
+                    
+                    overlap = cells1.intersection(cells2)
+                    if overlap:
+                        print(f"  ❌ FINAL OVERLAP between agents {p1} and {p2}: {overlap}")
+                        overlaps_found += 1
+                    else:
+                        print(f"  ✅ No final overlap between agents {p1} and {p2}")
+        
+        if overlaps_found == 0:
+            print("🎉 NO OVERLAPS DETECTED - SYNC WORKING!")
+        else:
+            print(f"❌ {overlaps_found} OVERLAPS STILL PRESENT - SYNC FAILED!")
+        
+        return overlaps_found == 0
