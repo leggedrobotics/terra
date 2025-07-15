@@ -94,6 +94,9 @@ class Rewards(NamedTuple):
     holding_dirt: float  # penalty per step for being loaded (holding dirt)
     skid_lift_shovel_with_dirt: float  # reward for lifting the shovel while loaded
     skid_move_loaded_shovel_up: float  # reward for moving while loaded and shovel is up
+    skid_auto_load_from_dumpzone_penalty: float  # penalty for loading dirt from a dump zone
+
+    move_to_dump_zone: float  # reward/penalty for distance to dump zone
 
     terminal: float  # given if the action map is the same as the target map where it matters (digged tiles)
 
@@ -118,17 +121,18 @@ class Rewards(NamedTuple):
             dump_correct=0.15,  # Even higher reward for dumping correctly was 0.15
 
             # Skid steer specific rewards
-            skid_move=0.005,                 # Small positive reward for movement
-            skid_dump_correct=1.0,             # Large reward for correct dumping
-            skid_dump_wrong=-0.3,            # Moderate penalty for failed dumps
-            skid_shovel_control=0.005,       # Small reward for shovel control
-            skid_auto_load=0.1,              # Small reward for auto-loading
-            holding_dirt=-0.02,              # Per-step penalty for holding dirt
-            skid_lift_shovel_with_dirt=0.0,  # No reward for this event
-            skid_move_loaded_shovel_up=0.01, # Small reward for moving while loaded and shovel is up
+            skid_move=0.0,                 # Remove positive movement reward to discourage random movement
+            skid_dump_correct=40.0,         # 5  20  # Large reward for correct dumping (0.05 after normalization)
+            skid_dump_wrong=-0.6,          #-0.5  # Moderate penalty for failed dumps (-0.005 after normalization)
+            skid_shovel_control=0.005,       # Small reward for shovel control (0.0001 after normalization)
+            skid_auto_load=0.5,              # Core reward: agents need to load dirt to dump it (0.005 after normalization)
+            holding_dirt=-0.15,        #-0.1      # Per-step penalty for holding dirt (-0.001 after normalization)
+            skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt (0.0005 after normalization)
+            skid_move_loaded_shovel_up=0.02,  # New: reward for moving while loaded and shovel is up (0.0002 after normalization)
+            move_to_dump_zone=0.4,  #0.3 worked        # Moderate reward for being close to dump zones (0.003 after normalization)
             terminal=100.0,
             normalizer=100.0,
-            
+            skid_auto_load_from_dumpzone_penalty=-0.0,  #-1.5# Large penalty for loading from dump zone
         )
 
     @staticmethod
@@ -148,16 +152,18 @@ class Rewards(NamedTuple):
             dig_correct=0.0,
             dump_correct=0.0,
             # Skid steer specific rewards (more sparse)
-            skid_move=0.01,  # Small reward for skidsteer movement in sparse mode
-            skid_dump_correct=0.05,  # Lower reward in sparse mode
-            skid_dump_wrong=-0.2,  # Lower penalty in sparse mode
-            skid_shovel_control=0.01,  # Very small reward in sparse mode
-            skid_auto_load=0.02,  # Very small reward in sparse mode
-            holding_dirt=-0.01,
-            skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt
-            skid_move_loaded_shovel_up=0.02,  # New: reward for moving while loaded and shovel is up
+            skid_move=0.0,  # Remove positive movement reward to discourage random movement
+            skid_dump_correct=1.0,  # Lower reward in sparse mode (0.01 after normalization)
+            skid_dump_wrong=-0.25,  # Moderate penalty in sparse mode (-0.0025 after normalization)
+            skid_shovel_control=0.01,  # Very small reward in sparse mode (0.0001 after normalization)
+            skid_auto_load=0.2,  # Core reward: agents need to load dirt to dump it (0.002 after normalization)
+            holding_dirt=-0.05,  # Per-step penalty for holding dirt (-0.0005 after normalization)
+            skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt (0.0005 after normalization)
+            skid_move_loaded_shovel_up=0.02,  # New: reward for moving while loaded and shovel is up (0.0002 after normalization)
+            move_to_dump_zone=0.1,          # Small reward for being close to dump zones (0.001 after normalization)
             terminal=100.0,
             normalizer=100.0,
+            skid_auto_load_from_dumpzone_penalty=-2.0,  # Penalty for loading from dump zone
         )
 
 
@@ -212,13 +218,13 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
         {
             "maps_path": "relocations_easy",
-            "max_steps_in_episode": 300,  # Shorter episodes for faster learning
+            "max_steps_in_episode": 600,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "relocations",
-            "max_steps_in_episode": 500,  # Shorter episodes for faster learning
+            "maps_path": "relocations_easy",
+            "max_steps_in_episode": 500,  # Balanced: increased from 400 but reduced from 600
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },

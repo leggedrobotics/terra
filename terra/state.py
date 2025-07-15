@@ -78,7 +78,8 @@ class State(NamedTuple):
         action_map: Array,
     ) -> "State":
         # TEMP HACK: Set all dirt height 1 to 5 for testing
-        action_map = jnp.where(action_map == 1, 5, action_map)
+        #action_map = jnp.where(action_map == 1, 5, action_map)
+
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
         )
@@ -1562,6 +1563,7 @@ class State(NamedTuple):
         """
         For skid steer: Allow lifting from any dirt (action_map != 0)
         NEVER allow digging new holes (target_map < 0)
+        Now also prevent loading from dump zones (target_map > 0).
         """
         # Allow lifting from any dirt (action_map != 0) - both natural and dumped
         dig_mask_action_map = self.world.action_map.map != 0
@@ -1570,12 +1572,12 @@ class State(NamedTuple):
         max_dig_limit_mask = (
             self.world.action_map.map > -self.env_cfg.agent.dig_depth
         ).reshape(-1)
-
-        return (
-            dig_mask
-            * dig_mask_action_map.reshape(-1)  # Any dirt tiles (natural or dumped)
-            * max_dig_limit_mask
-        ).astype(jnp.bool_)
+        # Prevent loading from dump zones (target_map > 0)
+        target_map_flat = self.world.target_map.map.reshape(-1)
+        not_dump_zone_mask = target_map_flat <= 0
+        # Combine all masks
+        combined_mask = dig_mask & dig_mask_action_map.reshape(-1) & max_dig_limit_mask & not_dump_zone_mask
+        return combined_mask
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         new_dumpability_mask = self.world.dumpability_mask_init.map
@@ -2053,26 +2055,40 @@ class State(NamedTuple):
     def _handle_rewards_skid_steer_auto_load(
         self, new_state: "State"
     ) -> Float:
-        """Reward for successful auto-loading during movement"""
-        # Check if dirt was auto-loaded during movement
+        """Reward for successful auto-loading during movement, with penalty if dirt is removed from a dump zone."""
         old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state.loaded[0]
+        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
         dirt_gained = new_loaded - old_loaded
-        
-        # Give reward proportional to dirt auto-loaded
+
+        # Only check for penalty if dirt was gained
+        def _reward_or_penalty():
+            # Use the existing progress function to check if dump zone dirt decreased
+            progress = self._get_action_map_dump_progress(
+                self.world.action_map.map,
+                new_state.world.action_map.map,
+                self.world.target_map.map,
+            )
+            # If progress is negative, dirt was removed from a dump zone
+            # return jax.lax.cond(
+            #     progress < 0,
+            #     lambda: self.env_cfg.rewards.skid_auto_load_from_dumpzone_penalty,
+            #     lambda: self.env_cfg.rewards.skid_auto_load,
+            # )
+            # Penalty commented out:
+            return self.env_cfg.rewards.skid_auto_load
         return jax.lax.cond(
             dirt_gained > 0,
-            lambda: self.env_cfg.rewards.skid_auto_load, #dirt_gained * 
+            _reward_or_penalty,
             lambda: 0.0
         )
 
     def _handle_rewards_skid_steer_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        """Specialized dump rewards for skid steer"""
+        """Specialized dump rewards for skid steer with efficiency-based rewards"""
         # Check if dump was successful (dirt was unloaded)
         old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state.loaded[0]
+        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
         dirt_dumped = old_loaded - new_loaded
         
         def _successful_dump():
@@ -2083,11 +2099,34 @@ class State(NamedTuple):
                 self.world.target_map.map,
             )
             
-            # Reward based on correct placement
+            # EFFICIENCY FIX: Calculate efficiency as ratio of correct placement
+            # This eliminates the edge-dumping exploit by rewarding based on percentage
+            def _calculate_efficiency_reward():
+                dump_efficiency = action_map_dump_progress / jnp.maximum(old_loaded, 1e-6)  # Use total loaded capacity
+                dump_efficiency = jnp.clip(dump_efficiency, 0.0, 1.0)  # Clamp to [0, 1]
+                
+                # Base efficiency reward
+                base_reward = dump_efficiency * self.env_cfg.rewards.skid_dump_correct
+                
+                # PERFECT EFFICIENCY BONUS: Extra reward for 100% correct dumping
+                # This creates stronger incentive to dump ALL dirt in correct zones
+                perfect_bonus = jnp.where(
+                    dump_efficiency >= 1.0,
+                    self.env_cfg.rewards.skid_dump_correct * 0.2,  # 20% bonus for perfect efficiency
+                    0.0
+                )
+                
+                return base_reward + perfect_bonus
+            
+            def _wrong_dump_penalty():
+                # If no progress in dump zones, give penalty proportional to amount dumped
+                return self.env_cfg.rewards.skid_dump_wrong
+            
+            # Reward based on correct placement efficiency
             return jax.lax.cond(
                 action_map_dump_progress > 0,
-                lambda: self.env_cfg.rewards.skid_dump_correct, # action_map_dump_progress * s
-                lambda: self.env_cfg.rewards.skid_dump_wrong  # Dumped but not in correct area dirt_dumped * 
+                _calculate_efficiency_reward,
+                _wrong_dump_penalty
             )
         
         def _failed_dump():
@@ -2105,7 +2144,7 @@ class State(NamedTuple):
     ) -> Float:
         """Small reward for effective shovel control"""
         old_shovel = self.agent.agent_state.shovel_lifted[0]
-        new_shovel = new_state.agent.agent_state.shovel_lifted[0]
+        new_shovel = new_state.agent.agent_state_2.shovel_lifted[0]  # FIX: Use agent_state_2 after swap
         shovel_changed = old_shovel != new_shovel
         
         # Small reward for shovel state changes (encourages learning control)
@@ -2123,7 +2162,7 @@ class State(NamedTuple):
         
         # Check what happened during DO action
         old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state.loaded[0]
+        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
         
         # Add dump rewards if dirt was unloaded
         reward += jax.lax.cond(
@@ -2773,7 +2812,6 @@ class State(NamedTuple):
     def _handle_rewards_move_skidsteer(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        """Movement rewards for skidsteer - excludes move penalties to encourage transport"""
         reward = 0.0
         # Collision
         reward += jax.lax.cond(
@@ -2782,8 +2820,12 @@ class State(NamedTuple):
             lambda: self.env_cfg.rewards.skid_move,
         )
 
-        # NO move_while_loaded penalty for skidsteer (removed to encourage transport)
-        # NO base move penalty for skidsteer (removed to encourage transport)
+        # Move while loaded
+        reward += jax.lax.cond(
+            jnp.all(self.agent.agent_state.loaded > 0),
+            lambda: self.env_cfg.rewards.move_while_loaded,
+            lambda: 0.0,
+        )
 
         # Moving with turned wheels (not applicable to skidsteer, but keeping for consistency)
         reward += jax.lax.cond(
@@ -2792,7 +2834,44 @@ class State(NamedTuple):
             lambda: 0.0,
         )
 
-        # NO base move penalty for skidsteer
+        # Directional distance reward: only reward if getting closer to dump zones
+        # FIX: Use correct agent positions to avoid state swapping bug
+        old_dist = self._get_min_distance_to_dump_zone_for_agent(self.agent.agent_state.pos_base)
+        new_dist = self._get_min_distance_to_dump_zone_for_agent(new_state.agent.agent_state_2.pos_base)
+        distance_improvement = old_dist - new_dist  # Positive if getting closer
+        
+        # Reward/penalize based on distance change to dump zones when loaded
+        reward += jax.lax.cond(
+            self.agent.agent_state.loaded[0] > 0,
+            lambda: self.env_cfg.rewards.move_to_dump_zone * distance_improvement,
+            lambda: 0.0,
+        )
 
         return reward
+
+    def _get_min_distance_to_dump_zone_for_agent(self, agent_pos: Array) -> Float:
+        """
+        Returns the minimum Euclidean distance from a given agent position to any dump zone tile.
+        Helper method to avoid state swapping issues.
+        """
+        dump_mask = self.world.dumpability_mask.map  # shape (W, H), 1 = can dump
+        width = self.world.width
+        height = self.world.height
+        
+        xs = jnp.arange(width)
+        ys = jnp.arange(height)
+        grid_x, grid_y = jnp.meshgrid(xs, ys, indexing='ij')  # shape (W, H)
+        
+        # Compute squared distances to agent position
+        dists = (grid_x - agent_pos[0]) ** 2 + (grid_y - agent_pos[1]) ** 2  # shape (W, H)
+        
+        # Mask out non-dump-zone tiles by setting their distance to a large value
+        masked_dists = jnp.where(dump_mask, dists, jnp.inf)
+        
+        # Take the minimum distance (if no dump zone, result is inf)
+        min_dist = jnp.sqrt(jnp.min(masked_dists))
+        
+        # Normalize by map diagonal
+        map_diagonal = jnp.sqrt(width**2 + height**2)
+        return jnp.where(jnp.isfinite(min_dist), min_dist / map_diagonal, 0.0)
 

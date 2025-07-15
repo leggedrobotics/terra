@@ -53,14 +53,15 @@ def save_action_image(drt, save_folder, i):
 
 def create_relocations_easy(n_imgs, save_folder):
     img_edge = 64
-    size = 7
+    dump_zone_size = 18  # Even larger dump zones for easier access
+    dirt_zone_size = 7   # Keep dirt zones smaller (original size)
     for i in range(n_imgs):
         img = initialize_image(img_edge, img_edge, color_dict["neutral"])
-        (dump_x, dump_y), (dirt_x, dirt_y) = get_random_close_positions(img_edge, size, min_dist=12, max_dist=20)
-        img, cumulative_mask = add_dump_zone_easy(img, size=size, pos=(dump_x, dump_y))
+        (dump_x, dump_y), (dirt_x, dirt_y) = get_random_close_positions(img_edge, dump_zone_size, min_dist=20, max_dist=28)
+        img, cumulative_mask = add_dump_zone_easy(img, size=dump_zone_size, pos=(dump_x, dump_y))
         occ = img.copy()
         dmp = img.copy()
-        drt, cumulative_mask = add_dirt_tile_easy(img, occ, dmp, cumulative_mask, size=size, pos=(dirt_x, dirt_y))
+        drt, cumulative_mask = add_dirt_tile_easy(img, occ, dmp, cumulative_mask, size=dirt_zone_size, pos=(dirt_x, dirt_y))
         # No obstacles or non-dumpables for easy maps
         save_or_display_image(img, occ, dmp, {}, save_folder, i)
         save_action_image(drt, save_folder, i)
