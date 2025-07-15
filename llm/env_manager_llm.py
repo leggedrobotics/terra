@@ -1165,29 +1165,54 @@ class EnvironmentsManager:
         if targets_blocked > 0:
             print(f"  ✓ Blocked {cells_blocked} target cells from {targets_blocked} other partitions in partition {target_partition_idx}")
 
+    # def step_with_full_global_sync(self, partition_idx: int, action, partition_states: dict):
+    #     """
+    #     UPDATED: Enhanced step function that properly handles dumped soil as obstacles.
+    #     """
+    #     # Step 1: Take the action in the partition
+    #     new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+    #     # Step 2: Update the partition state
+    #     partition_states[partition_idx]['timestep'] = new_timestep
+        
+    #     # Step 3: Extract changes from this partition and update global maps
+    #     self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+    #     # Step 4: Propagate global map changes to ALL partitions (EXCLUDING traversability)
+    #     self._sync_all_partitions_from_global_maps_excluding_traversability(partition_states)
+        
+    #     # Step 5: Properly sync agent positions AND dumped soil obstacles
+    #     self._sync_agent_positions_across_partitions(partition_states)
+        
+    #     # Step 6: Update observations to match synced states
+    #     self._update_all_observations(partition_states)
+        
+    #     return new_timestep
+    
     def step_with_full_global_sync(self, partition_idx: int, action, partition_states: dict):
         """
-        UPDATED: Enhanced step function that properly handles dumped soil as obstacles.
+        FIXED: Synchronize BEFORE stepping to prevent collisions.
         """
-        # Step 1: Take the action in the partition
-        new_timestep = self.step_simple(partition_idx, action, partition_states)
-        
-        # Step 2: Update the partition state
-        partition_states[partition_idx]['timestep'] = new_timestep
-        
-        # Step 3: Extract changes from this partition and update global maps
-        self._update_global_maps_from_single_partition(partition_idx, partition_states)
-        
-        # Step 4: Propagate global map changes to ALL partitions (EXCLUDING traversability)
-        self._sync_all_partitions_from_global_maps_excluding_traversability(partition_states)
-        
-        # Step 5: Properly sync agent positions AND dumped soil obstacles
+        # Step 1: Sync current positions BEFORE any movement
         self._sync_agent_positions_across_partitions(partition_states)
         
-        # Step 6: Update observations to match synced states
+        # Step 2: Update observations so agents see synchronized state
         self._update_all_observations(partition_states)
         
+        # Step 3: NOW take the action with proper obstacle awareness
+        new_timestep = self.step_simple(partition_idx, action, partition_states)
+        
+        # Step 4: Update the partition state
+        partition_states[partition_idx]['timestep'] = new_timestep
+        
+        # Step 5: Extract changes and update global maps
+        self._update_global_maps_from_single_partition(partition_idx, partition_states)
+        
+        # Step 6: Propagate changes to other partitions
+        self._sync_all_partitions_from_global_maps_excluding_traversability(partition_states)
+        
         return new_timestep
+
     
     def _update_partition_traversability_with_dumped_soil_and_dig_targets(self, target_partition_idx, target_partition_state, 
                                                                      all_agent_positions, partition_states):
