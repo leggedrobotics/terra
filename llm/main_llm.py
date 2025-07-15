@@ -357,6 +357,16 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         try:
                             current_observation = partition_state['timestep'].observation
 
+
+                            #if map_step <=20 and current_map_index == 0:
+                            if current_map_index == 0:
+                                    sub_maps = current_observation
+                                    save_mask(np.array(sub_maps['target_map']),'target', 'before_RL', partition_idx, map_step)
+                                    save_mask(np.array(sub_maps['action_map']),'action', 'before_RL', partition_idx, map_step)
+                                    save_mask(np.array(sub_maps['dumpability_mask']),'dumpability', 'before_RL', partition_idx, map_step)
+                                    save_mask(np.array(sub_maps['padding_mask']),'padding', 'before_RL', partition_idx, 0)
+                                    save_mask(np.array(sub_maps['traversability_mask']),'traversability', 'before_RL', partition_idx, map_step)
+
                             batched_observation = add_batch_dimension_to_observation(current_observation)
                             obs = obs_to_model_input(batched_observation, partition_state['prev_actions_rl'], config)
 
