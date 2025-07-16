@@ -209,8 +209,8 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20  # Reduced from 20 for faster progression
-    decrease_level_threshold: int = 35  # Reduced from 50 for quicker regression
+    increase_level_threshold: int = 5  # Reduced from 20 for faster progression
+    decrease_level_threshold: int = 14  # Reduced from 50 for quicker regression
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
@@ -218,13 +218,13 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
         {
             "maps_path": "relocations_easy",
-            "max_steps_in_episode": 600,  # 600 Balanced: increased from 300 but reduced from 500
+            "max_steps_in_episode": 550,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
         {
-            "maps_path": "relocations_easy",
-            "max_steps_in_episode": 500,  # Balanced: increased from 400 but reduced from 600
+            "maps_path": "relocations",
+            "max_steps_in_episode": 550,  # Balanced: increased from 400 but reduced from 600
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
