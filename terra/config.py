@@ -193,12 +193,31 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # NOTE: all maps need to have the same size
     levels = [
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         {
-            "maps_path": "foundations",
+            "maps_path": "trenches/single",
             "max_steps_in_episode": 600,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
+        {
+            "maps_path": "trenches/double",
+            "max_steps_in_episode": 600,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
+        # {
+        #     "maps_path": "trenches/triple",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+
         # {
         #     "maps_path": "trenches/easy_size_small",
         #     "max_steps_in_episode": 600,
@@ -217,12 +236,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
-        {
-            "maps_path": "trenches/medium_size_large",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "trenches/medium_size_large",
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # {
         #     "maps_path": "trenches/hard_size_large",
         #     "max_steps_in_episode": 600,
@@ -258,7 +277,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
+    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
