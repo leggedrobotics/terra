@@ -684,9 +684,20 @@ if __name__ == "__main__":
         help="Policy to use for the experiment. Must be a valid path to a .pkl file containing the policy.",
     )
 
+    parser.add_argument(
+        "--level_index",
+        type=int,
+        default=None,
+        help="Index of the level to run from CurriculumGlobalConfig.levels. If None, runs all levels."
+    )
+
 
     args = parser.parse_args()
     NUM_ENVS = args.n_envs
+
+    if args.level_index is not None:
+        import os
+        os.environ['TERRA_LEVEL_INDEX'] = str(args.level_index)
 
     episode_done_once_list = []
     episode_length_list = []

@@ -411,7 +411,16 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
     else:
         if os.getenv("DATASET_PATH", "") == "":
             raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
-        maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
+        
+        # Check if we should only load a specific level
+        level_index = os.getenv("TERRA_LEVEL_INDEX", None)
+
+        if level_index is not None:
+            maps_paths = [batch_cfg.curriculum_global.levels[int(level_index)]["maps_path"]]
+        else:
+            # Original code - load all levels
+            maps_paths = [el["maps_path"] for el in batch_cfg.curriculum_global.levels]
+
         folder_paths = [str(Path(os.getenv("DATASET_PATH", "")) / el) for el in maps_paths]
         print(f"Loading maps from {folder_paths}.")
         maps_from_disk = []
