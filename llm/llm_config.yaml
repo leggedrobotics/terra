@@ -19,7 +19,7 @@ session_id: "session_001"       # Session ID for ADK
 # Rendering settings
 grid_rendering: false           # Use grid rendering for partitions
 use_rendering: true             # Use rendering for the environment
-use_display: true               # Use display for the environment
+use_display: false               # Use display for the environment
 
 # Environment settings
 original_map_size: 64          # Original map size for the environment

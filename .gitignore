@@ -55,3 +55,4 @@ experiment_outputs/experiment_seed_789.log
 train4/
 train/
 .DS_Store
+logs/

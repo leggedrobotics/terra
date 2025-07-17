@@ -591,7 +591,8 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
     os.makedirs(output_dir, exist_ok=True)
 
     # Save video
-    if USE_RENDERING:
+    SAVE_VIDEO = False
+    if SAVE_VIDEO:
         video_path = os.path.join(output_dir, "gameplay_all_maps.mp4")
         save_video(all_frames, video_path)
         
