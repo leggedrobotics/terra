@@ -4,27 +4,21 @@ channels:
   - https://repo.anaconda.com/pkgs/main
   - https://repo.anaconda.com/pkgs/r
 dependencies:
-  - _libgcc_mutex=0.1=main
-  - _openmp_mutex=5.1=1_gnu
-  - bzip2=1.0.8=h5eee18b_5
-  - ca-certificates=2023.12.12=h06a4308_0
-  - expat=2.5.0=h6a678d5_0
-  - ld_impl_linux-64=2.38=h1181459_1
-  - libffi=3.4.4=h6a678d5_0
-  - libgcc-ng=11.2.0=h1234567_1
-  - libgomp=11.2.0=h1234567_1
-  - libstdcxx-ng=11.2.0=h1234567_1
-  - libuuid=1.41.5=h5eee18b_0
-  - ncurses=6.4=h6a678d5_0
-  - openssl=3.0.13=h7f8727e_0
-  - python=3.12.2=h996f2a0_0
-  - readline=8.2=h5eee18b_0
-  - setuptools=68.2.2=py312h06a4308_0
-  - sqlite=3.41.2=h5eee18b_0
-  - tk=8.6.12=h1ccaba5_0
-  - wheel=0.41.2=py312h06a4308_0
-  - xz=5.4.6=h5eee18b_0
-  - zlib=1.2.13=h5eee18b_0
+  - bzip2=1.0.8
+  - ca-certificates=2023.12.12
+  - expat=2.5.0
+  - libffi=3.4.4
+  - libuuid=1.41.5
+  - ncurses=6.4
+  - openssl=3.0.13
+  - python=3.12.2
+  - readline=8.2
+  - setuptools=68.2.2
+  - sqlite=3.41.2
+  - tk=8.6.12
+  - wheel=0.41.2
+  - xz=5.4.6
+  - zlib=1.2.13
   - pip:
       - aiohappyeyeballs==2.6.1
       - aiohttp==3.11.18
@@ -88,7 +82,7 @@ dependencies:
       - graphviz==0.20.3
       - greenlet==3.2.1
       - grpc-google-iam-v1==0.14.2
-      - grpcio==1.62.1
+      - grpcio==1.62.3
       - grpcio-status==1.62.3
       - gviz-api==1.10.0
       - h5py==3.10.0
@@ -101,8 +95,8 @@ dependencies:
       - imageio==2.34.0
       - importlib-metadata==8.6.1
       - importlib-resources==6.3.1
-      - jax==0.4.34
-      - jaxlib==0.4.34
+      - jax==0.4.26
+      - jaxlib==0.4.26
       - jinja2==3.1.6
       - jsonschema==4.23.0
       - jsonschema-specifications==2025.4.1
@@ -126,17 +120,6 @@ dependencies:
       - networkx==3.2.1
       - nodeenv==1.8.0
       - numpy==1.26.4
-      - nvidia-cublas-cu12==12.4.2.65
-      - nvidia-cuda-cupti-cu12==12.4.99
-      - nvidia-cuda-nvcc-cu12==12.4.99
-      - nvidia-cuda-nvrtc-cu12==12.4.99
-      - nvidia-cuda-runtime-cu12==12.4.99
-      - nvidia-cudnn-cu12==8.9.7.29
-      - nvidia-cufft-cu12==11.2.0.44
-      - nvidia-cusolver-cu12==11.6.0.99
-      - nvidia-cusparse-cu12==12.3.0.142
-      - nvidia-nccl-cu12==2.20.5
-      - nvidia-nvjitlink-cu12==12.4.99
       - openai==1.76.0
       - opencv-python==4.9.0.80
       - opentelemetry-api==1.32.1
@@ -148,7 +131,7 @@ dependencies:
       - optax==0.2.1
       - orbax-checkpoint==0.5.6
       - osmnx==1.9.1
-      - packaging==24.0
+      - packaging==24.2.0
       - pandas==2.2.1
       - pathspec==0.12.1
       - pillow==10.2.0
@@ -198,7 +181,7 @@ dependencies:
       - tokenizers==0.21.1
       - toolz==0.12.1
       - tqdm==4.66.2
-      - typing-extensions==4.10.0
+      - typing-extensions==4.12.0
       - typing-inspection==0.4.0
       - tzdata==2024.1
       - tzlocal==5.3.1
@@ -210,5 +193,4 @@ dependencies:
       - werkzeug==3.0.1
       - wrapt==1.16.0
       - yarl==1.20.0
-      - zipp==3.18.1
-prefix: /home/gioelemo/miniconda3/envs/terra
+      - zipp==3.20
