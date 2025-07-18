@@ -56,3 +56,5 @@ train4/
 train/
 .DS_Store
 logs/
+*.err
+*.out
