@@ -78,7 +78,7 @@ class State(NamedTuple):
         action_map: Array,
     ) -> "State":
         # TEMP HACK: Set all dirt height 1 to 5 for testing
-        #action_map = jnp.where(action_map == 1, 5, action_map)
+        action_map = jnp.where(action_map == 1, 5, action_map)
 
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
@@ -117,7 +117,7 @@ class State(NamedTuple):
         """
         key, _ = jax.random.split(self.key)
         # TEMP HACK: Set all dirt height 1 to 5 for testing
-        action_map = jnp.where(action_map == 1, 5, action_map)
+        #action_map = jnp.where(action_map == 1, 5, action_map)
         return self.new(
             key=key,
             env_cfg=env_cfg,
@@ -251,14 +251,70 @@ class State(NamedTuple):
     @staticmethod
     def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
         """
+        Efficient traversability mask with selective dirt collision.
+        Small dirt patches are traversable, only very dense dirt formations block movement.
+        
         Args:
-            - map: (N, M) Array of ints
+            - map: (N, M) Array of ints (action_map)
             - padding_mask: (N, M) Array of ints, 1 if not traversable, 0 if traversable
         Returns:
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
+                
+        Behavior:
+            - High dirt piles (>1 height): Always blocked
+            - Dug holes/trenches (negative values): Always blocked
+            - 3x3 dirt patches: Mostly traversable (edges passable)
+            - Large solid dirt formations: Blocked (8+ dirt tiles in 3x3 area)
+            - Scattered dirt: Always traversable
+            - Padding obstacles: Always blocked
         """
-        return (~((map == 0) * ~padding_mask)).astype(IntLowDim)
+        # Fast path: if no dirt, just return padding mask
+        has_dirt = jnp.any(map != 0)
+        
+        def _with_selective_dirt_collision():
+            # Efficient direct neighbor counting (no convolution)
+            dirt_mask = (map != 0).astype(jnp.int32)
+            H, W = dirt_mask.shape
+            
+            # Pad with zeros to handle boundaries
+            padded = jnp.pad(dirt_mask, 1, mode='constant', constant_values=0)
+            
+            # Count dirt in 3x3 neighborhood (8 neighbors + center = 9 total)
+            dirt_count_3x3 = (
+                padded[:-2, :-2] + padded[:-2, 1:-1] + padded[:-2, 2:] +    # Top row
+                padded[1:-1, :-2] + dirt_mask +        padded[1:-1, 2:] +    # Middle row (include center)
+                padded[2:, :-2] + padded[2:, 1:-1] + padded[2:, 2:]         # Bottom row
+            )
+            
+            # Block only tiles in very dense dirt areas (8+ out of 9 tiles are dirt)
+            # This allows 3x3 patches to be mostly traversable, blocks larger solid formations
+            large_dirt_patches = jnp.logical_and(
+                map != 0,  # Is dirt
+                dirt_count_3x3 >= 8  # 8+ dirt tiles in 3x3 area (very dense)
+            )
+            
+            # Also block high dirt piles (>1 dirt height) - always non-traversable
+            high_dirt_piles = map > 1
+            
+            # Also block dug holes/trenches (negative values) - always non-traversable
+            dug_holes = map < 0
+            
+            # Combine all conditions: dense areas OR high piles OR dug holes
+            dirt_obstacles = jnp.logical_or(
+                jnp.logical_or(large_dirt_patches, high_dirt_piles),
+                dug_holes
+            )
+            
+            # Combine: block padding obstacles OR dirt obstacles
+            return jnp.logical_or(padding_mask == 1, dirt_obstacles).astype(IntLowDim)
+        
+        def _without_dirt():
+            # No dirt present, just return padding mask
+            return (padding_mask == 1).astype(IntLowDim)
+        
+        # Use JAX conditional to avoid unnecessary computation when no dirt is present
+        return jax.lax.cond(has_dirt, _with_selective_dirt_collision, _without_dirt)
 
     def _is_valid_move(self, agent_corners: Array) -> Array:
         """
@@ -433,20 +489,23 @@ class State(NamedTuple):
             )
         )
 
+
+
     def _skid_steer_auto_load_dirt(self, new_state: "State") -> "State":
         """
         Auto-loading function for skid steer when moving with shovel lowered.
+        Supports partial loading: loads up to capacity, removes exact amount from workspace.
         Applies soil mechanics directly when dirt is loaded.
         """
-        # Only applies to skid steer with shovel lowered and not already loaded
+        # Only applies to skid steer with shovel lowered
         is_skid_steer = new_state.agent.agent_state.agent_type[0] == 2
         shovel_lowered = new_state.agent.agent_state.shovel_lifted[0] == 0
-        not_loaded = new_state.agent.agent_state.loaded[0] == 0
         
-        should_auto_load = jnp.logical_and(
-            jnp.logical_and(is_skid_steer, shovel_lowered), 
-            not_loaded
-        )
+        # Fixed workspace capacity and current load
+        workspace_capacity = jnp.int32(127)  # Fixed capacity within int8 range
+        current_load = jnp.int32(new_state.agent.agent_state.loaded[0])  # Convert to int32
+        
+        should_auto_load = jnp.logical_and(is_skid_steer, shovel_lowered)
         
         def _apply_auto_load():
             # Use the closer cylindrical workspace for skid steer auto-loading
@@ -458,62 +517,77 @@ class State(NamedTuple):
             # Apply skid steer dig masking (only allow loading from existing dirt)
             auto_load_mask = new_state._mask_out_wrong_dig_tiles_skidsteer(auto_load_mask)
             
-            # Calculate how much dirt to load (from current state)
+            # Calculate how much dirt is available to load from workspace
             current_flattened_action_map = new_state.world.action_map.map.reshape(-1)
-            actual_dirt_to_remove = current_flattened_action_map @ auto_load_mask
+            # Convert to int32 to prevent overflow in dot product
+            available_dirt = jnp.int32(current_flattened_action_map) @ jnp.int32(auto_load_mask)
             
-            def _perform_auto_load():
-                # Only perform auto-load if there is dirt to remove
-                def _do_load():
-                    # First remove dirt cleanly (without soil mechanics)
-                    new_flattened_action_map = new_state._apply_dig_mask(
-                        current_flattened_action_map,
-                        auto_load_mask,
-                        moving_dumped_dirt=True  # We're moving existing dirt
+            # Simple all-or-nothing loading: only load if entire workspace fits in capacity
+            can_load_all = current_load + available_dirt <= workspace_capacity
+            
+            def _load_all_workspace():
+                # Remove ALL dirt from workspace (simple and clean)
+                new_flattened_action_map = jnp.where(
+                    auto_load_mask,
+                    0,  # Clear all dirt from workspace tiles
+                    current_flattened_action_map  # Keep other tiles unchanged
+                )
+                
+                new_map_2d = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
+                
+                # Apply soil mechanics (conserves dirt - only redistributes)
+                def _apply_soil_collapse():
+                    auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
+                    expanded_mask = new_state._expand_mask_for_soil_mechanics(auto_load_mask_2d)
+                    collapsed_map = new_state._apply_local_soil_mechanics(
+                        new_map_2d, expanded_mask
                     )
-                    new_map_2d = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
-                    
-                    # Apply soil mechanics directly using the auto-load mask (the actual holes)
-                    def _apply_soil_collapse():
-                        auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
-                        expanded_mask = new_state._expand_mask_for_soil_mechanics(auto_load_mask_2d)
-                        collapsed_map = new_state._apply_local_soil_mechanics(
-                            new_map_2d, expanded_mask
+                    return collapsed_map
+                
+                def _skip_soil_collapse():
+                    return new_map_2d
+                
+                final_map = jax.lax.cond(
+                    ENABLE_SOIL_MECHANICS,
+                    _apply_soil_collapse,
+                    _skip_soil_collapse
+                )
+                final_map = final_map.astype(new_state.world.action_map.map.dtype)
+                
+                # Load agent with the exact amount that was in the workspace
+                # (soil mechanics conserves dirt, so this is perfectly conserving)
+                new_loaded = current_load + available_dirt
+                
+                return new_state._replace(
+                    world=new_state.world._replace(
+                        action_map=new_state.world.action_map._replace(map=final_map),
+                    ),
+                    agent=new_state.agent._replace(
+                        agent_state=new_state.agent.agent_state._replace(
+                            loaded=jnp.array([new_loaded], dtype=new_state.agent.agent_state.loaded.dtype),
                         )
-                        return collapsed_map
-                    
-                    def _skip_soil_collapse():
-                        return new_map_2d
-                    
-                    final_map = jax.lax.cond(
-                        ENABLE_SOIL_MECHANICS,
-                        _apply_soil_collapse,
-                        _skip_soil_collapse
                     )
-                    final_map = final_map.astype(new_state.world.action_map.map.dtype)
-                    return new_state._replace(
-                        world=new_state.world._replace(
-                            action_map=new_state.world.action_map._replace(map=final_map),
-                        ),
-                        agent=new_state.agent._replace(
-                            agent_state=new_state.agent.agent_state._replace(
-                                loaded=jnp.array([actual_dirt_to_remove], dtype=new_state.agent.agent_state.loaded.dtype),
-                            )
-                        )
-                    )
-                def _no_load():
-                    # No dirt to load, keep loaded value unchanged
-                    return new_state
-                return jax.lax.cond(actual_dirt_to_remove > 0, _do_load, _no_load)
-            return _perform_auto_load()
+                )
+            
+            def _no_load():
+                # Can't fit entire workspace, so don't load anything
+                return new_state
+            
+            # Load all workspace dirt if it fits, otherwise load nothing
+            return jax.lax.cond(
+                jnp.logical_and(available_dirt > 0, can_load_all),
+                _load_all_workspace,
+                _no_load
+            )
+        
         return jax.lax.cond(should_auto_load, _apply_auto_load, lambda: new_state)
 
     def _handle_move_forward(self) -> "State":
         """
         Moves the base forward with realistic restrictions:
         - Excavators/Wheeled: can only move when not loaded
-        - Skid steer: can move when not loaded OR when loaded with shovel lifted
-        - Skid steer with lowered shovel + loaded: BLOCKED (forces shovel lifting)
+        - Skid steer: can move when not loaded OR when loaded with shovel lifted OR when loaded with shovel down (push mode)
+        - Skid steer push mode: can move forward while pushing dirt with lowered shovel
         """
 
         def _move_forward():
@@ -529,26 +603,13 @@ class State(NamedTuple):
         # Check agent conditions
         is_skid_steer = self.agent.agent_state.agent_type[0] == 2
         is_loaded = self.agent.agent_state.loaded[0] > 0
-        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
         
         # Movement rules:
         # - Non-skid steers: only when not loaded
-        # - Skid steer: not loaded OR (loaded AND shovel lifted)
-        # - Blocked: skid steer with loaded + lowered shovel
-        skid_steer_can_move = jnp.logical_or(
-            jnp.logical_not(is_loaded),  # Not loaded - can always move
-            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - optimal transport
-        )
-        
+        # - Skid steer: can always move (supports empty, push mode, and transport mode)
         can_move = jnp.logical_or(
-            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
-            jnp.logical_and(is_skid_steer, skid_steer_can_move)  # Skid steer with restrictions
-        )
-        
-        # Final check: non-skid steers still can't move when loaded
-        can_move = jnp.logical_and(
-            can_move,
-            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+            is_skid_steer,  # Skid steer - can always move
+            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
         )
         
         return jax.lax.cond(can_move, _move_forward, self._do_nothing)
@@ -557,8 +618,8 @@ class State(NamedTuple):
         """
         Moves the base backward with realistic restrictions:
         - Excavators/Wheeled: can only move when not loaded
-        - Skid steer: can move when not loaded OR when loaded with shovel lifted
-        - Skid steer with lowered shovel + loaded: BLOCKED (forces shovel lifting)
+        - Skid steer: can move when not loaded OR when loaded with shovel lifted OR when loaded with shovel down (drops dirt)
+        - Skid steer with lowered shovel + loaded: moves backward and drops dirt (realistic behavior)
         """
 
         def _move_backward():
@@ -566,9 +627,37 @@ class State(NamedTuple):
             orientation_vector = self._base_orientation_to_one_hot_backwards(
                 base_orientation
             )
-            new_state = self._move_on_orientation(orientation_vector)
             
-            # No auto-loading on backward movement - only forward movement should auto-load
+            # Check if skid steer should drop dirt when attempting to reverse
+            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+            is_loaded = self.agent.agent_state.loaded[0] > 0
+            shovel_down = self.agent.agent_state.shovel_lifted[0] == 0
+            
+            # Check if backward movement would be possible (without actually moving yet)
+            test_new_state = self._move_on_orientation(orientation_vector)
+            movement_possible = ~jnp.allclose(
+                self.agent.agent_state.pos_base,
+                test_new_state.agent.agent_state.pos_base,
+                atol=1e-6
+            )
+            
+            # Drop dirt first if skid steer is loaded, shovel down, AND movement is possible
+            # (realistic: blade lifts when starting to reverse, dirt falls off)
+            should_drop_dirt = jnp.logical_and(
+                jnp.logical_and(is_skid_steer, movement_possible),  # Skid steer AND can move
+                jnp.logical_and(is_loaded, shovel_down)             # Loaded AND shovel down
+            )
+            
+            # First dump dirt if needed
+            state_after_dump = jax.lax.cond(
+                should_drop_dirt,
+                self._handle_dump,
+                lambda: self
+            )
+            
+            # Then move backward
+            new_state = state_after_dump._move_on_orientation(orientation_vector)
+            
             return new_state
 
         # Check agent conditions
@@ -578,22 +667,10 @@ class State(NamedTuple):
         
         # Movement rules:
         # - Non-skid steers: only when not loaded
-        # - Skid steer: not loaded OR (loaded AND shovel lifted)
-        # - Blocked: skid steer with loaded + lowered shovel
-        skid_steer_can_move = jnp.logical_or(
-            jnp.logical_not(is_loaded),  # Not loaded - can always move
-            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - optimal transport
-        )
-        
+        # - Skid steer: can always move (handles dirt dropping automatically when needed)
         can_move = jnp.logical_or(
-            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
-            jnp.logical_and(is_skid_steer, skid_steer_can_move)  # Skid steer with restrictions
-        )
-        
-        # Final check: non-skid steers still can't move when loaded
-        can_move = jnp.logical_and(
-            can_move,
-            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+            is_skid_steer,  # Skid steer - can always move
+            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
         )
         
         return jax.lax.cond(can_move, _move_backward, self._do_nothing)
@@ -680,26 +757,13 @@ class State(NamedTuple):
         # Check agent conditions
         is_skid_steer = self.agent.agent_state.agent_type[0] == 2
         is_loaded = self.agent.agent_state.loaded[0] > 0
-        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
         
         # Rotation rules:
-        # - Non-skid steers: only when not loaded (existing logic)
-        # - Skid steer: not loaded OR (loaded AND shovel lifted)
-        # - Blocked: skid steer with loaded + lowered shovel (realistic constraint)
-        skid_steer_can_rotate = jnp.logical_or(
-            jnp.logical_not(is_loaded),  # Not loaded - can always rotate
-            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - safe rotation
-        )
-        
+        # - Non-skid steers: only when not loaded
+        # - Skid steer: can always rotate (supports empty, push mode, and transport mode)
         can_rotate = jnp.logical_or(
-            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
-            jnp.logical_and(is_skid_steer, skid_steer_can_rotate)  # Skid steer with realistic restrictions
-        )
-        
-        # Final check: non-skid steers still can't rotate when loaded
-        can_rotate = jnp.logical_and(
-            can_rotate,
-            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+            is_skid_steer,  # Skid steer - can always rotate
+            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
         )
         
         return jax.lax.cond(can_rotate, _rotate_clock, self._do_nothing)
@@ -725,26 +789,13 @@ class State(NamedTuple):
         # Check agent conditions
         is_skid_steer = self.agent.agent_state.agent_type[0] == 2
         is_loaded = self.agent.agent_state.loaded[0] > 0
-        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
         
         # Rotation rules:
-        # - Non-skid steers: only when not loaded (existing logic)
-        # - Skid steer: not loaded OR (loaded AND shovel lifted)
-        # - Blocked: skid steer with loaded + lowered shovel (realistic constraint)
-        skid_steer_can_rotate = jnp.logical_or(
-            jnp.logical_not(is_loaded),  # Not loaded - can always rotate
-            jnp.logical_and(is_loaded, shovel_lifted)  # Loaded but shovel lifted - safe rotation
-        )
-        
+        # - Non-skid steers: only when not loaded
+        # - Skid steer: can always rotate (supports empty, push mode, and transport mode)
         can_rotate = jnp.logical_or(
-            jnp.logical_not(is_skid_steer),  # Non-skid steer (use old logic)
-            jnp.logical_and(is_skid_steer, skid_steer_can_rotate)  # Skid steer with realistic restrictions
-        )
-        
-        # Final check: non-skid steers still can't rotate when loaded
-        can_rotate = jnp.logical_and(
-            can_rotate,
-            jnp.logical_or(is_skid_steer, jnp.logical_not(is_loaded))
+            is_skid_steer,  # Skid steer - can always rotate
+            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
         )
         
         return jax.lax.cond(can_rotate, _rotate_anticlock, self._do_nothing)
