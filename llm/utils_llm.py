@@ -1189,7 +1189,7 @@ async def call_agent_async_master(query: str, image, runner, user_id, session_id
 
 def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, llm_model_name, llm_model_key,
                                   APP_NAME, USER_ID, SESSION_ID, screen, USE_MANUAL_PARTITIONING=False,
-                                  USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4, USE_RANDOM_PARTITIONING=False, sub_task_seed=58):
+                                  USE_IMAGE_PROMPT=False,MAX_NUM_PARTITIONS=4,USE_EXACT_NUMBER_OF_PARTITIONS=False, USE_RANDOM_PARTITIONING=False, sub_task_seed=58):
     """
     Setup_partitions_and_llm with proper session management.
     """
@@ -1235,9 +1235,15 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             observation_str = str(current_observation)
         # Use file-based prompt
         if USE_IMAGE_PROMPT:
-            prompt = prompts.get("master_partitioning", 
-                               map_size=ORIGINAL_MAP_SIZE, 
-                               max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
+            if USE_EXACT_NUMBER_OF_PARTITIONS:
+                prompt = prompts.get("master_partitioning_exact", 
+                            map_size=ORIGINAL_MAP_SIZE, 
+                            max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
+            else:
+                prompt = prompts.get("master_partitioning", 
+                            map_size=ORIGINAL_MAP_SIZE, 
+                            max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
+
         else:
             try:
                 obs_dict = {k: v.tolist() for k, v in current_observation.items()}
@@ -1245,9 +1251,14 @@ def setup_partitions_and_llm(map_index, ORIGINAL_MAP_SIZE, env_manager, config, 
             except AttributeError:
                 observation_str = str(current_observation)
             
-            prompt = prompts.get("master_partitioning", 
-                               map_size=ORIGINAL_MAP_SIZE, 
-                               max_partitions=MAX_NUM_PARTITIONS) + f"\n\nCurrent observation: {observation_str}"
+            if USE_EXACT_NUMBER_OF_PARTITIONS:
+                prompt = prompts.get("master_partitioning_exact", 
+                            map_size=ORIGINAL_MAP_SIZE, 
+                            max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
+            else:
+                prompt = prompts.get("master_partitioning", 
+                            map_size=ORIGINAL_MAP_SIZE, 
+                            max_partitions=MAX_NUM_PARTITIONS) + "\n\nCurrent observation: See image"
 
         try:
             user_id_partitioning = f"{USER_ID}_partitioning"
@@ -1753,7 +1764,9 @@ def load_experiment_constants(config_file="llm/llm_config.yaml"):
         'intervention_check_frequency': 15,
         'stuck_detection_window': 10,
         'min_reward_threshold': 0.001,
-        'use_random_partitioning': False
+        'use_random_partitioning': False,
+        'use_exact_number_of_partitions': False,
+
     }
     
     # Try to load from YAML file
@@ -1816,6 +1829,7 @@ def setup_experiment_config(config_file="llm/llm_config.yaml"):
         constants.stuck_detection_window,
         constants.min_reward_threshold,
         constants.use_random_partitioning,  # USE_RANDOM_PARTITIONING
+        constants.use_exact_number_of_partitions
     )
 
 def detect_stuck_excavator(partition_state, threshold_steps=10, min_reward_threshold=0.001):

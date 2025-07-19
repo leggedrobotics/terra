@@ -53,7 +53,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
      USE_IMAGE_PROMPT , APP_NAME, USER_ID, SESSION_ID,
      GRID_RENDERING, ORIGINAL_MAP_SIZE, 
      USE_RENDERING, USE_DISPLAY,
-    ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD, USE_RANDOM_PARTITIONING) = setup_experiment_config()
+    ENABLE_INTERVENTION, INTERVENTION_FREQUENCY, STUCK_WINDOW, MIN_REWARD, USE_RANDOM_PARTITIONING,USE_EXACT_NUMBER_OF_PARTITIONS) = setup_experiment_config()
 
     # Initialize once with proper batching
     rng = jax.random.PRNGKey(seed)
@@ -154,7 +154,7 @@ def run_experiment(llm_model_name, llm_model_key, num_timesteps, seed,
                         current_map_index, ORIGINAL_MAP_SIZE, env_manager, 
                         config, llm_model_name, llm_model_key,
                         APP_NAME, USER_ID, SESSION_ID, screen,
-                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS, USE_RANDOM_PARTITIONING, sub_task_seed)
+                        USE_MANUAL_PARTITIONING, USE_IMAGE_PROMPT, MAX_NUM_PARTITIONS,USE_EXACT_NUMBER_OF_PARTITIONS, USE_RANDOM_PARTITIONING, sub_task_seed)
             partition_states, partition_models, active_partitions = initialize_partitions_for_current_map(env_manager, config, model_params)
 
             env_manager.initialize_partition_specific_target_maps(partition_states)
@@ -715,7 +715,7 @@ if __name__ == "__main__":
      _ , _, _, _,
      _, _, 
      USE_RENDERING, USE_DISPLAY,
-    _, _, _, _, _) = setup_experiment_config()
+    _, _, _, _, _,_) = setup_experiment_config()
 
 
 
