@@ -326,7 +326,7 @@ class Game:
         return agent_surfaces, agent_positions
         
     def draw(self, info=None):
-        if "additional_agents" not in info or info["additional_agents"] is None:
+        if info is None or "additional_agents" not in info or info["additional_agents"] is None:
             self.surface.fill("#F0F0F0")
             agent_surfaces = []
             agent_positions = []
