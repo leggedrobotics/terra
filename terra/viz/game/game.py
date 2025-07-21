@@ -85,6 +85,7 @@ class Game:
         loaded,
         generate_gif,
         target_tiles=None,
+        info=None,
     ):
         # self.events()
         self.update(
