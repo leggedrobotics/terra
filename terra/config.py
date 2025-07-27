@@ -60,7 +60,7 @@ class AgentConfig(NamedTuple):
     #       (we dig as much as move_tiles in the radial distance)
 
     dig_depth: int = 1  # how much every dig action digs
-
+    num_agents: int = 1  # number of agents in the environment
     height: int = 0  # updated in the code
     width: int = 0  # updated in the code
 
