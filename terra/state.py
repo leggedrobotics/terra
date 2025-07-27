@@ -78,7 +78,7 @@ class State(NamedTuple):
         action_map: Array,
     ) -> "State":
         # TEMP HACK: Set all dirt height 1 to 5 for testing
-        action_map = jnp.where(action_map == 1, 5, action_map)
+        #action_map = jnp.where(action_map == 1, 5, action_map)
 
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map
@@ -2882,6 +2882,16 @@ class State(NamedTuple):
         reward += jax.lax.cond(
             jnp.any(self.agent.agent_state.wheel_angle != 0),
             lambda: self.env_cfg.rewards.move_with_turned_wheels,
+            lambda: 0.0,
+        )
+
+        # Check for backwards dumping reward
+        # This happens when moving backwards with shovel down and loaded
+        old_loaded = self.agent.agent_state.loaded[0]
+        new_loaded = new_state.agent.agent_state_2.loaded[0]
+        reward += jax.lax.cond(
+            (action == TrackedActionType.BACKWARD) & (old_loaded > new_loaded),
+            lambda: self._handle_rewards_skid_steer_dump(new_state, action),
             lambda: 0.0,
         )
 

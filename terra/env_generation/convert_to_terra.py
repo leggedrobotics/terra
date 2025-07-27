@@ -194,7 +194,7 @@ def _convert_all_imgs_to_terra(
                 np.ones_like(img_terra_pad),
             )
         if actions_folder is not None:
-            actions_path = actions_folder / filename
+            actions_path = actions_folder / f"trench_{n}.png"
             actions = cv2.imread(str(actions_path))
             actions_terra = _convert_actions_to_terra(actions)
             actions_terra = actions_terra.repeat(expansion_factor, axis=0).repeat(expansion_factor, axis=1)
@@ -320,6 +320,82 @@ def generate_relocations_easy_terra(dataset_folder, size, n_imgs):
         actions_folder=actions_folder
     )
 
+def generate_relocations_medium_terra(dataset_folder, size, n_imgs):
+    print("Converting relocations_medium...")
+    img_folder = Path(dataset_folder) / "relocations_medium" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations_medium" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations_medium" / "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations_medium" / "dumpability"
+    actions_folder = Path(dataset_folder) / "relocations_medium" / "actions"
+    destination_folder = Path(dataset_folder) / "train" / "relocations_medium"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=actions_folder
+    )
+
+def generate_relocations_hard_terra(dataset_folder, size, n_imgs):
+    print("Converting relocations_hard...")
+    img_folder = Path(dataset_folder) / "relocations_hard" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations_hard" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations_hard"/ "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations_hard" / "dumpability"
+    actions_folder = Path(dataset_folder) / "relocations_hard" / "actions"
+    destination_folder = Path(dataset_folder) / "train" / "relocations_hard"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=actions_folder
+    )
+
+
+def generate_relocations_harder_terra(dataset_folder, size, n_imgs):
+    print("Converting relocations_harder...")
+    img_folder = Path(dataset_folder) / "relocations_harder" / "images"
+    metadata_folder = Path(dataset_folder) / "relocations_harder" / "metadata"
+    occupancy_folder = Path(dataset_folder) / "relocations_harder"/ "occupancy"
+    dumpability_folder = Path(dataset_folder) / "relocations_harder" / "dumpability"
+    actions_folder = Path(dataset_folder) / "relocations_harder" / "actions"
+    destination_folder = Path(dataset_folder) / "train" / "relocations_harder"
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,
+        copy_metadata=False,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=actions_folder
+    )
+
 def generate_custom_terra(dataset_folder, size, n_imgs):
     print("Converting custom maps...")
     img_folder = Path(dataset_folder) / ".." / "custom" / "images"
@@ -345,17 +421,36 @@ def generate_custom_terra(dataset_folder, size, n_imgs):
     )
 
 
-def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000):
+def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=None):
     print("dataset folder: ", dataset_folder)
-    generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable=False)
-    print("Foundations processed successfully.")
-    generate_trenches_terra(
-        dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
-    )
-    print("Trenches processed successfully.")
-    generate_relocations_terra(dataset_folder, size, n_imgs)
-    print("Relocations processed successfully.")
-    generate_relocations_easy_terra(dataset_folder, size, n_imgs)
-    print("Relocations_easy processed successfully.")
-    generate_custom_terra(dataset_folder, size, n_imgs)
-    print("Custom maps processed successfully.")
+    if map_types is None:
+        map_types = [
+            "foundations", "trenches", "relocations", "relocations_easy",
+            "relocations_medium", "relocations_hard", "custom"
+        ]
+    if "foundations" in map_types:
+        generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable=False)
+        print("Foundations processed successfully.")
+    if "trenches" in map_types:
+        generate_trenches_terra(
+            dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
+        )
+        print("Trenches processed successfully.")
+    if "relocations" in map_types:
+        generate_relocations_terra(dataset_folder, size, n_imgs)
+        print("Relocations processed successfully.")
+    if "relocations_easy" in map_types:
+        generate_relocations_easy_terra(dataset_folder, size, n_imgs)
+        print("Relocations_easy processed successfully.")
+    if "relocations_medium" in map_types:
+        generate_relocations_medium_terra(dataset_folder, size, n_imgs)
+        print("Relocations_medium processed successfully.")
+    if "relocations_hard" in map_types:
+        generate_relocations_hard_terra(dataset_folder, size, n_imgs)
+        print("Relocations_hard processed successfully.")
+    if "relocations_harder" in map_types:
+        generate_relocations_harder_terra(dataset_folder, size, n_imgs)
+        print("Relocations_harder processed successfully.")
+    if "custom" in map_types:
+        generate_custom_terra(dataset_folder, size, n_imgs)
+        print("Custom maps processed successfully.")

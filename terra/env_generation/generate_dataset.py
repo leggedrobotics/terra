@@ -9,6 +9,9 @@ from terra.env_generation.create_train_data import (
 )
 from terra.env_generation.generate_relocations import create_relocations
 from terra.env_generation.generate_relocations_easy import create_relocations_easy
+from terra.env_generation.generate_relocations_medium import create_relocations_medium
+from terra.env_generation.generate_relocations_hard import create_relocations_hard
+from terra.env_generation.generate_relocations_harder import create_relocations_harder
 import terra.env_generation.convert_to_terra as convert_to_terra
 
 def generate_complete_dataset(config_path="config/env_generation/config.yml", 
@@ -17,6 +20,9 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
                              generate_trenches=True,
                              generate_relocations=True,
                              generate_relocations_easy=False,
+                             generate_relocations_medium=False,
+                             generate_relocations_hard=False,
+                             generate_relocations_harder=False,
                              generate_terra_format=True):
     """
     Generate a complete dataset in one go - combining foundations generation and training data creation.
@@ -115,14 +121,46 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
         create_relocations_easy(n_imgs, save_folder)
         print("  ✓ Easy relocation maps saved to: data/terra/relocations_easy/")
 
+    # === MEDIUM RELOCATION MAPS ===
+    if generate_relocations_medium:
+        print(f"Step {step_counter}: Creating MEDIUM relocation maps...")
+        step_counter += 1
+        save_folder = os.path.join(package_dir, "data", "terra", "relocations_medium")
+        create_relocations_medium(n_imgs, save_folder)
+        print("  ✓ Medium relocation maps saved to: data/terra/relocations_medium/")
+
+    # === HARD RELOCATION MAPS ===
+    if generate_relocations_hard:
+        print(f"Step {step_counter}: Creating HARD relocation maps...")
+        step_counter += 1
+        save_folder = os.path.join(package_dir, "data", "terra", "relocations_hard")
+        create_relocations_hard(n_imgs, save_folder)
+        print("  ✓ Hard relocation maps saved to: data/terra/relocations_hard/")
+
+    if generate_relocations_harder:
+        print(f"Step {step_counter}: Creating HARDER relocation maps...")
+        step_counter += 1
+        save_folder = os.path.join(package_dir, "data", "terra", "relocations_harder")
+        create_relocations_harder(n_imgs, save_folder)
+        print("  ✓ Harder relocation maps saved to: data/terra/relocations_harder/")
+
     # === TERRA FORMAT CONVERSION ===
+    # Track which map types to convert
+    map_types_to_convert = []
+    if generate_foundations: map_types_to_convert.append("foundations")
+    if generate_trenches: map_types_to_convert.append("trenches")
+    if generate_relocations: map_types_to_convert.append("relocations")
+    if generate_relocations_easy: map_types_to_convert.append("relocations_easy")
+    if generate_relocations_medium: map_types_to_convert.append("relocations_medium")
+    if generate_relocations_hard: map_types_to_convert.append("relocations_hard")
+    if generate_relocations_harder: map_types_to_convert.append("relocations_harder")
     if generate_terra_format:
         print(f"Step {step_counter}: Converting data to Terra format...")
         step_counter += 1
         sizes = [(size, size) for size in config["sizes"]]
         npy_dataset_folder = package_dir + "/data/terra"
         for size in sizes:
-            convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs)
+            convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs, map_types_to_convert)
         print("  ✓ Terra format conversion complete")
 
     print("Dataset generation complete!")
@@ -164,6 +202,21 @@ if __name__ == "__main__":
         help="Generate easy relocation maps (dirt and dump zones close, no obstacles)"
     )
     parser.add_argument(
+        "--relocations-medium",
+        action="store_true",
+        help="Generate medium relocation maps (smaller dump zones, further dirt, and an obstacle)"
+    )
+    parser.add_argument(
+        "--relocations-hard",
+        action="store_true",
+        help="Generate hard relocation maps (1-2 dirt, 1-2 dump zones)"
+    )
+    parser.add_argument(
+        "--relocations-harder",
+        action="store_true",
+        help="Generate harder relocation maps (1-2 dirt, 1-2 dump zones, 1-2 obstacles)"
+    )
+    parser.add_argument(
         "--terra-format", 
         action="store_true", 
         help="Convert generated maps to Terra format (enabled by default)"
@@ -182,13 +235,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Determine what to generate
-    if args.all or not any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy, args.terra_format, args.no_terra_format]):
+    if args.all or not any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder, args.terra_format, args.no_terra_format]):
         # Generate everything (default behavior)
         generate_foundations = True
         generate_foundations_dumpzones = False  # Not generated by default
         generate_trenches = True
         generate_relocations = True
         generate_relocations_easy = False # Not generated by default
+        generate_relocations_medium = False # Not generated by default
+        generate_relocations_hard = False # Not generated by default
+        generate_relocations_harder = False # Not generated by default
         generate_terra_format = True
         print("No specific options selected - generating all standard map types")
         print("(Use --foundations-dumpzones to also generate dump zone foundations)")
@@ -199,13 +255,16 @@ if __name__ == "__main__":
         generate_trenches = args.trenches
         generate_relocations = args.relocations
         generate_relocations_easy = args.relocations_easy
+        generate_relocations_medium = args.relocations_medium
+        generate_relocations_hard = args.relocations_hard
+        generate_relocations_harder = args.relocations_harder
         # Handle Terra format conversion logic
         if args.no_terra_format:
             generate_terra_format = False
             print("Terra format conversion disabled by --no-terra-format flag")
         elif args.terra_format:
             generate_terra_format = True
-        elif any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy]):
+        elif any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder]):
             # If any map type is selected, default to True
             generate_terra_format = True
             print("Terra format conversion enabled by default (use --no-terra-format to disable)")
@@ -218,6 +277,9 @@ if __name__ == "__main__":
         if generate_trenches: selected.append("trenches")
         if generate_relocations: selected.append("relocations")
         if generate_relocations_easy: selected.append("easy relocations")
+        if generate_relocations_medium: selected.append("medium relocations")
+        if generate_relocations_hard: selected.append("hard relocations")
+        if generate_relocations_harder: selected.append("harder relocations")
         if generate_terra_format: selected.append("Terra format conversion")
         
         print(f"Generating selected map types: {', '.join(selected)}")
@@ -229,5 +291,8 @@ if __name__ == "__main__":
         generate_trenches=generate_trenches,
         generate_relocations=generate_relocations,
         generate_relocations_easy=generate_relocations_easy,
+        generate_relocations_medium=generate_relocations_medium,
+        generate_relocations_hard=generate_relocations_hard,
+        generate_relocations_harder=generate_relocations_harder,
         generate_terra_format=generate_terra_format
     )
