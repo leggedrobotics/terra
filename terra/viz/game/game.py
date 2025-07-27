@@ -77,6 +77,7 @@ class Game:
         self.old_agents_1 = []
         self.old_agents_2 = []
         self.count = 0
+        self.num_agents = 1
 
     def run(
         self,
@@ -94,6 +95,7 @@ class Game:
         loaded_2,
         generate_gif,
         target_tiles=None,
+        num_agents=1,
     ):
         # self.events()
         self.update(
@@ -110,6 +112,7 @@ class Game:
             cabin_dir_2,
             loaded_2,
             target_tiles,
+            num_agents,
         )
         self.draw()
         if generate_gif:
@@ -153,7 +156,9 @@ class Game:
         cabin_dir_2,
         loaded_2,
         target_tiles=None,
+        num_agents=1,
     ):
+        self.num_agents = num_agents
         def update_world_agent(
             world,
             agent_1,
@@ -174,7 +179,8 @@ class Game:
         ):
             world.update(active_grid, target_grid, padding_mask, dumpability_mask)
             agent_1.update(agent_pos_1, base_dir_1, cabin_dir_1, loaded_1)
-            agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2)
+            if self.num_agents == 2:
+                agent_2.update(agent_pos_2, base_dir_2, cabin_dir_2, loaded_2)
             if target_tiles is not None:
                 world.target_tiles = target_tiles
 
@@ -269,34 +275,35 @@ class Game:
             pg.draw.polygon(agent_surface1, cabin_color_1, cabin_offset_1)
             agent_surfaces_1.append(agent_surface1)
 
-            # Agent 2
-            body_vertices_2 = agent2.agent["body"]["vertices"]
-            body_color_2 = agent2.agent["body"]["color"]
+            if self.num_agents == 2:
+                # Agent 2
+                body_vertices_2 = agent2.agent["body"]["vertices"]
+                body_color_2 = agent2.agent["body"]["color"]
 
-            min_x2 = min(v[0] for v in body_vertices_2)
-            min_y2 = min(v[1] for v in body_vertices_2)
-            max_x2 = max(v[0] for v in body_vertices_2)
-            max_y2 = max(v[1] for v in body_vertices_2)
+                min_x2 = min(v[0] for v in body_vertices_2)
+                min_y2 = min(v[1] for v in body_vertices_2)
+                max_x2 = max(v[0] for v in body_vertices_2)
+                max_y2 = max(v[1] for v in body_vertices_2)
 
-            surface_width2 = math.ceil(max_x2 - min_x2) + 2
-            surface_height2 = math.ceil(max_y2 - min_y2) + 2
+                surface_width2 = math.ceil(max_x2 - min_x2) + 2
+                surface_height2 = math.ceil(max_y2 - min_y2) + 2
 
-            agent_surface2 = pg.Surface((surface_width2, surface_height2), pg.SRCALPHA)
-            if self.progressive_gif:
-                agent_surface2.set_alpha(50)
+                agent_surface2 = pg.Surface((surface_width2, surface_height2), pg.SRCALPHA)
+                if self.progressive_gif:
+                    agent_surface2.set_alpha(50)
 
-            agent_x2_pos = min_x2 + total_offset_x
-            agent_y2_pos = min_y2 + total_offset_y
-            agent_positions_2.append((agent_x2_pos, agent_y2_pos))
+                agent_x2_pos = min_x2 + total_offset_x
+                agent_y2_pos = min_y2 + total_offset_y
+                agent_positions_2.append((agent_x2_pos, agent_y2_pos))
 
-            offset_vertices_2 = [(v[0] - min_x2, v[1] - min_y2) for v in body_vertices_2]
-            pg.draw.polygon(agent_surface2, body_color_2, offset_vertices_2)
+                offset_vertices_2 = [(v[0] - min_x2, v[1] - min_y2) for v in body_vertices_2]
+                pg.draw.polygon(agent_surface2, body_color_2, offset_vertices_2)
 
-            cabin_vertices_2 = agent2.agent["cabin"]["vertices"]
-            cabin_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in cabin_vertices_2]
-            cabin_color_2 = agent2.agent["cabin"]["color"]
-            pg.draw.polygon(agent_surface2, cabin_color_2, cabin_offset_2)
-            agent_surfaces_2.append(agent_surface2)
+                cabin_vertices_2 = agent2.agent["cabin"]["vertices"]
+                cabin_offset_2 = [(v[0] - min_x2, v[1] - min_y2) for v in cabin_vertices_2]
+                cabin_color_2 = agent2.agent["cabin"]["color"]
+                pg.draw.polygon(agent_surface2, cabin_color_2, cabin_offset_2)
+                agent_surfaces_2.append(agent_surface2)
 
         self.screen.blit(self.surface, (0, 0))
 
@@ -308,15 +315,17 @@ class Game:
             for history_surfaces, history_positions in self.old_agents_1:
                 for agent_surface, agent_position in zip(history_surfaces, history_positions):
                     self.screen.blit(agent_surface, agent_position)
-            for history_surfaces, history_positions in self.old_agents_2:
-                for agent_surface, agent_position in zip(history_surfaces, history_positions):
-                    self.screen.blit(agent_surface, agent_position)
+            if self.num_agents == 2:
+                for history_surfaces, history_positions in self.old_agents_2:
+                    for agent_surface, agent_position in zip(history_surfaces, history_positions):
+                        self.screen.blit(agent_surface, agent_position)
             self.count += 1
         else:
             for agent_surface, agent_position in zip(agent_surfaces_1, agent_positions_1):
                 self.screen.blit(agent_surface, agent_position)
-            for agent_surface, agent_position in zip(agent_surfaces_2, agent_positions_2):
-                self.screen.blit(agent_surface, agent_position)
+            if self.num_agents == 2:
+                for agent_surface, agent_position in zip(agent_surfaces_2, agent_positions_2):
+                    self.screen.blit(agent_surface, agent_position)
 
         if self.display:
             pg.display.flip()

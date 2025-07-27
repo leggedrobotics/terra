@@ -173,6 +173,8 @@ class TerraEnv(NamedTuple):
             loaded_2=obs["agent_state_2"][..., [5]],
             generate_gif=generate_gif,
             target_tiles=target_tiles,
+            num_agents=obs["num_agents"],
+        
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -316,6 +318,7 @@ class TerraEnv(NamedTuple):
             "dumpability_mask": state.world.dumpability_mask.map,
             "interaction_mask": state.world.interaction_mask.map,
             "id": state.agent.agent_state.id,
+            "num_agents": state.agent.num_agents,
         }
 
 

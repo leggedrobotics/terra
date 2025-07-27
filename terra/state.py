@@ -161,15 +161,33 @@ class State(NamedTuple):
     
     def _swap(self):
         """Swaps agent_state_1 and agent_state_2"""
-        #jax.debug.print("Swapping agent states")
-        return self._replace(
-            agent=self.agent._replace(
-                # agent_state=self.agent.agent_state_2,
-                # agent_state_2=self.agent.agent_state,
-                agent_state=self.agent.agent_state_2,
-                agent_state_2=self.agent.agent_state
+        #jax.debug.print("Swapping agent states")\
+        def _swap_states(state):
+            return state._replace(
+                agent=state.agent._replace(
+                    agent_state=state.agent.agent_state_2,
+                    agent_state_2=state.agent.agent_state
+                )
             )
+
+        def _no_op(state):
+            return state
+
+        return jax.lax.cond(
+            self.agent.num_agents == 2,
+            _swap_states,
+            _no_op,
+            self
         )
+
+        # return self._replace(
+        #     agent=self.agent._replace(
+        #         # agent_state=self.agent.agent_state_2,
+        #         # agent_state_2=self.agent.agent_state,
+        #         agent_state=self.agent.agent_state_2,
+        #         agent_state_2=self.agent.agent_state
+        #     )
+        # )
     def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
@@ -272,10 +290,12 @@ class State(NamedTuple):
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
+        polygon_mask_2 = jax.lax.cond(
+            self.agent.num_agents == 2,
+            lambda: compute_polygon_mask(agent_2_corners_xy, map_width, map_height),
+            lambda: jnp.zeros((map_width, map_height), dtype=jnp.bool_),
+        )
 
-        polygon_mask_2 = compute_polygon_mask(agent_2_corners_xy, map_width, map_height)
-
-        
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
 
         traversability_mask = self._build_traversability_mask(
@@ -284,8 +304,8 @@ class State(NamedTuple):
         )
         
         
-        dig_mask = self._build_dig_dump_cone().reshape(map_width, map_height)
-        dig_mask_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
+        # dig_mask = self._build_dig_dump_cone().reshape(map_width, map_height)
+        # dig_mask_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
 
         #traversability_mask = jnp.where(dig_mask_2, 1, traversability_mask)
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
@@ -1786,9 +1806,14 @@ class State(NamedTuple):
         return action_mask
 
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
+        interaction_mask = jax.lax.cond(
+            self.agent.num_agents == 2,
+            lambda:~(~self._build_dig_dump_cone().reshape(-1)*~self._build_dig_dump_cone_2().reshape(-1)),
+            lambda: self._build_dig_dump_cone().reshape(-1)
+        )
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
-            "target_tiles": ~(~self._build_dig_dump_cone().reshape(-1)*~self._build_dig_dump_cone_2()),
+            "target_tiles": interaction_mask,
             # Include termination_type directly without done_task
             "task_done": task_done,
         }

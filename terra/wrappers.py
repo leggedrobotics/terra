@@ -45,14 +45,35 @@ class TraversabilityMaskWrapper:
         map_height = state.world.height
         
         polygon_mask1 = compute_polygon_mask(agent_corners_1, map_width, map_height)
-        polygon_mask2 = compute_polygon_mask(agent_corners_2, map_width, map_height)
+        # polygon_mask2 = compute_polygon_mask(agent_corners_2, map_width, map_height)
+        
+        # traversability_mask = jnp.where(polygon_mask1, -1, traversability_mask)
+        # traversability_mask = jnp.where(polygon_mask2, -1, traversability_mask)
+        
+        # padding_mask = state.world.padding_mask.map
+        # tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
+        interaction_mask = ~(~state._build_dig_dump_cone().reshape(-1)*~state._build_dig_dump_cone_2()).reshape(map_width, map_height)
+
+
+        polygon_mask2 = jax.lax.cond(
+            state.agent.num_agents == 2,
+            lambda: compute_polygon_mask(agent_corners_2, map_width, map_height),
+            lambda: jnp.zeros((map_width, map_height), dtype=jnp.bool_)
+        )
         
         traversability_mask = jnp.where(polygon_mask1, -1, traversability_mask)
         traversability_mask = jnp.where(polygon_mask2, -1, traversability_mask)
-
+        
         padding_mask = state.world.padding_mask.map
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
-        interaction_mask = ~(~state._build_dig_dump_cone().reshape(-1)*~state._build_dig_dump_cone_2()).reshape(map_width, map_height)
+
+        interaction_mask = jax.lax.cond(
+            state.agent.num_agents == 2,
+            lambda: ~(~state._build_dig_dump_cone().reshape(-1) * ~state._build_dig_dump_cone_2().reshape(-1)).reshape(map_width, map_height),
+            lambda: state._build_dig_dump_cone().reshape(map_width, map_height) 
+        )
+
+
 
         return state._replace(
             # increase number of steps as well

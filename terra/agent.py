@@ -37,7 +37,7 @@ class Agent(NamedTuple):
 
     agent_state: AgentState
     agent_state_2: AgentState
-
+    num_agents: int 
     width: int
     height: int
 
@@ -112,13 +112,14 @@ class Agent(NamedTuple):
         width = env_cfg.agent.width
         height = env_cfg.agent.height
         moving_dumped_dirt = False
-
+        num_agents = 2
         return Agent(
             agent_state=agent_state_1, 
             agent_state_2=agent_state_2, 
             width=width, 
             height=height, 
-            moving_dumped_dirt=moving_dumped_dirt
+            moving_dumped_dirt=moving_dumped_dirt,
+            num_agents=num_agents
         ), key
 
 
