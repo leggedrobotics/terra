@@ -459,7 +459,6 @@ class Game:
 
     def _draw_partition_rectangles(self, partitions, total_offset_x, total_offset_y):
         """Draw simple rectangles around each partition."""
-        #import pygame as pg
         
         for i, partition in enumerate(partitions):
             y_start, x_start, y_end, x_end = partition['region_coords']
