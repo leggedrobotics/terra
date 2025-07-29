@@ -200,7 +200,6 @@ class Game:
         
             # Calculate bounding box
             all_vertices = body_vertices + cabin_vertices
-            #all_vertices = body_vertices
             min_x = min(v[0] for v in all_vertices)
             min_y = min(v[1] for v in all_vertices)
             max_x = max(v[0] for v in all_vertices)
