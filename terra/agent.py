@@ -196,57 +196,7 @@ def _validate_agent_position(
     return valid
 
 
-def _validate_agent_position(
-    pos_base: Array,
-    angle_base: Array,
-    env_cfg: EnvConfig,
-    padding_mask: Array,
-    agent_width: int,
-    agent_height: int,
-) -> Array:
-    """
-    Validate if an agent position is valid (within bounds and not intersecting obstacles).
-    
-    Returns:
-        JAX array with boolean value indicating if the position is valid
-    """
-    map_width = padding_mask.shape[0]
-    map_height = padding_mask.shape[1]
-    
-    # Check if position is within bounds
-    max_center_coord = jnp.ceil(
-        jnp.max(jnp.array([agent_width / 2 - 1, agent_height / 2 - 1]))
-    ).astype(IntMap)
-    
-    max_w = jnp.minimum(env_cfg.maps.edge_length_px, map_width)
-    max_h = jnp.minimum(env_cfg.maps.edge_length_px, map_height)
-    
-    within_bounds = jnp.logical_and(
-        jnp.logical_and(pos_base[0] >= max_center_coord, pos_base[0] < max_w - max_center_coord),
-        jnp.logical_and(pos_base[1] >= max_center_coord, pos_base[1] < max_h - max_center_coord)
-    )
-    
-    # Check if position intersects with obstacles
-    def check_obstacle_intersection(_):
-        agent_corners_xy = get_agent_corners(
-            pos_base, angle_base, agent_width, agent_height, env_cfg.agent.angles_base
-        )
-        polygon_mask = compute_polygon_mask(agent_corners_xy, map_width, map_height)
-        has_obstacle = jnp.any(jnp.logical_and(polygon_mask, padding_mask == 1))
-        return jnp.logical_not(has_obstacle)
-    
-    def return_false(_):
-        return jnp.array(False)
-    
-    # Only check obstacles if we're within bounds (to avoid unnecessary computations)
-    valid = jax.lax.cond(
-        within_bounds,
-        check_obstacle_intersection,
-        return_false,
-        None
-    )
-    
-    return valid
+# Removed duplicate definition of _validate_agent_position
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
