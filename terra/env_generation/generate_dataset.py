@@ -7,12 +7,14 @@ from terra.env_generation.create_train_data import (
     create_procedural_trenches, 
     create_foundations as create_train_foundations
 )
+from terra.env_generation.generate_foundations_with_dumpzones import create_foundations_with_dumpzones_defaults
 from terra.env_generation.generate_relocations import create_relocations
 from terra.env_generation.generate_relocations_easy import create_relocations_easy
 from terra.env_generation.generate_relocations_medium import create_relocations_medium
 from terra.env_generation.generate_relocations_hard import create_relocations_hard
 from terra.env_generation.generate_relocations_harder import create_relocations_harder
 import terra.env_generation.convert_to_terra as convert_to_terra
+from terra.env_generation.convert_to_terra import generate_foundations_dumpzones_terra
 
 def generate_complete_dataset(config_path="config/env_generation/config.yml", 
                              generate_foundations=True,
@@ -93,9 +95,8 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
         # Generate foundations with specific dump zones
         if generate_foundations_dumpzones:
             print("  → Generating SPECIFIC DUMP ZONES foundation maps...")
-            config_copy = config.copy()
-            config_copy["foundations"]["use_specific_dump_zones"] = True
-            create_train_foundations(config_copy)
+            # Use default parameters - no config needed
+            create_foundations_with_dumpzones_defaults()
             print("  ✓ Dump zone foundation maps saved to: data/terra/foundations_dumpzones/")
 
     # === TRENCH MAPS ===
@@ -148,6 +149,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
     # Track which map types to convert
     map_types_to_convert = []
     if generate_foundations: map_types_to_convert.append("foundations")
+    if generate_foundations_dumpzones: map_types_to_convert.append("foundations_dumpzones")
     if generate_trenches: map_types_to_convert.append("trenches")
     if generate_relocations: map_types_to_convert.append("relocations")
     if generate_relocations_easy: map_types_to_convert.append("relocations_easy")
@@ -157,10 +159,21 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
     if generate_terra_format:
         print(f"Step {step_counter}: Converting data to Terra format...")
         step_counter += 1
-        sizes = [(size, size) for size in config["sizes"]]
+        # Use default sizes instead of reading from config
+        #sizes = [(50, 50), (100, 100)]  # Default sizes
+        sizes = [(64, 64)]
         npy_dataset_folder = package_dir + "/data/terra"
         for size in sizes:
-            convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs, map_types_to_convert)
+            # Use the dedicated function for foundations_dumpzones if it's in the map types
+            if "foundations_dumpzones" in map_types_to_convert:
+                print(f"  Converting foundations_dumpzones with size {size}...")
+                convert_to_terra.generate_foundations_dumpzones_terra(npy_dataset_folder, size, n_imgs)
+                # Remove foundations_dumpzones from the list to avoid double conversion
+                map_types_to_convert = [mt for mt in map_types_to_convert if mt != "foundations_dumpzones"]
+            
+            # Convert remaining map types
+            if map_types_to_convert:
+                convert_to_terra.generate_dataset_terra_format(npy_dataset_folder, size, n_imgs, map_types_to_convert)
         print("  ✓ Terra format conversion complete")
 
     print("Dataset generation complete!")

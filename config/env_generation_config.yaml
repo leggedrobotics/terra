@@ -43,7 +43,7 @@ foundations:
   dataset_rel_path: "data/openstreet/"
   min_size: 8
   max_size: 64
-  max_buildings: 3000
+  max_buildings: 1500
   # Dump zone configuration
   use_specific_dump_zones: false  # Set to true for skid steer training, false for excavator-only
   n_dump_min: 2

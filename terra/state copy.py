@@ -1585,7 +1585,6 @@ class State(NamedTuple):
         Takes the dig mask and turns into False the elements that do not correspond to
         a tile that has to be digged in the target map or that are dumped tiles in the action map.
         Also masks out the tiles that are digged as much as the target map requires.
-        For excavators: also excludes the last dig area to prevent dump-load cycles.
         """
         dig_mask_target_map = self.world.target_map.map < 0
         dig_mask_action_map = self.world.action_map.map > 0
@@ -1604,46 +1603,12 @@ class State(NamedTuple):
             self.world.action_map.map > -self.env_cfg.agent.dig_depth
         ).reshape(-1)
 
-        # For excavators: exclude last dig area to prevent dump-load cycles
-        is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
-        
-        def _exclude_last_dig_area():
-            # Exclude the last dig/dump area from digging for excavators to prevent dump-load cycles
-            return ~self.world.last_dig_mask.map.reshape(-1)
-        
-        def _no_dig_exclusion():
-            # No exclusion for skidsteers
-            return jnp.ones_like(dig_mask, dtype=jnp.bool_)
-        
-        dig_exclusion_mask = jax.lax.cond(
-            is_excavator,
-            _exclude_last_dig_area,
-            _no_dig_exclusion
-        )
-
-        # For excavators: exclude dump zones (target_map > 0) from dig mask
-        target_map_flat = self.world.target_map.map.reshape(-1)
-        not_dump_zone_mask = target_map_flat <= 0
-        is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
-
-        def _exclude_dump_zones():
-            return not_dump_zone_mask
-        def _no_exclusion():
-            return jnp.ones_like(dig_mask, dtype=jnp.bool_)
-        dump_zone_exclusion_mask = jax.lax.cond(
-            is_excavator,
-            _exclude_dump_zones,
-            _no_exclusion
-        )
-
         return (
             dig_mask
             * dig_mask_maps.reshape(-1)
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
-            * dig_exclusion_mask
-            * dump_zone_exclusion_mask
-        ).astype(jnp.bool_)
+                ).astype(jnp.bool_)
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
         """
@@ -1734,23 +1699,6 @@ class State(NamedTuple):
                 final_map,
             )
 
-            # Only update last_dig_mask for excavators, not skidsteers
-            is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
-            
-            def _update_last_dig_mask():
-                return self.world.last_dig_mask._replace(
-                    map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape))
-                )
-            
-            def _keep_last_dig_mask():
-                return self.world.last_dig_mask  # Keep existing mask for skidsteers (don't update it)
-            
-            new_last_dig_mask = jax.lax.cond(
-                is_excavator,
-                _update_last_dig_mask,
-                _keep_last_dig_mask
-            )
-            
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
@@ -1759,7 +1707,9 @@ class State(NamedTuple):
                     dumpability_mask=self.world.dumpability_mask._replace(
                         map=jnp.bool_(new_dumpability_mask),
                     ),
-                    last_dig_mask=new_last_dig_mask,
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape)),
+                    )
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -1779,23 +1729,6 @@ class State(NamedTuple):
         return s
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
-        # Only restrict dumping to dump zones for skid steer agents
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-        
-        def _apply_dump_zone_restriction():
-            # For skid steer: restrict to only dump zones (target_map > 0)
-            dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-            return dump_mask * dump_zone_mask
-        
-        def _no_dump_zone_restriction():
-            # For excavators: allow dumping on any valid tile (including neutral)
-            return dump_mask
-        
-        dump_mask = jax.lax.cond(
-            is_skid_steer,
-            _apply_dump_zone_restriction,
-            _no_dump_zone_restriction
-        )
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
@@ -1822,29 +1755,14 @@ class State(NamedTuple):
                 self.world.target_map.map.shape
             )
 
-            # Store the dump mask for excavators to prevent immediate reloading
-            is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
-            
-            def _store_dump_mask():
-                return self.world.last_dig_mask._replace(
-                    map=jnp.bool_(dump_mask.reshape(self.world.last_dig_mask.map.shape))
-                )
-            
-            def _keep_dump_mask():
-                return self.world.last_dig_mask  # Keep existing mask for skidsteers (don't clear it)
-            
-            new_last_dig_mask = jax.lax.cond(
-                is_excavator,
-                _store_dump_mask,
-                _keep_dump_mask
-            )
-            
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(new_map_global_coords)
                     ),
-                    last_dig_mask=new_last_dig_mask,
+                    last_dig_mask=self.world.last_dig_mask._replace(
+                        map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
+                    ),
                 ),
                 agent=self.agent._replace(
                     agent_state=self.agent.agent_state._replace(
@@ -2114,10 +2032,10 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         """
-        Handles reward assignment at dump time for tracked/wheeled agents (excavators).
-        Excavators get rewards only for dumping in target dump zones (target_map > 0).
+        Handles reward assignment at dump time.
+        This includes both the dump part and the realization
+        of the previously digged terrain.
         """
-        # Calculate progress on target dump tiles only
         action_map_dump_progress = self._get_action_map_dump_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
@@ -2166,7 +2084,7 @@ class State(NamedTuple):
 
         dig_wrong_reward = jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded    ##NOT SURE IF CORRECT
+                self.agent.agent_state.loaded, new_state.agent.agent_state.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
@@ -2235,24 +2153,21 @@ class State(NamedTuple):
             # EFFICIENCY FIX: Calculate efficiency as ratio of correct placement
             # This eliminates the edge-dumping exploit by rewarding based on percentage
             def _calculate_efficiency_reward():
-                # Give reward based on absolute amount of dirt moved, not percentage
-                min_reward = 15.0
-                max_reward = self.env_cfg.rewards.skid_dump_correct
+                dump_efficiency = action_map_dump_progress / jnp.maximum(old_loaded, 1e-6)  # Use total loaded capacity
+                dump_efficiency = jnp.clip(dump_efficiency, 0.0, 1.0)  # Clamp to [0, 1]
                 
-                # Scale reward based on absolute dirt amount moved
-                # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
-                min_dirt = 1.0
-                max_dirt = 20.0
+                # Base efficiency reward
+                base_reward = dump_efficiency * self.env_cfg.rewards.skid_dump_correct
                 
-                # Clamp dirt amount to reasonable range
-                clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
+                # PERFECT EFFICIENCY BONUS: Extra reward for 100% correct dumping
+                # This creates stronger incentive to dump ALL dirt in correct zones
+                perfect_bonus = jnp.where(
+                    dump_efficiency >= 1.0,
+                    self.env_cfg.rewards.skid_dump_correct * 0.2,  # 20% bonus for perfect efficiency
+                    0.0
+                )
                 
-                # Linear interpolation between min and max reward based on dirt amount
-                reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-                scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
-                
-                return scaled_reward
-            
+                return base_reward + perfect_bonus
             
             def _wrong_dump_penalty():
                 # If no progress in dump zones, give penalty proportional to amount dumped
@@ -2506,21 +2421,15 @@ class State(NamedTuple):
         Checks if the task is complete based on the type of task:
         1. Traditional tasks: target map requirements must be met
         2. Relocation tasks: all dirt must be in dump zones (no dirt in neutral areas)
-        3. Cooperative tasks: excavator digs, skidsteer moves dirt - both must be complete
 
         On top of that, both agents should not be loaded.
         """
 
         def _check_done_dump():
-            # For dump completion: check if all dirt is in designated dump zones (no dirt on neutral tiles)
-            # This is the same logic as relocation tasks
-            designated_dump_zones = target_map > 0
-            
-            # Check if there's any dirt outside designated dump zones
-            dirt_outside_designated = jnp.logical_and(action_map > 0, jnp.logical_not(designated_dump_zones))
-            
-            # Task complete if NO dirt exists outside designated dump zones
-            done_dump = jnp.logical_not(jnp.any(dirt_outside_designated))
+            # For dump completion: action_map must be >= target_map for all target_map > 0
+            dump_requirements = jnp.where(target_map > 0, target_map, 0)
+            actual_dumps = jnp.where(target_map > 0, action_map, 0)
+            done_dump = jnp.all(actual_dumps >= dump_requirements)
             return done_dump
 
         def _check_done_dig():
@@ -2578,62 +2487,37 @@ class State(NamedTuple):
                 _do_expensive_check
             )
 
-        def _check_cooperative_task_done():
-            """
-            For cooperative tasks (excavator + skidsteer):
-            - Excavator digs: check if all dig requirements are met (target_map < 0)
-            - Skidsteer moves dirt: check if all dirt is in dump zones (target_map > 0)
-            - Both agents must be unloaded
-            """
-            # Both dig and dump must be complete for cooperative tasks
-            done_dig = _check_done_dig()
-            done_dump = _check_done_dump()
-            
-            # For cooperative tasks, we require BOTH conditions to be met
-            # This ensures the excavator has finished digging AND the skidsteer has moved all dirt
-            cooperative_complete = jnp.logical_and(done_dig, done_dump)
-            
-            # Additional check: ensure both agents are unloaded for cooperative completion
-            # This prevents premature termination when one agent still has dirt
-            agents_unloaded = (agent_loaded[0] == 0) & (agent_laoded_2[0] == 0)
-            cooperative_complete = jnp.logical_and(cooperative_complete, agents_unloaded)
-            
-            return cooperative_complete
-
         # Check if this is a relocation task:
         # Relocation tasks have dump zones (target_map > 0) but no dig requirements (no target_map < 0)
-        # AND at least one skidsteer agent is available (agent_type == 2)
         has_dump_requirements = jnp.any(target_map > 0)
         has_dig_requirements = jnp.any(target_map < 0)
-        
-        # Check if there are skidsteer agents available
-        agent1_is_skidsteer = self.agent.agent_state.agent_type[0] == 2
-        agent2_is_skidsteer = self.agent.agent_state_2.agent_type[0] == 2
-        has_skidsteer_agent = agent1_is_skidsteer | agent2_is_skidsteer
-        
-        # Only use relocation logic if skidsteer agents are available
-        is_relocation_task = jnp.logical_and(
-            jnp.logical_and(has_dump_requirements, jnp.logical_not(has_dig_requirements)),
-            has_skidsteer_agent
-        )
-        # Only use cooperative logic if skidsteer agents are available
-        is_cooperative_task = jnp.logical_and(
-            jnp.logical_and(has_dig_requirements, has_dump_requirements),
-            has_skidsteer_agent
-        )
+        is_relocation_task = jnp.logical_and(has_dump_requirements, jnp.logical_not(has_dig_requirements))
 
         # Choose termination logic based on task type
         def _traditional_task_logic():
             # Traditional logic for tasks with specific target map requirements
-            # Only check digging requirements - dump requirements are handled by relocation/cooperative logic
+            done_dump = jax.lax.cond(
+                jnp.all(target_map <= 0),  # No dump requirements
+                lambda: True,
+                _check_done_dump,
+            )
+            
             done_dig = jax.lax.cond(
                 jnp.all(target_map >= 0),  # No dig requirements
                 lambda: True,
                 _check_done_dig,
             )
             
-            # Traditional tasks are complete when digging requirements are met
-            return done_dig
+            # Task completion logic for traditional tasks
+            return jax.lax.cond(
+                jnp.logical_and(has_dig_requirements, has_dump_requirements),
+                lambda: jnp.logical_and(done_dig, done_dump),  # Both required
+                lambda: jax.lax.cond(
+                    has_dig_requirements,
+                    lambda: done_dig,      # Only digging required
+                    lambda: done_dump      # Only dumping required
+                )
+            )
 
         def _relocation_task_logic():
             # New logic for relocation tasks - check if all dirt is in dump zones
@@ -2643,11 +2527,7 @@ class State(NamedTuple):
         task_requirements_met = jax.lax.cond(
             is_relocation_task,
             _relocation_task_logic,
-            lambda: jax.lax.cond(
-                is_cooperative_task,
-                _check_cooperative_task_done,
-                _traditional_task_logic
-            )
+            _traditional_task_logic
         )
         
         # Task is complete when requirements are met AND both agents are unloaded
@@ -2844,15 +2724,15 @@ class State(NamedTuple):
         max_agent_dim = jnp.max(
             jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
         )
-        min_distance_from_agent = tile_size * (max_agent_dim - 2.0)
+        min_distance_from_agent = tile_size * max_agent_dim
 
         # Slightly closer to agent than excavator but similar range
-        fixed_extension = 0.1  # Slightly closer than excavator's 0.5  
+        fixed_extension = 0.2  # Slightly closer than excavator's 0.5  
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1.2) * dig_portion_radius * tile_size + min_distance_from_agent  # Slimmer range than excavator's 1.0
+        r_max = (fixed_extension + 0.8) * dig_portion_radius * tile_size + min_distance_from_agent  # Slimmer range than excavator's 1.0
         
         # Same angular range as excavator
-        theta_max = 2 * np.pi / (self.env_cfg.agent.angles_cabin / 1.2)  # Same as excavator
+        theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin  # Same as excavator
         theta_min = -theta_max
 
         dig_mask_r = jnp.logical_and(

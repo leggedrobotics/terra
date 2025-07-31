@@ -106,31 +106,31 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.05,  # Small time pressure penalty (was -0.1)
+            existence=-0.1,  # Small time pressure penalty (was -0.1)
             collision_move=-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
             move_with_turned_wheels=-0.1,  # Reduced penalty was -0.1
             collision_turn=-0.1,
-            base_turn=-0.1,  
-            cabin_turn=-0.05,  
-            wheel_turn=-0.05,  
+            base_turn=-0.1,  # Reduced turning penalty was -0.1
+            cabin_turn=-0.05,  # Much reduced cabin penalty was -0.05
+            wheel_turn=-0.05,  # Reduced turning penalty was -0.05
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=0.2,  #0.2      0.35
-            dump_correct=0.15,  #0.15   0.0
+            dig_correct=0.2,  # Much higher positive rewards was 0.2
+            dump_correct=0.15,  # Even higher reward for dumping correctly was 0.15
 
             # Skid steer specific rewards
             skid_move=0.0,                 # Remove positive movement reward to discourage random movement
-            skid_dump_correct=50.0,         # 5  20  # Large reward for correct dumping (0.05 after normalization)
+            skid_dump_correct=40.0,         # 5  20  # Large reward for correct dumping (0.05 after normalization)
             skid_dump_wrong=-0.6,          #-0.5  # Moderate penalty for failed dumps (-0.005 after normalization)
-            skid_shovel_control=0.001,       # Small reward for shovel control (0.0001 after normalization)
-            skid_auto_load=0.7,              # Core reward: agents need to load dirt to dump it (0.005 after normalization)
-            holding_dirt=-0.0,        #-0.1      # Per-step penalty for holding dirt (-0.001 after normalization)
+            skid_shovel_control=0.005,       # Small reward for shovel control (0.0001 after normalization)
+            skid_auto_load=0.5,              # Core reward: agents need to load dirt to dump it (0.005 after normalization)
+            holding_dirt=-0.15,        #-0.1      # Per-step penalty for holding dirt (-0.001 after normalization)
             skid_lift_shovel_with_dirt=0.05,  # New: reward for lifting shovel with dirt (0.0005 after normalization)
             skid_move_loaded_shovel_up=0.02,  # New: reward for moving while loaded and shovel is up (0.0002 after normalization)
-            move_to_dump_zone=0.0,  #0.3 worked        # Moderate reward for being close to dump zones (0.003 after normalization)
-            terminal=250.0,
+            move_to_dump_zone=0.4,  #0.3 worked        # Moderate reward for being close to dump zones (0.003 after normalization)
+            terminal=100.0,
             normalizer=100.0,
             skid_auto_load_from_dumpzone_penalty=-0.0,  #-1.5# Large penalty for loading from dump zone
         )
@@ -209,37 +209,25 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20  # Reduced from 20 for faster progression
-    decrease_level_threshold: int = 30  # Reduced from 50 for quicker regression
+    increase_level_threshold: int = 5  # Reduced from 20 for faster progression
+    decrease_level_threshold: int = 14  # Reduced from 50 for quicker regression
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
-        # {
-        #     "maps_path": "foundations",
-        #     "max_steps_in_episode": 600,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "relocations_harder",
-        #     "max_steps_in_episode": 1300,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
         {
-            "maps_path": "foundations_dumpzones",
-            "max_steps_in_episode": 1600,  # 600 Balanced: increased from 300 but reduced from 500
+            "maps_path": "relocations_easy",
+            "max_steps_in_episode": 550,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
-        # {
-        #     "maps_path": "relocations",
-        #     "max_steps_in_episode": 550,  # Balanced: increased from 400 but reduced from 600
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "relocations",
+            "max_steps_in_episode": 550,  # Balanced: increased from 400 but reduced from 600
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         # {
         #     "maps_path": "foundations_dumpzones", 
         #     "max_steps_in_episode": 350,

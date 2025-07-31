@@ -228,6 +228,15 @@ def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
         dumpability_folder = Path(dataset_folder) / level / "dumpability"
         destination_folder = Path(dataset_folder) / "train" / level
         destination_folder.mkdir(parents=True, exist_ok=True)
+        
+        # Determine the correct all_dumpable setting based on the level
+        level_all_dumpable = all_dumpable
+        if "dumpzones" in level:
+            level_all_dumpable = False  # Foundations with dump zones use specific dump zones, not all dumpable
+            print(f"  Converting {level} with all_dumpable=False (specific dump zones)")
+        else:
+            print(f"  Converting {level} with all_dumpable={all_dumpable}")
+        
         _convert_all_imgs_to_terra(
             img_folder,
             metadata_folder,
@@ -236,7 +245,7 @@ def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
             destination_folder,
             size,
             n_imgs,
-            all_dumpable=all_dumpable,
+            all_dumpable=level_all_dumpable,
             copy_metadata=True,
             downsample=False,
             has_dumpability=True,
@@ -421,16 +430,63 @@ def generate_custom_terra(dataset_folder, size, n_imgs):
     )
 
 
+def generate_foundations_dumpzones_terra(dataset_folder, size, n_imgs):
+    """Convert foundations with dump zones to Terra format."""
+    print("Converting foundations with dump zones...")
+    
+    # Check if foundations_dumpzones exists
+    foundations_dumpzones_dir = Path(dataset_folder) / "foundations_dumpzones"
+    if not foundations_dumpzones_dir.exists():
+        print(f"  foundations_dumpzones directory not found: {foundations_dumpzones_dir}")
+        return
+    
+    print(f"  Found foundations_dumpzones folder - will convert to train/foundations_dumpzones")
+    
+    # Set up paths
+    img_folder = foundations_dumpzones_dir / "images"
+    metadata_folder = foundations_dumpzones_dir / "metadata"
+    occupancy_folder = foundations_dumpzones_dir / "occupancy"
+    dumpability_folder = foundations_dumpzones_dir / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / "foundations_dumpzones"
+    
+    # Create destination directory
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    print(f"  Created destination directory: {destination_folder}")
+    
+    # Convert with specific settings for foundations with dump zones
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,  # Foundations with dump zones use specific dump zones, not all dumpable
+        copy_metadata=True,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=None,
+    )
+    
+    print(f"  foundations_dumpzones conversion completed")
+
+
 def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=None):
     print("dataset folder: ", dataset_folder)
     if map_types is None:
         map_types = [
-            "foundations", "trenches", "relocations", "relocations_easy",
+            "foundations", "foundations_dumpzones", "trenches", "relocations", "relocations_easy",
             "relocations_medium", "relocations_hard", "custom"
         ]
     if "foundations" in map_types:
         generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable=False)
         print("Foundations processed successfully.")
+    if "foundations_dumpzones" in map_types:
+        # Use the dedicated function for foundations with dump zones
+        generate_foundations_dumpzones_terra(dataset_folder, size, n_imgs)
+        print("Foundations with dump zones processed successfully.")
     if "trenches" in map_types:
         generate_trenches_terra(
             dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
