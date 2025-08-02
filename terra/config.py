@@ -175,24 +175,24 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # NOTE: all maps need to have the same size
     levels = [
-        {
-            "maps_path": "foundations",
-            "max_steps_in_episode": 400,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations",
+        #     "max_steps_in_episode": 400,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # {
         #     "maps_path": "trenches/single",
         #     "max_steps_in_episode": 400,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": True,
         # },
-        # {
-        #     "maps_path": "trenches/double",
-        #     "max_steps_in_episode": 400,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": True,
-        # },
+        {
+            "maps_path": "trenches/double",
+            "max_steps_in_episode": 400,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
         # {
         #     "maps_path": "terra/trenches/double_diagonal",
         #     "max_steps_in_episode": 400,
@@ -206,7 +206,7 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
         # {
-        #     "maps_path": "terra/trenches/triple_diagonal",
+        #     "maps_path": "trenches/triple_diagonal",
         #     "max_steps_in_episode": 400,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": True,

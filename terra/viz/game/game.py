@@ -34,6 +34,7 @@ class Game:
         n_envs_x=1,
         n_envs_y=1,
         display=True,
+        agent_config=None,
     ):
         self.screen = screen
         self.surface = surface
@@ -51,10 +52,21 @@ class Game:
         self.maps_size_px = maps_size_px
         tile_size = MAP_TILES // maps_size_px
         self.tile_size = tile_size
-        excavator_dims = ExcavatorDims()
-        agent_h, agent_w = get_agent_dims(
+
+        if maps_size_px == 128:
+            # Extract dimensions from config
+            agent_config = {}
+            agent_config['height'] = 5
+            agent_config['width'] = 9
+            agent_h = int(agent_config['height'][0]) if hasattr(agent_config['height'], '__getitem__') else int(agent_config['height'])
+            agent_w = int(agent_config['width'][0]) if hasattr(agent_config['width'], '__getitem__') else int(agent_config['width'])
+            print(f"Using provided agent config: {agent_w}x{agent_h}")
+        
+        else:
+            excavator_dims = ExcavatorDims()
+            agent_h, agent_w = get_agent_dims(
             excavator_dims.WIDTH, excavator_dims.HEIGHT, tile_size_m
-        )
+            )
         angles_base = ImmutableAgentConfig().angles_base
         angles_cabin = ImmutableAgentConfig().angles_cabin
         print(f"Agent size (in rendering): {agent_w}x{agent_h}")
@@ -406,6 +418,7 @@ class Game:
             self.surface.fill("#F0F0F0")
             all_agent_surfaces = []
             all_agent_positions = []
+            print("Map size in px:", self.maps_size_px)
             for i, (world, agent) in enumerate(zip(self.worlds, self.agents)):
                 ix = i % self.n_envs_y
                 iy = i // self.n_envs_y

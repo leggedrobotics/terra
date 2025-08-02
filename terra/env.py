@@ -40,6 +40,7 @@ class TerraEnv(NamedTuple):
         n_envs_x: int = 1,
         n_envs_y: int = 1,
         display: bool = False,
+        agent_config_override: Optional[dict[str, Any]] = None,
     ) -> "TerraEnv":
         re = None
         tile_size_rendering = MAP_TILES // maps_size_px
@@ -69,6 +70,8 @@ class TerraEnv(NamedTuple):
                 n_envs_x=n_envs_x,
                 n_envs_y=n_envs_y,
                 display=display,
+                agent_config=agent_config_override if agent_config_override is not None else None,
+
             )
         return TerraEnv(rendering_engine=re)
 
