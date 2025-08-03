@@ -8,17 +8,19 @@ from terra.env_generation.create_train_data import (
     create_foundations as create_train_foundations
 )
 from terra.env_generation.generate_foundations_with_dumpzones import create_foundations_with_dumpzones_defaults
+from terra.env_generation.generate_foundations_with_dumpzones_harder import create_foundations_with_dumpzones_harder_defaults
 from terra.env_generation.generate_relocations import create_relocations
 from terra.env_generation.generate_relocations_easy import create_relocations_easy
 from terra.env_generation.generate_relocations_medium import create_relocations_medium
 from terra.env_generation.generate_relocations_hard import create_relocations_hard
 from terra.env_generation.generate_relocations_harder import create_relocations_harder
 import terra.env_generation.convert_to_terra as convert_to_terra
-from terra.env_generation.convert_to_terra import generate_foundations_dumpzones_terra
+from terra.env_generation.convert_to_terra import generate_foundations_dumpzones_terra, generate_foundations_dumpzones_harder_terra
 
 def generate_complete_dataset(config_path="config/env_generation/config.yml", 
                              generate_foundations=True,
                              generate_foundations_dumpzones=False,
+                             generate_foundations_dumpzones_harder=False,
                              generate_trenches=True,
                              generate_relocations=True,
                              generate_relocations_easy=False,
@@ -55,7 +57,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
     step_counter = 1
 
     # === FOUNDATION MAPS ===
-    if generate_foundations or generate_foundations_dumpzones:
+    if generate_foundations or generate_foundations_dumpzones or generate_foundations_dumpzones_harder:
         print(f"Step {step_counter}: Downloading and processing foundation maps...")
         step_counter += 1
         
@@ -98,6 +100,13 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
             # Use default parameters - no config needed
             create_foundations_with_dumpzones_defaults()
             print("  ✓ Dump zone foundation maps saved to: data/terra/foundations_dumpzones/")
+
+        # Generate foundations with specific dump zones (harder version)
+        if generate_foundations_dumpzones_harder:
+            print("  → Generating SPECIFIC DUMP ZONES foundation maps (HARDER VERSION)...")
+            # Use default parameters - no config needed
+            create_foundations_with_dumpzones_harder_defaults()
+            print("  ✓ Harder dump zone foundation maps saved to: data/terra/foundations_dumpzones_harder/")
 
     # === TRENCH MAPS ===
     if generate_trenches:
@@ -150,6 +159,7 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
     map_types_to_convert = []
     if generate_foundations: map_types_to_convert.append("foundations")
     if generate_foundations_dumpzones: map_types_to_convert.append("foundations_dumpzones")
+    if generate_foundations_dumpzones_harder: map_types_to_convert.append("foundations_dumpzones_harder")
     if generate_trenches: map_types_to_convert.append("trenches")
     if generate_relocations: map_types_to_convert.append("relocations")
     if generate_relocations_easy: map_types_to_convert.append("relocations_easy")
@@ -170,6 +180,13 @@ def generate_complete_dataset(config_path="config/env_generation/config.yml",
                 convert_to_terra.generate_foundations_dumpzones_terra(npy_dataset_folder, size, n_imgs)
                 # Remove foundations_dumpzones from the list to avoid double conversion
                 map_types_to_convert = [mt for mt in map_types_to_convert if mt != "foundations_dumpzones"]
+            
+            # Use the dedicated function for foundations_dumpzones_harder if it's in the map types
+            if "foundations_dumpzones_harder" in map_types_to_convert:
+                print(f"  Converting foundations_dumpzones_harder with size {size}...")
+                convert_to_terra.generate_foundations_dumpzones_harder_terra(npy_dataset_folder, size, n_imgs)
+                # Remove foundations_dumpzones_harder from the list to avoid double conversion
+                map_types_to_convert = [mt for mt in map_types_to_convert if mt != "foundations_dumpzones_harder"]
             
             # Convert remaining map types
             if map_types_to_convert:
@@ -198,6 +215,11 @@ if __name__ == "__main__":
         "--foundations-dumpzones", 
         action="store_true", 
         help="Generate foundation maps with specific dump zones for mixed agent training"
+    )
+    parser.add_argument(
+        "--foundations-dumpzones-harder", 
+        action="store_true", 
+        help="Generate foundation maps with specific dump zones (harder version) for mixed agent training"
     )
     parser.add_argument(
         "--trenches", 
@@ -248,7 +270,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Determine what to generate
-    if args.all or not any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder, args.terra_format, args.no_terra_format]):
+    if args.all or not any([args.foundations, args.foundations_dumpzones, args.foundations_dumpzones_harder, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder, args.terra_format, args.no_terra_format]):
         # Generate everything (default behavior)
         generate_foundations = True
         generate_foundations_dumpzones = False  # Not generated by default
@@ -265,6 +287,7 @@ if __name__ == "__main__":
         # Generate only selected types
         generate_foundations = args.foundations
         generate_foundations_dumpzones = args.foundations_dumpzones
+        generate_foundations_dumpzones_harder = args.foundations_dumpzones_harder
         generate_trenches = args.trenches
         generate_relocations = args.relocations
         generate_relocations_easy = args.relocations_easy
@@ -277,7 +300,7 @@ if __name__ == "__main__":
             print("Terra format conversion disabled by --no-terra-format flag")
         elif args.terra_format:
             generate_terra_format = True
-        elif any([args.foundations, args.foundations_dumpzones, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder]):
+        elif any([args.foundations, args.foundations_dumpzones, args.foundations_dumpzones_harder, args.trenches, args.relocations, args.relocations_easy, args.relocations_medium, args.relocations_hard, args.relocations_harder]):
             # If any map type is selected, default to True
             generate_terra_format = True
             print("Terra format conversion enabled by default (use --no-terra-format to disable)")
@@ -287,6 +310,7 @@ if __name__ == "__main__":
         selected = []
         if generate_foundations: selected.append("standard foundations")
         if generate_foundations_dumpzones: selected.append("dump zone foundations")
+        if generate_foundations_dumpzones_harder: selected.append("harder dump zone foundations")
         if generate_trenches: selected.append("trenches")
         if generate_relocations: selected.append("relocations")
         if generate_relocations_easy: selected.append("easy relocations")
@@ -301,6 +325,7 @@ if __name__ == "__main__":
         args.config,
         generate_foundations=generate_foundations,
         generate_foundations_dumpzones=generate_foundations_dumpzones,
+        generate_foundations_dumpzones_harder=generate_foundations_dumpzones_harder,
         generate_trenches=generate_trenches,
         generate_relocations=generate_relocations,
         generate_relocations_easy=generate_relocations_easy,

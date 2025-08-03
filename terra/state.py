@@ -291,7 +291,7 @@ class State(NamedTuple):
             # This allows 3x3 patches to be mostly traversable, blocks larger solid formations
             large_dirt_patches = jnp.logical_and(
                 map != 0,  # Is dirt
-                dirt_count_3x3 >= 8  # 8+ dirt tiles in 3x3 area (very dense)
+                dirt_count_3x3 >= 6  # 8+ dirt tiles in 3x3 area (very dense)
             )
             
             # Also block high dirt piles (>1 dirt height) - always non-traversable

@@ -473,11 +473,54 @@ def generate_foundations_dumpzones_terra(dataset_folder, size, n_imgs):
     print(f"  foundations_dumpzones conversion completed")
 
 
+def generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs):
+    """Convert foundations with dump zones (harder version) to Terra format."""
+    print("Converting foundations with dump zones (harder version)...")
+    
+    # Check if foundations_dumpzones_harder exists
+    foundations_dumpzones_harder_dir = Path(dataset_folder) / "foundations_dumpzones_harder"
+    if not foundations_dumpzones_harder_dir.exists():
+        print(f"  foundations_dumpzones_harder directory not found: {foundations_dumpzones_harder_dir}")
+        return
+    
+    print(f"  Found foundations_dumpzones_harder folder - will convert to train/foundations_dumpzones_harder")
+    
+    # Set up paths
+    img_folder = foundations_dumpzones_harder_dir / "images"
+    metadata_folder = foundations_dumpzones_harder_dir / "metadata"
+    occupancy_folder = foundations_dumpzones_harder_dir / "occupancy"
+    dumpability_folder = foundations_dumpzones_harder_dir / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / "foundations_dumpzones_harder"
+    
+    # Create destination directory
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    print(f"  Created destination directory: {destination_folder}")
+    
+    # Convert with specific settings for foundations with dump zones (harder version)
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,  # Foundations with dump zones use specific dump zones, not all dumpable
+        copy_metadata=True,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=None,
+    )
+    
+    print(f"  foundations_dumpzones_harder conversion completed")
+
+
 def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=None):
     print("dataset folder: ", dataset_folder)
     if map_types is None:
         map_types = [
-            "foundations", "foundations_dumpzones", "trenches", "relocations", "relocations_easy",
+            "foundations", "foundations_dumpzones", "foundations_dumpzones_harder", "trenches", "relocations", "relocations_easy",
             "relocations_medium", "relocations_hard", "custom"
         ]
     if "foundations" in map_types:
@@ -487,6 +530,10 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=N
         # Use the dedicated function for foundations with dump zones
         generate_foundations_dumpzones_terra(dataset_folder, size, n_imgs)
         print("Foundations with dump zones processed successfully.")
+    if "foundations_dumpzones_harder" in map_types:
+        # Use the dedicated function for foundations with dump zones (harder version)
+        generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs)
+        print("Foundations with dump zones (harder version) processed successfully.")
     if "trenches" in map_types:
         generate_trenches_terra(
             dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
