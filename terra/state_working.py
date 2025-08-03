@@ -1621,19 +1621,35 @@ class State(NamedTuple):
             _no_dig_exclusion
         )
 
+        # For excavators: exclude dump zones (target_map > 0) from dig mask
+        target_map_flat = self.world.target_map.map.reshape(-1)
+        not_dump_zone_mask = target_map_flat <= 0
+        is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
+
+        def _exclude_dump_zones():
+            return not_dump_zone_mask
+        def _no_exclusion():
+            return jnp.ones_like(dig_mask, dtype=jnp.bool_)
+        dump_zone_exclusion_mask = jax.lax.cond(
+            is_excavator,
+            _exclude_dump_zones,
+            _no_exclusion
+        )
+
         return (
             dig_mask
             * dig_mask_maps.reshape(-1)
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
             * dig_exclusion_mask
+            * dump_zone_exclusion_mask
         ).astype(jnp.bool_)
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
         """
         For skid steer: Allow lifting from any dirt (action_map != 0)
         NEVER allow digging new holes (target_map < 0)
-        Now allows loading from dump zones (target_map > 0) but with penalty.
+        Now also prevent loading from dump zones (target_map > 0).
         """
         # Allow lifting from any dirt (action_map != 0) - both natural and dumped
         dig_mask_action_map = self.world.action_map.map != 0
@@ -1642,9 +1658,11 @@ class State(NamedTuple):
         max_dig_limit_mask = (
             self.world.action_map.map > -self.env_cfg.agent.dig_depth
         ).reshape(-1)
-        
-        # Combine all masks (no dump zone exclusion)
-        combined_mask = dig_mask & dig_mask_action_map.reshape(-1) & max_dig_limit_mask
+        # Prevent loading from dump zones (target_map > 0)
+        target_map_flat = self.world.target_map.map.reshape(-1)
+        not_dump_zone_mask = target_map_flat <= 0
+        # Combine all masks
+        combined_mask = dig_mask & dig_mask_action_map.reshape(-1) & max_dig_limit_mask & not_dump_zone_mask
         return combined_mask
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
@@ -2109,13 +2127,12 @@ class State(NamedTuple):
         dump_reward_condition = jnp.allclose(
             self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
         )
-        #TODO: NO MORE DUMP REWARD
-        dump_reward = 0.0
-        # dump_reward = jax.lax.cond(
-        #     dump_reward_condition,
-        #     lambda: self.env_cfg.rewards.dump_wrong,
-        #     lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
-        # )
+
+        dump_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
+        )
 
         return dump_reward
 
@@ -2128,19 +2145,11 @@ class State(NamedTuple):
             self.world.target_map.map,
         )
 
-        # action_map_dig_regress = self._get_action_map_dump_regress(
-        #     self.world.action_map.map,
-        #     new_state.world.action_map.map,
-        #     self.world.target_map.map,
-        # )
-
-
-        action_map_dump_progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-
+        action_map_dig_regress = self._get_action_map_dump_regress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
 
         dig_reward = jax.lax.cond(
             action_map_dig_progress > 0,
@@ -2149,14 +2158,9 @@ class State(NamedTuple):
         )
 
         # Make penalty bigger than dumping reward
-        # dig_on_dump_penalty = jax.lax.cond(
-        #     action_map_dig_regress > 0,
-        #     lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
-        #     lambda: 0.0,
-        # )
         dig_on_dump_penalty = jax.lax.cond(
-            action_map_dump_progress < 0,
-            lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
+            action_map_dig_regress > 0,
+            lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
             lambda: 0.0,
         )
 
@@ -2204,15 +2208,15 @@ class State(NamedTuple):
             #     lambda: self.env_cfg.rewards.skid_auto_load,
             # )
 
-            return jax.lax.cond(
-                progress < 0,
-                lambda: self._calculate_dump_zone_reward(progress, self.agent.agent_state.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
-                lambda: self.env_cfg.rewards.skid_auto_load,
-            )
+            # return jax.lax.cond(
+            #     progress < 0,
+            #     lambda: self._calculate_dump_zone_reward(progress) - self.env_cfg.rewards.skid_auto_load,  # Use unified function
+            #     lambda: self.env_cfg.rewards.skid_auto_load,
+            # )
 
 
             # Penalty commented out:
-            #return self.env_cfg.rewards.skid_auto_load
+            return self.env_cfg.rewards.skid_auto_load
 
         return jax.lax.cond(
             dirt_gained > 0,
@@ -2243,23 +2247,23 @@ class State(NamedTuple):
                 # Give reward based on absolute amount of dirt moved, not percentage
                 
                 
-                # min_reward = 15.0
-                # max_reward = self.env_cfg.rewards.skid_dump_correct
+                min_reward = 15.0
+                max_reward = self.env_cfg.rewards.skid_dump_correct
                 
-                # # Scale reward based on absolute dirt amount moved
-                # # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
-                # min_dirt = 1.0
-                # max_dirt = 20.0
+                # Scale reward based on absolute dirt amount moved
+                # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
+                min_dirt = 1.0
+                max_dirt = 20.0
                 
-                # # Clamp dirt amount to reasonable range
-                # clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
+                # Clamp dirt amount to reasonable range
+                clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
                 
-                # # Linear interpolation between min and max reward based on dirt amount
-                # reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-                # scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
+                # Linear interpolation between min and max reward based on dirt amount
+                reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
+                scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
                 
-                # return scaled_reward
-                return self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0])
+                return scaled_reward
+                #return self._calculate_dump_zone_reward(action_map_dump_progress)
             
             
             def _wrong_dump_penalty():
@@ -2483,11 +2487,7 @@ class State(NamedTuple):
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         reward += jax.lax.switch(clamped_agent_type, reward_functions)
 
-        # Terminal reward based on completion percentage
-        completion_percentage = self._calculate_completion_percentage(
-            new_state.world.action_map.map,
-            self.world.target_map.map
-        )
+        # Terminal
         reward += jax.lax.cond(
             self._is_done_task(
                 new_state.world.action_map.map,
@@ -2495,8 +2495,7 @@ class State(NamedTuple):
                 new_state.agent.agent_state_2.loaded,
                 new_state.agent.agent_state.loaded,
             ),
-            lambda: self._calculate_terminal_reward(completion_percentage),  #lambda: self.env_cfg.rewards.terminal,
-            #lambda: self.env_cfg.rewards.terminal,
+            lambda: self.env_cfg.rewards.terminal,
             lambda: 0.0,
         )
 
@@ -2525,18 +2524,15 @@ class State(NamedTuple):
         """
 
         def _check_done_dump():
-            # For dump completion: check if all dirt is in designated dump zones OR 1-pixel buffer around them
-            # This allows for more lenient termination while keeping rewards precise
+            # For dump completion: check if all dirt is in designated dump zones (no dirt on neutral tiles)
+            # This is the same logic as relocation tasks
             designated_dump_zones = target_map > 0
             
-            # Expand dump zones by 1 pixel using the existing soil mechanics function
-            expanded_dump_zones = self._expand_mask_for_soil_mechanics(designated_dump_zones)
+            # Check if there's any dirt outside designated dump zones
+            dirt_outside_designated = jnp.logical_and(action_map > 0, jnp.logical_not(designated_dump_zones))
             
-            # Check if there's any dirt outside expanded dump zones
-            dirt_outside_expanded = jnp.logical_and(action_map > 0, jnp.logical_not(expanded_dump_zones))
-            
-            # Task complete if NO dirt exists outside expanded dump zones
-            done_dump = jnp.logical_not(jnp.any(dirt_outside_expanded))
+            # Task complete if NO dirt exists outside designated dump zones
+            done_dump = jnp.logical_not(jnp.any(dirt_outside_designated))
             return done_dump
 
         def _check_done_dig():
@@ -3075,97 +3071,42 @@ class State(NamedTuple):
 
 
 
-    def _calculate_dump_zone_reward(self, action_map_progress: Float, loaded_capacity: Float) -> Float:
-        """
-        Calculate reward/penalty for dump zone progress using consistent scaling.
-        Positive progress (dumping) gets positive reward, negative progress (lifting) gets negative penalty.
-        Uses loaded_capacity as reference for efficiency bonus.
-        """
-        # Use the same scaling logic as _calculate_efficiency_reward
-        min_reward = 15.0
-        max_reward = self.env_cfg.rewards.skid_dump_correct
+    # def _calculate_dump_zone_reward(self, action_map_progress: Float) -> Float:
+    #     """
+    #     Calculate reward/penalty for dump zone progress using consistent scaling.
+    #     Positive progress (dumping) gets positive reward, negative progress (lifting) gets negative penalty.
+    #     """
+    #     # Use the same scaling logic as _calculate_efficiency_reward
+    #     min_reward = 15.0
+    #     max_reward = self.env_cfg.rewards.skid_dump_correct
         
-        # Scale based on absolute dirt amount
-        # Small amounts (1-5 units) get min_reward, large amounts (20+ units) get max_reward
-        min_dirt = 1.0
-        max_dirt = 20.0
+    #     # Scale based on absolute dirt amount
+    #     # Small amounts (1-5 units) get min_reward, large amounts (20+ units) get max_reward
+    #     min_dirt = 1.0
+    #     max_dirt = 20.0
         
-        # Use absolute value for scaling
-        abs_progress = jnp.abs(action_map_progress)
-        clamped_dirt = jnp.clip(abs_progress, min_dirt, max_dirt)
+    #     # Use absolute value for scaling
+    #     abs_progress = jnp.abs(action_map_progress)
+    #     clamped_dirt = jnp.clip(abs_progress, min_dirt, max_dirt)
         
-        # Linear interpolation between min and max reward/penalty based on dirt amount
-        reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-        scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
+    #     # Linear interpolation between min and max reward/penalty based on dirt amount
+    #     reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
+    #     scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
         
-        # Apply perfect efficiency bonus based on percentage of loaded capacity used
-        # This prevents reward farming: agent can't lift small amounts and dump large amounts for net positive reward
-        efficiency_ratio = abs_progress / jnp.maximum(loaded_capacity, 1e-6)
-        perfect_bonus = jnp.where(
-            efficiency_ratio >= 0.95,  # Using 95%+ of capacity
-            1.2,  # 20% bonus for efficient use of capacity
-            1.0
-        )
+    #     # Apply perfect efficiency bonus for both positive and negative progress
+    #     # This prevents reward farming: agent can't lift small amounts and dump large amounts for net positive reward
+    #     perfect_bonus = jnp.where(
+    #         abs_progress / jnp.maximum(abs_progress, 1e-6) >= 0.95,  # Large amounts
+    #         1.2,  # 20% bonus for large amounts (both reward and penalty)
+    #         1.0
+    #     )
         
-        # Apply additional 20% penalty increase for negative progress (lifting from dump zones)
-        penalty_multiplier = jax.lax.cond(
-            action_map_progress < 0,  # Only for penalties
-            lambda: 1.05,  # 20% stronger penalty
-            lambda: 1.0   # No change for rewards
-        )
+    #     # Apply additional 20% penalty increase for negative progress (lifting from dump zones)
+    #     penalty_multiplier = jax.lax.cond(
+    #         action_map_progress < 0,  # Only for penalties
+    #         lambda: 1.2,  # 20% stronger penalty
+    #         lambda: 1.0   # No change for rewards
+    #     )
         
-        # Return positive reward for positive progress, negative penalty for negative progress
-        return (scaled_reward * perfect_bonus * penalty_multiplier) * jnp.sign(action_map_progress)
-
-    def _calculate_terminal_reward(self, completion_percentage: Float) -> Float:
-        """
-        Calculate terminal reward based on completion percentage.
-        Uses threshold + exponential scaling to discourage low effort and encourage high completion.
-        """
-        base_reward = self.env_cfg.rewards.terminal
-        min_threshold = 0.3  # 30% minimum completion required
-        
-        # No reward for very poor performance
-        def _no_reward():
-            return 0.0
-        
-        def _calculate_scaled_reward():
-            # Scale from min_threshold to 100% with exponential curve
-            # This makes the curve steeper and discourages mediocre completion
-            scaled_percentage = (completion_percentage - min_threshold) / (1.0 - min_threshold)
-            exponential_percentage = scaled_percentage ** 2  # Square for steep curve
-            return base_reward * exponential_percentage
-        
-        return jax.lax.cond(
-            completion_percentage < min_threshold,
-            _no_reward,
-            _calculate_scaled_reward
-        )
-
-    def _calculate_completion_percentage(self, action_map: Array, target_map: Array) -> Float:
-        """
-        Calculate completion percentage based on how much dirt is in correct dump zones.
-        Returns a value between 0.0 and 1.0.
-        """
-        # Get designated dump zones (target_map > 0)
-        designated_dump_zones = target_map > 0
-        
-        # Calculate total dirt volume in the environment (sum of heights)
-        total_dirt = jnp.sum(jnp.where(action_map > 0, action_map, 0))
-        
-        # Calculate dirt volume in correct dump zones (sum of heights)
-        dirt_in_correct_zones = jnp.sum(jnp.where(
-            jnp.logical_and(action_map > 0, designated_dump_zones),
-            action_map,
-            0
-        ))
-        
-        # Calculate completion percentage
-        # If no dirt exists, return 0.0 (no completion)
-        completion_percentage = jax.lax.cond(
-            total_dirt > 0,
-            lambda: dirt_in_correct_zones / total_dirt,
-            lambda: 0.0
-        )
-        
-        return completion_percentage
+    #     # Return positive reward for positive progress, negative penalty for negative progress
+    #     return (scaled_reward * perfect_bonus * penalty_multiplier) * jnp.sign(action_map_progress)

@@ -106,7 +106,7 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.05,  # Small time pressure penalty (was -0.1)
+            existence=-0.15,  # 0.05
             collision_move=-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
@@ -230,7 +230,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         {
             "maps_path": "foundations_dumpzones",
-            "max_steps_in_episode": 1600,  # 600 Balanced: increased from 300 but reduced from 500
+            "max_steps_in_episode": 800,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
