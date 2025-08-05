@@ -106,7 +106,7 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.15,  # 0.05
+            existence=-0.2,  # 0.05   -0.15
             collision_move=-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
@@ -117,7 +117,7 @@ class Rewards(NamedTuple):
             wheel_turn=-0.05,  
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=0.2,  #0.2      0.35
+            dig_correct=1.0,  #0.2      0.35
             dump_correct=0.15,  #0.15   0.0
 
             # Skid steer specific rewards
@@ -229,8 +229,8 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
         {
-            "maps_path": "foundations_dumpzones",
-            "max_steps_in_episode": 800,  # 600 Balanced: increased from 300 but reduced from 500
+            "maps_path": "foundations_dumpzones_harder_nodump",
+            "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },

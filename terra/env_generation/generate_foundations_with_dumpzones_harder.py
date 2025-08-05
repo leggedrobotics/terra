@@ -165,9 +165,9 @@ def create_foundations_with_dumpzones_harder_defaults(
                                     size_obstacle_min=4,
                                     size_obstacle_max=7,
                                     n_nodump_min=0,
-                                    n_nodump_max=0,
-                                    size_nodump_min=8,
-                                    size_nodump_max=10,
+                                    n_nodump_max=1,
+                                    size_nodump_min=5,
+                                    size_nodump_max=8,
                                     expansion_factor=1,
                                     all_dumpable=False,
                                     copy_metadata=True,
@@ -203,9 +203,9 @@ def create_foundations_with_dumpzones_harder_defaults(
     - size_dump_max (int): Maximum size of specific dump zones (default: 13)
     """
     # Define save folder for the envs using os.path.join
-    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_harder")
-    save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_harder_large")
-    print(f"Creating foundations with specific dump zones - saving to: foundations_dumpzones_harder/")
+    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_harder_nodump")
+    save_folder_large = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_harder_large_nodump")
+    print(f"Creating foundations with specific dump zones - saving to: foundations_dumpzones_harder_nodump/")
 
     # Choose different downsampling factors for different curriculum levels
     downsampling_factors = {

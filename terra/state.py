@@ -2116,6 +2116,12 @@ class State(NamedTuple):
         #     lambda: self.env_cfg.rewards.dump_wrong,
         #     lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
         # )
+        dump_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
+            #lambda: self.env_cfg.rewards.dump_correct,
+        )
 
         return dump_reward
 

@@ -478,19 +478,19 @@ def generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs):
     print("Converting foundations with dump zones (harder version)...")
     
     # Check if foundations_dumpzones_harder exists
-    foundations_dumpzones_harder_dir = Path(dataset_folder) / "foundations_dumpzones_harder"
+    foundations_dumpzones_harder_dir = Path(dataset_folder) / "foundations_dumpzones_harder_nodump"
     if not foundations_dumpzones_harder_dir.exists():
         print(f"  foundations_dumpzones_harder directory not found: {foundations_dumpzones_harder_dir}")
         return
     
-    print(f"  Found foundations_dumpzones_harder folder - will convert to train/foundations_dumpzones_harder")
+    print(f"  Found foundations_dumpzones_harder folder - will convert to train/foundations_dumpzones_harder_nodump")
     
     # Set up paths
     img_folder = foundations_dumpzones_harder_dir / "images"
     metadata_folder = foundations_dumpzones_harder_dir / "metadata"
     occupancy_folder = foundations_dumpzones_harder_dir / "occupancy"
     dumpability_folder = foundations_dumpzones_harder_dir / "dumpability"
-    destination_folder = Path(dataset_folder) / "train" / "foundations_dumpzones_harder"
+    destination_folder = Path(dataset_folder) / "train" / "foundations_dumpzones_harder_nodump"
     
     # Create destination directory
     destination_folder.mkdir(parents=True, exist_ok=True)
