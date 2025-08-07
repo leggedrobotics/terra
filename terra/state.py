@@ -620,6 +620,7 @@ class State(NamedTuple):
         - Excavators/Wheeled: can only move when not loaded
         - Skid steer: can move when not loaded OR when loaded with shovel lifted OR when loaded with shovel down (drops dirt)
         - Skid steer with lowered shovel + loaded: moves backward and drops dirt (realistic behavior)
+        - Skid steer with lowered shovel + loaded + no valid dump tiles: blocked from moving backward
         """
 
         def _move_backward():
@@ -641,24 +642,65 @@ class State(NamedTuple):
                 atol=1e-6
             )
             
-            # Drop dirt first if skid steer is loaded, shovel down, AND movement is possible
-            # (realistic: blade lifts when starting to reverse, dirt falls off)
-            should_drop_dirt = jnp.logical_and(
-                jnp.logical_and(is_skid_steer, movement_possible),  # Skid steer AND can move
-                jnp.logical_and(is_loaded, shovel_down)             # Loaded AND shovel down
+            # Check if there are valid dump tiles under the agent (for skid steer)
+            # Use the same logic as the dump function
+            dump_mask = self._build_dig_dump_cone()
+            # Only restrict dumping to dump zones for skid steer agents
+            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+            
+            def _apply_dump_zone_restriction():
+                # For skid steer: restrict to only dump zones (target_map > 0)
+                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+                return dump_mask * dump_zone_mask
+            
+            def _no_dump_zone_restriction():
+                # For excavators: allow dumping on any valid tile (including neutral)
+                return dump_mask
+            
+            dump_mask = jax.lax.cond(
+                is_skid_steer,
+                _apply_dump_zone_restriction,
+                _no_dump_zone_restriction
             )
             
-            # First dump dirt if needed
-            state_after_dump = jax.lax.cond(
-                should_drop_dirt,
-                self._handle_dump,
-                lambda: self
+            # Apply the same exclude masks that are used in the dump function
+            dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+            dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
+            dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
+            
+            has_valid_dump_tiles = jnp.any(dump_mask)
+            
+            # Block movement if skid steer is loaded, shovel down, but no valid dump tiles
+            should_block_movement = jnp.logical_and(
+                jnp.logical_and(is_skid_steer, is_loaded),
+                jnp.logical_and(shovel_down, jnp.logical_not(has_valid_dump_tiles))
             )
             
-            # Then move backward
-            new_state = state_after_dump._move_on_orientation(orientation_vector)
+            # If movement should be blocked, return current state
+            def _block_movement():
+                return self
             
-            return new_state
+            def _allow_movement():
+                # Drop dirt first if skid steer is loaded, shovel down, AND movement is possible
+                # (realistic: blade lifts when starting to reverse, dirt falls off)
+                should_drop_dirt = jnp.logical_and(
+                    jnp.logical_and(is_skid_steer, movement_possible),  # Skid steer AND can move
+                    jnp.logical_and(is_loaded, shovel_down)             # Loaded AND shovel down
+                )
+                
+                # First dump dirt if needed
+                state_after_dump = jax.lax.cond(
+                    should_drop_dirt,
+                    self._handle_dump,
+                    lambda: self
+                )
+                
+                # Then move backward
+                new_state = state_after_dump._move_on_orientation(orientation_vector)
+                
+                return new_state
+            
+            return jax.lax.cond(should_block_movement, _block_movement, _allow_movement)
 
         # Check agent conditions
         is_skid_steer = self.agent.agent_state.agent_type[0] == 2
@@ -2116,12 +2158,26 @@ class State(NamedTuple):
         #     lambda: self.env_cfg.rewards.dump_wrong,
         #     lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
         # )
+
+        
+        # dump_reward = jax.lax.cond(
+        #     dump_reward_condition,
+        #     lambda: self.env_cfg.rewards.dump_wrong,
+        #     lambda: 0.0
+        # )
+
         dump_reward = jax.lax.cond(
             dump_reward_condition,
             lambda: self.env_cfg.rewards.dump_wrong,
-            #lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
-            lambda: self.env_cfg.rewards.dump_correct,
+            lambda: jax.lax.cond(
+                action_map_dump_progress > 0,
+                lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
+                #lambda: self.env_cfg.rewards.dump_correct,
+                lambda: 0.0
+            )
+
         )
+        #self.env_cfg.rewards.dump_wrong
 
         return dump_reward
 
@@ -2871,7 +2927,7 @@ class State(NamedTuple):
         # Slightly closer to agent than excavator but similar range
         fixed_extension = 0.1  # Slightly closer than excavator's 0.5  
         r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1.2) * dig_portion_radius * tile_size + min_distance_from_agent  # Slimmer range than excavator's 1.0
+        r_max = (fixed_extension + 1.4) * dig_portion_radius * tile_size + min_distance_from_agent  # Slimmer range than excavator's 1.0
         
         # Same angular range as excavator
         theta_max = 2 * np.pi / (self.env_cfg.agent.angles_cabin / 1.2)  # Same as excavator
