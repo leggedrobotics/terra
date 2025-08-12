@@ -631,9 +631,9 @@ def convert_terra_pad_to_color(img_terra_pad, color_dict):
     )
 
     # Mapping from terra_pad values to color_dict keys
-    value_to_color = {-1: "digging", 1: "dumping"}
+    value_to_color = {-1: "digging", 0: "neutral", 1: "dumping"}
 
-    # Iterate over the unique values in img_terra_pad (-1 and 1)
+    # Iterate over the unique values in img_terra_pad (-1, 0, and 1)
     for value in np.unique(img_terra_pad):
         # Get the corresponding color from color_dict
         color = color_dict[value_to_color[value]]

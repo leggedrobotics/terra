@@ -52,7 +52,20 @@ class Game:
 
         tile_size_m = ImmutableMapsConfig().edge_length_m / maps_size_px
         self.maps_size_px = maps_size_px
-        tile_size = MAP_TILES // maps_size_px
+        
+        # Dynamic display scaling to maintain consistent visual scale
+        # 64x64 = 44m, so each tile = 44m/64 = 0.6875m
+        # We want to maintain this scale across all map sizes
+        baseline_map_size = 64   # Reference map size (44m)
+        baseline_tile_size = MAP_TILES // baseline_map_size  # 192 // 64 = 3 pixels
+        
+        # Keep tile size constant so larger maps occupy proportionally more pixels
+        tile_size = baseline_tile_size
+        
+        # Calculate total display size per map (maps_size_px * tile_size)
+        total_display_size = maps_size_px * tile_size
+        self.total_display_size = total_display_size
+        
         self.tile_size = tile_size
         excavator_dims = ExcavatorDims()
         agent_h, agent_w = get_agent_dims(
@@ -63,11 +76,13 @@ class Game:
         print(f"Agent size (in rendering): {agent_w}x{agent_h}")
         print(f"Tile size (in rendering): {tile_size_m}")
         print(f"Rendering tile size: {tile_size}")
+        print(f"Total display size: {self.total_display_size}x{self.total_display_size}")
+        print(f"Map size: {maps_size_px}x{maps_size_px}")
         print(f"Number of possible base rotations: {angles_base}")
         print(f"Number of possible cabin rotations: {angles_cabin}")
         for _ in range(self.n_envs):
             self.worlds.append(
-                World(maps_size_px, maps_size_px, self.width, self.height, tile_size)
+                World(maps_size_px, maps_size_px, self.total_display_size, self.total_display_size, tile_size)
             )
             self.agents_1.append(Agent(agent_w, agent_h, tile_size, angles_base, angles_cabin))
             self.agents_2.append(Agent(agent_w, agent_h, tile_size, angles_base, angles_cabin))
@@ -234,12 +249,11 @@ class Game:
             ix = i % self.n_envs_y
             iy = i // self.n_envs_y
 
-            total_offset_x = (
-                ix * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
-            )
-            total_offset_y = (
-                iy * (self.maps_size_px + 4) * self.tile_size + 4 * self.tile_size
-            )
+            # Offsets based on pixel size per map (robust for dynamic scaling)
+            map_px = self.total_display_size  # = self.maps_size_px * self.tile_size
+            border_px = 4 * self.tile_size
+            total_offset_x = ix * (map_px + border_px) + border_px
+            total_offset_y = iy * (map_px + border_px) + border_px
 
             # Draw terrain
             for x in range(world.grid_length_x):

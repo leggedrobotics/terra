@@ -1,9 +1,9 @@
 resolution: 1 # Resolution of the images in meters per pixel
-n_imgs: 2000 # it has to be the same else we can't stack images together
+n_imgs: 1000 # it has to be the same else we can't stack images together
 sizes: [64]
 
 trenches:
-  difficulty_levels: ["single", "double", "double_diagonal", "triple", "triple_diagonal"]
+  difficulty_levels: ["single", "double"] #["single", "double", "double_diagonal", "triple", "triple_diagonal"]
   trenches_per_level: [[1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
   trench_dims:  # Updated section
     single:

@@ -2568,11 +2568,19 @@ class State(NamedTuple):
         # Existence
         reward += self.env_cfg.rewards.existence
 
+        # # Scaled existence penalty: clip between min and max
+        # min_penalty = self.env_cfg.rewards.existence  # Start at config value
+        # max_penalty = -1.0    # Cap at -1.0
+        
+        # # Simple clipping: scale with timestep and clip to bounds
+        # raw_penalty = -0.002 * self.env_steps  # Scale with time
+        # existence_penalty = jnp.clip(raw_penalty, max_penalty, min_penalty)
+        
+        # # Add the existence penalty to the reward
+        # reward += existence_penalty
+
         # Constant scaling factor
         reward /= self.env_cfg.rewards.normalizer
-
-      
-        
 
         return reward
 

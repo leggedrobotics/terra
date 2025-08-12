@@ -22,7 +22,7 @@ class ImmutableMapsConfig(NamedTuple):
     This defines the proportion between the map and the agent.
     """
 
-    edge_length_m: float = 44.0  # map edge length in meters
+    edge_length_m: float = 44.0  # map edge length in meters 44  , 66 for 96x96 maps
     edge_length_px: int = 0  # updated in the code
 
 
@@ -106,7 +106,7 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.2,  # 0.05   -0.15
+            existence=-0.25,   # -0.25      -0.1 for 96x96 maps
             collision_move=-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
@@ -117,7 +117,7 @@ class Rewards(NamedTuple):
             wheel_turn=-0.05,  
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=1.0,  #0.2      0.35
+            dig_correct=1.5,  #1.0    0.2      0.35
             dump_correct=0.15,  #0.15   0.0
 
             # Skid steer specific rewards
@@ -216,24 +216,29 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
-        # {
-        #     "maps_path": "foundations",
-        #     "max_steps_in_episode": 600,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "relocations_harder",
-        #     "max_steps_in_episode": 1300,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
         {
-            "maps_path": "foundations_dumpzones_harder_nodump",
+            "maps_path": "trenches/single_dumpzone",
             "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
+            "apply_trench_rewards": True,
         },
+        # {
+        #     "maps_path": "foundations_dumpzones_harder_nodump",
+        #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+
+        # {
+        #     "maps_path": "experimental_96x96",
+        #     "max_steps_in_episode":1600,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+
+
+
+
         # {
         #     "maps_path": "relocations",
         #     "max_steps_in_episode": 550,  # Balanced: increased from 400 but reduced from 600

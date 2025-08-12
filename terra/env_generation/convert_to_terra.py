@@ -516,11 +516,69 @@ def generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs):
     print(f"  foundations_dumpzones_harder conversion completed")
 
 
+def generate_trenches_dumpzone_terra(dataset_folder, size, n_imgs):
+    """Convert trenches with dump zones to Terra format."""
+    print("Converting trenches with dump zones...")
+    
+    # Check if trenches directory exists
+    trenches_dir = Path(dataset_folder) / "trenches"
+    if not trenches_dir.exists():
+        print(f"  trenches directory not found: {trenches_dir}")
+        return
+    
+    # Look for subdirectories with "_dumpzone" suffix
+    dumpzone_subdirs = []
+    for subdir in trenches_dir.iterdir():
+        if subdir.is_dir() and "_dumpzone" in subdir.name:
+            dumpzone_subdirs.append(subdir)
+    
+    if not dumpzone_subdirs:
+        print(f"  No trenches with dump zones found in: {trenches_single_dumpzone_dir}")
+        return
+    
+    print(f"  Found {len(dumpzone_subdirs)} trench dump zone subdirectories")
+    
+    for subdir in dumpzone_subdirs:
+        print(f"  Processing {subdir.name}...")
+        
+        # Set up paths
+        img_folder = subdir / "images"
+        metadata_folder = subdir / "metadata"
+        occupancy_folder = subdir / "occupancy"
+        dumpability_folder = subdir / "dumpability"
+        destination_folder = Path(dataset_folder) / "train" / "trenches" / subdir.name
+        
+        # Create destination directory
+        destination_folder.mkdir(parents=True, exist_ok=True)
+        print(f"    Created destination directory: {destination_folder}")
+        
+        # Convert with specific settings for trenches with dump zones
+        _convert_all_imgs_to_terra(
+            img_folder,
+            metadata_folder,
+            occupancy_folder,
+            dumpability_folder,
+            destination_folder,
+            size,
+            n_imgs,
+            all_dumpable=False,  # Trenches with dump zones use specific dump zones, not all dumpable
+            copy_metadata=True,
+            downsample=False,
+            has_dumpability=True,
+            center_padding=False,
+            actions_folder=None,
+        )
+        
+        print(f"    {subdir.name} conversion completed")
+    
+    print(f"  All trenches with dump zones conversion completed")
+
+
 def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=None):
     print("dataset folder: ", dataset_folder)
     if map_types is None:
         map_types = [
-            "foundations", "foundations_dumpzones", "foundations_dumpzones_harder", "trenches", "relocations", "relocations_easy",
+            "foundations", "foundations_dumpzones", "foundations_dumpzones_harder", "trenches", "trenches_dumpzone", "relocations", "relocations_easy",
             "relocations_medium", "relocations_hard", "custom"
         ]
     if "foundations" in map_types:
@@ -539,6 +597,10 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=N
             dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False
         )
         print("Trenches processed successfully.")
+    if "trenches_dumpzone" in map_types:
+        # Use the dedicated function for trenches with dump zones
+        generate_trenches_dumpzone_terra(dataset_folder, size, n_imgs)
+        print("Trenches with dump zones processed successfully.")
     if "relocations" in map_types:
         generate_relocations_terra(dataset_folder, size, n_imgs)
         print("Relocations processed successfully.")

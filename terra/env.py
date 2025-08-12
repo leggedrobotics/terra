@@ -41,14 +41,17 @@ class TerraEnv(NamedTuple):
         display: bool = False,
     ) -> "TerraEnv":
         re = None
-        tile_size_rendering = MAP_TILES // maps_size_px
+        baseline_map_size = 64
+        tile_size_rendering = MAP_TILES // baseline_map_size  # 192//64 = 3
         if rendering:
             pg.init()
             pg.mixer.init()
+            # Map pixel size per env = maps_size_px * tile_size_rendering (constant tile size)
+            total_display_size = maps_size_px * tile_size_rendering
             display_dims = (
-                n_envs_y * (maps_size_px + 4) * tile_size_rendering
+                n_envs_y * (total_display_size + 4 * tile_size_rendering)
                 + 4 * tile_size_rendering,
-                n_envs_x * (maps_size_px + 4) * tile_size_rendering
+                n_envs_x * (total_display_size + 4 * tile_size_rendering)
                 + 4 * tile_size_rendering,
             )
             if not display:
