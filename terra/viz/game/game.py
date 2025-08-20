@@ -55,12 +55,14 @@ class Game:
 
         if maps_size_px == 128:
             # Extract dimensions from config
-            agent_config = {}
-            agent_config['height'] = 5
-            agent_config['width'] = 9
-            agent_h = int(agent_config['height'][0]) if hasattr(agent_config['height'], '__getitem__') else int(agent_config['height'])
-            agent_w = int(agent_config['width'][0]) if hasattr(agent_config['width'], '__getitem__') else int(agent_config['width'])
-            print(f"Using provided agent config: {agent_w}x{agent_h}")
+            # Use agent_config argument if provided, else default values
+            if agent_config is not None:
+                agent_h = int(agent_config.get('height', 5))
+                agent_w = int(agent_config.get('width', 9))
+            else:
+                agent_h = 5
+                agent_w = 9
+            print(f"Using agent config: {agent_w}x{agent_h}")
         
         else:
             excavator_dims = ExcavatorDims()
