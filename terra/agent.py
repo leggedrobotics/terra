@@ -195,10 +195,6 @@ def _validate_agent_position(
     
     return valid
 
-
-# Removed duplicate definition of _validate_agent_position
-
-
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):
     max_center_coord = jnp.ceil(
         jnp.max(
