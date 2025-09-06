@@ -641,7 +641,7 @@ class State(NamedTuple):
         max_agent_dim = jnp.max(
             jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
         )
-        min_distance_from_agent = tile_size * max_agent_dim
+        min_distance_from_agent = tile_size * max_agent_dim - 1
 
         # Fixed middle-point arm extension (halfway between 0 and 1)
         fixed_extension = 0.5
