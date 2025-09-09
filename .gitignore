@@ -18,3 +18,4 @@ data/*
 !data/custom/
 !data/custom/**
 *.pkl
+.DS_Store

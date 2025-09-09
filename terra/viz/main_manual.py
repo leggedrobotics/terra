@@ -40,7 +40,15 @@ def main():
     env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
-    timestep = env.reset(env_cfgs, _rng)
+
+    # initial_custom_pos = (32, 32)
+    # initial_custom_angle = 0
+    initial_custom_pos = None  # Use default random position
+    initial_custom_angle = None  # Use default random angle
+    
+    timestep = env.reset(env_cfgs, _rng, 
+                         custom_pos=initial_custom_pos, 
+                         custom_angle=initial_custom_angle)
     print(f"{timestep.state.agent.width=}")
     print(f"{timestep.state.agent.height=}")
 
@@ -49,7 +57,7 @@ def main():
 
     def repeat_action(action, n_times=n_envs):
         return action_type.new(action.action[None].repeat(n_times, 0))
-
+    
     # Trigger the JIT compilation
     timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
     end_time = time.time()
