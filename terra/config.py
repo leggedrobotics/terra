@@ -210,18 +210,18 @@ class MapsDimsConfig(NamedTuple):
 
 class CurriculumGlobalConfig(NamedTuple):
     increase_level_threshold: int = 20  # Reduced from 20 for faster progression
-    decrease_level_threshold: int = 30  # Reduced from 50 for quicker regression
+    decrease_level_threshold: int = 100  # Reduced from 50 for quicker regression
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
     # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
-        {
-            "maps_path": "trenches/single_dumpzone",
-            "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
-        },
+        # {
+        #     "maps_path": "trenches/single_dumpzone",
+        #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         # {
         #     "maps_path": "foundations_dumpzones_harder_nodump",
         #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
@@ -235,8 +235,15 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
+        
+        {
+            "maps_path": "foundations_dumpzones_large",
+            "max_steps_in_episode":1200,  # 600 Balanced: increased from 300 but reduced from 500
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
 
-
+        
 
 
         # {

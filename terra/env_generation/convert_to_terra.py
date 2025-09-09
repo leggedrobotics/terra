@@ -516,6 +516,49 @@ def generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs):
     print(f"  foundations_dumpzones_harder conversion completed")
 
 
+def generate_foundations_quarter_large_terra(dataset_folder, size, n_imgs):
+    """Convert foundations with quarter dump zones (large version) to Terra format."""
+    print("Converting foundations with quarter dump zones (large version)...")
+    
+    # Check if foundations_quarter_large exists
+    foundations_quarter_large_dir = Path(dataset_folder) / "foundations_quarter_large"
+    if not foundations_quarter_large_dir.exists():
+        print(f"  foundations_quarter_large directory not found: {foundations_quarter_large_dir}")
+        return
+    
+    print(f"  Found foundations_quarter_large folder - will convert to train/foundations_quarter_large")
+    
+    # Set up paths
+    img_folder = foundations_quarter_large_dir / "images"
+    metadata_folder = foundations_quarter_large_dir / "metadata"
+    occupancy_folder = foundations_quarter_large_dir / "occupancy"
+    dumpability_folder = foundations_quarter_large_dir / "dumpability"
+    destination_folder = Path(dataset_folder) / "train" / "foundations_quarter_large"
+    
+    # Create destination directory
+    destination_folder.mkdir(parents=True, exist_ok=True)
+    print(f"  Created destination directory: {destination_folder}")
+    
+    # Convert with specific settings for quarter dump zone foundations
+    _convert_all_imgs_to_terra(
+        img_folder,
+        metadata_folder,
+        occupancy_folder,
+        dumpability_folder,
+        destination_folder,
+        size,
+        n_imgs,
+        all_dumpable=False,  # Quarter foundations use specific dump zones, not all dumpable
+        copy_metadata=True,
+        downsample=False,
+        has_dumpability=True,
+        center_padding=False,
+        actions_folder=None,
+    )
+    
+    print(f"  foundations_quarter_large conversion completed")
+
+
 def generate_trenches_dumpzone_terra(dataset_folder, size, n_imgs):
     """Convert trenches with dump zones to Terra format."""
     print("Converting trenches with dump zones...")
@@ -592,6 +635,10 @@ def generate_dataset_terra_format(dataset_folder, size, n_imgs=1000, map_types=N
         # Use the dedicated function for foundations with dump zones (harder version)
         generate_foundations_dumpzones_harder_terra(dataset_folder, size, n_imgs)
         print("Foundations with dump zones (harder version) processed successfully.")
+    if "foundations_quarter_large" in map_types:
+        # Use the dedicated function for foundations with quarter dump zones (large version)
+        generate_foundations_quarter_large_terra(dataset_folder, size, n_imgs)
+        print("Foundations with quarter dump zones (large version) processed successfully.")
     if "trenches" in map_types:
         generate_trenches_terra(
             dataset_folder, size, n_imgs, expansion_factor=1, all_dumpable=False

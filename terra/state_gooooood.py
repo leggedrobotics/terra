@@ -2138,239 +2138,99 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         """
-        Handles reward assignment at dump time.
-        This includes both the dump part and the realization
-        of the previously digged terrain.
+        Handles reward assignment at dump time for tracked/wheeled agents (excavators).
+        Excavators get rewards only for dumping in target dump zones (target_map > 0).
         """
-        # Check if agent is excavator (not skid steer)
-        is_excavator = self.agent.agent_state.agent_type[0] != 2
+        # Calculate progress on target dump tiles only
+        action_map_dump_progress = self._get_action_map_dump_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+
+        dump_reward_condition = jnp.allclose(
+            self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
+        )
+        #TODO: NO MORE DUMP REWARD
+        dump_reward = 0.0
+        # dump_reward = jax.lax.cond(
+        #     dump_reward_condition,
+        #     lambda: self.env_cfg.rewards.dump_wrong,
+        #     lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
+        # )
+
         
-        def _excavator_dump_rewards():
-            # Standard dump zone progress (target_map > 0)
-            action_map_dump_progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-            
-            # Calculate intermediate dumping progress on dig zones (target_map < 0)
-            action_map_clip_old = jnp.clip(self.world.action_map.map, a_min=0)
-            action_map_clip_new = jnp.clip(new_state.world.action_map.map, a_min=0)
-            dig_zone_mask = self.world.target_map.map < 0
-            intermediate_dump_progress = (
-                (action_map_clip_new - action_map_clip_old) * dig_zone_mask
-            ).sum()
-            
-            # Calculate neutral area dumping (target_map = 0)
-            neutral_area_mask = self.world.target_map.map == 0
-            neutral_dump_progress = (
-                (action_map_clip_new - action_map_clip_old) * neutral_area_mask
-            ).sum()
+        # dump_reward = jax.lax.cond(
+        #     dump_reward_condition,
+        #     lambda: self.env_cfg.rewards.dump_wrong,
+        #     lambda: 0.0
+        # )
 
-            dump_reward_condition = jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
+        dump_reward = jax.lax.cond(
+            dump_reward_condition,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            lambda: jax.lax.cond(
+                action_map_dump_progress > 0,
+                lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
+                #lambda: self.env_cfg.rewards.dump_correct,
+                lambda: 0.0
             )
 
-            def _successful_dump():
-                # Reward hierarchy for excavators:
-                # 1. Dump zones (target_map > 0): BIG BONUS (150% - encourages proper dumping!)
-                # 2. Neutral areas (target_map = 0): Medium reward (30%)
-                # 3. Intermediate dumps on dig zones (target_map < 0): VERY SMALL REWARD (5% - enables strategy)
-                dump_zone_reward = action_map_dump_progress * (self.env_cfg.rewards.dump_correct)  # BIG BONUS!
-                neutral_reward = neutral_dump_progress * (self.env_cfg.rewards.dump_correct * 0.1)
-                intermediate_reward = intermediate_dump_progress * (self.env_cfg.rewards.dump_correct * 0.05)  # Very small reward
-                
-                return dump_zone_reward + neutral_reward + intermediate_reward
+        )
+        #self.env_cfg.rewards.dump_wrong
 
-            def _failed_dump():
-                return self.env_cfg.rewards.dump_wrong
-
-            return jax.lax.cond(dump_reward_condition, _failed_dump, _successful_dump)
-        
-        def _standard_dump_rewards():
-            # Standard logic for skid steer (unchanged)
-            action_map_dump_progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-
-            dump_reward_condition = jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
-            )
-
-            dump_reward = jax.lax.cond(
-                dump_reward_condition,
-                lambda: self.env_cfg.rewards.dump_wrong,
-                lambda: action_map_dump_progress * self.env_cfg.rewards.dump_correct,
-            )
-            return dump_reward
-        
-        return jax.lax.cond(is_excavator, _excavator_dump_rewards, _standard_dump_rewards)
+        return dump_reward
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Check if agent is excavator (not skid steer)
-        is_excavator = self.agent.agent_state.agent_type[0] != 2
-        
-        def _excavator_dig_rewards():
-            # Standard dig progress on designated dig zones
-            action_map_dig_progress = self._get_action_map_dig_progress(
+        action_map_dig_progress = self._get_action_map_dig_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+
+        # action_map_dig_regress = self._get_action_map_dump_regress(
+        #     self.world.action_map.map,
+        #     new_state.world.action_map.map,
+        #     self.world.target_map.map,
+        # )
+
+
+        action_map_dump_progress = self._get_action_map_dump_progress(
                 self.world.action_map.map,
                 new_state.world.action_map.map,
                 self.world.target_map.map,
             )
 
-            # Standard dump regress penalty
-            action_map_dig_regress = self._get_action_map_dump_regress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-            
-            # Distance-based dig reward scaling: farther from dump zones = higher rewards
-            # This incentivizes tackling hard-to-reach areas first (inside-out strategy)
-            def _calculate_distance_scaled_dig_reward():
-                # Get dig cone center position using same logic as cone creation (reuse calculations)
-                agent_pos = self.agent.agent_state.pos_base
-                arm_angle = self._get_arm_angle_rad()
-                
-                # Use exact same parameters as _get_dig_dump_mask_cyl for consistency
-                dig_portion_radius = self.env_cfg.agent.move_tiles
-                tile_size = self.env_cfg.tile_size
-                max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
-                min_distance_from_agent = tile_size * max_agent_dim
-                
-                # Fixed extension and cone center distance (same as cone creation)
-                fixed_extension = 0.5
-                r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-                r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-                cone_center_distance = (r_min + r_max) / 2  # Middle of the cone range
-                
-                # Convert to tile coordinates (divide by tile_size to get tile units)
-                cone_center_distance_tiles = cone_center_distance / tile_size
-                
-                # Calculate cone center offset in arm direction
-                cone_offset_x = cone_center_distance_tiles * jnp.cos(arm_angle)
-                cone_offset_y = cone_center_distance_tiles * jnp.sin(arm_angle)
-                
-                # Ensure compatible shapes for addition
-                cone_offset = jnp.array([cone_offset_x, cone_offset_y])
-                dig_cone_pos = agent_pos + cone_offset
-                
-                # Calculate distance from dig cone center to nearest dump zone
-                distance_to_dump = self._get_min_distance_to_dump_zone_for_agent(dig_cone_pos)
-                
-                # Map realistic distance range to reward multiplier (1.0x to 5.0x)
-                # distance_to_dump is normalized by map diagonal, but with quarter dump zones:
-                # - Closest distance: 0.0 (on dump zone) → 1.0x multiplier (no bonus)
-                # - Furthest realistic distance: ~0.25 (quarter map) → 5.0x multiplier (max bonus)
-                # Scale accordingly: multiply by 4 to map 0.0-0.25 range to 0.0-1.0 range
-                scaled_distance = jnp.clip(distance_to_dump * 4.0, 0.0, 1.0)  # Map 0.0-0.25 to 0.0-1.0
-                distance_multiplier = 1.0 + (scaled_distance * 4.0)  # Now gives 1.0x to 5.0x range
-                
-                scaled_reward = action_map_dig_progress * self.env_cfg.rewards.dig_correct * distance_multiplier
-                return scaled_reward
-            
-            dig_reward = jax.lax.cond(
-                action_map_dig_progress > 0,
-                _calculate_distance_scaled_dig_reward,
-                lambda: 0.0,
-            )
 
-            # Hole filling bonus: reward for digging adjacent to existing holes
-            def _calculate_hole_filling_bonus():
-                # Frontier is defined against the pre-dig holes
-                holes_before = self.world.action_map.map < 0
-                holes_after = new_state.world.action_map.map < 0
-                new_digs = jnp.logical_and(holes_after, jnp.logical_not(holes_before))
-                dig_zones = self.world.target_map.map < 0
+        dig_reward = jax.lax.cond(
+            action_map_dig_progress > 0,
+            lambda: action_map_dig_progress * self.env_cfg.rewards.dig_correct,
+            lambda: 0.0,
+        )
 
-                # 4-neighbor frontier ring around existing holes (exclude holes themselves)
-                K_cross = jnp.array([[0, 1, 0],
-                                     [1, 1, 1],
-                                     [0, 1, 0]], dtype=jnp.float32)
-                hb_f = holes_before.astype(jnp.float32)
-                dil4 = jax.scipy.signal.correlate2d(
-                    hb_f, K_cross, mode='same', boundary='fill', fillvalue=0.0
-                ) > 0
-                frontier_ring = jnp.logical_and(dil4, jnp.logical_not(holes_before))
-                frontier_ring = jnp.logical_and(frontier_ring, dig_zones)
+        # Make penalty bigger than dumping reward
+        # dig_on_dump_penalty = jax.lax.cond(
+        #     action_map_dig_regress > 0,
+        #     lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
+        #     lambda: 0.0,
+        # )
+        dig_on_dump_penalty = jax.lax.cond(
+            action_map_dump_progress < 0,
+            lambda: self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0]),
+            lambda: 0.0,
+        )
 
-                # Reward only newly dug tiles that extend the frontier within dig zones
-                frontier_digs = jnp.logical_and(new_digs, frontier_ring)
+        dig_wrong_reward = jax.lax.cond(
+            jnp.allclose(
+                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded    ##NOT SURE IF CORRECT
+            ),
+            lambda: self.env_cfg.rewards.dig_wrong,
+            lambda: 0.0,
+        )
 
-                bonus_multiplier = 2.0
-                hole_filling_progress = jnp.sum(frontier_digs.astype(jnp.float32))
-
-                return hole_filling_progress * self.env_cfg.rewards.dig_correct * bonus_multiplier
-            
-            hole_filling_bonus = jax.lax.cond(
-                action_map_dig_progress > 0,
-                _calculate_hole_filling_bonus,
-                lambda: 0.0,
-            )
-
-            # Penalty for digging on dump zones (keep existing logic)
-            dig_on_dump_penalty = jax.lax.cond(
-                action_map_dig_regress > 0,
-                lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
-                lambda: 0.0,
-            )
-            
-            # ANTI-FARMING: Remove cleanup bonus to prevent dig-dump farming cycles
-            # Agent can still learn intermediate dumping (gets 5% dump reward) but won't farm by repeatedly picking up the same dirt
-            cleanup_bonus = 0.0
-
-            dig_wrong_reward = jax.lax.cond(
-                jnp.allclose(
-                    self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: 0.0,
-            )
-
-            return dig_reward + hole_filling_bonus + dig_on_dump_penalty + dig_wrong_reward + cleanup_bonus
-        
-        def _standard_dig_rewards():
-            # Standard logic for skid steer (unchanged)
-            action_map_dig_progress = self._get_action_map_dig_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-
-            action_map_dig_regress = self._get_action_map_dump_regress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-
-            dig_reward = jax.lax.cond(
-                action_map_dig_progress > 0,
-                lambda: action_map_dig_progress * self.env_cfg.rewards.dig_correct,
-                lambda: 0.0,
-            )
-
-            # Make penalty bigger than dumping reward
-            dig_on_dump_penalty = jax.lax.cond(
-                action_map_dig_regress > 0,
-                lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
-                lambda: 0.0,
-            )
-
-            dig_wrong_reward = jax.lax.cond(
-                jnp.allclose(
-                    self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: 0.0,
-            )
-
-            return dig_reward + dig_on_dump_penalty + dig_wrong_reward
-        
-        return jax.lax.cond(is_excavator, _excavator_dig_rewards, _standard_dig_rewards)
+        return dig_reward + dig_on_dump_penalty + dig_wrong_reward
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
@@ -3258,11 +3118,10 @@ class State(NamedTuple):
 
     def _get_min_distance_to_dump_zone_for_agent(self, agent_pos: Array) -> Float:
         """
-        Returns the minimum Euclidean distance from a given agent position to any DESIGNATED dump zone tile.
+        Returns the minimum Euclidean distance from a given agent position to any dump zone tile.
         Helper method to avoid state swapping issues.
         """
-        # Use target_map > 0 to find designated dump zones, not dumpability_mask
-        dump_zones_mask = self.world.target_map.map > 0  # shape (W, H), True = designated dump zone
+        dump_mask = self.world.dumpability_mask.map  # shape (W, H), 1 = can dump
         width = self.world.width
         height = self.world.height
         
@@ -3271,14 +3130,10 @@ class State(NamedTuple):
         grid_x, grid_y = jnp.meshgrid(xs, ys, indexing='ij')  # shape (W, H)
         
         # Compute squared distances to agent position
-        # Ensure agent_pos is properly shaped and extract scalars
-        agent_pos_flat = jnp.atleast_1d(jnp.ravel(agent_pos))  # Flatten to 1D
-        agent_x = agent_pos_flat[0]  # Extract first element as scalar
-        agent_y = agent_pos_flat[1]  # Extract second element as scalar
-        dists = (grid_x - agent_x) ** 2 + (grid_y - agent_y) ** 2  # shape (W, H)
+        dists = (grid_x - agent_pos[0]) ** 2 + (grid_y - agent_pos[1]) ** 2  # shape (W, H)
         
         # Mask out non-dump-zone tiles by setting their distance to a large value
-        masked_dists = jnp.where(dump_zones_mask, dists, jnp.inf)
+        masked_dists = jnp.where(dump_mask, dists, jnp.inf)
         
         # Take the minimum distance (if no dump zone, result is inf)
         min_dist = jnp.sqrt(jnp.min(masked_dists))
@@ -3286,6 +3141,9 @@ class State(NamedTuple):
         # Normalize by map diagonal
         map_diagonal = jnp.sqrt(width**2 + height**2)
         return jnp.where(jnp.isfinite(min_dist), min_dist / map_diagonal, 0.0)
+
+
+
 
     def _calculate_dump_zone_reward(self, action_map_progress: Float, loaded_capacity: Float) -> Float:
         """
