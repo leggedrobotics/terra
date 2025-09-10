@@ -43,7 +43,7 @@ class ImmutableAgentConfig(NamedTuple):
     angles_base: int = 12
     angles_cabin: int = 12
     max_wheel_angle: int = 2
-    wheel_step: float = 25.0  # difference between next angles in discretization (in degrees)
+    wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
     num_state_obs: int = 6  # number of state observations (used to determine network input)
 
 
@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 5  # number of tiles of progress for every move action
+    move_tiles: int = 6  # number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
@@ -221,7 +221,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
 
 class BatchConfig(NamedTuple):
-    action_type: Action = WheeledAction  # [WheeledAction, TrackedAction]
+    action_type: Action = TrackedAction  # [WheeledAction, TrackedAction]
 
     # Config to get data for batched env initialization
     agent: ImmutableAgentConfig = ImmutableAgentConfig()
