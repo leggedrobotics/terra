@@ -643,10 +643,9 @@ class State(NamedTuple):
         )
         min_distance_from_agent = tile_size * max_agent_dim
 
-        # Fixed middle-point arm extension (halfway between 0 and 1)
-        fixed_extension = 0.5
-        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+        # Dig zone starts close to digger and uses original radius
+        r_min = min_distance_from_agent
+        r_max = min_distance_from_agent + dig_portion_radius * tile_size
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
