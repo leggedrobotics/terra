@@ -2254,114 +2254,28 @@ class State(NamedTuple):
         is_excavator = self.agent.agent_state.agent_type[0] != 2
         
         def _excavator_dig_rewards():
-            # Standard dig progress on designated dig zones
-            action_map_dig_progress = self._get_action_map_dig_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
+            # Constant dig reward when loading starts (0 -> >0), penalties unchanged
+            started_loading = jnp.logical_and(
+                self.agent.agent_state.loaded[0] == 0,
+                new_state.agent.agent_state_2.loaded[0] > 0,
             )
-
-            # Standard dump regress penalty
+            dig_reward = jax.lax.cond(
+                started_loading,
+                lambda: jnp.float32(1.0),
+                lambda: jnp.float32(0.0),
+            )
+            # Penalty for digging on dump zones (regress on positive target)
             action_map_dig_regress = self._get_action_map_dump_regress(
                 self.world.action_map.map,
                 new_state.world.action_map.map,
                 self.world.target_map.map,
             )
-            
-            # Distance-based dig reward scaling: farther from dump zones = higher rewards
-            # This incentivizes tackling hard-to-reach areas first (inside-out strategy)
-            def _calculate_distance_scaled_dig_reward():
-                # Get dig cone center position using same logic as cone creation (reuse calculations)
-                agent_pos = self.agent.agent_state.pos_base
-                arm_angle = self._get_arm_angle_rad()
-                
-                # Use exact same parameters as _get_dig_dump_mask_cyl for consistency
-                dig_portion_radius = self.env_cfg.agent.move_tiles
-                tile_size = self.env_cfg.tile_size
-                max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
-                min_distance_from_agent = tile_size * max_agent_dim
-                
-                # Fixed extension and cone center distance (same as cone creation)
-                fixed_extension = 0.5
-                r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-                r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-                cone_center_distance = (r_min + r_max) / 2  # Middle of the cone range
-                
-                # Convert to tile coordinates (divide by tile_size to get tile units)
-                cone_center_distance_tiles = cone_center_distance / tile_size
-                
-                # Calculate cone center offset in arm direction
-                cone_offset_x = cone_center_distance_tiles * jnp.cos(arm_angle)
-                cone_offset_y = cone_center_distance_tiles * jnp.sin(arm_angle)
-                
-                # Ensure compatible shapes for addition
-                cone_offset = jnp.array([cone_offset_x, cone_offset_y])
-                dig_cone_pos = agent_pos + cone_offset
-                
-                # Calculate distance from dig cone center to nearest dump zone
-                distance_to_dump = self._get_min_distance_to_dump_zone_for_agent(dig_cone_pos)
-                
-                # Map realistic distance range to reward multiplier (1.0x to 5.0x)
-                # distance_to_dump is normalized by map diagonal, but with quarter dump zones:
-                # - Closest distance: 0.0 (on dump zone) → 1.0x multiplier (no bonus)
-                # - Furthest realistic distance: ~0.25 (quarter map) → 5.0x multiplier (max bonus)
-                # Scale accordingly: multiply by 4 to map 0.0-0.25 range to 0.0-1.0 range
-                scaled_distance = jnp.clip(distance_to_dump * 4.0, 0.0, 1.0)  # Map 0.0-0.25 to 0.0-1.0
-                distance_multiplier = 1.0 + (scaled_distance * 4.0)  # Now gives 1.0x to 5.0x range
-                
-                scaled_reward = action_map_dig_progress * self.env_cfg.rewards.dig_correct * distance_multiplier
-                return scaled_reward
-            
-            dig_reward = jax.lax.cond(
-                action_map_dig_progress > 0,
-                _calculate_distance_scaled_dig_reward,
-                lambda: 0.0,
-            )
-
-            # Hole filling bonus: reward for digging adjacent to existing holes
-            def _calculate_hole_filling_bonus():
-                # Frontier is defined against the pre-dig holes
-                holes_before = self.world.action_map.map < 0
-                holes_after = new_state.world.action_map.map < 0
-                new_digs = jnp.logical_and(holes_after, jnp.logical_not(holes_before))
-                dig_zones = self.world.target_map.map < 0
-
-                # 4-neighbor frontier ring around existing holes (exclude holes themselves)
-                K_cross = jnp.array([[0, 1, 0],
-                                     [1, 1, 1],
-                                     [0, 1, 0]], dtype=jnp.float32)
-                hb_f = holes_before.astype(jnp.float32)
-                dil4 = jax.scipy.signal.correlate2d(
-                    hb_f, K_cross, mode='same', boundary='fill', fillvalue=0.0
-                ) > 0
-                frontier_ring = jnp.logical_and(dil4, jnp.logical_not(holes_before))
-                frontier_ring = jnp.logical_and(frontier_ring, dig_zones)
-
-                # Reward only newly dug tiles that extend the frontier within dig zones
-                frontier_digs = jnp.logical_and(new_digs, frontier_ring)
-
-                bonus_multiplier = 2.0
-                hole_filling_progress = jnp.sum(frontier_digs.astype(jnp.float32))
-
-                return hole_filling_progress * self.env_cfg.rewards.dig_correct * bonus_multiplier
-            
-            hole_filling_bonus = jax.lax.cond(
-                action_map_dig_progress > 0,
-                _calculate_hole_filling_bonus,
-                lambda: 0.0,
-            )
-
-            # Penalty for digging on dump zones (keep existing logic)
             dig_on_dump_penalty = jax.lax.cond(
                 action_map_dig_regress > 0,
                 lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
                 lambda: 0.0,
             )
-            
-            # ANTI-FARMING: Remove cleanup bonus to prevent dig-dump farming cycles
-            # Agent can still learn intermediate dumping (gets 5% dump reward) but won't farm by repeatedly picking up the same dirt
-            cleanup_bonus = 0.0
-
+            # Wrong dig when loaded doesn't change
             dig_wrong_reward = jax.lax.cond(
                 jnp.allclose(
                     self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
@@ -2369,15 +2283,18 @@ class State(NamedTuple):
                 lambda: self.env_cfg.rewards.dig_wrong,
                 lambda: 0.0,
             )
-
-            return dig_reward + hole_filling_bonus + dig_on_dump_penalty + dig_wrong_reward + cleanup_bonus
+            return dig_reward + dig_on_dump_penalty + dig_wrong_reward
         
         def _standard_dig_rewards():
-            # Standard logic for skid steer (unchanged)
-            action_map_dig_progress = self._get_action_map_dig_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
+            # Skidsteer: constant reward when loading starts (0 -> >0), penalties unchanged
+            started_loading = jnp.logical_and(
+                self.agent.agent_state.loaded[0] == 0,
+                new_state.agent.agent_state_2.loaded[0] > 0,
+            )
+            dig_reward = jax.lax.cond(
+                started_loading,
+                lambda: jnp.float32(1.0),
+                lambda: jnp.float32(0.0),
             )
 
             action_map_dig_regress = self._get_action_map_dump_regress(
@@ -2386,13 +2303,7 @@ class State(NamedTuple):
                 self.world.target_map.map,
             )
 
-            dig_reward = jax.lax.cond(
-                action_map_dig_progress > 0,
-                lambda: action_map_dig_progress * self.env_cfg.rewards.dig_correct,
-                lambda: 0.0,
-            )
-
-            # Make penalty bigger than dumping reward
+            # Penalty for digging on dump zones
             dig_on_dump_penalty = jax.lax.cond(
                 action_map_dig_regress > 0,
                 lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
