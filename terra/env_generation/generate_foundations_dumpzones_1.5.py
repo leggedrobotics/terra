@@ -28,6 +28,8 @@ from terra.env_generation.utils import _get_img_mask, color_dict
 PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+name_string = ""
+
 def create_single_dump_zone(img_terra_pad, size_dump_min, size_dump_max, foundation_mask):
     """
     Create exactly 1 dump zone that avoids foundation overlaps.
@@ -130,6 +132,7 @@ def create_foundations_dumpzones_standalone(
                                     center_padding=True,
                                     n_dump_min=1,
                                     n_dump_max=1,
+                                    no_dump_zones=False,
                                     size_dump_min=16,  # Bigger dump zones
                                     size_dump_max=16):  # Bigger dump zones
     """
@@ -158,9 +161,14 @@ def create_foundations_dumpzones_standalone(
     - size_dump_min (int): Minimum size of specific dump zones (default: 20)
     - size_dump_max (int): Maximum size of specific dump zones (default: 20)
     """
+
+
+    
+
+
     # Define save folder for the envs using os.path.join
-    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_1.5")
-    print(f"Creating foundations with specific dump zones - saving to: foundations_dumpzones_1.5/")
+    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", name_string)
+    print(f"Creating foundations with specific dump zones - saving to: {name_string}/")
 
     # Use downsampling factor 1.5 instead of 2 for larger foundations
     downsampling_factors = {
@@ -275,6 +283,8 @@ def create_foundations_dumpzones_standalone(
             foundation_mask = np.all(img_terra_pad != color_dict["neutral"], axis=-1) & np.all(img_terra_pad != color_dict["digging"], axis=-1)
             
             # Create exactly 1 dump zone with no overlaps
+
+            
             img_terra_pad, dump_cumulative_mask = create_single_dump_zone(
                 img_terra_pad, size_dump_min, size_dump_max, foundation_mask
             )
@@ -305,6 +315,12 @@ def create_foundations_dumpzones_standalone(
                 size_nodump_min,
                 size_nodump_max,
             )
+
+
+            if (no_dump_zones):
+                #neutral_mask = np.all(img_terra_pad == color_dict["neutral"], axis=-1)
+                img_terra_pad[neutral_mask] = color_dict["dumping"]
+                dump_cumulative_mask = neutral_mask
             
             save_or_display_image(img_terra_pad, occ, dmp, metadata, curriculum_level, n)
 
@@ -312,7 +328,8 @@ def create_foundations_dumpzones_standalone(
 
 
 def generate_foundations_dumpzones_standalone(config_path="config/env_generation/config.yml",
-                                            generate_terra_format=True):
+                                            generate_terra_format=True,
+                                            no_dump_zones=False):
     """
     Generate foundation maps with specific dump zones using standalone configuration.
 
@@ -375,9 +392,10 @@ def generate_foundations_dumpzones_standalone(config_path="config/env_generation
     print("  → Generating FOUNDATIONS DUMPZONES 1.5 maps...")
     create_foundations_dumpzones_standalone(
         n_imgs=n_imgs,
-        max_size=foundations_config.get("max_size", 64)
+        max_size=foundations_config.get("max_size", 64),
+        no_dump_zones=no_dump_zones,
     )
-    print("  ✓ Foundations dumpzones 1.5 maps saved to: data/terra/foundations_dumpzones_1.5/")
+    print("  ✓ Foundations dumpzones 1.5 maps saved to: data/terra/{name_string}")
 
     # === TERRA FORMAT CONVERSION ===
     if generate_terra_format:
@@ -386,11 +404,11 @@ def generate_foundations_dumpzones_standalone(config_path="config/env_generation
         npy_dataset_folder = package_dir + "/data/terra"
         for size in sizes:
             # Convert generated maps using internal converter
-            foundations_dir = Path(npy_dataset_folder) / "foundations_dumpzones_1.5"
+            foundations_dir = Path(npy_dataset_folder) / name_string
             if not foundations_dir.exists():
                 print(f"  Skipping conversion; folder not found: {foundations_dir}")
                 continue
-            destination_folder = Path(npy_dataset_folder) / "train" / "foundations_dumpzones_1.5"
+            destination_folder = Path(npy_dataset_folder) / "train" / name_string
             img_folder = foundations_dir / "images"
             metadata_folder = foundations_dir / "metadata"
             occupancy_folder = foundations_dir / "occupancy"
@@ -415,8 +433,8 @@ def generate_foundations_dumpzones_standalone(config_path="config/env_generation
             )
         print("  ✓ Terra format conversion complete")
 
-    print("Foundations dumpzones 1.5 generation complete!")
-    print(f"Data saved to {os.path.join(package_dir, 'data/terra/foundations_dumpzones_1.5')}")
+    print("Foundations 1.5 generation complete!")
+    print(f"Data saved to {os.path.join(package_dir, 'data/terra/{name_string}')}")
 
 
 if __name__ == "__main__":
@@ -432,6 +450,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip Terra format conversion",
     )
+    parser.add_argument(
+        "--no-dump-zones",
+        action="store_true",
+        help="Skip dump zones",
+    )
 
     args = parser.parse_args()
 
@@ -442,7 +465,12 @@ if __name__ == "__main__":
     else:
         print("Terra format conversion enabled (use --no-terra-format to disable)")
 
+    no_dump_zones = args.no_dump_zones
+    name_string = "foundations_1.5" if no_dump_zones else "foundations_dumpzones_1.5"
+
+
     generate_foundations_dumpzones_standalone(
         args.config,
         generate_terra_format=generate_terra_format,
+        no_dump_zones=no_dump_zones,
     ) 

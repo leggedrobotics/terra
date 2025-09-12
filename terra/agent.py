@@ -32,6 +32,10 @@ class AgentState(NamedTuple):
     loaded: IntLowDim
     agent_type: IntLowDim  # 0=tracked, 1=wheeled, 2=skid steer
     shovel_lifted: IntLowDim  # 0=lowered, 1=lifted (for skid steer only)
+    # Per-agent baseline potential cached at start of carry (0 -> >0)
+    carry_baseline_potential: jnp.float32 = jnp.float32(0.0)
+    # Per-agent potential immediately after lifting (post-dig/auto-load)
+    carry_potential_after_lift: jnp.float32 = jnp.float32(0.0)
 
 
 class Agent(NamedTuple):
@@ -103,6 +107,8 @@ class Agent(NamedTuple):
             loaded=jnp.full((1,), 0, dtype=jnp.int8),
             agent_type=jnp.full((1,), agent_types[0], dtype=jnp.int8),  # Array like loaded
             shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
+            carry_baseline_potential=jnp.float32(0.0),
+            carry_potential_after_lift=jnp.float32(0.0),
         )
         
         agent_state_2 = AgentState(
@@ -113,6 +119,8 @@ class Agent(NamedTuple):
             loaded=jnp.full((1,), 0, dtype=jnp.int8),
             agent_type=jnp.full((1,), agent_types[1], dtype=jnp.int8),  # Array like loaded
             shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
+            carry_baseline_potential=jnp.float32(0.0),
+            carry_potential_after_lift=jnp.float32(0.0),
         )
 
         width = env_cfg.agent.width

@@ -68,6 +68,9 @@ class GridWorld(NamedTuple):
     local_map_dumpability_2: GridMap = GridMap.dummy_map()
     local_map_obstacles_2: GridMap = GridMap.dummy_map()
 
+    # Cached per-episode map: distance to nearest designated dump zone (normalized); optional
+    relocation_distance_map: Array = jnp.zeros((1, 1), dtype=jnp.float32)
+
     @property
     def width(self) -> int:
         return self.target_map.width
@@ -93,6 +96,7 @@ class GridWorld(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
+        relocation_distance_map_override: Array | None = None,
     ) -> "GridWorld":
         action_map = GridMap.new(IntLowDim(action_map))
         target_map = GridMap.new(IntLowDim(target_map))
@@ -101,6 +105,7 @@ class GridWorld(NamedTuple):
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
         interaction_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
+        relocation_distance_map = jnp.array(relocation_distance_map_override, dtype=jnp.float32) if relocation_distance_map_override is not None else jnp.zeros_like(target_map.map, dtype=jnp.float32)
         
         world = cls(
             target_map=target_map,
@@ -112,6 +117,7 @@ class GridWorld(NamedTuple):
             dumpability_mask_init=dumpability_mask_init_gm,
             last_dig_mask=last_dig_mask,
             interaction_mask=interaction_mask,
+            relocation_distance_map=relocation_distance_map,
         )
 
         return world

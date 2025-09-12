@@ -86,6 +86,7 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
+        distance_map: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
@@ -102,6 +103,7 @@ class TerraEnv(NamedTuple):
             trench_type,
             dumpability_mask_init,
             action_map,
+            distance_map_override=distance_map,
         )
         state = self.wrap_state(state)
 
@@ -133,6 +135,7 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
+        distance_map: Array,
         env_cfg: EnvConfig,
     ) -> tuple[State, dict[str, Array]]:
         """
@@ -145,7 +148,8 @@ class TerraEnv(NamedTuple):
             trench_axes,
             trench_type,
             dumpability_mask_init,
-            action_map
+            action_map,
+            distance_map_override=distance_map,
         )
         state = self.wrap_state(state)
         observations = self._state_to_obs_dict(state)
@@ -197,6 +201,7 @@ class TerraEnv(NamedTuple):
         trench_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
+        distance_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
         new_state = state._step(action)
@@ -246,6 +251,7 @@ class TerraEnv(NamedTuple):
                 trench_type,
                 dumpability_mask_init,
                 action_map,
+                distance_map,
                 cfg,
             )
             return s_reset, o_reset, cfg
@@ -436,6 +442,7 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             action_maps,
+            distance_maps,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
         timestep = jax.vmap(self.terra_env.reset)(
@@ -446,6 +453,7 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             action_maps,
+            distance_maps,
             env_cfgs,
         )
         return timestep
@@ -466,6 +474,7 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             action_maps,
+            distance_maps,
             maps_buffer_keys,
         ) = self._get_map(maps_buffer_keys, timestep.env_cfg)
         # Step the environment
@@ -478,6 +487,7 @@ class TerraEnvBatch:
             trench_type,
             dumpability_mask_init,
             action_maps,
+            distance_maps,
             timestep.env_cfg,
         )
         return timestep

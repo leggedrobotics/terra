@@ -29,6 +29,7 @@ class MapsBuffer(NamedTuple):
     trench_types: Array  # type of trench (number of branches), or -1 if not a trench
     action_maps: Array  # [map_type, n_maps, W, H]
     n_maps: int  # number of maps for each map type
+    distance_maps: Array  # [map_type, n_maps, W, H] normalized float32
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
 
@@ -47,6 +48,7 @@ class MapsBuffer(NamedTuple):
         trench_types: Array,
         dumpability_masks_init: Array,
         action_maps: Array,
+        distance_maps: Array,
     ) -> "MapsBuffer":
         # PATCH: Set all action_map values of 1 to 5 at load time
         #action_maps = jnp.where(action_maps == 1, 5, action_maps)   #DELETE IF NOT NEEDED ANYMORE
@@ -58,6 +60,7 @@ class MapsBuffer(NamedTuple):
             trench_types=trench_types,
             n_maps=maps.shape[1],
             action_maps=action_maps.astype(IntLowDim),
+            distance_maps=distance_maps.astype(jnp.float32),
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -73,7 +76,8 @@ class MapsBuffer(NamedTuple):
         trench_type = trench_type.astype(jnp.int32)
         dumpability_mask_init = self.dumpability_masks_init[curriculum_level, idx]
         action_map = self.action_maps[curriculum_level, idx]
-        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, key
+        distance_map = self.distance_maps[curriculum_level, idx]
+        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
@@ -84,11 +88,12 @@ class MapsBuffer(NamedTuple):
             trench_type,
             dumpability_mask_init,
             action_map,
+            distance_map,
             key,
         ) = self._get_map_from_disk(key, env_cfg)
         # Ensure consistent dtypes for all return values
         trench_type = trench_type.astype(jnp.int32)
-        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, key
+        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
@@ -218,11 +223,14 @@ def load_maps_from_disk(folder_path: str) -> Array:
     dumpability_masks_init = []
     trench_axes = []
     actions = []
+    distances = []
     n_loaded_metadata = 0
     trench_type = -1
     # Check if the actions folder exists (only for relocations)
     actions_folder = Path(folder_path) / "actions"
     has_actions = actions_folder.exists()
+    # Track if we found any distance maps at all
+    found_any_distance = False
     for i in tqdm(range(1, dataset_size + 1), desc="Data Loader"):
         map = np.load(f"{folder_path}/images/img_{i}.npy")
         map_sanity_check(map)
@@ -240,6 +248,23 @@ def load_maps_from_disk(folder_path: str) -> Array:
             actions.append(actions_map)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
+
+        # Load distance map (optional). Warn if missing and fill zeros so shapes match
+        distance_file = Path(folder_path) / "distance" / f"img_{i}.npy"
+        if distance_file.exists():
+            try:
+                dist_map = np.load(distance_file)
+                if dist_map.shape != map.shape:
+                    print(f"Warning: distance map shape mismatch for {distance_file}, expected {map.shape}, got {dist_map.shape}; filling zeros.")
+                    dist_map = np.zeros_like(map, dtype=np.float32)
+                found_any_distance = True
+            except Exception as e:
+                print(f"Warning: failed to load distance map {distance_file}: {e}; filling zeros.")
+                dist_map = np.zeros_like(map, dtype=np.float32)
+        else:
+            print(f"Warning: missing distance map {distance_file}, filling zeros.")
+            dist_map = np.zeros_like(map, dtype=np.float32)
+        distances.append(dist_map.astype(np.float32))
 
         try:
             # Metadata needs to be loaded only for trenches (A, B, C coefficients)
@@ -265,6 +290,9 @@ def load_maps_from_disk(folder_path: str) -> Array:
             if n_loaded_metadata > 0:
                 raise (RuntimeError("Imported some trench metadata, but one failed."))
             continue
+    # If no distance maps were found at all, raise an error (strict behavior)
+    if not found_any_distance:
+        raise RuntimeError(f"No distance maps found in {Path(folder_path) / 'distance'}; please provide distance/img_*.npy files.")
     print(f"Loaded {dataset_size} maps from {folder_path}.")
     if n_loaded_metadata > 0:
         print(f"Loaded {n_loaded_metadata} metadata files from {folder_path}.")
@@ -283,7 +311,8 @@ def load_maps_from_disk(folder_path: str) -> Array:
         jnp.array(trench_axes),
         trench_type,
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
-        jnp.array(actions, dtype=IntMap)
+        jnp.array(actions, dtype=IntMap),
+        jnp.array(distances, dtype=jnp.float32),
     )
 
 
@@ -391,6 +420,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = []
         trench_types = []
         actions_from_disk = []
+        distances_from_disk = []
 
         # Load the single map
         (
@@ -400,7 +430,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             trench_type,
             dumpability_masks_init,
             actions,
-        ) = load_single_map(single_map_path)
+        ) = load_single_map(single_map_path)  # NOTE: single-map path legacy loader has no distances
+        # Fill zeros distance for single-map path
+        distances = jnp.zeros_like(maps, dtype=jnp.float32)
 
         # Repeat the map for each curriculum level
         num_levels = len(batch_cfg.curriculum_global.levels)
@@ -410,6 +442,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = [trench_axes] * num_levels
         trench_types = [trench_type] * num_levels
         actions_from_disk = [actions] * num_levels
+        distances_from_disk = [distances] * num_levels
     else:
         if os.getenv("DATASET_PATH", "") == "":
             raise RuntimeError("DATASET_PATH not defined, can't load maps from disk.")
@@ -422,6 +455,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = []
         trench_types = []
         actions_from_disk = []
+        distances_from_disk = []
         for folder_path in folder_paths:
             (
                 maps,
@@ -430,6 +464,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
                 trench_type,
                 dumpability_masks_init,
                 actions,
+                distances,
             ) = load_maps_from_disk(folder_path)
             maps_from_disk.append(maps)
             occupancies_from_disk.append(occupancies)
@@ -437,88 +472,81 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             trench_axes_list.append(trench_axes)
             trench_types.append(trench_type)
             actions_from_disk.append(actions)
-    maps_width, maps_height = _check_maps(maps_from_disk)
-    maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk_padded, actions_from_disk_padded = _pad_maps(
-        maps_from_disk,
-        occupancies_from_disk,
-        dumpability_masks_init_from_disk,
-        actions_from_disk,
-        maps_width,
-        maps_height,
-    )
-    unique_shapes = set([trench_axes.shape for trench_axes in trench_axes_list])
-    print(f"Unique shapes of trench_axes_list: {unique_shapes}")
+            distances_from_disk.append(distances)
+        maps_width, maps_height = _check_maps(maps_from_disk)
+        maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk_padded, actions_from_disk_padded = _pad_maps(
+            maps_from_disk,
+            occupancies_from_disk,
+            dumpability_masks_init_from_disk,
+            actions_from_disk,
+            maps_width,
+            maps_height,
+        )
+        # Distance maps don't require padding masks; pad to same shape
+        distances_padded = []
+        for d in distances_from_disk:
+            z = np.zeros((d.shape[0], maps_width, maps_height), dtype=np.float32)
+            z[:, : d.shape[1], : d.shape[2]] = d
+            distances_padded.append(z)
 
-    maps_from_disk_padded = jnp.array(maps_from_disk_padded)
-    padding_mask = jnp.array(padding_mask)
-    dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk)
-    trench_axes_list = jnp.array(trench_axes_list)
-    trench_types = jnp.array(trench_types)
-    actions_from_disk_padded = jnp.array(actions_from_disk_padded)
-    print(f"Maps shape: {maps_from_disk_padded.shape}.")
-    print(f"Padding mask shape: {padding_mask.shape}.")
-    print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
-    print(f"Trench axes shape: {trench_axes_list.shape}.")
-    print(f"Trench types shape: {trench_types.shape}.")
-    print(f"Actions shape: {actions_from_disk_padded.shape}.")
-    if shuffle_maps:
-        # NOTE: this is only for visualization purposes (allows to visualize in a single gif every level of the curriculum)
-        print("Shuffling maps between curriculum levels...")
-        rng = jax.random.PRNGKey(3333)  # doesn't matter which key, it's used only once
-        d0 = maps_from_disk_padded.shape[0]
-        d1 = maps_from_disk_padded.shape[1]
-        # Reshape
-        maps_from_disk_padded = maps_from_disk_padded.reshape(
-            (-1, *maps_from_disk_padded.shape[2:])
+        # Summary of distance maps quality (match single-agent diagnostics)
+        try:
+            zero_dist_count = sum(int(np.allclose(d, 0.0)) for d in distances_from_disk)
+            if zero_dist_count > 0:
+                print(f"Debug: {zero_dist_count}/{len(distances_from_disk[0]) if len(distances_from_disk)>0 else 0} distance maps are all zeros across loaded folders.")
+        except Exception:
+            pass
+        unique_shapes = set([trench_axes.shape for trench_axes in trench_axes_list])
+        print(f"Unique shapes of trench_axes_list: {unique_shapes}")
+
+        maps_from_disk_padded = jnp.array(maps_from_disk_padded)
+        padding_mask = jnp.array(padding_mask)
+        dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk)
+        trench_axes_list = jnp.array(trench_axes_list)
+        trench_types = jnp.array(trench_types)
+        actions_from_disk_padded = jnp.array(actions_from_disk_padded)
+        distances_padded = jnp.array(distances_padded)
+        print(f"Maps shape: {maps_from_disk_padded.shape}.")
+        print(f"Padding mask shape: {padding_mask.shape}.")
+        print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
+        print(f"Trench axes shape: {trench_axes_list.shape}.")
+        print(f"Trench types shape: {trench_types.shape}.")
+        print(f"Actions shape: {actions_from_disk_padded.shape}.")
+        print(f"Distance maps shape: {distances_padded.shape}.")
+        if shuffle_maps:
+            # NOTE: this is only for visualization purposes (allows to visualize in a single gif every level of the curriculum)
+            print("Shuffling maps between curriculum levels...")
+            rng = jax.random.PRNGKey(3333)  # doesn't matter which key, it's used only once
+            d0 = maps_from_disk_padded.shape[0]
+            d1 = maps_from_disk_padded.shape[1]
+            # Reshape
+            maps_from_disk_padded = maps_from_disk_padded.reshape(
+                (-1, *maps_from_disk_padded.shape[2:])
+            )
+            padding_mask = padding_mask.reshape((-1, *padding_mask.shape[2:]))
+            dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape(
+                (-1, *dumpability_masks_init_from_disk.shape[2:])
+            )
+            trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
+            actions_from_disk_padded = actions_from_disk_padded.reshape(
+                (-1, *actions_from_disk_padded.shape[2:])
+            )
+            distances_padded = distances_padded.reshape((-1, *distances_padded.shape[2:]))
+            print("Maps shuffled.")
+        maps_buffer = MapsBuffer.new(
+            maps=maps_from_disk_padded,
+            padding_mask=padding_mask,
+            trench_axes=trench_axes_list,
+            trench_types=trench_types,
+            dumpability_masks_init=dumpability_masks_init_from_disk,
+            action_maps=actions_from_disk_padded,
+            distance_maps=distances_padded,
         )
-        padding_mask = padding_mask.reshape((-1, *padding_mask.shape[2:]))
-        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape(
-            (-1, *dumpability_masks_init_from_disk.shape[2:])
+        # Update batch config with the actual map dimensions
+        maps_width = maps_from_disk_padded.shape[2]
+        maps_height = maps_from_disk_padded.shape[3]
+        assert maps_width == maps_height, "Maps are not square."
+        batch_cfg = batch_cfg._replace(
+            maps_dims=batch_cfg.maps_dims._replace(maps_edge_length=maps_width)
         )
-        trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
-        actions_from_disk_padded = actions_from_disk_padded.reshape(
-            (-1, *actions_from_disk_padded.shape[2:])
-        )
-        # Shuffle
-        maps_from_disk_padded = jax.random.permutation(
-            rng, maps_from_disk_padded, axis=0
-        )
-        padding_mask = jax.random.permutation(rng, padding_mask, axis=0)
-        dumpability_masks_init_from_disk = jax.random.permutation(
-            rng, dumpability_masks_init_from_disk, axis=0
-        )
-        trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
-        actions_from_disk_padded = jax.random.permutation(
-            rng, actions_from_disk_padded, axis=0
-        )
-        # Reshape back
-        maps_from_disk_padded = maps_from_disk_padded.reshape(
-            (d0, d1, *maps_from_disk_padded.shape[1:])
-        )
-        padding_mask = padding_mask.reshape((d0, d1, *padding_mask.shape[1:]))
-        dumpability_masks_init_from_disk = dumpability_masks_init_from_disk.reshape(
-            (d0, d1, *dumpability_masks_init_from_disk.shape[1:])
-        )
-        trench_axes_list = trench_axes_list.reshape(
-            (d0, d1, *trench_axes_list.shape[1:])
-        )
-        actions_from_disk_padded = actions_from_disk_padded.reshape(
-            (d0, d1, *actions_from_disk_padded.shape[1:])
-        )
-        print("Maps shuffled.")
-    maps_buffer = MapsBuffer.new(
-        maps=maps_from_disk_padded,
-        padding_mask=padding_mask,
-        trench_axes=trench_axes_list,
-        trench_types=trench_types,
-        dumpability_masks_init=dumpability_masks_init_from_disk,
-        action_maps=actions_from_disk_padded,
-    )
-    # Update batch config with the actual map dimensions
-    maps_width = maps_from_disk_padded.shape[2]
-    maps_height = maps_from_disk_padded.shape[3]
-    assert maps_width == maps_height, "Maps are not square."
-    batch_cfg = batch_cfg._replace(
-        maps_dims=batch_cfg.maps_dims._replace(maps_edge_length=maps_width)
-    )
-    return maps_buffer, batch_cfg
+        return maps_buffer, batch_cfg
