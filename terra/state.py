@@ -1827,35 +1827,35 @@ class State(NamedTuple):
             )
             
             			# Cache potentials for telescoping and add artificial source for newly dug dirt
-			potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
-			after_lift_potential = self._compute_relocation_potential(final_map)
-			started_loading = jnp.logical_and(self.agent.agent_state.loaded[0] == 0, actual_volume_loaded > 0)
-			# Artificial source potential for newly dug dirt (only when not moving dumped dirt)
-			def _compute_artificial_source_potential():
-				old_map_2d = self.world.action_map.map
-				new_map_2d = final_map
-				delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
-				non_dump_mask = (self.world.target_map.map <= 0)
-				return jnp.sum(delta_removed * self.world.relocation_distance_map * non_dump_mask)
-			artificial_source_potential = jax.lax.cond(
-				jnp.logical_not(moving_dumped_dirt),
-				_compute_artificial_source_potential,
-				lambda: jnp.float32(0.0)
-			)
-			# If starting to load:
-			# - existing dumped dirt: baseline = potential_before_dig
-			# - newly dug dirt: baseline = potential_before_dig + artificial_source_potential
-			def _baseline_when_starting():
-				return jax.lax.select(
-					moving_dumped_dirt,
-					potential_before_dig,
-					potential_before_dig + artificial_source_potential
-				)
-			new_carry_base = jax.lax.select(
-				started_loading,
-				_baseline_when_starting(),
-				self.agent.agent_state.carry_baseline_potential
-			)
+            potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
+            after_lift_potential = self._compute_relocation_potential(final_map)
+            started_loading = jnp.logical_and(self.agent.agent_state.loaded[0] == 0, actual_volume_loaded > 0)
+            # Artificial source potential for newly dug dirt (only when not moving dumped dirt)
+            def _compute_artificial_source_potential():
+                old_map_2d = self.world.action_map.map
+                new_map_2d = final_map
+                delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
+                non_dump_mask = (self.world.target_map.map <= 0)
+                return jnp.sum(delta_removed * self.world.relocation_distance_map * non_dump_mask)
+            artificial_source_potential = jax.lax.cond(
+                jnp.logical_not(moving_dumped_dirt),
+                _compute_artificial_source_potential,
+                lambda: jnp.float32(0.0)
+            )
+            # If starting to load:
+            # - existing dumped dirt: baseline = potential_before_dig
+            # - newly dug dirt: baseline = potential_before_dig + artificial_source_potential
+            def _baseline_when_starting():
+                return jax.lax.select(
+                    moving_dumped_dirt,
+                    potential_before_dig,
+                    potential_before_dig + artificial_source_potential
+                )
+            new_carry_base = jax.lax.select(
+                started_loading,
+                _baseline_when_starting(),
+                self.agent.agent_state.carry_baseline_potential
+            )
             return self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
@@ -1930,32 +1930,32 @@ class State(NamedTuple):
             )
 
             			# Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
-			is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
-			
-			def _clear_last_dig_mask():
-				return self.world.last_dig_mask._replace(
-					map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
-				)
-			
-			def _keep_last_dig_mask():
-				return self.world.last_dig_mask  # Skidsteer: leave unchanged
-			
-			new_last_dig_mask = jax.lax.cond(
-				is_excavator,
-				_clear_last_dig_mask,
-				_keep_last_dig_mask
-			)
-			            
+            is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
+        
+            def _clear_last_dig_mask():
+                return self.world.last_dig_mask._replace(
+                    map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
+                )
+            
+            def _keep_last_dig_mask():
+                return self.world.last_dig_mask  # Skidsteer: leave unchanged
+            
+            new_last_dig_mask = jax.lax.cond(
+                is_excavator,
+                _clear_last_dig_mask,
+                _keep_last_dig_mask
+            )
+            current_potential = self._compute_relocation_potential(self.world.action_map.map)            
             # Predict potential post-dump and gate regressive dumps relative to effective baseline
             predicted_potential = self._compute_relocation_potential(new_map_global_coords)
             baseline_before = self.agent.agent_state.carry_baseline_potential
             after_lift = self.agent.agent_state.carry_potential_after_lift
-            baseline_eff = baseline_before + (self.current_relocation_potential - after_lift)
+            baseline_eff = baseline_before + (current_potential - after_lift)
             def _prevent_regressive_dump():
                 return self
             def _allow_progressive_dump():
                 # Update world and current potential
-                new_rel_pot = self._compute_relocation_potential(new_map_global_coords)
+                #new_rel_pot = self._compute_relocation_potential(new_map_global_coords)
                 return self._replace(
                     world=self.world._replace(
                         action_map=self.world.action_map._replace(
@@ -1969,7 +1969,7 @@ class State(NamedTuple):
                         ),
                         moving_dumped_dirt=jnp.bool_(False),
                     ),
-                    current_relocation_potential=jnp.float32(new_rel_pot),
+                    current_relocation_potential=jnp.float32(predicted_potential),
                 )
             return jax.lax.cond(predicted_potential > baseline_eff, _prevent_regressive_dump, _allow_progressive_dump)
 
@@ -2244,7 +2244,8 @@ class State(NamedTuple):
             # Telescoping relocation reward: use progress since lift
             baseline_before = self.agent.agent_state.carry_baseline_potential
             after_lift = self.agent.agent_state.carry_potential_after_lift
-            new_potential = new_state.current_relocation_potential
+            #new_potential = new_state.current_relocation_potential
+            new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
             effective_progress = (baseline_before - new_potential)
             cap = jnp.float32(200.0)
             progress_clamped = jnp.clip(effective_progress, -cap, cap)
