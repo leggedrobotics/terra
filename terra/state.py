@@ -551,6 +551,7 @@ class State(NamedTuple):
         should_auto_load = jnp.logical_and(is_skid_steer, shovel_lowered)
         
         def _apply_auto_load():
+            
             # Use the closer cylindrical workspace for skid steer auto-loading
             map_cyl_coords, map_local_coords = new_state._get_map_local_and_cyl_coords()
             
@@ -567,6 +568,8 @@ class State(NamedTuple):
             
             # Simple all-or-nothing loading: only load if entire workspace fits in capacity
             can_load_all = current_load + available_dirt <= workspace_capacity
+            
+
             
             def _load_all_workspace():
                 # Remove ALL dirt from workspace (simple and clean)
@@ -624,6 +627,9 @@ class State(NamedTuple):
                 
                 # Compute potential immediately after auto-load (post-removal map)
                 after_lift_potential = self._compute_relocation_potential(final_map)
+                
+
+                
                 return new_state._replace(
                     world=new_state.world._replace(
                         action_map=new_state.world.action_map._replace(map=final_map),
@@ -713,23 +719,23 @@ class State(NamedTuple):
             # Check if there are valid dump tiles under the agent (for skid steer)
             # Use the same logic as the dump function
             dump_mask = self._build_dig_dump_cone()
-            # Only restrict dumping to dump zones for skid steer agents
+            # Only restrict dumping to dump zones for skid steer agents (commented out dump zone restriction)
             is_skid_steer = self.agent.agent_state.agent_type[0] == 2
             
-            def _apply_dump_zone_restriction():
-                # For skid steer: restrict to only dump zones (target_map > 0)
-                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-                return dump_mask * dump_zone_mask
+            # def _apply_dump_zone_restriction():
+            #     # For skid steer: restrict to only dump zones (target_map > 0)
+            #     dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+            #     return dump_mask * dump_zone_mask
             
-            def _no_dump_zone_restriction():
-                # For excavators: allow dumping on any valid tile (including neutral)
-                return dump_mask
+            # def _no_dump_zone_restriction():
+            #     # For excavators: allow dumping on any valid tile (including neutral)
+            #     return dump_mask
             
-            dump_mask = jax.lax.cond(
-                is_skid_steer,
-                _apply_dump_zone_restriction,
-                _no_dump_zone_restriction
-            )
+            # dump_mask = jax.lax.cond(
+            #     is_skid_steer,
+            #     _apply_dump_zone_restriction,
+            #     _no_dump_zone_restriction
+            # )
             
             # Apply the same exclude masks that are used in the dump function
             dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
@@ -1904,22 +1910,22 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
         # Only restrict dumping to dump zones for skid steer agents
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        # is_skid_steer = self.agent.agent_state.agent_type[0] == 2
         
-        def _apply_dump_zone_restriction():
-            # For skid steer: restrict to only dump zones (target_map > 0)
-            dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-            return dump_mask * dump_zone_mask
+        # def _apply_dump_zone_restriction():
+        #     # For skid steer: restrict to only dump zones (target_map > 0)
+        #     dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+        #     return dump_mask * dump_zone_mask
         
-        def _no_dump_zone_restriction():
-            # For excavators: allow dumping on any valid tile (including neutral)
-            return dump_mask
+        # def _no_dump_zone_restriction():
+        #     # For excavators: allow dumping on any valid tile (including neutral)
+        #     return dump_mask
         
-        dump_mask = jax.lax.cond(
-            is_skid_steer,
-            _apply_dump_zone_restriction,
-            _no_dump_zone_restriction
-        )
+        # dump_mask = jax.lax.cond(
+        #     is_skid_steer,
+        #     _apply_dump_zone_restriction,
+        #     _no_dump_zone_restriction
+        # )
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
@@ -1968,6 +1974,18 @@ class State(NamedTuple):
             baseline_before = self.agent.agent_state.carry_baseline_potential
             after_lift = self.agent.agent_state.carry_potential_after_lift
             baseline_eff = baseline_before + (current_potential - after_lift)
+
+            would_increase_potential = predicted_potential > baseline_eff
+
+            jax.debug.print("[DEBUG] Baseline Caching:")
+            jax.debug.print("  potential (before lift): {}", baseline_before)
+            jax.debug.print("  potential (after lift): {}", after_lift)
+            jax.debug.print("  potential (current): {}", current_potential)
+            jax.debug.print("  potential (new): {}", predicted_potential)
+            jax.debug.print("  baseline effective: {}", baseline_eff)
+            jax.debug.print("  would increase potential: {}", would_increase_potential)
+
+
             def _prevent_regressive_dump():
                 return self
             def _allow_progressive_dump():
@@ -1988,7 +2006,7 @@ class State(NamedTuple):
                     ),
                     current_relocation_potential=jnp.float32(predicted_potential),
                 )
-            return jax.lax.cond(predicted_potential > baseline_eff, _prevent_regressive_dump, _allow_progressive_dump)
+            return jax.lax.cond(would_increase_potential, _prevent_regressive_dump, _allow_progressive_dump)
 
         return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
 
@@ -2270,6 +2288,17 @@ class State(NamedTuple):
             dump_failed = jnp.allclose(
                 self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
             )
+
+            
+            jax.debug.print("[DEBUG] Potential Rewards:")
+            jax.debug.print("  potential (before lift): {}", baseline_before)
+            jax.debug.print("  potential (after lift): {}", after_lift)
+            jax.debug.print("  potential (new after dump): {}", new_potential)
+            jax.debug.print("  effective progress: {}", effective_progress)
+            jax.debug.print("  progress clamped: {}", progress_clamped) 
+
+
+
             def _success_reward():
                 dump_progress = self._get_action_map_dump_progress(
                     self.world.action_map.map,
