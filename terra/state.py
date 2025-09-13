@@ -604,7 +604,24 @@ class State(NamedTuple):
                 # Cache baseline when starting a carry (0 -> >0)
                 potential_before_load = self._compute_relocation_potential(self.world.action_map.map)
                 started_loading = jnp.logical_and(current_load == 0, available_dirt > 0)
-                new_carry_base = jax.lax.select(started_loading, potential_before_load, self.agent.agent_state.carry_baseline_potential)
+                
+                # For subsequent loads: adjust baseline for world changes (like in dump rewards)
+                def _adjust_baseline_for_world_changes():
+                    # Current world potential before this auto-load
+                    current_potential = potential_before_load
+                    # Previous after-lift potential from last load
+                    previous_after_lift = self.agent.agent_state.carry_potential_after_lift
+                    # Adjust baseline: if world got worse (higher potential), increase baseline
+                    # If world got better (lower potential), decrease baseline (make it harder)
+                    world_change = current_potential - previous_after_lift
+                    return self.agent.agent_state.carry_baseline_potential + world_change
+                
+                new_carry_base = jax.lax.select(
+                    started_loading, 
+                    potential_before_load,  # First load: use current potential as baseline
+                    _adjust_baseline_for_world_changes()  # Subsequent loads: adjust for world changes
+                )
+                
                 # Compute potential immediately after auto-load (post-removal map)
                 after_lift_potential = self._compute_relocation_potential(final_map)
                 return new_state._replace(
