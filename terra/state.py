@@ -744,10 +744,38 @@ class State(NamedTuple):
             
             has_valid_dump_tiles = jnp.any(dump_mask)
             
-            # Block movement if skid steer is loaded, shovel down, but no valid dump tiles
+            # Check if dump would be regressive (increase potential) - same logic as _handle_dump
+            dump_volume = dump_mask.sum()
+            def _predict_potential():
+                remaining_volume = self.agent.agent_state.loaded % dump_volume
+                even_volume_per_tile = (
+                    self.agent.agent_state.loaded - remaining_volume
+                ) / dump_volume
+                flattened_action_map = self.world.action_map.map.reshape(-1)
+                predicted_map_flat = self._apply_dump_mask(
+                    flattened_action_map,
+                    dump_mask,
+                    even_volume_per_tile,
+                    remaining_volume,
+                    self.world.target_map.map,
+                    use_condensed_dump=True,
+                )
+                predicted_map = predicted_map_flat.reshape(self.world.target_map.map.shape)
+                return self._compute_relocation_potential(predicted_map)
+            
+            predicted_potential = jax.lax.cond(dump_volume > 0, _predict_potential, lambda: self.current_relocation_potential)
+            
+            # Use same potential gating logic as in _handle_dump
+            current_potential = self._compute_relocation_potential(self.world.action_map.map)
+            baseline_before = self.agent.agent_state.carry_baseline_potential
+            after_lift = self.agent.agent_state.carry_potential_after_lift
+            baseline_eff = baseline_before + (current_potential - after_lift)
+            would_increase_potential = predicted_potential > baseline_eff
+            
+            # Block movement if skid steer is loaded, shovel down, but no valid dump tiles OR dump would be regressive
             should_block_movement = jnp.logical_and(
                 jnp.logical_and(is_skid_steer, is_loaded),
-                jnp.logical_and(shovel_down, jnp.logical_not(has_valid_dump_tiles))
+                jnp.logical_and(shovel_down, jnp.logical_or(jnp.logical_not(has_valid_dump_tiles), would_increase_potential))
             )
             
             # If movement should be blocked, return current state
@@ -1977,13 +2005,13 @@ class State(NamedTuple):
 
             would_increase_potential = predicted_potential > baseline_eff
 
-            jax.debug.print("[DEBUG] Baseline Caching:")
-            jax.debug.print("  potential (before lift): {}", baseline_before)
-            jax.debug.print("  potential (after lift): {}", after_lift)
-            jax.debug.print("  potential (current): {}", current_potential)
-            jax.debug.print("  potential (new): {}", predicted_potential)
-            jax.debug.print("  baseline effective: {}", baseline_eff)
-            jax.debug.print("  would increase potential: {}", would_increase_potential)
+            # jax.debug.print("[DEBUG] Baseline Caching:")
+            # jax.debug.print("  potential (before lift): {}", baseline_before)
+            # jax.debug.print("  potential (after lift): {}", after_lift)
+            # jax.debug.print("  potential (current): {}", current_potential)
+            # jax.debug.print("  potential (new): {}", predicted_potential)
+            # jax.debug.print("  baseline effective: {}", baseline_eff)
+            # jax.debug.print("  would increase potential: {}", would_increase_potential)
 
 
             def _prevent_regressive_dump():
@@ -2290,12 +2318,12 @@ class State(NamedTuple):
             )
 
             
-            jax.debug.print("[DEBUG] Potential Rewards:")
-            jax.debug.print("  potential (before lift): {}", baseline_before)
-            jax.debug.print("  potential (after lift): {}", after_lift)
-            jax.debug.print("  potential (new after dump): {}", new_potential)
-            jax.debug.print("  effective progress: {}", effective_progress)
-            jax.debug.print("  progress clamped: {}", progress_clamped) 
+            # jax.debug.print("[DEBUG] Potential Rewards:")
+            # jax.debug.print("  potential (before lift): {}", baseline_before)
+            # jax.debug.print("  potential (after lift): {}", after_lift)
+            # jax.debug.print("  potential (new after dump): {}", new_potential)
+            # jax.debug.print("  effective progress: {}", effective_progress)
+            # jax.debug.print("  progress clamped: {}", progress_clamped) 
 
 
 
