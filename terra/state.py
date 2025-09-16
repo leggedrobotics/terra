@@ -65,8 +65,7 @@ class State(NamedTuple):
 
     env_steps: int
 
-    # Cached world relocation potential used for telescoping dump rewards
-    current_relocation_potential: Float = jnp.float32(0.0)
+    # Note: Removed current_relocation_potential cache - always compute fresh for multi-agent reliability
 
     @classmethod
     def new(
@@ -140,7 +139,6 @@ class State(NamedTuple):
             world=world,
             agent=agent,
             env_steps=0,
-            current_relocation_potential=jnp.float32(initial_potential),
         )
 
     def _reset(
@@ -604,7 +602,7 @@ class State(NamedTuple):
                 # (soil mechanics conserves dirt, so this is perfectly conserving)
                 new_loaded = current_load + available_dirt
                 
-                # Cache baseline when starting a carry (0 -> >0)
+                # Cache baseline when starting a carry (0 -> >0) - compute BEFORE removing dirt
                 potential_before_load = self._compute_relocation_potential(self.world.action_map.map)
                 started_loading = jnp.logical_and(current_load == 0, available_dirt > 0)
                 
@@ -720,7 +718,7 @@ class State(NamedTuple):
             # Use the same logic as the dump function
             dump_mask = self._build_dig_dump_cone()
             # Only restrict dumping to dump zones for skid steer agents (commented out dump zone restriction)
-            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+            # is_skid_steer = self.agent.agent_state.agent_type[0] == 2
             
             # def _apply_dump_zone_restriction():
             #     # For skid steer: restrict to only dump zones (target_map > 0)
@@ -746,31 +744,40 @@ class State(NamedTuple):
             
             # Check if dump would be regressive (increase potential) - same logic as _handle_dump
             dump_volume = dump_mask.sum()
-            def _predict_potential():
-                remaining_volume = self.agent.agent_state.loaded % dump_volume
-                even_volume_per_tile = (
-                    self.agent.agent_state.loaded - remaining_volume
-                ) / dump_volume
-                flattened_action_map = self.world.action_map.map.reshape(-1)
-                predicted_map_flat = self._apply_dump_mask(
-                    flattened_action_map,
-                    dump_mask,
-                    even_volume_per_tile,
-                    remaining_volume,
-                    self.world.target_map.map,
-                    use_condensed_dump=True,
-                )
-                predicted_map = predicted_map_flat.reshape(self.world.target_map.map.shape)
-                return self._compute_relocation_potential(predicted_map)
             
-            predicted_potential = jax.lax.cond(dump_volume > 0, _predict_potential, lambda: self.current_relocation_potential)
+            # Skip potential check if no dump volume - can't increase potential if not dumping
+            def _check_potential_increase():
+                def _predict_potential():
+                    remaining_volume = self.agent.agent_state.loaded % dump_volume
+                    even_volume_per_tile = (
+                        self.agent.agent_state.loaded - remaining_volume
+                    ) / dump_volume
+                    flattened_action_map = self.world.action_map.map.reshape(-1)
+                    predicted_map_flat = self._apply_dump_mask(
+                        flattened_action_map,
+                        dump_mask,
+                        even_volume_per_tile,
+                        remaining_volume,
+                        self.world.target_map.map,
+                        use_condensed_dump=True,
+                    )
+                    predicted_map = predicted_map_flat.reshape(self.world.target_map.map.shape)
+                    return self._compute_relocation_potential(predicted_map)
+                
+                predicted_potential = _predict_potential()
+                
+                # Use same potential gating logic as in _handle_dump
+                current_potential = self._compute_relocation_potential(self.world.action_map.map)
+                baseline_before = self.agent.agent_state.carry_baseline_potential
+                after_lift = self.agent.agent_state.carry_potential_after_lift
+                baseline_eff = baseline_before + (current_potential - after_lift)
+                return predicted_potential > baseline_eff
             
-            # Use same potential gating logic as in _handle_dump
-            current_potential = self._compute_relocation_potential(self.world.action_map.map)
-            baseline_before = self.agent.agent_state.carry_baseline_potential
-            after_lift = self.agent.agent_state.carry_potential_after_lift
-            baseline_eff = baseline_before + (current_potential - after_lift)
-            would_increase_potential = predicted_potential > baseline_eff
+            would_increase_potential = jax.lax.cond(
+                dump_volume > 0,
+                _check_potential_increase,
+                lambda: jnp.bool_(False)  # No dump volume = can't increase potential
+            )
             
             # Block movement if skid steer is loaded, shovel down, but no valid dump tiles OR dump would be regressive
             should_block_movement = jnp.logical_and(
@@ -2032,7 +2039,6 @@ class State(NamedTuple):
                         ),
                         moving_dumped_dirt=jnp.bool_(False),
                     ),
-                    current_relocation_potential=jnp.float32(predicted_potential),
                 )
             return jax.lax.cond(would_increase_potential, _prevent_regressive_dump, _allow_progressive_dump)
 
@@ -2304,12 +2310,14 @@ class State(NamedTuple):
         is_excavator = self.agent.agent_state.agent_type[0] != 2
         
         def _excavator_dump_rewards():
-            # Telescoping relocation reward: use progress since lift
+            # Telescoping relocation reward: use progress since lift with effective baseline
             baseline_before = self.agent.agent_state.carry_baseline_potential
             after_lift = self.agent.agent_state.carry_potential_after_lift
-            #new_potential = new_state.current_relocation_potential
+            current_potential = self._compute_relocation_potential(self.world.action_map.map)
             new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
-            effective_progress = (baseline_before - new_potential)
+            # Use same effective baseline logic as in dump gating
+            baseline_eff = baseline_before + (current_potential - after_lift)
+            effective_progress = (baseline_eff - new_potential)
             cap = jnp.float32(200.0)
             progress_clamped = jnp.clip(effective_progress, -cap, cap)
             # Dump success/fail
@@ -2564,7 +2572,7 @@ class State(NamedTuple):
         # Add dump rewards if dirt was unloaded
         reward += jax.lax.cond(
             old_loaded > new_loaded,
-            lambda: self._handle_rewards_skid_steer_dump(new_state, action),
+            lambda: self._handle_rewards_dump(new_state, action),
             lambda: 0.0
         )
         
