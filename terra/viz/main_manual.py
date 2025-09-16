@@ -90,22 +90,6 @@ def main():
                     )
                     print("Reward: ", timestep.reward.item())
 
-                    # DEBUG: Show maximum dirt on any single tile
-                    action_map = timestep.state.world.action_map.map[0]  # First environment
-                    max_dirt = jnp.max(action_map)
-                    min_dirt = jnp.min(action_map)
-                    total_dirt = jnp.sum(action_map)
-                    print(f"🏔️ MAX DIRT ON TILE: {max_dirt}")
-                    print(f"⛳ MIN DIRT ON TILE: {min_dirt}")
-                    print(f"🌍 TOTAL DIRT: {total_dirt}")
-                    
-                    # Show agent loading state for context
-                    agent_loaded = timestep.state.agent.agent_state.loaded[0]
-                    total_dirt_with_agent = total_dirt + agent_loaded
-                    print(f"🚜 AGENT: Loaded={agent_loaded}")
-                    print(f"🧮 TOTAL DIRT (map + agent): {total_dirt_with_agent}")
-                    print("-" * 40)
-
             elif event.type == QUIT:
                 playing = False
 

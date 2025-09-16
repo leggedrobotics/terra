@@ -18,6 +18,3 @@ data/*
 !data/custom/
 !data/custom/**
 *.pkl
-terra/data/*
-!terra/data/custom/
-!terra/data/custom/**
