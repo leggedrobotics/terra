@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from functools import partial
 from typing import NamedTuple
+from typing import Any, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -39,6 +40,7 @@ class TerraEnv(NamedTuple):
         n_envs_x: int = 1,
         n_envs_y: int = 1,
         display: bool = False,
+        agent_config_override: Optional[dict[str, Any]] = None,
     ) -> "TerraEnv":
         re = None
         tile_size_rendering = MAP_TILES // maps_size_px
@@ -68,6 +70,8 @@ class TerraEnv(NamedTuple):
                 n_envs_x=n_envs_x,
                 n_envs_y=n_envs_y,
                 display=display,
+                agent_config=agent_config_override if agent_config_override is not None else None,
+
             )
         return TerraEnv(rendering_engine=re)
 
@@ -82,6 +86,8 @@ class TerraEnv(NamedTuple):
         dumpability_mask_init: Array,
         action_map: Array,
         env_cfg: EnvConfig,
+        custom_pos: Optional[Tuple[int, int]] = None,
+        custom_angle: Optional[int] = None,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
@@ -95,6 +101,8 @@ class TerraEnv(NamedTuple):
             trench_type,
             dumpability_mask_init,
             action_map,
+            custom_pos,
+            custom_angle,
         )
         state = self.wrap_state(state)
 
@@ -154,7 +162,7 @@ class TerraEnv(NamedTuple):
         Renders the environment at a given observation.
         """
         if info is not None:
-            target_tiles = info["target_tiles"]
+            target_tiles = info.get("target_tiles", None)
         else:
             target_tiles = None
 
@@ -169,6 +177,7 @@ class TerraEnv(NamedTuple):
             loaded=obs["agent_state"][..., [5]],
             target_tiles=target_tiles,
             generate_gif=generate_gif,
+            info=info,
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -360,7 +369,9 @@ class TerraEnvBatch:
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
 
     @partial(jax.jit, static_argnums=(0,))
-    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey,
+            custom_pos: Optional[Tuple[int, int]] = None, 
+            custom_angle: Optional[int] = None) -> State:
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
         env_cfgs = self.update_env_cfgs(env_cfgs)
         (
@@ -372,17 +383,36 @@ class TerraEnvBatch:
             action_maps,
             new_rng_key,
         ) = self._get_map_init(rng_key, env_cfgs)
-        timestep = jax.vmap(self.terra_env.reset)(
-            rng_key,
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            dumpability_mask_init,
-            action_maps,
-            env_cfgs,
-        )
+        timestep = jax.vmap(
+            self.terra_env.reset,
+            in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None, None)
+            )(
+                rng_key,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                dumpability_mask_init,
+                action_maps,
+                env_cfgs,
+                custom_pos,
+                custom_angle,
+            )
         return timestep
+    
+    @property
+    def actions_size(self) -> int:
+        """
+        Number of actions played at every env step.
+        """
+        return self.num_actions
+
+    @property
+    def num_actions(self) -> int:
+        """
+        Total number of actions
+        """
+        return self.batch_cfg.action_type.get_num_actions()
 
     @partial(jax.jit, static_argnums=(0,))
     def step(
