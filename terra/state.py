@@ -2358,77 +2358,39 @@ class State(NamedTuple):
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Check if agent is excavator (not skid steer)
-        is_excavator = self.agent.agent_state.agent_type[0] != 2
+        # Unified dig rewards for all agent types - both excavators and skidsteers use same logic
+        started_loading = jnp.logical_and(
+            self.agent.agent_state.loaded[0] == 0,
+            new_state.agent.agent_state_2.loaded[0] > 0,
+        )
+        dig_reward = jax.lax.cond(
+            started_loading,
+            lambda: jnp.float32(1.0),
+            lambda: jnp.float32(0.0),
+        )
         
-        def _excavator_dig_rewards():
-            # Constant dig reward when loading starts (0 -> >0), penalties unchanged
-            started_loading = jnp.logical_and(
-                self.agent.agent_state.loaded[0] == 0,
-                new_state.agent.agent_state_2.loaded[0] > 0,
-            )
-            dig_reward = jax.lax.cond(
-                started_loading,
-                lambda: jnp.float32(1.0),
-                lambda: jnp.float32(0.0),
-            )
-            # Penalty for digging on dump zones (regress on positive target)
-            action_map_dig_regress = self._get_action_map_dump_regress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-            dig_on_dump_penalty = jax.lax.cond(
-                action_map_dig_regress > 0,
-                lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
-                lambda: 0.0,
-            )
-            # Wrong dig when loaded doesn't change
-            dig_wrong_reward = jax.lax.cond(
-                jnp.allclose(
-                    self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: 0.0,
-            )
-            return dig_reward + dig_on_dump_penalty + dig_wrong_reward
+        # Penalty for digging on dump zones (regress on positive target)
+        action_map_dig_regress = self._get_action_map_dump_regress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        dig_on_dump_penalty = jax.lax.cond(
+            action_map_dig_regress > 0,
+            lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
+            lambda: 0.0,
+        )
         
-        def _standard_dig_rewards():
-            # Skidsteer: constant reward when loading starts (0 -> >0), penalties unchanged
-            started_loading = jnp.logical_and(
-                self.agent.agent_state.loaded[0] == 0,
-                new_state.agent.agent_state_2.loaded[0] > 0,
-            )
-            dig_reward = jax.lax.cond(
-                started_loading,
-                lambda: jnp.float32(1.0),
-                lambda: jnp.float32(0.0),
-            )
-
-            action_map_dig_regress = self._get_action_map_dump_regress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-
-            # Penalty for digging on dump zones
-            dig_on_dump_penalty = jax.lax.cond(
-                action_map_dig_regress > 0,
-                lambda: -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
-                lambda: 0.0,
-            )
-
-            dig_wrong_reward = jax.lax.cond(
-                jnp.allclose(
-                    self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
-                ),
-                lambda: self.env_cfg.rewards.dig_wrong,
-                lambda: 0.0,
-            )
-
-            return dig_reward + dig_on_dump_penalty + dig_wrong_reward
+        # Wrong dig when loaded (no dirt loaded despite dig action)
+        dig_wrong_reward = jax.lax.cond(
+            jnp.allclose(
+                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
+            ),
+            lambda: self.env_cfg.rewards.dig_wrong,
+            lambda: 0.0,
+        )
         
-        return jax.lax.cond(is_excavator, _excavator_dig_rewards, _standard_dig_rewards)
+        return dig_reward + dig_on_dump_penalty + dig_wrong_reward
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
@@ -3268,9 +3230,15 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         reward = 0.0
-        # Collision
+        # Sophisticated collision detection (matches single-agent)
+        old_loaded = self.agent.agent_state.loaded[0]
+        new_loaded = new_state.agent.agent_state_2.loaded[0]  # After swap in multi-agent
+        loaded_increased = new_loaded > old_loaded
+        no_movement = ~self._check_agent_moved_on_move_action(self, new_state)
+        collision_applicable = jnp.logical_and(no_movement, jnp.logical_not(loaded_increased))
+        
         reward += jax.lax.cond(
-            ~self._check_agent_moved_on_move_action(self, new_state),
+            collision_applicable,
             lambda: self.env_cfg.rewards.collision_move,
             lambda: self.env_cfg.rewards.skid_move,
         )
@@ -3301,16 +3269,16 @@ class State(NamedTuple):
 
         # Directional distance reward: only reward if getting closer to dump zones
         # FIX: Use correct agent positions to avoid state swapping bug
-        old_dist = self._get_min_distance_to_dump_zone_for_agent(self.agent.agent_state.pos_base)
-        new_dist = self._get_min_distance_to_dump_zone_for_agent(new_state.agent.agent_state_2.pos_base)
-        distance_improvement = old_dist - new_dist  # Positive if getting closer
+        # old_dist = self._get_min_distance_to_dump_zone_for_agent(self.agent.agent_state.pos_base)
+        # new_dist = self._get_min_distance_to_dump_zone_for_agent(new_state.agent.agent_state_2.pos_base)
+        # distance_improvement = old_dist - new_dist  # Positive if getting closer
         
-        # Reward/penalize based on distance change to dump zones when loaded
-        reward += jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0,
-            lambda: self.env_cfg.rewards.move_to_dump_zone * distance_improvement,
-            lambda: 0.0,
-        )
+        # # Reward/penalize based on distance change to dump zones when loaded
+        # reward += jax.lax.cond(
+        #     self.agent.agent_state.loaded[0] > 0,
+        #     lambda: self.env_cfg.rewards.move_to_dump_zone * distance_improvement,
+        #     lambda: 0.0,
+        # )
 
         return reward
     def _get_min_distance_to_dump_zone_for_agent(self, agent_pos: Array) -> Float:
