@@ -205,7 +205,7 @@ class TerraEnv(NamedTuple):
         env_cfg: EnvConfig,
     ) -> TimeStep:
         new_state = state._step(action)
-        reward = state._get_reward(new_state, action)
+        reward, reward_components = state._get_reward(new_state, action)
         new_state = self.wrap_state(new_state)
         obs = self._state_to_obs_dict(new_state)
         #print agent agentstate_2
@@ -269,6 +269,12 @@ class TerraEnv(NamedTuple):
         )
 
         infos = new_state._get_infos(action, task_done)
+        # Attach reward components for logging
+        try:
+            if isinstance(infos, dict):
+                infos = {**infos, "reward_components": reward_components}
+        except Exception:
+            pass
         return TimeStep(
             state=new_state,
             observation=obs,

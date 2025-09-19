@@ -132,6 +132,22 @@ class State(NamedTuple):
                 carry_potential_after_lift=jnp.float32(initial_potential),
             ),
         )
+        
+        # Randomize starting agent to prevent first-mover advantage
+        # Randomly swap agent_state and agent_state_2 with 50% probability
+        key, swap_key = jax.random.split(key)
+        should_swap = jax.random.bernoulli(swap_key, 0.5)
+        
+        def swap_agents(agent):
+            return agent._replace(
+                agent_state=agent.agent_state_2,
+                agent_state_2=agent.agent_state
+            )
+        
+        def keep_agents(agent):
+            return agent
+            
+        agent = jax.lax.cond(should_swap, swap_agents, keep_agents, agent)
 
         return State(
             key=key,
@@ -2341,8 +2357,15 @@ class State(NamedTuple):
                     new_state.world.action_map.map,
                     self.world.target_map.map,
                 )
-                dump_bonus = jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5
+                # Dump bonus only for skidsteers (relocation specialists)
+                is_skidsteer = self.agent.agent_state.agent_type[0] == 2
+                dump_bonus = jax.lax.cond(
+                    is_skidsteer,
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5,   # Strong relocation specialization
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.1   # Small efficiency bonus for direct dumps
+                )
                 meaningful_threshold = jnp.float32(0.1)
+                
                 return jax.lax.cond(
                     progress_clamped > meaningful_threshold,
                     lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
@@ -2394,13 +2417,17 @@ class State(NamedTuple):
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
-    ) -> Float:
+    ) -> tuple[Float, dict]:
+        def _dump():
+            total = self._handle_rewards_dump(new_state, action)
+            return total, {"dump": total, "lift": 0.0}
+        def _dig():
+            total = self._handle_rewards_dig(new_state, action)
+            return total, {"dump": 0.0, "lift": total}
         return jax.lax.cond(
             jnp.all(self.agent.agent_state.loaded > 0),
-            self._handle_rewards_dump,
-            self._handle_rewards_dig,
-            new_state,
-            action,
+            _dump,
+            _dig,
         )
 
     def _handle_rewards_skid_steer_auto_load(
@@ -2578,7 +2605,7 @@ class State(NamedTuple):
 
         reward += jax.lax.cond(
             action == TrackedActionType.DO,
-            self._handle_rewards_do,
+            lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -2618,7 +2645,7 @@ class State(NamedTuple):
 
         reward += jax.lax.cond(
             action == WheeledActionType.DO,
-            self._handle_rewards_do,
+            lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -2677,17 +2704,30 @@ class State(NamedTuple):
             # Explicitly ensure the final result is scalar before returning
             return jnp.squeeze(total_reward)
 
+        # Only apply trench rewards to excavators (type 0), not skidsteers (type 2)
+        # This encourages role specialization: excavators focus on trenches, skidsteers on relocation
+        is_excavator = self.agent.agent_state.agent_type[0] == 0
+        should_apply_trench_rewards = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
+        
         r = jax.lax.cond(
-            self.env_cfg.apply_trench_rewards,
+            should_apply_trench_rewards,
             _get_trench_reward,
             lambda: 0.0,
         )
         return r
 
-    def _get_reward(self, new_state: "State", action_handler: Action) -> Float:
+    def _get_reward(self, new_state: "State", action_handler: Action):
         action = action_handler.action
 
         reward = 0.0
+        # Components for W&B logging - per-agent reward breakdown
+        components = {
+            "agent1_rewards": 0.0,  # Rewards earned by agent 1 
+            "agent2_rewards": 0.0,  # Rewards earned by agent 2
+            "terminal": 0.0,
+            "trench": 0.0,
+            "existence": 0.0,
+        }
 
         # Action-dependent - route to appropriate reward function based on agent type
         current_agent_type = self.agent.agent_state.agent_type[0]
@@ -2704,46 +2744,53 @@ class State(NamedTuple):
         # Route rewards based on agent type: 0=tracked, 1=wheeled, 2=skidsteer
         reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
-        reward += jax.lax.switch(clamped_agent_type, reward_functions)
+        agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
+        reward += agent_reward
+        
+        # Attribute rewards by agent TYPE, not position (since random starting swaps positions)
+        # This ensures consistent tracking regardless of which agent slot they occupy
+        is_excavator = current_agent_type == 0  # Tracked excavator
+        is_skidsteer = current_agent_type == 2  # Skid steer
+        
+        # Attribute rewards to agent types for consistent tracking
+        components["agent1_rewards"] = jax.lax.cond(is_excavator, lambda: agent_reward, lambda: 0.0)  # Excavator rewards
+        components["agent2_rewards"] = jax.lax.cond(is_skidsteer, lambda: agent_reward, lambda: 0.0)  # Skidsteer rewards
 
         # Terminal reward based on completion percentage
         completion_percentage = self._calculate_completion_percentage(
             new_state.world.action_map.map,
             self.world.target_map.map
         )
-        reward += jax.lax.cond(
+        terminal_r = jax.lax.cond(
             self._is_done_task(
                 new_state.world.action_map.map,
                 self.world.target_map.map,
                 new_state.agent.agent_state_2.loaded,
                 new_state.agent.agent_state.loaded,
             ),
-            lambda: self._calculate_terminal_reward(completion_percentage),  #lambda: self.env_cfg.rewards.terminal,
-            #lambda: self.env_cfg.rewards.terminal,
+            lambda: self._calculate_terminal_reward(completion_percentage),
             lambda: 0.0,
         )
+        reward += terminal_r
+        components["terminal"] = terminal_r
 
         # Apply trench rewards
-        reward += self._get_trench_specific_rewards()
+        trench_r = self._get_trench_specific_rewards()
+        reward += trench_r
+        components["trench"] = trench_r
 
         # Existence
-        reward += self.env_cfg.rewards.existence
-
-        # # Scaled existence penalty: clip between min and max
-        # min_penalty = self.env_cfg.rewards.existence  # Start at config value
-        # max_penalty = -1.0    # Cap at -1.0
-        
-        # # Simple clipping: scale with timestep and clip to bounds
-        # raw_penalty = -0.002 * self.env_steps  # Scale with time
-        # existence_penalty = jnp.clip(raw_penalty, max_penalty, min_penalty)
-        
-        # # Add the existence penalty to the reward
-        # reward += existence_penalty
+        existence_r = self.env_cfg.rewards.existence
+        reward += existence_r
+        components["existence"] = existence_r
 
         # Constant scaling factor
-        reward /= self.env_cfg.rewards.normalizer
+        normalizer = self.env_cfg.rewards.normalizer
+        reward /= normalizer
+        # Normalize components to match total scale
+        components = {k: v / normalizer for k, v in components.items()}
 
-        return reward
+        return reward, components
 
     def _is_done_task(self, action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array):
         """
@@ -3165,7 +3212,7 @@ class State(NamedTuple):
         movement_reward = jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
-            self._handle_rewards_move_skidsteer,  # Use skidsteer-specific movement rewards
+            lambda new_state, action: self._handle_rewards_move_skidsteer(new_state, action),
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -3184,7 +3231,6 @@ class State(NamedTuple):
             self.agent.agent_state.loaded[0] > 0,
             lambda: self.env_cfg.rewards.holding_dirt,
             lambda: 0.0)
-        
 
         # Base turn rewards (same as tracked)
         reward += jax.lax.cond(
@@ -3228,7 +3274,7 @@ class State(NamedTuple):
 
     def _handle_rewards_move_skidsteer(
         self, new_state: "State", action: TrackedActionType
-    ) -> Float:
+    ) -> tuple[Float, dict]:
         reward = 0.0
         # Sophisticated collision detection (matches single-agent)
         old_loaded = self.agent.agent_state.loaded[0]

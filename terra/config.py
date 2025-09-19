@@ -130,7 +130,7 @@ class Rewards(NamedTuple):
             skid_lift_shovel_with_dirt=0.0,  # 0.05 New: reward for lifting shovel with dirt (0.0005 after normalization)
             skid_move_loaded_shovel_up=0.0,  # 0.02 New: reward for moving while loaded and shovel is up (0.0002 after normalization)
             move_to_dump_zone=0.0,  #0.3 worked        # Moderate reward for being close to dump zones (0.003 after normalization)
-            terminal=170.0, #250.0
+            terminal=300.0, #250.0
             normalizer=75.0,
             skid_auto_load_from_dumpzone_penalty=-0.0,  #-1.5# Large penalty for loading from dump zone
         )
@@ -186,8 +186,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.0
-    distance_coefficient: float = -0.0
+    alignment_coefficient: float = -0.08
+    distance_coefficient: float = -0.04
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -236,26 +236,32 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
         
-        # {
-        #     "maps_path": "foundations_dumpzones_large",
-        #     "max_steps_in_episode":1200,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-
-
-        # {
-        #     "maps_path": "foundations_dumpzones_1.5",
-        #     "max_steps_in_episode":900,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
         {
-            "maps_path": "relocations_harder",
+            "maps_path": "foundations_hybrid_dumpzones",
             "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
+
+
+        # {
+        #     "maps_path": "foundations_dumpzones_1.5",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "relocations_harder",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "trenches/single_dumpzone",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
 
 
         
@@ -269,7 +275,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # {
         #     "maps_path": "foundations_dumpzones", 
-        #     "max_steps_in_episode": 350,
+        #     "max_steps_in_episode": 800,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
