@@ -2761,13 +2761,15 @@ class State(NamedTuple):
             new_state.world.action_map.map,
             self.world.target_map.map
         )
+        done, done_task = self._is_done(
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+            new_state.agent.agent_state_2.loaded,
+            new_state.agent.agent_state.loaded,
+        )
+        
         terminal_r = jax.lax.cond(
-            self._is_done_task(
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-                new_state.agent.agent_state_2.loaded,
-                new_state.agent.agent_state.loaded,
-            ),
+            done,
             lambda: self._calculate_terminal_reward(completion_percentage),
             lambda: 0.0,
         )
@@ -3346,6 +3348,7 @@ class State(NamedTuple):
         min_dist = jnp.sqrt(jnp.min(masked_dists))
         map_diagonal = jnp.sqrt(width**2 + height**2)
         return jnp.where(jnp.isfinite(min_dist), min_dist / map_diagonal, 0.0)
+
     def _calculate_dump_zone_reward(self, action_map_progress: Float, loaded_capacity: Float) -> Float:
         """
         Calculate reward/penalty for dump zone progress using consistent scaling.
@@ -3394,7 +3397,7 @@ class State(NamedTuple):
         Uses threshold + exponential scaling to discourage low effort and encourage high completion.
         """
         base_reward = self.env_cfg.rewards.terminal
-        min_threshold = 0.3  # 30% minimum completion required
+        min_threshold = 0.05  # 30% minimum completion required
         
         # No reward for very poor performance
         def _no_reward():
@@ -3417,12 +3420,21 @@ class State(NamedTuple):
         """
         Calculate completion percentage based on how much dirt is in correct dump zones.
         Returns a value between 0.0 and 1.0.
+        Now includes undug tiles (target_map == -1) as dirt not relocated.
         """
         # Get designated dump zones (target_map > 0)
         designated_dump_zones = target_map > 0
         
-        # Calculate total dirt volume in the environment (sum of heights)
-        total_dirt = jnp.sum(jnp.where(action_map > 0, action_map, 0))
+        # Get areas that need to be dug (target_map < 0) but haven't been dug yet (action_map >= 0)
+        undug_areas = jnp.logical_and(target_map < 0, action_map >= 0)
+        
+        # Calculate total dirt volume in the environment:
+        # 1. Dirt that has been moved and dumped (action_map > 0)
+        # 2. Undug tiles that still need to be relocated (target_map == -1)
+        moved_dirt = jnp.sum(jnp.where(action_map > 0, action_map, 0))
+        undug_dirt = jnp.sum(jnp.where(undug_areas, 1.0, 0.0))  # Count undug tiles as 1 unit each
+        loaded_dirt = self.agent.agent_state.loaded[0] + self.agent.agent_state_2.loaded[0]
+        total_dirt = moved_dirt + undug_dirt + loaded_dirt
         
         # Calculate dirt volume in correct dump zones (sum of heights)
         dirt_in_correct_zones = jnp.sum(jnp.where(

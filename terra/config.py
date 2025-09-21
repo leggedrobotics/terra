@@ -236,9 +236,15 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
         
+        # {
+        #     "maps_path": "foundations_hybrid_dumpzones",
+        #     "max_steps_in_episode":1400,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         {
-            "maps_path": "foundations_hybrid_dumpzones",
-            "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+            "maps_path": "foundations_dumpzones", 
+            "max_steps_in_episode": 1400,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },
@@ -273,12 +279,7 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
-        # {
-        #     "maps_path": "foundations_dumpzones", 
-        #     "max_steps_in_episode": 800,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        
         # Stage 1: Basic Skills - Learn individual capabilities
         
         
