@@ -734,22 +734,22 @@ class State(NamedTuple):
             # Use the same logic as the dump function
             dump_mask = self._build_dig_dump_cone()
             # Only restrict dumping to dump zones for skid steer agents (commented out dump zone restriction)
-            # is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
             
-            # def _apply_dump_zone_restriction():
-            #     # For skid steer: restrict to only dump zones (target_map > 0)
-            #     dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-            #     return dump_mask * dump_zone_mask
+            def _apply_dump_zone_restriction():
+                # For skid steer: restrict to only dump zones (target_map > 0)
+                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+                return dump_mask * dump_zone_mask
             
-            # def _no_dump_zone_restriction():
-            #     # For excavators: allow dumping on any valid tile (including neutral)
-            #     return dump_mask
+            def _no_dump_zone_restriction():
+                # For excavators: allow dumping on any valid tile (including neutral)
+                return dump_mask
             
-            # dump_mask = jax.lax.cond(
-            #     is_skid_steer,
-            #     _apply_dump_zone_restriction,
-            #     _no_dump_zone_restriction
-            # )
+            dump_mask = jax.lax.cond(
+                is_skid_steer,
+                _apply_dump_zone_restriction,
+                _no_dump_zone_restriction
+            )
             
             # Apply the same exclude masks that are used in the dump function
             dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
@@ -1961,22 +1961,22 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
         # Only restrict dumping to dump zones for skid steer agents
-        # is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
         
-        # def _apply_dump_zone_restriction():
-        #     # For skid steer: restrict to only dump zones (target_map > 0)
-        #     dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-        #     return dump_mask * dump_zone_mask
+        def _apply_dump_zone_restriction():
+            # For skid steer: restrict to only dump zones (target_map > 0)
+            dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+            return dump_mask * dump_zone_mask
         
-        # def _no_dump_zone_restriction():
-        #     # For excavators: allow dumping on any valid tile (including neutral)
-        #     return dump_mask
+        def _no_dump_zone_restriction():
+            # For excavators: allow dumping on any valid tile (including neutral)
+            return dump_mask
         
-        # dump_mask = jax.lax.cond(
-        #     is_skid_steer,
-        #     _apply_dump_zone_restriction,
-        #     _no_dump_zone_restriction
-        # )
+        dump_mask = jax.lax.cond(
+            is_skid_steer,
+            _apply_dump_zone_restriction,
+            _no_dump_zone_restriction
+        )
         dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
         dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
@@ -2323,7 +2323,8 @@ class State(NamedTuple):
         of the previously digged terrain.
         """
         # Check if agent is excavator (not skid steer)
-        is_excavator = self.agent.agent_state.agent_type[0] != 2
+        is_excavator = self.agent.agent_state.agent_type[0] == 0
+        is_skidsteer = self.agent.agent_state.agent_type[0] == 2
         
         def _excavator_dump_rewards():
             # Telescoping relocation reward: use progress since lift with effective baseline
@@ -2349,6 +2350,17 @@ class State(NamedTuple):
             # jax.debug.print("  effective progress: {}", effective_progress)
             # jax.debug.print("  progress clamped: {}", progress_clamped) 
 
+            is_moving_dumped_dirt = self.agent.moving_dumped_dirt
+            potential_multiplier = jax.lax.cond(
+                is_skidsteer,
+                lambda: 1.0,  # Skidsteer gets full reward for all dirt
+                lambda: jax.lax.cond(
+                    is_moving_dumped_dirt,
+                    lambda: 0.1,  # Excavator gets half reward for relocating dumped dirt
+                    lambda: 1.0   # Excavator gets full reward for relocating newly dug dirt
+                )
+            )
+            progress_clamped = progress_clamped * potential_multiplier
 
 
             def _success_reward():
@@ -2358,11 +2370,11 @@ class State(NamedTuple):
                     self.world.target_map.map,
                 )
                 # Dump bonus only for skidsteers (relocation specialists)
-                is_skidsteer = self.agent.agent_state.agent_type[0] == 2
+                
                 dump_bonus = jax.lax.cond(
                     is_skidsteer,
                     lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5,   # Strong relocation specialization
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.1   # Small efficiency bonus for direct dumps
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5 * potential_multiplier # Small efficiency bonus for direct dumps
                 )
                 meaningful_threshold = jnp.float32(0.1)
                 
@@ -2773,8 +2785,19 @@ class State(NamedTuple):
             lambda: self._calculate_terminal_reward(completion_percentage),
             lambda: 0.0,
         )
+        # terminal_r = jax.lax.cond(
+        #     done_task,
+        #     lambda: self.env_cfg.rewards.terminal,
+        #     lambda: 0.0,
+        # )
+
         reward += terminal_r
         components["terminal"] = terminal_r
+
+        # Attribute terminal reward to BOTH agents in logging components (shared policy)
+        # Count full terminal for both to reflect joint success in logs
+        #components["agent1_rewards"] = components["agent1_rewards"] + terminal_r
+        #components["agent2_rewards"] = components["agent2_rewards"] + terminal_r
 
         # Apply trench rewards
         trench_r = self._get_trench_specific_rewards()
@@ -3397,7 +3420,7 @@ class State(NamedTuple):
         Uses threshold + exponential scaling to discourage low effort and encourage high completion.
         """
         base_reward = self.env_cfg.rewards.terminal
-        min_threshold = 0.05  # 30% minimum completion required
+        min_threshold = 0.50 #0.45 # 30% minimum completion required
         
         # No reward for very poor performance
         def _no_reward():

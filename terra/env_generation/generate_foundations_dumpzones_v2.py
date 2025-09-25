@@ -183,7 +183,7 @@ def add_dirt_tiles_hybrid(img, occ, dmp, cumulative_mask, total_dirt_tiles):
     mask_dmp = _get_img_mask(dmp, color_dict["nondumpable"])
     
     # Fixed number of dirt spots (3 zones) - same as relocations_harder
-    n_spots = 2
+    n_spots = 0
     
     # Distribute total dirt tiles across 3 spots
     remaining_dirt = total_dirt_tiles
@@ -272,8 +272,8 @@ def create_foundations_hybrid_standalone(
                                     no_dump_zones=False,
                                     size_dump_min=15,  # Bigger dump zones
                                     size_dump_max=15,  # Bigger dump zones
-                                    min_dirt_tiles=25,  # Minimum dirt tiles like relocations_harder
-                                    max_dirt_tiles=35): # Maximum dirt tiles like relocations_harder
+                                    min_dirt_tiles=10,  # Minimum dirt tiles like relocations_harder
+                                    max_dirt_tiles=20): # Maximum dirt tiles like relocations_harder
     """
     Creates hybrid foundation environments with pre-placed dirt (like relocations_harder) 
     AND dig zones (foundations) using 1.0 downsampling factor.
@@ -647,7 +647,7 @@ if __name__ == "__main__":
         print("Terra format conversion enabled (use --no-terra-format to disable)")
 
     no_dump_zones = args.no_dump_zones
-    name_string = "foundations_hybrid" if no_dump_zones else "foundations_hybrid_dumpzones"
+    name_string = "foundations_dumpzones_v3"
 
     generate_foundations_hybrid_standalone(
         args.config,
