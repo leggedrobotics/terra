@@ -2360,8 +2360,17 @@ class State(NamedTuple):
                     lambda: 1.0   # Excavator gets full reward for relocating newly dug dirt
                 )
             )
-            progress_clamped = progress_clamped * potential_multiplier
+            # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
+            avg_target_tiles = jnp.float32(170.0)
+            # Use only dig target tiles (foundations): target_map < 0
+            dig_target_tiles = jnp.sum(self.world.target_map.map < 0)
+            scale_raw = avg_target_tiles / jnp.maximum(jnp.float32(1.0), dig_target_tiles.astype(jnp.float32))
+            scale = jnp.clip(scale_raw, jnp.float32(0.8), jnp.float32(2.5))
 
+
+            #progress_clamped = progress_clamped * potential_multiplier * scale
+            progress_clamped = progress_clamped * potential_multiplier * 2
+            #progress_clamped = progress_clamped * potential_multiplier
 
             def _success_reward():
                 dump_progress = self._get_action_map_dump_progress(

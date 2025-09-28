@@ -109,7 +109,7 @@ class Rewards(NamedTuple):
             existence=-0.25,   # -0.25      -0.1 for 96x96 maps
             collision_move=-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
-            move=-0.15,  # Heavily reduced movement penalty was -0.1
+            move=-0.1,  # Heavily reduced movement penalty was -0.1
             move_with_turned_wheels=-0.1,  # Reduced penalty was -0.1
             collision_turn=-0.1,
             base_turn=-0.1,  #-0.1  
@@ -188,8 +188,8 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.08
-    distance_coefficient: float = -0.04
+    alignment_coefficient: float = -0.16 #-0.08
+    distance_coefficient: float = -0.08 #-0.04
 
     curriculum: CurriculumConfig = CurriculumConfig()
 
@@ -246,12 +246,12 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones_v3", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
 
 
         # {
@@ -270,8 +270,16 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "maps_path": "trenches/single_dumpzone",
         #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
         #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": True,
+        #     "apply_trench_rewards": False,
         # },
+
+
+        {
+            "maps_path": "trenches/single_dumpzone_v2",
+            "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
 
 
         
