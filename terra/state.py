@@ -200,6 +200,7 @@ class State(NamedTuple):
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
+            self._do_nothing,
             # Wheeled
             self._handle_move_forward_wheeled,
             self._handle_move_backward_wheeled,
@@ -208,14 +209,15 @@ class State(NamedTuple):
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
+            self._do_nothing,
         ]
-        cumulative_len = jnp.array([0, 7], dtype=IntLowDim)
+        cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
             IntLowDim
         )
 
         state = jax.lax.cond(
-            action.action[0] == -1,
+            jnp.logical_or(action.action[0] == -1, action.action[0] == 7),
             self._do_nothing,
             lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
         )

@@ -15,7 +15,7 @@ class TrackedActionType(ActionType):
     Tracked robot specific actions.
     """
 
-    DO_NOTHING = -1
+    NONE = -1
     FORWARD = 0
     BACKWARD = 1
     CLOCK = 2
@@ -23,6 +23,7 @@ class TrackedActionType(ActionType):
     CABIN_CLOCK = 4
     CABIN_ANTICLOCK = 5
     DO = 6
+    DO_NOTHING = 7
 
 
 Action = NamedTuple
@@ -31,7 +32,7 @@ Action = NamedTuple
 class TrackedAction(Action):
     type: Array = jnp.full((1,), fill_value=0, dtype=IntLowDim)
     action: Array = jnp.full(
-        (1,), fill_value=TrackedActionType.DO_NOTHING, dtype=IntLowDim
+        (1,), fill_value=TrackedActionType.NONE, dtype=IntLowDim
     )
 
     @classmethod
@@ -76,17 +77,23 @@ class TrackedAction(Action):
 
     @classmethod
     def random(cls, key: jnp.int32):
-        return cls.new(
-            jax.random.choice(
-                key,
-                jnp.arange(TrackedActionType.FORWARD, TrackedActionType.DO + 1),
-                (1,),
-            )
-        )
+        # Include DO_NOTHING (index 7) as a selectable action
+        choices = jnp.array([
+            TrackedActionType.FORWARD,
+            TrackedActionType.BACKWARD,
+            TrackedActionType.CLOCK,
+            TrackedActionType.ANTICLOCK,
+            TrackedActionType.CABIN_CLOCK,
+            TrackedActionType.CABIN_ANTICLOCK,
+            TrackedActionType.DO,
+            TrackedActionType.DO_NOTHING,
+        ], dtype=IntLowDim)
+        return cls.new(jax.random.choice(key, choices, (1,)))
 
     @staticmethod
     def get_num_actions():
-        return 7
+        # 8 actions including DO_NOTHING (index 7)
+        return 8
 
 
 class WheeledActionType(ActionType):
@@ -94,7 +101,7 @@ class WheeledActionType(ActionType):
     Wheeled robot specific actions.
     """
 
-    DO_NOTHING = -1
+    NONE = -1
     FORWARD = 0
     BACKWARD = 1
     WHEELS_LEFT = 2
@@ -102,12 +109,13 @@ class WheeledActionType(ActionType):
     CABIN_CLOCK = 4
     CABIN_ANTICLOCK = 5
     DO = 6
+    DO_NOTHING = 7
 
 
 class WheeledAction(Action):
     type: Array = jnp.full((1,), fill_value=1, dtype=IntLowDim)
     action: Array = jnp.full(
-        (1,), fill_value=WheeledActionType.DO_NOTHING, dtype=IntLowDim
+        (1,), fill_value=WheeledActionType.NONE, dtype=IntLowDim
     )
 
     @classmethod
@@ -154,14 +162,20 @@ class WheeledAction(Action):
 
     @classmethod
     def random(cls, key: jnp.int32):
-        return cls.new(
-            jax.random.choice(
-                key,
-                jnp.arange(WheeledActionType.FORWARD, WheeledActionType.DO + 1),
-                (1,),
-            )
-        )
+        # Include DO_NOTHING (index 7) as a selectable action
+        choices = jnp.array([
+            WheeledActionType.FORWARD,
+            WheeledActionType.BACKWARD,
+            WheeledActionType.WHEELS_LEFT,
+            WheeledActionType.WHEELS_RIGHT,
+            WheeledActionType.CABIN_CLOCK,
+            WheeledActionType.CABIN_ANTICLOCK,
+            WheeledActionType.DO,
+            WheeledActionType.DO_NOTHING,
+        ], dtype=IntLowDim)
+        return cls.new(jax.random.choice(key, choices, (1,)))
 
     @staticmethod
     def get_num_actions():
-        return 7
+        # 8 actions including DO_NOTHING (index 7)
+        return 8
