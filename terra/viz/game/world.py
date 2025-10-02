@@ -127,10 +127,14 @@ class World:
                     tile = -1
                 
                 # Add interaction mask visualization (dig/dump cones)
-                if interaction_mask is not None and interaction_mask[grid_x, grid_y]:
-                    # Overlay interaction mask with a semi-transparent color
-                    # Use a distinct color to show dig/dump areas
-                    tile = 6  # Special tile for interaction mask
+                if interaction_mask is not None and interaction_mask[grid_x, grid_y] > 0:
+                    # Use different colors based on interaction mask value
+                    if interaction_mask[grid_x, grid_y] == 2:
+                        # Current agent (saturated red)
+                        tile = 6
+                    elif interaction_mask[grid_x, grid_y] == 1:
+                        # Other agents (dampened/pale red)
+                        tile = 7
 
                 world_tile = self.grid_to_world(grid_x, grid_y, tile)
                 world[grid_x].append(world_tile)
