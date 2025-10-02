@@ -229,8 +229,6 @@ class TerraEnv(NamedTuple):
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
-            new_state._get_prev_agent_state().loaded,
-            new_state._get_current_agent_state().loaded,
         )
 
         def _reset_branch(s, o, cfg):
