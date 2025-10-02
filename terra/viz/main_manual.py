@@ -14,6 +14,7 @@ from pygame.locals import (
     K_k,
     K_l,
     K_SPACE,
+    K_RETURN,
     KEYDOWN,
     QUIT,
 )
@@ -108,6 +109,8 @@ def main():
                     action = action_type.wheels_right()
                 elif event.key == K_SPACE:
                     action = action_type.do()
+                elif event.key == K_RETURN:
+                    action = action_type.do_nothing()
 
                 if action is not None:
                     print("Action: ", action)
@@ -141,7 +144,7 @@ def main():
                     # Show action details
                     action_names = {
                         0: "FORWARD", 1: "BACKWARD", 2: "CLOCK", 3: "ANTICLOCK", 
-                        4: "CABIN_CLOCK", 5: "CABIN_ANTICLOCK", 6: "DO"
+                        4: "CABIN_CLOCK", 5: "CABIN_ANTICLOCK", 6: "DO", 7: "DO_NOTHING"
                     }
                     action_name = action_names.get(action_num, f"ACTION_{action_num}")
                     print(f"⚡ ACTION: {action_name} ({action_num})")

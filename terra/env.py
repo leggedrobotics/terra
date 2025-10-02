@@ -168,27 +168,15 @@ class TerraEnv(NamedTuple):
         else:
             target_tiles = None
 
-        # Use new array observations: active agent is index 0; "last active" is index num_agents-1
-        last_active_index = jnp.maximum(0, obs["num_agents"] - 1)
-        agent0 = obs["agent_states"][0]
-        agent_last = obs["agent_states"][last_active_index]
+        # Pass all agent states and masks to the renderer
         self.rendering_engine.run(
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
-            agent_pos_1=agent0[..., [0, 1]],
-            base_dir_1=agent0[..., [2]],
-            cabin_dir_1=agent0[..., [3]],
-            loaded_1=agent0[..., [5]],
-            agent_type_1=agent0[..., [6]],
-            shovel_lifted_1=agent0[..., [7]],
-            agent_pos_2=agent_last[..., [0, 1]],
-            base_dir_2=agent_last[..., [2]],
-            cabin_dir_2=agent_last[..., [3]],
-            loaded_2=agent_last[..., [5]],
-            agent_type_2=agent_last[..., [6]],
-            shovel_lifted_2=agent_last[..., [7]],
+            agent_states=obs["agent_states"],  # [MAX_AGENTS, 8] with active agent at index 0
+            agent_active=obs["agent_active"],  # [MAX_AGENTS] mask
+            num_agents=obs["num_agents"],      # scalar
             generate_gif=generate_gif,
             target_tiles=target_tiles,
         )
