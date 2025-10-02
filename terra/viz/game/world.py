@@ -127,14 +127,10 @@ class World:
                     tile = -1
                 
                 # Add interaction mask visualization (dig/dump cones)
-                if interaction_mask is not None and interaction_mask[grid_x, grid_y] > 0:
-                    # Use different colors based on interaction mask value
-                    if interaction_mask[grid_x, grid_y] == 2:
-                        # Current agent (saturated red)
-                        tile = 6
-                    elif interaction_mask[grid_x, grid_y] == 1:
-                        # Other agents (dampened/pale red)
-                        tile = 7
+                if interaction_mask is not None and interaction_mask[grid_x, grid_y]:
+                    # For now, use the same color for all interaction areas
+                    # TODO: Implement current agent vs other agents distinction
+                    tile = 6  # Bright red for all interaction areas
 
                 world_tile = self.grid_to_world(grid_x, grid_y, tile)
                 world[grid_x].append(world_tile)

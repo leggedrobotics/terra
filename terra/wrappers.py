@@ -107,26 +107,8 @@ class TraversabilityMaskWrapper:
         
         # Generate interaction masks for all 4 agents
         agent_interaction_masks = jax.vmap(get_agent_interaction_mask)(jnp.arange(4))
-        
-        # Create separate masks for current agent vs other agents
-        current_agent_idx = state.agent.current_agent
-        current_agent_mask = agent_interaction_masks[current_agent_idx]
-        
-        # Create mask for other active agents (excluding current agent)
-        other_agents_mask = jnp.zeros_like(current_agent_mask)
-        for i in range(4):
-            is_other_active = jnp.logical_and(
-                jnp.logical_and(state.agent.agent_active[i], i != current_agent_idx),
-                i < state.agent.num_agents
-            )
-            other_agents_mask = jnp.where(is_other_active, 
-                                         jnp.logical_or(other_agents_mask, agent_interaction_masks[i]),
-                                         other_agents_mask)
-        
-        # Store both masks in the state for the renderer to use
-        # We'll encode this as: 0=no cone, 1=other agents (dampened), 2=current agent (saturated)
-        interaction_mask = jnp.where(current_agent_mask, 2,  # Current agent = saturated red
-                                   jnp.where(other_agents_mask, 1, 0))  # Other agents = dampened, None = 0
+        # Combine all agent interaction masks
+        interaction_mask = jnp.any(agent_interaction_masks, axis=0)
 
         return state._replace(
             # increase number of steps as well
@@ -136,7 +118,7 @@ class TraversabilityMaskWrapper:
                 map=tm.astype(IntLowDim)
             ),
             interaction_mask=state.world.interaction_mask._replace(
-                map=interaction_mask.astype(jnp.int32)  # Changed to int32 to support 3 values
+                map=interaction_mask.astype(jnp.bool_)
             ),
             )
         )
