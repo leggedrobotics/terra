@@ -43,13 +43,16 @@ class Agent(NamedTuple):
     Defines the state and type of the agent.
     """
 
-    agent_state: AgentState
-    agent_state_2: AgentState
-
     width: int
     height: int
 
     moving_dumped_dirt: bool
+
+    # Variable number of agents with fixed-size storage (JAX-friendly, static max size)
+    agent_states: tuple[AgentState, ...] | None = None  # Fixed-size container (e.g., 8)
+    agent_active: jnp.ndarray | None = None  # shape [max_agents], 1 for active, 0 for inactive
+    num_agents: int = 2  # actual number of active agents (defaults to current behavior)
+    current_agent: int = 0  # index of currently acting agent (alternating training)
 
     @staticmethod
     def new(
@@ -59,81 +62,151 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
         action_map: Array,
-        agent_types: tuple = (0, 0),  # 0=tracked, 1=wheeled, 2=skid steer
+        agent_types: tuple = (0, 0),  # variable length; 0=tracked, 1=wheeled, 2=skid steer
     ) -> tuple["Agent", jax.random.PRNGKey]:
-        # Split the key for the two agent initializations
-        key, key_agent1, key_agent2 = jax.random.split(key, 3)
+        # Determine number of agents to initialize (clip to MAX_AGENTS)
+        MAX_AGENTS = 4
+        n_agents = min(len(agent_types), MAX_AGENTS)  # Use Python min for static value
 
-        # Initialize first agent
-        pos_base_1, angle_base_1, key_agent1 = _get_random_init_state(
-            key_agent1,
-            env_cfg,
-            max_traversable_x,
-            max_traversable_y,
-            padding_mask,
-            action_map,
-            env_cfg.agent.width,
-            env_cfg.agent.height,
-        )
-
-        # Create a temporary agent mask to prevent agent 2 spawning on agent 1
-        map_width, map_height = padding_mask.shape
-        agent1_corners = get_agent_corners(
-            pos_base_1, angle_base_1, env_cfg.agent.width, env_cfg.agent.height, 
-            env_cfg.agent.angles_base
-        )
-        agent1_mask = compute_polygon_mask(agent1_corners, map_width, map_height)
-        
-        # Combined mask including both padding and first agent location
-        combined_mask = jnp.logical_or(padding_mask == 1, agent1_mask)
-        
-        # Initialize second agent, avoiding both obstacles and first agent
-        pos_base_2, angle_base_2, key_agent2 = _get_random_init_state(
-            key_agent2,
-            env_cfg,
-            max_traversable_x,
-            max_traversable_y,
-            combined_mask,  # Use the combined mask to avoid agent 1
-            action_map,
-            env_cfg.agent.width,
-            env_cfg.agent.height,
-        )
-
-        agent_state_1 = AgentState(
-            pos_base=pos_base_1,
-            angle_base=angle_base_1,
-            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
-            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
-            loaded=jnp.full((1,), 0, dtype=jnp.int8),
-            agent_type=jnp.full((1,), agent_types[0], dtype=jnp.int8),  # Array like loaded
-            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
-            carry_baseline_potential=jnp.float32(0.0),
-            carry_potential_after_lift=jnp.float32(0.0),
-        )
-        
-        agent_state_2 = AgentState(
-            pos_base=pos_base_2,
-            angle_base=angle_base_2,
-            angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
-            wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
-            loaded=jnp.full((1,), 0, dtype=jnp.int8),
-            agent_type=jnp.full((1,), agent_types[1], dtype=jnp.int8),  # Array like loaded
-            shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),  # Start with shovel lowered
-            carry_baseline_potential=jnp.float32(0.0),
-            carry_potential_after_lift=jnp.float32(0.0),
-        )
+        # Split keys: one per agent + one for choosing current agent
+        # Use MAX_AGENTS + 1 to avoid dynamic shapes
+        keys = jax.random.split(key, MAX_AGENTS + 1)
+        key_current_sel = keys[0]
+        per_agent_keys = list(keys[1:MAX_AGENTS + 1])
 
         width = env_cfg.agent.width
         height = env_cfg.agent.height
         moving_dumped_dirt = False
 
+        # Use JAX-compatible loop for agent placement
+        map_width, map_height = padding_mask.shape
+        
+        def place_agent(carry, i):
+            combined_mask, keys, states = carry
+            # Only place agent if i < n_agents
+            should_place = i < n_agents
+            
+            pos_i, angle_i, new_key = _get_random_init_state(
+                keys[i],
+                env_cfg,
+                max_traversable_x,
+                max_traversable_y,
+                combined_mask,
+                action_map,
+                width,
+                height,
+            )
+            
+            # Create agent state
+            st_i = AgentState(
+                pos_base=pos_i,
+                angle_base=angle_i,
+                angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
+                wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
+                loaded=jnp.full((1,), 0, dtype=jnp.int8),
+                agent_type=jnp.full((1,), agent_types[i] if i < len(agent_types) else 0, dtype=jnp.int8),
+                shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),
+                carry_baseline_potential=jnp.float32(0.0),
+                carry_potential_after_lift=jnp.float32(0.0),
+            )
+            
+            # Update mask only if we placed an agent
+            agent_corners = get_agent_corners(
+                pos_i, angle_i, width, height, env_cfg.agent.angles_base
+            )
+            agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+            new_combined_mask = jnp.where(should_place, 
+                                        jnp.logical_or(combined_mask, agent_mask), 
+                                        combined_mask)
+            
+            # Update keys array
+            new_keys = keys.at[i].set(new_key)
+            
+            # Update states array
+            new_states = states.at[i].set(st_i)
+            
+            return (new_combined_mask, new_keys, new_states), None
+        
+        # Initialize arrays
+        initial_mask = (padding_mask == 1)
+        initial_keys = jnp.array(per_agent_keys)
+        
+        # Create initial dummy state for padding
+        dummy_state = AgentState(
+            pos_base=jnp.array([0, 0], dtype=IntMap),
+            angle_base=jnp.array([0], dtype=IntLowDim),
+            angle_cabin=jnp.array([0], dtype=IntLowDim),
+            wheel_angle=jnp.array([0], dtype=IntLowDim),
+            loaded=jnp.array([0], dtype=IntLowDim),
+            agent_type=jnp.array([0], dtype=IntLowDim),
+            shovel_lifted=jnp.array([0], dtype=IntLowDim),
+        )
+        
+        # Initialize with dummy states that will be replaced
+        initial_states = [dummy_state] * MAX_AGENTS
+        
+        # Use a simpler approach - just place agents one by one with regular Python loop
+        # since the scan approach is too complex for NamedTuple handling
+        combined_mask = initial_mask
+        built_states = []
+        
+        for i in range(MAX_AGENTS):
+            if i >= n_agents:
+                # Pad with dummy state
+                built_states.append(dummy_state)
+                continue
+                
+            pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
+                per_agent_keys[i],
+                env_cfg,
+                max_traversable_x,
+                max_traversable_y,
+                combined_mask,
+                action_map,
+                width,
+                height,
+            )
+
+            st_i = AgentState(
+                pos_base=pos_i.astype(IntMap),
+                angle_base=angle_i.astype(IntLowDim),
+                angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
+                wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
+                loaded=jnp.full((1,), 0, dtype=IntLowDim),
+                agent_type=jnp.full((1,), agent_types[i] if i < len(agent_types) else 0, dtype=IntLowDim),
+                shovel_lifted=jnp.full((1,), 0, dtype=IntLowDim),
+                carry_baseline_potential=jnp.float32(0.0),
+                carry_potential_after_lift=jnp.float32(0.0),
+            )
+            built_states.append(st_i)
+
+            # Update combined mask to avoid placing next agent on top of this one
+            agent_corners = get_agent_corners(
+                pos_i, angle_i, width, height, env_cfg.agent.angles_base
+            )
+            agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+            combined_mask = jnp.logical_or(combined_mask, agent_mask)
+
+        # built_states is already MAX_AGENTS length
+
+        agent_states_tuple = tuple(built_states)
+        agent_active = jnp.concatenate([
+            jnp.ones((n_agents,), dtype=jnp.int8),
+            jnp.zeros((MAX_AGENTS - n_agents,), dtype=jnp.int8)
+        ])
+
+        # Randomize starting current agent among active agents
+        current_agent = jax.random.randint(key_current_sel, (), 0, n_agents)
+
         return Agent(
-            agent_state=agent_state_1, 
-            agent_state_2=agent_state_2, 
-            width=width, 
-            height=height, 
-            moving_dumped_dirt=moving_dumped_dirt
-        ), key
+            agent_states=agent_states_tuple,
+            agent_active=agent_active,
+            num_agents=n_agents,
+            current_agent=current_agent,
+            width=width,
+            height=height,
+            moving_dumped_dirt=moving_dumped_dirt,
+        ), per_agent_keys[-1]
 
 
 def _get_top_left_init_state(key: jax.random.PRNGKey, env_cfg: EnvConfig):

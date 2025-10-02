@@ -55,7 +55,7 @@ class TerraEnv(NamedTuple):
                 + 4 * tile_size_rendering,
             )
             if not display:
-                print("TerraEnv: disabling display...")
+                # One-time notice suppressed to avoid recurring prints
                 screen = pg.display.set_mode(display_dims, pg.HIDDEN)
 
                 # screen = pg.display.set_mode(
@@ -92,8 +92,7 @@ class TerraEnv(NamedTuple):
         """
         Resets the environment using values from config files, and a seed.
         """
-        # DEBUG: Print shape and type of action_map before State.new
-        print(f"[TerraEnv.reset] action_map shape: {getattr(action_map, 'shape', 'no shape')}, type: {type(action_map)}")
+        # One-time debug can be done at trainer; avoid recurring prints here
         state = State.new(
             key,
             env_cfg,
@@ -169,23 +168,27 @@ class TerraEnv(NamedTuple):
         else:
             target_tiles = None
 
+        # Use new array observations: active agent is index 0; "last active" is index num_agents-1
+        last_active_index = jnp.maximum(0, obs["num_agents"] - 1)
+        agent0 = obs["agent_states"][0]
+        agent_last = obs["agent_states"][last_active_index]
         self.rendering_engine.run(
             active_grid=obs["action_map"],
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
-            agent_pos_1=obs["agent_state"][..., [0, 1]],
-            base_dir_1=obs["agent_state"][..., [2]],
-            cabin_dir_1=obs["agent_state"][..., [3]],
-            loaded_1=obs["agent_state"][..., [5]],
-            agent_type_1=obs["agent_state"][..., [6]],
-            shovel_lifted_1=obs["agent_state"][..., [7]],
-            agent_pos_2=obs["agent_state_2"][..., [0, 1]],
-            base_dir_2=obs["agent_state_2"][..., [2]],
-            cabin_dir_2=obs["agent_state_2"][..., [3]],
-            loaded_2=obs["agent_state_2"][..., [5]],
-            agent_type_2=obs["agent_state_2"][..., [6]],
-            shovel_lifted_2=obs["agent_state_2"][..., [7]],
+            agent_pos_1=agent0[..., [0, 1]],
+            base_dir_1=agent0[..., [2]],
+            cabin_dir_1=agent0[..., [3]],
+            loaded_1=agent0[..., [5]],
+            agent_type_1=agent0[..., [6]],
+            shovel_lifted_1=agent0[..., [7]],
+            agent_pos_2=agent_last[..., [0, 1]],
+            base_dir_2=agent_last[..., [2]],
+            cabin_dir_2=agent_last[..., [3]],
+            loaded_2=agent_last[..., [5]],
+            agent_type_2=agent_last[..., [6]],
+            shovel_lifted_2=agent_last[..., [7]],
             generate_gif=generate_gif,
             target_tiles=target_tiles,
         )
@@ -238,8 +241,8 @@ class TerraEnv(NamedTuple):
         done, task_done = state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
-            new_state.agent.agent_state_2.loaded,
-            new_state.agent.agent_state.loaded,
+            new_state._get_prev_agent_state().loaded,
+            new_state._get_current_agent_state().loaded,
         )
 
         def _reset_branch(s, o, cfg):
@@ -289,47 +292,54 @@ class TerraEnv(NamedTuple):
         """
         Transforms a State object to an observation dictionary.
         """
-        agent_state = jnp.hstack(
-            [
-                state.agent.agent_state.pos_base,  # pos_base is encoded in traversability_mask
-                state.agent.agent_state.angle_base,
-                state.agent.agent_state.angle_cabin,
-                state.agent.agent_state.wheel_angle,
-                state.agent.agent_state.loaded,
-                state.agent.agent_state.agent_type,  # Add agent type for rendering
-                state.agent.agent_state.shovel_lifted,  # Add shovel state for rendering
-            ]
-        
-        )
+        # Build per-agent features for fixed-size agent array and reorder so current agent is first
+        # Feature order mirrors legacy single-agent vector
+        def _feat(a):
+            return jnp.hstack([
+                a.pos_base,
+                a.angle_base,
+                a.angle_cabin,
+                a.wheel_angle,
+                a.loaded,
+                a.agent_type,
+                a.shovel_lifted,
+            ])
 
-        agent_state_2 = jnp.hstack(
-            [
-                state.agent.agent_state_2.pos_base,  # pos_base is encoded in traversability_mask
-                state.agent.agent_state_2.angle_base,
-                state.agent.agent_state_2.angle_cabin,
-                state.agent.agent_state_2.wheel_angle,
-                state.agent.agent_state_2.loaded,
-                state.agent.agent_state_2.agent_type,  # Add agent type for rendering
-                state.agent.agent_state_2.shovel_lifted,  # Add shovel state for rendering
-            ]
-        
-        )
+        # Fixed MAX_AGENTS consistent with Agent.new
+        MAX_AGENTS = 4
+        # Assemble [MAX_AGENTS, feat_dim]
+        agents_feat = jnp.stack([_feat(s) for s in state.agent.agent_states[:MAX_AGENTS]], axis=0)
+
+        # Reorder so that the current (acting) agent is first, then pack actives contiguously
+        agents_feat_rolled = jnp.roll(agents_feat, -state.agent.current_agent, axis=0)
+        agent_active_rolled = jnp.roll(state.agent.agent_active, -state.agent.current_agent, axis=0)
+        # Permutation that ensures the acting agent (index 0 after roll) stays first,
+        # then other active agents, then inactive agents. Use a static-shape-friendly key.
+        idx = jnp.arange(MAX_AGENTS)
+        sort_key = (1 - agent_active_rolled) * 2 + (idx != 0)
+        perm = jnp.argsort(sort_key)
+        agents_feat_ordered = agents_feat_rolled[perm]
+        agent_active_ordered = agent_active_rolled[perm]
+        num_agents = state.agent.num_agents
+
         # Note: not all of those fields are used by the network for training!
         return {
-            "agent_state": agent_state,
-            "agent_state_2": agent_state_2,
+            # New multi-agent observation tensors
+            "agent_states": agents_feat_ordered,            # [MAX_AGENTS, feat]
+            "agent_active": agent_active_ordered,           # [MAX_AGENTS]
+            "num_agents": jnp.array(num_agents),            # scalar
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,
             "local_map_target_pos": state.world.local_map_target_pos.map,
             "local_map_dumpability": state.world.local_map_dumpability.map,
             "local_map_obstacles": state.world.local_map_obstacles.map,
-            "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
-            "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
-            "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
-            "local_map_target_pos_2": state.world.local_map_target_pos_2.map,
-            "local_map_dumpability_2": state.world.local_map_dumpability_2.map,
-            "local_map_obstacles_2": state.world.local_map_obstacles_2.map,
+            # "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
+            # "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
+            # "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
+            # "local_map_target_pos_2": state.world.local_map_target_pos_2.map,
+            # "local_map_dumpability_2": state.world.local_map_dumpability_2.map,
+            # "local_map_obstacles_2": state.world.local_map_obstacles_2.map,
             "traversability_mask": state.world.traversability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
@@ -398,7 +408,7 @@ class TerraEnvBatch:
             self.batch_cfg.maps.edge_length_m
             / self.batch_cfg.maps_dims.maps_edge_length
         )
-        print(f"tile_size: {tile_size}")
+        # Recurring prints removed for performance
         agent_w = self.batch_cfg.agent.dimensions.WIDTH
         agent_h = self.batch_cfg.agent.dimensions.HEIGHT
         agent_height = (
@@ -411,7 +421,7 @@ class TerraEnvBatch:
             if (round(agent_h / tile_size)) % 2 != 0
             else round(agent_h / tile_size) + 1
         )
-        print(f"agent_width: {agent_width}, agent_height: {agent_height}")
+        # Recurring prints removed for performance
 
         # Repeat to match the number of environments
         n_envs = env_cfgs.agent.dig_depth.shape[

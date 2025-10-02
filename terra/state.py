@@ -12,6 +12,7 @@ from terra.actions import ActionType
 from terra.actions import TrackedActionType
 from terra.actions import WheeledActionType
 from terra.agent import Agent
+from terra.agent import AgentState
 from terra.config import AgentConfig
 from terra.config import EnvConfig
 from terra.map import GridWorld
@@ -122,32 +123,22 @@ class State(NamedTuple):
         )
 
         # Initialize per-agent baselines/after-lift to initial_potential
+        def _set_baselines(a: AgentState):
+            return a._replace(
+                carry_baseline_potential=jnp.float32(initial_potential),
+                carry_potential_after_lift=jnp.float32(initial_potential),
+            )
         agent = agent._replace(
-            agent_state=agent.agent_state._replace(
-                carry_baseline_potential=jnp.float32(initial_potential),
-                carry_potential_after_lift=jnp.float32(initial_potential),
-            ),
-            agent_state_2=agent.agent_state_2._replace(
-                carry_baseline_potential=jnp.float32(initial_potential),
-                carry_potential_after_lift=jnp.float32(initial_potential),
-            ),
+            agent_states=tuple(_set_baselines(a) for a in agent.agent_states)
         )
         
-        # Randomize starting agent to prevent first-mover advantage
-        # Randomly swap agent_state and agent_state_2 with 50% probability
-        key, swap_key = jax.random.split(key)
-        should_swap = jax.random.bernoulli(swap_key, 0.5)
-        
-        def swap_agents(agent):
-            return agent._replace(
-                agent_state=agent.agent_state_2,
-                agent_state_2=agent.agent_state
-            )
-        
-        def keep_agents(agent):
-            return agent
-            
-        agent = jax.lax.cond(should_swap, swap_agents, keep_agents, agent)
+        # Randomize starting agent uniformly among active agents to prevent first-mover advantage
+        key, cat_key = jax.random.split(key)
+        active_mask = agent.agent_active.astype(jnp.bool_)
+        # Uniform logits over active indices; large negative for inactive to mask them out
+        logits = jnp.where(active_mask, 0.0, -1e9)
+        start_idx = jax.random.categorical(cat_key, logits).astype(jnp.int32)
+        agent = agent._replace(current_agent=start_idx)
 
         return State(
             key=key,
@@ -232,16 +223,101 @@ class State(NamedTuple):
         return self
     
     def _swap(self):
-        """Swaps agent_state_1 and agent_state_2"""
-        #jax.debug.print("Swapping agent states")
+        """Advance to next active agent (defaults to 2 agents)."""
+        def _next_agent_idx(current: int, num_agents: int, active_mask):
+            # simple 2-agent fallback without scanning
+            return (current + 1) % jnp.maximum(1, num_agents)
+
+        next_idx = _next_agent_idx(self.agent.current_agent, self.agent.num_agents, self.agent.agent_active)
+        # DEBUG: track agent turn cycling
+        # Swap debug print silenced for cleaner training logs
         return self._replace(
             agent=self.agent._replace(
-                # agent_state=self.agent.agent_state_2,
-                # agent_state_2=self.agent.agent_state,
-                agent_state=self.agent.agent_state_2,
-                agent_state_2=self.agent.agent_state
+                current_agent=next_idx,
             )
         )
+
+    # --- Helper accessors to migrate to array-only agent states ---
+    def _get_current_agent_state(self):
+        # Fixed cases for MAX_AGENTS=4
+        return jax.lax.switch(
+            self.agent.current_agent,
+            [
+                lambda: self.agent.agent_states[0],
+                lambda: self.agent.agent_states[1],
+                lambda: self.agent.agent_states[2],
+                lambda: self.agent.agent_states[3],
+            ]
+        )
+
+    def _get_next_agent_state(self):
+        next_idx = (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
+        return jax.lax.switch(
+            next_idx,
+            [
+                lambda: self.agent.agent_states[0],
+                lambda: self.agent.agent_states[1],
+                lambda: self.agent.agent_states[2],
+                lambda: self.agent.agent_states[3],
+            ]
+        )
+
+    def _get_prev_agent_state(self):
+        prev_idx = (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
+        return jax.lax.switch(
+            prev_idx,
+            [
+                lambda: self.agent.agent_states[0],
+                lambda: self.agent.agent_states[1],
+                lambda: self.agent.agent_states[2],
+                lambda: self.agent.agent_states[3],
+            ]
+        )
+
+    def _set_agent_state_at(self, idx: int, new_state):
+        # Use jax.lax.switch to set the agent state at the given index
+        def set_at_0():
+            return self.agent._replace(agent_states=(
+                new_state, self.agent.agent_states[1], self.agent.agent_states[2], self.agent.agent_states[3]
+            ))
+        def set_at_1():
+            return self.agent._replace(agent_states=(
+                self.agent.agent_states[0], new_state, self.agent.agent_states[2], self.agent.agent_states[3]
+            ))
+        def set_at_2():
+            return self.agent._replace(agent_states=(
+                self.agent.agent_states[0], self.agent.agent_states[1], new_state, self.agent.agent_states[3]
+            ))
+        def set_at_3():
+            return self.agent._replace(agent_states=(
+                self.agent.agent_states[0], self.agent.agent_states[1], self.agent.agent_states[2], new_state
+            ))
+        
+        updated_agent = jax.lax.switch(
+            idx,
+            [set_at_0, set_at_1, set_at_2, set_at_3]
+        )
+        return self._replace(agent=updated_agent)
+
+    def _current_idx(self):
+        return self.agent.current_agent
+
+    def _next_idx(self):
+        return (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
+
+    def _prev_idx(self):
+        return (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
+
+    def _set_current_agent_state(self, new_state):
+        return self._set_agent_state_at(self._current_idx(), new_state)
+
+    def _set_next_agent_state(self, new_state):
+        return self._set_agent_state_at(self._next_idx(), new_state)
+
+    def _set_prev_agent_state(self, new_state):
+        return self._set_agent_state_at(self._prev_idx(), new_state)
+
+    
     def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
@@ -394,9 +470,11 @@ class State(NamedTuple):
         # Determine the occupancy mask for a grid of size map_width x map_height.
         polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
 
+        # Use last active agent for collision exclusion
+        prev = self._get_prev_agent_state()
         agent_2_corners_xy = self._get_agent_corners(
-            self.agent.agent_state_2.pos_base,
-            base_orientation=self.agent.agent_state_2.angle_base,
+            prev.pos_base,
+            base_orientation=prev.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
@@ -444,14 +522,15 @@ class State(NamedTuple):
         delta_xy = orientation_vector @ xy_delta
 
         # Compute candidate new position and immediately round it to discrete grid points.
-        candidate_pos = self.agent.agent_state.pos_base + delta_xy
+        cur = self._get_current_agent_state()
+        candidate_pos = cur.pos_base + delta_xy
         candidate_pos = jnp.round(candidate_pos).astype(IntMap)  # Fix: use IntMap not IntLowDim
         candidate_pos = jnp.squeeze(candidate_pos, axis=0)
 
         # Compute the agent's corners based on the candidate (rounded) position.
         agent_corners_xy = self._get_agent_corners(
             candidate_pos,
-            base_orientation=self.agent.agent_state.angle_base,
+            base_orientation=cur.angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
         )
@@ -461,20 +540,16 @@ class State(NamedTuple):
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
 
         # Choose between the old position and the new candidate position.
-        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        old_new_pos = jnp.array([cur.pos_base, candidate_pos])
         new_pos_base = valid_move_mask @ old_new_pos
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(pos_base=new_pos_base)
-            )
-        )
+        return self._set_current_agent_state(cur._replace(pos_base=new_pos_base))
 
     def _move_on_orientation_with_steering(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
+        cur = self._get_current_agent_state()
         return jax.lax.cond(
-            self.agent.agent_state.wheel_angle[0] == 0,
+            cur.wheel_angle[0] == 0,
             lambda: self._move_on_orientation(orientation_vector),
-            lambda: self._execute_curved_movement(angle_idx_to_rad(self.agent.agent_state.angle_base,
+            lambda: self._execute_curved_movement(angle_idx_to_rad(cur.angle_base,
                                                                    self.env_cfg.agent.angles_base),
                                                                    is_forward),
         )
@@ -484,7 +559,8 @@ class State(NamedTuple):
         orientation_angle = orientation_angle + (jnp.pi / 2)
 
         # For backward movement, reverse the wheel angle effect
-        wheel_angle = self.agent.agent_state.wheel_angle[0]
+        cur = self._get_current_agent_state()
+        wheel_angle = cur.wheel_angle[0]
         wheel_angle_rad = jnp.deg2rad(wheel_angle * self.env_cfg.agent.wheel_step)
         # Use width as wheelbase for turning radius calculation
         turn_radius = self.env_cfg.agent.width / (jnp.tan(wheel_angle_rad) + 1e-6)
@@ -495,7 +571,7 @@ class State(NamedTuple):
             -jnp.sin(orientation_angle) * turn_radius,
             jnp.cos(orientation_angle) * turn_radius
         ]))
-        center_of_rotation = self.agent.agent_state.pos_base + center_offset
+        center_of_rotation = cur.pos_base + center_offset
 
         # Compute how far we move along the arc and new orientation
         angle_change = self.env_cfg.agent.move_tiles / turn_radius
@@ -507,7 +583,7 @@ class State(NamedTuple):
             [jnp.cos(angle_change), -jnp.sin(angle_change)],
             [jnp.sin(angle_change), jnp.cos(angle_change)]
         ])
-        relative_pos = self.agent.agent_state.pos_base - center_of_rotation
+        relative_pos = cur.pos_base - center_of_rotation
         new_relative_pos = rotation_matrix @ relative_pos
         candidate_pos = center_of_rotation + new_relative_pos
 
@@ -532,21 +608,13 @@ class State(NamedTuple):
         valid_move_mask = self._valid_move_to_valid_mask(valid_move)
 
         # Choose between old and new positions
-        old_new_pos = jnp.array([self.agent.agent_state.pos_base, candidate_pos])
+        old_new_pos = jnp.array([cur.pos_base, candidate_pos])
         new_pos_base = valid_move_mask @ old_new_pos
 
         # Choose between old and new angles
-        old_new_angle = jnp.array([self.agent.agent_state.angle_base, new_angle_base])
+        old_new_angle = jnp.array([cur.angle_base, new_angle_base])
         new_angle_base = valid_move_mask @ old_new_angle
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    pos_base=new_pos_base,
-                    angle_base=new_angle_base
-                )
-            )
-        )
+        return self._set_current_agent_state(cur._replace(pos_base=new_pos_base, angle_base=new_angle_base))
 
 
 
@@ -557,12 +625,13 @@ class State(NamedTuple):
         Applies soil mechanics directly when dirt is loaded.
         """
         # Only applies to skid steer with shovel lowered
-        is_skid_steer = new_state.agent.agent_state.agent_type[0] == 2
-        shovel_lowered = new_state.agent.agent_state.shovel_lifted[0] == 0
+        cur = new_state._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        shovel_lowered = cur.shovel_lifted[0] == 0
         
         # Fixed workspace capacity and current load
         workspace_capacity = jnp.int32(127)  # Fixed capacity within int8 range
-        current_load = jnp.int32(new_state.agent.agent_state.loaded[0])  # Convert to int32 (use current)
+        current_load = jnp.int32(cur.loaded[0])  # Convert to int32 (use current)
         
         should_auto_load = jnp.logical_and(is_skid_steer, shovel_lowered)
         
@@ -629,11 +698,11 @@ class State(NamedTuple):
                     # Current world potential before this auto-load
                     current_potential = potential_before_load
                     # Previous after-lift potential from last load
-                    previous_after_lift = self.agent.agent_state.carry_potential_after_lift
+                    previous_after_lift = cur.carry_potential_after_lift
                     # Adjust baseline: if world got worse (higher potential), increase baseline
                     # If world got better (lower potential), decrease baseline (make it harder)
                     world_change = current_potential - previous_after_lift
-                    return self.agent.agent_state.carry_baseline_potential + world_change
+                    return cur.carry_baseline_potential + world_change
                 
                 new_carry_base = jax.lax.select(
                     started_loading, 
@@ -646,18 +715,16 @@ class State(NamedTuple):
                 
 
                 
+                new_cur = cur._replace(
+                    loaded=jnp.array([new_loaded], dtype=cur.loaded.dtype),
+                    carry_baseline_potential=jnp.float32(new_carry_base),
+                    carry_potential_after_lift=jnp.float32(after_lift_potential),
+                )
                 return new_state._replace(
                     world=new_state.world._replace(
                         action_map=new_state.world.action_map._replace(map=final_map),
-                    ),
-                    agent=new_state.agent._replace(
-                        agent_state=new_state.agent.agent_state._replace(
-                            loaded=jnp.array([new_loaded], dtype=new_state.agent.agent_state.loaded.dtype),
-                            carry_baseline_potential=jnp.float32(new_carry_base),
-                            carry_potential_after_lift=jnp.float32(after_lift_potential),
-                        )
                     )
-                )
+                )._set_current_agent_state(new_cur)
             
             def _no_load():
                 # Can't fit entire workspace, so don't load anything
@@ -681,7 +748,8 @@ class State(NamedTuple):
         """
 
         def _move_forward():
-            base_orientation = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            base_orientation = cur.angle_base
             orientation_vector = self._base_orientation_to_one_hot_forward(
                 base_orientation
             )
@@ -691,8 +759,9 @@ class State(NamedTuple):
             return self._skid_steer_auto_load_dirt(new_state)
 
         # Check agent conditions
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-        is_loaded = self.agent.agent_state.loaded[0] > 0
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_loaded = cur.loaded[0] > 0
         
         # Movement rules:
         # - Non-skid steers: only when not loaded
@@ -714,21 +783,23 @@ class State(NamedTuple):
         """
 
         def _move_backward():
-            base_orientation = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            base_orientation = cur.angle_base
             orientation_vector = self._base_orientation_to_one_hot_backwards(
                 base_orientation
             )
             
             # Check if skid steer should drop dirt when attempting to reverse
-            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-            is_loaded = self.agent.agent_state.loaded[0] > 0
-            shovel_down = self.agent.agent_state.shovel_lifted[0] == 0
+            cur2 = self._get_current_agent_state()
+            is_skid_steer = cur2.agent_type[0] == 2
+            is_loaded = cur2.loaded[0] > 0
+            shovel_down = cur2.shovel_lifted[0] == 0
             
             # Check if backward movement would be possible (without actually moving yet)
             test_new_state = self._move_on_orientation(orientation_vector)
             movement_possible = ~jnp.allclose(
-                self.agent.agent_state.pos_base,
-                test_new_state.agent.agent_state.pos_base,
+                cur2.pos_base,
+                test_new_state._get_current_agent_state().pos_base,
                 atol=1e-6
             )
             
@@ -736,7 +807,7 @@ class State(NamedTuple):
             # Use the same logic as the dump function
             dump_mask = self._build_dig_dump_cone()
             # Only restrict dumping to dump zones for skid steer agents (commented out dump zone restriction)
-            is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+            is_skid_steer = cur2.agent_type[0] == 2
             
             def _apply_dump_zone_restriction():
                 # For skid steer: restrict to only dump zones (target_map > 0)
@@ -766,9 +837,9 @@ class State(NamedTuple):
             # Skip potential check if no dump volume - can't increase potential if not dumping
             def _check_potential_increase():
                 def _predict_potential():
-                    remaining_volume = self.agent.agent_state.loaded % dump_volume
+                    remaining_volume = cur2.loaded % dump_volume
                     even_volume_per_tile = (
-                        self.agent.agent_state.loaded - remaining_volume
+                        cur2.loaded - remaining_volume
                     ) / dump_volume
                     flattened_action_map = self.world.action_map.map.reshape(-1)
                     predicted_map_flat = self._apply_dump_mask(
@@ -786,8 +857,8 @@ class State(NamedTuple):
                 
                 # Use same potential gating logic as in _handle_dump
                 current_potential = self._compute_relocation_potential(self.world.action_map.map)
-                baseline_before = self.agent.agent_state.carry_baseline_potential
-                after_lift = self.agent.agent_state.carry_potential_after_lift
+                baseline_before = cur2.carry_baseline_potential
+                after_lift = cur2.carry_potential_after_lift
                 baseline_eff = baseline_before + (current_potential - after_lift)
                 return predicted_potential > baseline_eff
             
@@ -830,9 +901,10 @@ class State(NamedTuple):
             return jax.lax.cond(should_block_movement, _block_movement, _allow_movement)
 
         # Check agent conditions
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-        is_loaded = self.agent.agent_state.loaded[0] > 0
-        shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_loaded = cur.loaded[0] > 0
+        shovel_lifted = cur.shovel_lifted[0] > 0
         
         # Movement rules:
         # - Non-skid steers: only when not loaded
@@ -849,12 +921,13 @@ class State(NamedTuple):
         Moves the wheeled vehicle forward along an arc determined by wheel angle - if not loaded
         """
         def _move_forward_wheeled():
-            base_orientation = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            base_orientation = cur.angle_base
             orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(True))
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_forward_wheeled
+            self._get_current_agent_state().loaded[0] > 0, self._do_nothing, _move_forward_wheeled
         )
 
     def _handle_move_backward_wheeled(self) -> "State":
@@ -862,12 +935,13 @@ class State(NamedTuple):
         Moves the wheeled vehicle backward along an arc determined by wheel angle - if not loaded
         """
         def _move_backward_wheeled():
-            base_orientation = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            base_orientation = cur.angle_base
             orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
 
         return jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0, self._do_nothing, _move_backward_wheeled
+            self._get_current_agent_state().loaded[0] > 0, self._do_nothing, _move_backward_wheeled
         )
 
     def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
@@ -879,7 +953,7 @@ class State(NamedTuple):
         """
         # Compute the agent's polygon for the candidate new angle.
         candidate_corners = self._get_agent_corners(
-            self.agent.agent_state.pos_base,
+            self._get_current_agent_state().pos_base,
             base_orientation=new_angle_base,
             agent_width=self.env_cfg.agent.width,
             agent_height=self.env_cfg.agent.height,
@@ -907,7 +981,8 @@ class State(NamedTuple):
 
     def _handle_clock(self) -> "State":
         def _rotate_clock():
-            old_angle_base = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            old_angle_base = cur.angle_base
             new_angle_base = decrease_angle_circular(
                 old_angle_base, self.env_cfg.agent.angles_base
             )
@@ -915,17 +990,12 @@ class State(NamedTuple):
                 old_angle_base, new_angle_base
             )
 
-            return self._replace(
-                agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        angle_base=new_angle_base
-                    )
-                )
-            )
+            return self._set_current_agent_state(cur._replace(angle_base=new_angle_base))
 
         # Check agent conditions
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-        is_loaded = self.agent.agent_state.loaded[0] > 0
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
         # - Non-skid steers: only when not loaded
@@ -939,7 +1009,8 @@ class State(NamedTuple):
 
     def _handle_anticlock(self) -> "State":
         def _rotate_anticlock():
-            old_angle_base = self.agent.agent_state.angle_base
+            cur = self._get_current_agent_state()
+            old_angle_base = cur.angle_base
             new_angle_base = increase_angle_circular(
                 old_angle_base, self.env_cfg.agent.angles_base
             )
@@ -947,17 +1018,12 @@ class State(NamedTuple):
                 old_angle_base, new_angle_base
             )
 
-            return self._replace(
-                agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        angle_base=new_angle_base
-                    )
-                )
-            )
+            return self._set_current_agent_state(cur._replace(angle_base=new_angle_base))
 
         # Check agent conditions
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
-        is_loaded = self.agent.agent_state.loaded[0] > 0
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
         # - Non-skid steers: only when not loaded
@@ -972,47 +1038,40 @@ class State(NamedTuple):
     def _handle_cabin_clock(self) -> "State":
         """Handle cabin clockwise rotation. Does nothing for skid steer."""
         # Skid steer cannot rotate cabin
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
         
         def _cabin_clock():
-            old_angle_cabin = self.agent.agent_state.angle_cabin
+            cur2 = self._get_current_agent_state()
+            old_angle_cabin = cur2.angle_cabin
             new_angle_cabin = decrease_angle_circular(
                 old_angle_cabin, self.env_cfg.agent.angles_cabin
             )
 
-            return self._replace(
-                agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        angle_cabin=new_angle_cabin
-                    )
-                )
-            )
+            return self._set_current_agent_state(cur2._replace(angle_cabin=new_angle_cabin))
         
         return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_clock)
 
     def _handle_cabin_anticlock(self) -> "State":
         """Handle cabin anti-clockwise rotation. Does nothing for skid steer."""
         # Skid steer cannot rotate cabin
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
         
         def _cabin_anticlock():
-            old_angle_cabin = self.agent.agent_state.angle_cabin
+            cur2 = self._get_current_agent_state()
+            old_angle_cabin = cur2.angle_cabin
             new_angle_cabin = increase_angle_circular(
                 old_angle_cabin, self.env_cfg.agent.angles_cabin
             )
 
-            return self._replace(
-                agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        angle_cabin=new_angle_cabin
-                    )
-                )
-            )
+            return self._set_current_agent_state(cur2._replace(angle_cabin=new_angle_cabin))
         
         return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_anticlock)
 
     def _handle_turn_wheels_left(self) -> "State":
-        old_wheel_angle = self.agent.agent_state.wheel_angle
+        cur = self._get_current_agent_state()
+        old_wheel_angle = cur.wheel_angle
         new_wheel_angle = jnp.min(
             jnp.array([
                 old_wheel_angle + 1,
@@ -1020,17 +1079,11 @@ class State(NamedTuple):
             ]),
             axis=0,
         )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    wheel_angle=new_wheel_angle
-                )
-            )
-        )
+        return self._set_current_agent_state(cur._replace(wheel_angle=new_wheel_angle))
 
     def _handle_turn_wheels_right(self) -> "State":
-        old_wheel_angle = self.agent.agent_state.wheel_angle
+        cur = self._get_current_agent_state()
+        old_wheel_angle = cur.wheel_angle
         new_wheel_angle = jnp.max(
             jnp.array([
                 old_wheel_angle - 1,
@@ -1038,14 +1091,7 @@ class State(NamedTuple):
             ]),
             axis=0,
         )
-
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    wheel_angle=new_wheel_angle
-                )
-            )
-        )
+        return self._set_current_agent_state(cur._replace(wheel_angle=new_wheel_angle))
 
     @staticmethod
     def _get_current_pos_vector_idx(pos_base: Array, map_height: IntMap) -> IntMap:
@@ -1091,24 +1137,20 @@ class State(NamedTuple):
         return current_pos
 
     def _get_cabin_angle_rad(self) -> Float:
-        return angle_idx_to_rad(
-            self.agent.agent_state.angle_cabin, self.env_cfg.agent.angles_cabin
-        )
+        cur = self._get_current_agent_state()
+        return angle_idx_to_rad(cur.angle_cabin, self.env_cfg.agent.angles_cabin)
 
     def _get_base_angle_rad(self) -> Float:
-        return angle_idx_to_rad(
-            self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base
-        )
+        cur = self._get_current_agent_state()
+        return angle_idx_to_rad(cur.angle_base, self.env_cfg.agent.angles_base)
     
     def _get_cabin_angle_rad_2(self) -> Float:
-        return angle_idx_to_rad(
-            self.agent.agent_state_2.angle_cabin, self.env_cfg.agent.angles_cabin
-        )
+        prev = self._get_prev_agent_state()
+        return angle_idx_to_rad(prev.angle_cabin, self.env_cfg.agent.angles_cabin)
 
     def _get_base_angle_rad_2(self) -> Float:
-        return angle_idx_to_rad(
-            self.agent.agent_state_2.angle_base, self.env_cfg.agent.angles_base
-        )
+        prev = self._get_prev_agent_state()
+        return angle_idx_to_rad(prev.angle_base, self.env_cfg.agent.angles_base)
 
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
@@ -1265,7 +1307,8 @@ class State(NamedTuple):
                 lambda: (IntMap(dump_mask), dump_mask.sum()),
             )
 
-            loaded_volume = self.agent.agent_state.loaded
+            cur = self._get_current_agent_state()
+            loaded_volume = cur.loaded
             remaining_volume_final = loaded_volume % dump_volume
             even_volume_per_tile_final = (loaded_volume - remaining_volume_final) / dump_volume
 
@@ -1430,8 +1473,9 @@ class State(NamedTuple):
             - map_cyl_coords: (2, width*height) map with [r, theta] rows
             - map_local_coords_base: (2, width*height) map with [x, y] rows
         """
+        prev = self._get_prev_agent_state()
         current_pos_idx = self._get_current_pos_vector_idx(
-            pos_base=self.agent.agent_state_2.pos_base,
+            pos_base=prev.pos_base,
             map_height=self.env_cfg.maps.edge_length_px,
         )
         map_global_coords = self._map_to_flattened_global_coords(
@@ -1458,8 +1502,9 @@ class State(NamedTuple):
             - map_cyl_coords: (2, width*height) map with [r, theta] rows
             - map_local_coords_base: (2, width*height) map with [x, y] rows
         """
+        cur = self._get_current_agent_state()
         current_pos_idx = self._get_current_pos_vector_idx(
-            pos_base=self.agent.agent_state.pos_base,
+            pos_base=cur.pos_base,
             map_height=self.env_cfg.maps.edge_length_px,
         )
         map_global_coords = self._map_to_flattened_global_coords(
@@ -1486,7 +1531,8 @@ class State(NamedTuple):
         All transformations and calculations are performed inline.
         """
         # Get agent state information
-        pos_base = self.agent.agent_state.pos_base
+        cur = self._get_current_agent_state()
+        pos_base = cur.pos_base
         map_width = self.world.width
         map_height = self.world.height
         tile_size = self.env_cfg.tile_size
@@ -1510,14 +1556,10 @@ class State(NamedTuple):
         current_pos = jnp.reshape(current_pos, (2,))
         
         # Get angles and ensure they're scalars
-        base_angle_rad = angle_idx_to_rad(
-            self.agent.agent_state.angle_base, self.env_cfg.agent.angles_base
-        )
+        base_angle_rad = angle_idx_to_rad(cur.angle_base, self.env_cfg.agent.angles_base)
         base_angle_rad = jnp.squeeze(base_angle_rad)  # Ensure scalar
     
-        cabin_angle_rad = angle_idx_to_rad(
-            self.agent.agent_state.angle_cabin, self.env_cfg.agent.angles_cabin
-        )
+        cabin_angle_rad = angle_idx_to_rad(cur.angle_cabin, self.env_cfg.agent.angles_cabin)
         cabin_angle_rad = jnp.squeeze(cabin_angle_rad)  # Ensure scalar
     
         # Calculate arm angle and ensure it's a scalar
@@ -1666,7 +1708,7 @@ class State(NamedTuple):
         - Excavator/Wheeled: Cylindrical cone (original parameters)
         - Skid Steer: Cylindrical cone (closer, smaller parameters)
         """
-        current_agent_type = self.agent.agent_state.agent_type[0]
+        current_agent_type = self._get_current_agent_state().agent_type[0]
         
         # Get coordinates for cylindrical approach (used by both agent types)
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords()
@@ -1692,7 +1734,7 @@ class State(NamedTuple):
         - Excavator/Wheeled: Cylindrical cone (original parameters)
         - Skid Steer: Cylindrical cone (closer, smaller parameters)
         """
-        current_agent_type = self.agent.agent_state_2.agent_type[0]
+        current_agent_type = self._get_prev_agent_state().agent_type[0]
         
         # Get coordinates for cylindrical approach (used by both agent types)
         map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords_2()
@@ -1735,16 +1777,15 @@ class State(NamedTuple):
         Also, removes the possibility of moving the tiles within the same workspace,
         even if not all tiles are occupied.
         """
-        cone_mask = self._build_dig_dump_cone()
+        cone_mask_2d = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        # Use boolean logic and any() to avoid large integer reductions on flattened arrays
+        cond_has_overlap = jnp.any(
+            self.world.last_dig_mask.map & (self.world.action_map.map > 0) & cone_mask_2d
+        )
         dig_map_mask = jax.lax.cond(
-            (
-                self.world.last_dig_mask.map.reshape(-1)
-                * (self.world.action_map.map.reshape(-1) > 0)
-                * cone_mask
-            ).sum()
-            > 0,
-            lambda: ~cone_mask,
-            lambda: jnp.ones_like(dump_mask),
+            cond_has_overlap,
+            lambda: (~cone_mask_2d).reshape(-1),
+            lambda: jnp.ones_like(dump_mask, dtype=jnp.bool_),
         )
 
         return dump_mask * dig_map_mask
@@ -1761,11 +1802,13 @@ class State(NamedTuple):
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
         flat_action_map = self.world.action_map.map.reshape(-1)
-        dig_mask_cone = self._build_dig_dump_cone()
+        dig_mask_cone = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        # Prefer boolean any over integer sum for compile-time efficiency
+        has_dumped_dirt_in_cone = jnp.any((self.world.action_map.map > 0) & dig_mask_cone)
         ambiguity_mask_dig_movesoil = jax.lax.cond(
-            jnp.any(flat_action_map * dig_mask_cone.reshape(-1) > 0),
-            lambda: flat_action_map > 0,
-            lambda: flat_action_map == 0,
+            has_dumped_dirt_in_cone,
+            lambda: (flat_action_map > 0),
+            lambda: (flat_action_map == 0),
         )
 
         # respect max dig limit
@@ -1774,7 +1817,7 @@ class State(NamedTuple):
         ).reshape(-1)
 
         # For excavators: exclude last dig area to prevent dump-load cycles
-        is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
+        is_excavator = self._get_current_agent_state().agent_type[0] != 2  # Not skidsteer
         
         def _exclude_last_dig_area():
             # Exclude the last dig/dump area from digging for excavators to prevent dump-load cycles
@@ -1886,7 +1929,7 @@ class State(NamedTuple):
             )
 
             # Only update last_dig_mask for excavators, not skidsteers
-            is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
+            is_excavator = self._get_current_agent_state().agent_type[0] != 2  # Not skidsteer
             
             def _update_last_dig_mask():
                 return self.world.last_dig_mask._replace(
@@ -1905,7 +1948,8 @@ class State(NamedTuple):
             			# Cache potentials for telescoping and add artificial source for newly dug dirt
             potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
             after_lift_potential = self._compute_relocation_potential(final_map)
-            started_loading = jnp.logical_and(self.agent.agent_state.loaded[0] == 0, actual_volume_loaded > 0)
+            cur2 = self._get_current_agent_state()
+            started_loading = jnp.logical_and(cur2.loaded[0] == 0, actual_volume_loaded > 0)
             # Artificial source potential for newly dug dirt (only when not moving dumped dirt)
             def _compute_artificial_source_potential():
                 old_map_2d = self.world.action_map.map
@@ -1927,12 +1971,13 @@ class State(NamedTuple):
                     potential_before_dig,
                     potential_before_dig + artificial_source_potential
                 )
+            cur3 = self._get_current_agent_state()
             new_carry_base = jax.lax.select(
                 started_loading,
                 _baseline_when_starting(),
-                self.agent.agent_state.carry_baseline_potential
+                cur3.carry_baseline_potential
             )
-            return self._replace(
+            updated_state = self._replace(
                 world=self.world._replace(
                     action_map=self.world.action_map._replace(
                         map=IntLowDim(final_map)
@@ -1943,12 +1988,14 @@ class State(NamedTuple):
                     last_dig_mask=new_last_dig_mask,
                 ),
                 agent=self.agent._replace(
-                    agent_state=self.agent.agent_state._replace(
-                        loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim),
-                        carry_baseline_potential=jnp.float32(new_carry_base),
-                        carry_potential_after_lift=jnp.float32(after_lift_potential),
-                    ),
                     moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
+                )
+            )
+            return updated_state._set_current_agent_state(
+                cur3._replace(
+                    loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim),
+                    carry_baseline_potential=jnp.float32(new_carry_base),
+                    carry_potential_after_lift=jnp.float32(after_lift_potential),
                 )
             )
 
@@ -1963,7 +2010,8 @@ class State(NamedTuple):
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
         # Only restrict dumping to dump zones for skid steer agents
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
         
         def _apply_dump_zone_restriction():
             # For skid steer: restrict to only dump zones (target_map > 0)
@@ -1987,9 +2035,10 @@ class State(NamedTuple):
 
         def _apply_dump():
             # Calculate volume distribution only when we actually have a valid dump area
-            remaining_volume = self.agent.agent_state.loaded % dump_volume
+            curd = self._get_current_agent_state()
+            remaining_volume = curd.loaded % dump_volume
             even_volume_per_tile = (
-                self.agent.agent_state.loaded - remaining_volume
+                curd.loaded - remaining_volume
             ) / dump_volume
             
             flattened_action_map = self.world.action_map.map.reshape(-1)
@@ -2006,7 +2055,7 @@ class State(NamedTuple):
             )
 
             			# Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
-            is_excavator = self.agent.agent_state.agent_type[0] != 2  # Not skidsteer
+            is_excavator = self._get_current_agent_state().agent_type[0] != 2  # Not skidsteer
         
             def _clear_last_dig_mask():
                 return self.world.last_dig_mask._replace(
@@ -2024,8 +2073,9 @@ class State(NamedTuple):
             current_potential = self._compute_relocation_potential(self.world.action_map.map)            
             # Predict potential post-dump and gate regressive dumps relative to effective baseline
             predicted_potential = self._compute_relocation_potential(new_map_global_coords)
-            baseline_before = self.agent.agent_state.carry_baseline_potential
-            after_lift = self.agent.agent_state.carry_potential_after_lift
+            curb = self._get_current_agent_state()
+            baseline_before = curb.carry_baseline_potential
+            after_lift = curb.carry_potential_after_lift
             baseline_eff = baseline_before + (current_potential - after_lift)
 
             would_increase_potential = predicted_potential > baseline_eff
@@ -2044,7 +2094,7 @@ class State(NamedTuple):
             def _allow_progressive_dump():
                 # Update world and current potential
                 #new_rel_pot = self._compute_relocation_potential(new_map_global_coords)
-                return self._replace(
+                updated_state = self._replace(
                     world=self.world._replace(
                         action_map=self.world.action_map._replace(
                             map=IntLowDim(new_map_global_coords)
@@ -2052,11 +2102,13 @@ class State(NamedTuple):
                         last_dig_mask=new_last_dig_mask,
                     ),
                     agent=self.agent._replace(
-                        agent_state=self.agent.agent_state._replace(
-                            loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
-                        ),
                         moving_dumped_dirt=jnp.bool_(False),
                     ),
+                )
+                return updated_state._set_current_agent_state(
+                    updated_state._get_current_agent_state()._replace(
+                        loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+                    )
                 )
             return jax.lax.cond(would_increase_potential, _prevent_regressive_dump, _allow_progressive_dump)
 
@@ -2071,13 +2123,9 @@ class State(NamedTuple):
         For skid steer: Lifting the shovel only toggles the shovel state to up.
         Does NOT move dirt or change loaded. All loading is handled in auto-load.
         """
-        return self._replace(
-            agent=self.agent._replace(
-                agent_state=self.agent.agent_state._replace(
-                    shovel_lifted=jnp.array([1], dtype=IntLowDim)
-                )
-            )
-        )
+        cur = self._get_current_agent_state()
+        new_cur = cur._replace(shovel_lifted=jnp.array([1], dtype=IntLowDim))
+        return self._set_current_agent_state(new_cur)
 
     def _handle_do(self) -> "State":
         """
@@ -2088,27 +2136,27 @@ class State(NamedTuple):
           * If shovel lifted + not loaded: lower shovel  
           * If shovel lowered: lift shovel (regardless of loading)
         """
-        is_skid_steer = self.agent.agent_state.agent_type[0] == 2
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
         
         def _skid_steer_do():
-            is_loaded = self.agent.agent_state.loaded[0] > 0
-            shovel_lifted = self.agent.agent_state.shovel_lifted[0] > 0
+            cur = self._get_current_agent_state()
+            is_loaded = cur.loaded[0] > 0
+            shovel_lifted = cur.shovel_lifted[0] > 0
             
             def _dump_and_lower():
                 # Always try to dump dirt and then lower shovel regardless of dump success
                 dumped_state = self._handle_dump()
                 # Always lower the shovel after dump attempt
-                return dumped_state._replace(
-                    agent=dumped_state.agent._replace(
-                        agent_state=dumped_state.agent.agent_state._replace(
-                            shovel_lifted=jnp.array([0], dtype=IntLowDim)  # Lower shovel
-                        )
-                    )
+                next_cur = dumped_state._get_current_agent_state()
+                return dumped_state._set_current_agent_state(
+                    next_cur._replace(shovel_lifted=jnp.array([0], dtype=IntLowDim))
                 )
             
             def _lift_shovel():
                 # Check if agent is loaded
-                agent_is_loaded = self.agent.agent_state.loaded[0] > 0
+                cur3 = self._get_current_agent_state()
+                agent_is_loaded = cur3.loaded[0] > 0
                 
                 def _lift_with_soil_mechanics():
                     # Agent has dirt, so lifting will disturb surrounding soil
@@ -2116,22 +2164,16 @@ class State(NamedTuple):
                     lifted_state = self._handle_lift_dumped_dirt()
                     
                     # Just lift the shovel (soil mechanics already applied)
-                    return lifted_state._replace(
-                        agent=lifted_state.agent._replace(
-                            agent_state=lifted_state.agent.agent_state._replace(
-                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Ensure shovel is lifted
-                            )
-                        )
+                    lc = lifted_state._get_current_agent_state()
+                    return lifted_state._set_current_agent_state(
+                        lc._replace(shovel_lifted=jnp.array([1], dtype=IntLowDim))
                     )
                 
                 def _lift_without_soil_mechanics():
                     # Agent has no dirt, just lift shovel without terrain disturbance
-                    return self._replace(
-                        agent=self.agent._replace(
-                            agent_state=self.agent.agent_state._replace(
-                                shovel_lifted=jnp.array([1], dtype=IntLowDim)  # Lift shovel
-                            )
-                        )
+                    cur4 = self._get_current_agent_state()
+                    return self._set_current_agent_state(
+                        cur4._replace(shovel_lifted=jnp.array([1], dtype=IntLowDim))
                     )
                 
                 # Apply soil mechanics only if agent is loaded (has dirt to lift)
@@ -2143,12 +2185,9 @@ class State(NamedTuple):
             
             def _lower_shovel():
                 # Lower shovel (keeping current loading state)
-                return self._replace(
-                    agent=self.agent._replace(
-                        agent_state=self.agent.agent_state._replace(
-                            shovel_lifted=jnp.array([0], dtype=IntLowDim)  # Lower shovel
-                        )
-                    )
+                cur5 = self._get_current_agent_state()
+                return self._set_current_agent_state(
+                    cur5._replace(shovel_lifted=jnp.array([0], dtype=IntLowDim))
                 )
             
             # Simple logic: if shovel is up, either dump (if loaded) or just lower it
@@ -2160,7 +2199,8 @@ class State(NamedTuple):
             )
         
         def _tracked_wheeled_do():
-            is_loaded = self.agent.agent_state.loaded[0] > 0
+            cur = self._get_current_agent_state()
+            is_loaded = cur.loaded[0] > 0
             return jax.lax.cond(is_loaded, self._handle_dump, self._handle_dig)
         
         return jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
@@ -2171,7 +2211,8 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent moved"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.pos_base, new_state.agent.agent_state_2.pos_base
+            old_state._get_current_agent_state().pos_base,
+            new_state._get_next_agent_state().pos_base,
         )
 
     @staticmethod
@@ -2180,8 +2221,8 @@ class State(NamedTuple):
     ) -> bool:
         """True if agent turned"""
         return ~jnp.allclose(
-            old_state.agent.agent_state.angle_base,
-            new_state.agent.agent_state_2.angle_base,
+            old_state._get_current_agent_state().angle_base,
+            new_state._get_next_agent_state().angle_base,
         )
 
     def _handle_rewards_move(
@@ -2196,15 +2237,16 @@ class State(NamedTuple):
         )
 
         # Move while loaded
+        cur = self._get_current_agent_state()
         reward += jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded > 0),
+            jnp.all(cur.loaded > 0),
             lambda: self.env_cfg.rewards.move_while_loaded,
             lambda: 0.0,
         )
 
         # Moving with turned wheels
         reward += jax.lax.cond(
-            jnp.any(self.agent.agent_state.wheel_angle != 0),
+            jnp.any(cur.wheel_angle != 0),
             lambda: self.env_cfg.rewards.move_with_turned_wheels,
             lambda: 0.0,
         )
@@ -2237,8 +2279,8 @@ class State(NamedTuple):
 
         # Check if wheels actually turned
         wheel_not_turned = jnp.allclose(
-            self.agent.agent_state.wheel_angle,
-            new_state.agent.agent_state_2.wheel_angle
+            self._get_current_agent_state().wheel_angle,
+            new_state._get_next_agent_state().wheel_angle,
         )
 
         # Apply extra reward if wheels did not turn
@@ -2325,13 +2367,14 @@ class State(NamedTuple):
         of the previously digged terrain.
         """
         # Check if agent is excavator (not skid steer)
-        is_excavator = self.agent.agent_state.agent_type[0] == 0
-        is_skidsteer = self.agent.agent_state.agent_type[0] == 2
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
+        is_skidsteer = cur.agent_type[0] == 2
         
         def _excavator_dump_rewards():
             # Telescoping relocation reward: use progress since lift with effective baseline
-            baseline_before = self.agent.agent_state.carry_baseline_potential
-            after_lift = self.agent.agent_state.carry_potential_after_lift
+            baseline_before = cur.carry_baseline_potential
+            after_lift = cur.carry_potential_after_lift
             current_potential = self._compute_relocation_potential(self.world.action_map.map)
             new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
             # Use same effective baseline logic as in dump gating
@@ -2341,7 +2384,7 @@ class State(NamedTuple):
             progress_clamped = jnp.clip(effective_progress, -cap, cap)
             # Dump success/fail
             dump_failed = jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
+                cur.loaded, new_state._get_prev_agent_state().loaded
             )
 
             
@@ -2405,9 +2448,11 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         # Unified dig rewards for all agent types - both excavators and skidsteers use same logic
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
         started_loading = jnp.logical_and(
-            self.agent.agent_state.loaded[0] == 0,
-            new_state.agent.agent_state_2.loaded[0] > 0,
+            cur.loaded[0] == 0,
+            prev_new.loaded[0] > 0,
         )
         dig_reward = jax.lax.cond(
             started_loading,
@@ -2430,7 +2475,7 @@ class State(NamedTuple):
         # Wrong dig when loaded (no dirt loaded despite dig action)
         dig_wrong_reward = jax.lax.cond(
             jnp.allclose(
-                self.agent.agent_state.loaded, new_state.agent.agent_state_2.loaded
+                cur.loaded, prev_new.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
@@ -2448,7 +2493,7 @@ class State(NamedTuple):
             total = self._handle_rewards_dig(new_state, action)
             return total, {"dump": 0.0, "lift": total}
         return jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded > 0),
+            jnp.all(self._get_current_agent_state().loaded > 0),
             _dump,
             _dig,
         )
@@ -2457,8 +2502,10 @@ class State(NamedTuple):
         self, new_state: "State"
     ) -> Float:
         """Reward for successful auto-loading during movement, with penalty if dirt is removed from a dump zone."""
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
+        old_loaded = cur.loaded[0]
+        new_loaded = prev_new.loaded[0]
         dirt_gained = new_loaded - old_loaded
 
         # Only check for penalty if dirt was gained
@@ -2478,7 +2525,7 @@ class State(NamedTuple):
 
             return jax.lax.cond(
                 progress < 0,
-                lambda: self._calculate_dump_zone_reward(progress, self.agent.agent_state.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
+                lambda: self._calculate_dump_zone_reward(progress, cur.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
                 lambda: self.env_cfg.rewards.skid_auto_load,
             )
 
@@ -2498,8 +2545,10 @@ class State(NamedTuple):
     ) -> Float:
         """Specialized dump rewards for skid steer with efficiency-based rewards"""
         # Check if dump was successful (dirt was unloaded)
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
+        old_loaded = cur.loaded[0]
+        new_loaded = prev_new.loaded[0]
         dirt_dumped = old_loaded - new_loaded
         
         def _successful_dump():
@@ -2532,7 +2581,7 @@ class State(NamedTuple):
                 # scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
                 
                 # return scaled_reward
-                return self._calculate_dump_zone_reward(action_map_dump_progress, self.agent.agent_state.loaded[0])
+                return self._calculate_dump_zone_reward(action_map_dump_progress, cur.loaded[0])
             
             
             def _wrong_dump_penalty():
@@ -2560,8 +2609,10 @@ class State(NamedTuple):
         self, new_state: "State"
     ) -> Float:
         """Small reward for effective shovel control"""
-        old_shovel = self.agent.agent_state.shovel_lifted[0]
-        new_shovel = new_state.agent.agent_state_2.shovel_lifted[0]  # FIX: Use agent_state_2 after swap
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
+        old_shovel = cur.shovel_lifted[0]
+        new_shovel = prev_new.shovel_lifted[0]
         shovel_changed = old_shovel != new_shovel
         
         # Small reward for shovel state changes (encourages learning control)
@@ -2578,8 +2629,10 @@ class State(NamedTuple):
         reward = 0.0
         
         # Check what happened during DO action
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state_2.loaded[0]  # FIX: Use agent_state_2 after swap
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
+        old_loaded = cur.loaded[0]
+        new_loaded = prev_new.loaded[0]
         
         # Add dump rewards if dirt was unloaded
         reward += jax.lax.cond(
@@ -2677,7 +2730,8 @@ class State(NamedTuple):
 
     def _get_trench_specific_rewards(self) -> Float:
         def _get_trench_reward():
-            agent_pos = self.agent.agent_state.pos_base
+            cur = self._get_current_agent_state()
+            agent_pos = cur.pos_base
             trench_axes = self.world.trench_axes
             trench_type = self.world.trench_type
 
@@ -2729,7 +2783,8 @@ class State(NamedTuple):
 
         # Only apply trench rewards to excavators (type 0), not skidsteers (type 2)
         # This encourages role specialization: excavators focus on trenches, skidsteers on relocation
-        is_excavator = self.agent.agent_state.agent_type[0] == 0
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
         should_apply_trench_rewards = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
         
         r = jax.lax.cond(
@@ -2743,17 +2798,19 @@ class State(NamedTuple):
         action = action_handler.action
 
         reward = 0.0
-        # Components for W&B logging - per-agent reward breakdown
+        # Components for W&B logging - generalized to MAX_AGENTS per-agent rewards
+        MAX_AGENTS = 4
         components = {
-            "agent1_rewards": 0.0,  # Rewards earned by agent 1 
-            "agent2_rewards": 0.0,  # Rewards earned by agent 2
+            "agent_rewards": jnp.zeros((MAX_AGENTS,), dtype=jnp.float32),
             "terminal": 0.0,
             "trench": 0.0,
             "existence": 0.0,
+            "num_agents": self.agent.num_agents.astype(jnp.int32),
+            "agent_active": self.agent.agent_active.astype(jnp.int32),
         }
 
         # Action-dependent - route to appropriate reward function based on agent type
-        current_agent_type = self.agent.agent_state.agent_type[0]
+        current_agent_type = self._get_current_agent_state().agent_type[0]
         
         def get_tracked_rewards():
             return self._get_rewards_tracked(new_state, action)
@@ -2770,14 +2827,10 @@ class State(NamedTuple):
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
         reward += agent_reward
         
-        # Attribute rewards by agent TYPE, not position (since random starting swaps positions)
-        # This ensures consistent tracking regardless of which agent slot they occupy
-        is_excavator = current_agent_type == 0  # Tracked excavator
-        is_skidsteer = current_agent_type == 2  # Skid steer
-        
-        # Attribute rewards to agent types for consistent tracking
-        components["agent1_rewards"] = jax.lax.cond(is_excavator, lambda: agent_reward, lambda: 0.0)  # Excavator rewards
-        components["agent2_rewards"] = jax.lax.cond(is_skidsteer, lambda: agent_reward, lambda: 0.0)  # Skidsteer rewards
+        # Attribute per-step agent reward to the current agent index (active-first ordering in obs only)
+        def set_idx(vec):
+            return vec.at[self.agent.current_agent].set(agent_reward.astype(jnp.float32))
+        components["agent_rewards"] = set_idx(components["agent_rewards"])
 
         # Terminal reward based on completion percentage
         completion_percentage = self._calculate_completion_percentage(
@@ -2787,8 +2840,8 @@ class State(NamedTuple):
         done, done_task = self._is_done(
             new_state.world.action_map.map,
             self.world.target_map.map,
-            new_state.agent.agent_state_2.loaded,
-            new_state.agent.agent_state.loaded,
+            new_state._get_prev_agent_state().loaded,
+            new_state._get_current_agent_state().loaded,
         )
         
         terminal_r = jax.lax.cond(
@@ -2822,9 +2875,16 @@ class State(NamedTuple):
 
         # Constant scaling factor
         normalizer = self.env_cfg.rewards.normalizer
-        reward /= normalizer
-        # Normalize components to match total scale
-        components = {k: v / normalizer for k, v in components.items()}
+        reward = reward / normalizer
+        # Normalize only reward-bearing components; keep masks/counts as integers
+        components = {
+            "agent_rewards": components["agent_rewards"] / normalizer,
+            "terminal": components["terminal"] / normalizer,
+            "trench": components["trench"] / normalizer,
+            "existence": components["existence"] / normalizer,
+            "agent_active": components["agent_active"],
+            "num_agents": components["num_agents"],
+        }
 
         return reward, components
 
@@ -2936,10 +2996,10 @@ class State(NamedTuple):
         has_dump_requirements = jnp.any(target_map > 0)
         has_dig_requirements = jnp.any(target_map < 0)
         
-        # Check if there are skidsteer agents available
-        agent1_is_skidsteer = self.agent.agent_state.agent_type[0] == 2
-        agent2_is_skidsteer = self.agent.agent_state_2.agent_type[0] == 2
-        has_skidsteer_agent = agent1_is_skidsteer | agent2_is_skidsteer
+        # Check if there are skidsteer agents available (type 2) among active agents
+        # Check for any active skidsteer agents without dynamic tuple indexing
+        agent_types = jnp.array([st.agent_type[0] for st in self.agent.agent_states])
+        has_skidsteer_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 2))
         
         # Only use relocation logic if skidsteer agents are available
         is_relocation_task = jnp.logical_and(
@@ -2997,45 +3057,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # clock
         new_state = self._handle_clock()
         bool_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
         )
 
         # anticlock
         new_state = self._handle_anticlock()
         bool_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_base == self.agent.agent_state.angle_base
+            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state._get_prev_agent_state().angle_cabin
+            == self._get_current_agent_state().angle_cabin
         )
 
         # cabin clock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state._get_prev_agent_state().angle_cabin
+            == self._get_current_agent_state().angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
         )
 
         action_mask = jnp.array(
@@ -3056,45 +3116,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state.agent.agent_state.pos_base == self.agent.agent_state.pos_base
+            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # turn wheels left
         new_state = self._handle_turn_wheels_left()
         bool_turn_wheels_left = ~jnp.all(
-            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
+            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
         )
 
         # turn wheels right
         new_state = self._handle_turn_wheels_right()
         bool_turn_wheels_right = ~jnp.all(
-            new_state.agent.agent_state.wheel_angle == self.agent.agent_state.wheel_angle
+            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state._get_prev_agent_state().angle_cabin
+            == self._get_current_agent_state().angle_cabin
         )
 
         # cabin anticlock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state.agent.agent_state.angle_cabin
-            == self.agent.agent_state.angle_cabin
+            new_state._get_prev_agent_state().angle_cabin
+            == self._get_current_agent_state().angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state.agent.agent_state.loaded == self.agent.agent_state.loaded
+            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
         )
 
         action_mask = jnp.array(
@@ -3126,7 +3186,7 @@ class State(NamedTuple):
         num_actions = dummy_action.get_num_actions()
         
         # Check agent type from the current agent state
-        current_agent_type = self.agent.agent_state.agent_type[0]
+        current_agent_type = self._get_current_agent_state().agent_type[0]
         
         # Use JAX switch instead of if statements for JIT compatibility
         def get_tracked_mask():
@@ -3264,7 +3324,7 @@ class State(NamedTuple):
 
         # Holding dirt penalty
         reward += jax.lax.cond(
-            self.agent.agent_state.loaded[0] > 0,
+            self._get_current_agent_state().loaded[0] > 0,
             lambda: self.env_cfg.rewards.holding_dirt,
             lambda: 0.0)
 
@@ -3291,15 +3351,15 @@ class State(NamedTuple):
         reward += jax.lax.cond(
             (
                 ((action == TrackedActionType.FORWARD) | (action == TrackedActionType.BACKWARD))
-                & (self.agent.agent_state.loaded[0] > 0)
-                & (self.agent.agent_state.shovel_lifted[0] > 0)
+                & (self._get_current_agent_state().loaded[0] > 0)
+                & (self._get_current_agent_state().shovel_lifted[0] > 0)
                 & self._check_agent_moved_on_move_action(self, new_state)
             )
             |
             (
                 ((action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK))
-                & (self.agent.agent_state.loaded[0] > 0)
-                & (self.agent.agent_state.shovel_lifted[0] > 0)
+                & (self._get_current_agent_state().loaded[0] > 0)
+                & (self._get_current_agent_state().shovel_lifted[0] > 0)
                 & self._check_agent_turn_on_turn_action(self, new_state)
             ),
             lambda: self.env_cfg.rewards.skid_move_loaded_shovel_up,
@@ -3313,8 +3373,8 @@ class State(NamedTuple):
     ) -> tuple[Float, dict]:
         reward = 0.0
         # Sophisticated collision detection (matches single-agent)
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state_2.loaded[0]  # After swap in multi-agent
+        old_loaded = self._get_current_agent_state().loaded[0]
+        new_loaded = new_state._get_prev_agent_state().loaded[0]  # After swap in multi-agent
         loaded_increased = new_loaded > old_loaded
         no_movement = ~self._check_agent_moved_on_move_action(self, new_state)
         collision_applicable = jnp.logical_and(no_movement, jnp.logical_not(loaded_increased))
@@ -3327,22 +3387,22 @@ class State(NamedTuple):
 
         # Move while loaded
         reward += jax.lax.cond(
-            jnp.all(self.agent.agent_state.loaded > 0),
+            jnp.all(self._get_current_agent_state().loaded > 0),
             lambda: self.env_cfg.rewards.move_while_loaded,
             lambda: 0.0,
         )
 
         # Moving with turned wheels (not applicable to skidsteer, but keeping for consistency)
         reward += jax.lax.cond(
-            jnp.any(self.agent.agent_state.wheel_angle != 0),
+            jnp.any(self._get_current_agent_state().wheel_angle != 0),
             lambda: self.env_cfg.rewards.move_with_turned_wheels,
             lambda: 0.0,
         )
 
         # Check for backwards dumping reward
         # This happens when moving backwards with shovel down and loaded
-        old_loaded = self.agent.agent_state.loaded[0]
-        new_loaded = new_state.agent.agent_state_2.loaded[0]
+        old_loaded = self._get_current_agent_state().loaded[0]
+        new_loaded = new_state._get_prev_agent_state().loaded[0]
         reward += jax.lax.cond(
             (action == TrackedActionType.BACKWARD) & (old_loaded > new_loaded),
             lambda: self._handle_rewards_skid_steer_dump(new_state, action),
@@ -3467,7 +3527,10 @@ class State(NamedTuple):
         # 2. Undug tiles that still need to be relocated (target_map == -1)
         moved_dirt = jnp.sum(jnp.where(action_map > 0, action_map, 0))
         undug_dirt = jnp.sum(jnp.where(undug_areas, 1.0, 0.0))  # Count undug tiles as 1 unit each
-        loaded_dirt = self.agent.agent_state.loaded[0] + self.agent.agent_state_2.loaded[0]
+        # Sum dirt currently loaded across all active agents.
+        # Avoid dynamic tuple indexing by statically stacking per-agent loaded values.
+        loaded_per_agent = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+        loaded_dirt = jnp.sum(jnp.where(self.agent.agent_active, loaded_per_agent, 0))
         total_dirt = moved_dirt + undug_dirt + loaded_dirt
         
         # Calculate dirt volume in correct dump zones (sum of heights)
