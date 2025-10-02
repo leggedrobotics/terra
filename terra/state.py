@@ -2840,8 +2840,6 @@ class State(NamedTuple):
         done, done_task = self._is_done(
             new_state.world.action_map.map,
             self.world.target_map.map,
-            new_state._get_prev_agent_state().loaded,
-            new_state._get_current_agent_state().loaded,
         )
         
         terminal_r = jax.lax.cond(
@@ -2888,7 +2886,7 @@ class State(NamedTuple):
 
         return reward, components
 
-    def _is_done_task(self, action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array):
+    def _is_done_task(self, action_map: Array, target_map: Array):
         """
         Checks if the task is complete based on the type of task:
         1. Traditional tasks: target map requirements must be met
@@ -2926,8 +2924,10 @@ class State(NamedTuple):
             For relocation tasks: Check if all dirt is in designated dump zones (target_map > 0).
             Optimized version that early exits and avoids full map operations.
             """
-            # Early exit: if both agents are loaded, task cannot be complete
-            agents_loaded = (agent_loaded[0] > 0) | (agent_laoded_2[0] > 0)
+            # Early exit: if any active agent is loaded, task cannot be complete
+            loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+            active_dyn = self.agent.agent_active.astype(jnp.bool_)
+            agents_loaded = jnp.any(jnp.logical_and(active_dyn, loaded_per_agent_dyn > 0))
             
             def _do_expensive_check():
                 # Only do expensive operations when agents are unloaded
@@ -2983,10 +2983,12 @@ class State(NamedTuple):
             # This ensures the excavator has finished digging AND the skidsteer has moved all dirt
             cooperative_complete = jnp.logical_and(done_dig, done_dump)
             
-            # Additional check: ensure both agents are unloaded for cooperative completion
-            # This prevents premature termination when one agent still has dirt
-            agents_unloaded = (agent_loaded[0] == 0) & (agent_laoded_2[0] == 0)
-            cooperative_complete = jnp.logical_and(cooperative_complete, agents_unloaded)
+            # Additional check: ensure all active agents are unloaded for cooperative completion
+            # This prevents premature termination when any agent still has dirt
+            loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+            active_dyn = self.agent.agent_active.astype(jnp.bool_)
+            all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
+            cooperative_complete = jnp.logical_and(cooperative_complete, all_unloaded_dyn)
             
             return cooperative_complete
 
@@ -3040,16 +3042,17 @@ class State(NamedTuple):
             )
         )
         
-        # Task is complete when requirements are met AND both agents are unloaded
-        done_unload = agent_loaded[0] == 0
-        done_unload2 = agent_laoded_2[0] == 0
-        done_task = task_requirements_met & done_unload & done_unload2
+        # Task is complete when requirements are met AND all active agents are unloaded
+        loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+        active_dyn = self.agent.agent_active.astype(jnp.bool_)
+        all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
+        done_task = jnp.logical_and(task_requirements_met, all_unloaded_dyn)
         return done_task
 
     def _is_done(
-        self, action_map: Array, target_map: Array, agent_loaded: Array , agent_laoded_2: Array
+        self, action_map: Array, target_map: Array
     ) -> tuple[jnp.bool_, jnp.bool_]:
-        done_task = self._is_done_task(action_map, target_map, agent_loaded, agent_laoded_2)
+        done_task = self._is_done_task(action_map, target_map)
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 

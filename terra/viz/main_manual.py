@@ -122,7 +122,9 @@ def main():
                         _rng,
                     )
                     # DEBUG: Show reward with agent type and reward function used
-                    agent_type = timestep.state.agent.agent_state.agent_type[0].item()  # Convert JAX array to Python int
+                    # Get the current active agent (index 0 in the reordered observation)
+                    current_agent_state = timestep.state.agent.agent_states[timestep.state.agent.current_agent]
+                    agent_type = current_agent_state.agent_type[0].item()  # Convert JAX array to Python int
                     reward_value = timestep.reward.item()
                     action_num = action.action[0].item()  # Convert JAX array to Python int
                     
@@ -159,11 +161,17 @@ def main():
                     print(f"🌍 TOTAL DIRT: {total_dirt}")
                     
                     # Show agent loading state for context
-                    agent_loaded = timestep.state.agent.agent_state.loaded[0]
-                    shovel_lifted = timestep.state.agent.agent_state.shovel_lifted[0]
+                    agent_loaded = current_agent_state.loaded[0]
+                    shovel_lifted = current_agent_state.shovel_lifted[0]
                     total_dirt_with_agent = total_dirt + agent_loaded
                     print(f"🚜 AGENT: Loaded={agent_loaded}, Shovel={'UP' if shovel_lifted else 'DOWN'}")
                     print(f"🧮 TOTAL DIRT (map + agent): {total_dirt_with_agent}")
+                    
+                    # Show multi-agent debug info
+                    num_agents = timestep.state.agent.num_agents
+                    current_agent_idx = timestep.state.agent.current_agent
+                    agent_active = timestep.state.agent.agent_active
+                    print(f"🤖 MULTI-AGENT: Current={current_agent_idx}, Total={num_agents}, Active={agent_active}")
                     print("-" * 40)
 
             elif event.type == QUIT:

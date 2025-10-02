@@ -70,8 +70,45 @@ class TraversabilityMaskWrapper:
 
         padding_mask = state.world.padding_mask.map
         tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
-        # For now, just use the current agent's cone for interaction mask
-        interaction_mask = ~(~state._build_dig_dump_cone().reshape(-1) * ~state._build_dig_dump_cone().reshape(-1)).reshape(map_width, map_height)
+        # Generate interaction mask for all active agents
+        def get_agent_interaction_mask(agent_idx):
+            # Get agent state using jax.lax.switch
+            agent_state = jax.lax.switch(
+                agent_idx,
+                [
+                    lambda: state.agent.agent_states[0],
+                    lambda: state.agent.agent_states[1],
+                    lambda: state.agent.agent_states[2],
+                    lambda: state.agent.agent_states[3],
+                ]
+            )
+            # Get agent active status
+            agent_active = jax.lax.switch(
+                agent_idx,
+                [
+                    lambda: state.agent.agent_active[0],
+                    lambda: state.agent.agent_active[1],
+                    lambda: state.agent.agent_active[2],
+                    lambda: state.agent.agent_active[3],
+                ]
+            )
+            
+            # Only generate cone for active agents
+            def generate_cone():
+                # Temporarily set current agent to this agent to generate its cone
+                temp_state = state._replace(agent=state.agent._replace(current_agent=agent_idx))
+                return temp_state._build_dig_dump_cone()
+            
+            def no_cone():
+                return jnp.zeros((map_width * map_height,), dtype=jnp.bool_)
+            
+            cone = jax.lax.cond(agent_active, generate_cone, no_cone)
+            return cone.reshape(map_width, map_height)
+        
+        # Generate interaction masks for all 4 agents
+        agent_interaction_masks = jax.vmap(get_agent_interaction_mask)(jnp.arange(4))
+        # Combine all agent interaction masks
+        interaction_mask = jnp.any(agent_interaction_masks, axis=0)
 
         return state._replace(
             # increase number of steps as well
