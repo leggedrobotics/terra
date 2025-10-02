@@ -23,6 +23,7 @@ COLORS = {
     2: "#000000",  # obstacle
     1: "#002B5B",  # action map dump
     -1: "#26bd6c",  # action map dug
+    6: "#ff6b6b",  # interaction mask (dig/dump cones) - bright red
     "agent_body": (0, 43, 91),  # Blue for tracked agents
     "agent_cabin": {
         "loaded": (165, 115, 75),

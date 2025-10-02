@@ -74,7 +74,7 @@ class World:
         
         return hex_color
 
-    def update(self, action_map, target_map, obstacles_mask, dumpability_mask):
+    def update(self, action_map, target_map, obstacles_mask, dumpability_mask, interaction_mask=None):
         action_map = np.asarray(action_map, dtype=np.int32)
         action_map = action_map.swapaxes(0, 1)
         
@@ -86,6 +86,9 @@ class World:
         if dumpability_mask is not None:
             dumpability_mask = np.asarray(dumpability_mask, dtype=np.bool_)
             dumpability_mask = dumpability_mask.swapaxes(0, 1)
+        if interaction_mask is not None:
+            interaction_mask = np.asarray(interaction_mask, dtype=np.bool_)
+            interaction_mask = interaction_mask.swapaxes(0, 1)
 
         # Find max dirt amount for gradient normalization (per-frame)
         max_dirt_amount = np.max(action_map[action_map > 0]) if np.any(action_map > 0) else 1
@@ -122,6 +125,12 @@ class World:
                 if dirt_amount < 0:
                     # action map dug
                     tile = -1
+                
+                # Add interaction mask visualization (dig/dump cones)
+                if interaction_mask is not None and interaction_mask[grid_x, grid_y]:
+                    # Overlay interaction mask with a semi-transparent color
+                    # Use a distinct color to show dig/dump areas
+                    tile = 6  # Special tile for interaction mask
 
                 world_tile = self.grid_to_world(grid_x, grid_y, tile)
                 world[grid_x].append(world_tile)

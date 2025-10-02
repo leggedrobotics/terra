@@ -123,7 +123,8 @@ def main():
                     )
                     # DEBUG: Show reward with agent type and reward function used
                     # Get the current active agent (index 0 in the reordered observation)
-                    current_agent_state = timestep.state.agent.agent_states[timestep.state.agent.current_agent]
+                    current_agent_idx = timestep.state.agent.current_agent.item()  # Convert JAX array to Python int
+                    current_agent_state = timestep.state.agent.agent_states[current_agent_idx]
                     agent_type = current_agent_state.agent_type[0].item()  # Convert JAX array to Python int
                     reward_value = timestep.reward.item()
                     action_num = action.action[0].item()  # Convert JAX array to Python int
@@ -168,8 +169,7 @@ def main():
                     print(f"🧮 TOTAL DIRT (map + agent): {total_dirt_with_agent}")
                     
                     # Show multi-agent debug info
-                    num_agents = timestep.state.agent.num_agents
-                    current_agent_idx = timestep.state.agent.current_agent
+                    num_agents = timestep.state.agent.num_agents.item()  # Convert JAX array to Python int
                     agent_active = timestep.state.agent.agent_active
                     print(f"🤖 MULTI-AGENT: Current={current_agent_idx}, Total={num_agents}, Active={agent_active}")
                     print("-" * 40)

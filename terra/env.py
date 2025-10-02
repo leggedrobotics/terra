@@ -174,6 +174,7 @@ class TerraEnv(NamedTuple):
             target_grid=obs["target_map"],
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
+            interaction_mask=obs["interaction_mask"],  # [H, W] - dig/dump cones for all active agents
             agent_states=obs["agent_states"],  # [MAX_AGENTS, 8] with active agent at index 0
             agent_active=obs["agent_active"],  # [MAX_AGENTS] mask
             num_agents=obs["num_agents"],      # scalar

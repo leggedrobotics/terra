@@ -101,6 +101,7 @@ class Game:
         target_grid,
         padding_mask,
         dumpability_mask,
+        interaction_mask,  # [H, W] - dig/dump cones for all active agents
         agent_states,  # [MAX_AGENTS, 8] - all agent states with active agent at index 0
         agent_active,  # [MAX_AGENTS] - which agents are active
         num_agents,    # scalar - number of active agents
@@ -113,6 +114,7 @@ class Game:
             target_grid,
             padding_mask,
             dumpability_mask,
+            interaction_mask,
             agent_states,
             agent_active,
             num_agents,
@@ -151,6 +153,7 @@ class Game:
         target_grid,
         padding_mask,
         dumpability_mask,
+        interaction_mask,  # [H, W] - dig/dump cones for all active agents
         agent_states,  # [MAX_AGENTS, 8] - all agent states with active agent at index 0
         agent_active,  # [MAX_AGENTS] - which agents are active
         num_agents,    # scalar - number of active agents
@@ -163,12 +166,13 @@ class Game:
             target_grid,
             padding_mask,
             dumpability_mask,
+            interaction_mask,  # [H, W] - dig/dump cones for all active agents
             agent_states,  # [MAX_AGENTS, 8] for this environment
             agent_active,  # [MAX_AGENTS] for this environment
             num_agents,    # scalar for this environment
             target_tiles=None,
         ):
-            world.update(active_grid, target_grid, padding_mask, dumpability_mask)
+            world.update(active_grid, target_grid, padding_mask, dumpability_mask, interaction_mask)
             
             # Update all agents (up to MAX_AGENTS)
             MAX_AGENTS = 4
@@ -192,13 +196,14 @@ class Game:
             tg = target_grid[i]
             pm = padding_mask[i]
             dm = dumpability_mask[i]
+            im = interaction_mask[i]  # [H, W] - dig/dump cones for all active agents
             ast = agent_states[i]  # [MAX_AGENTS, 8] for this environment
             aac = agent_active[i]  # [MAX_AGENTS] for this environment
             nag = num_agents[i] if hasattr(num_agents, '__len__') else num_agents  # scalar for this environment
             tt = None if target_tiles is None else target_tiles[i]
             thread = threading.Thread(
                 target=update_world_agent,
-                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, ast, aac, nag, tt),
+                args=(self.worlds[i], self.agents[i], ag, tg, pm, dm, im, ast, aac, nag, tt),
             )
             thread.start()
             threads.append(thread)
