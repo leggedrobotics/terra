@@ -470,16 +470,32 @@ class State(NamedTuple):
         # Determine the occupancy mask for a grid of size map_width x map_height.
         polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
 
-        # Use last active agent for collision exclusion
-        prev = self._get_prev_agent_state()
-        agent_2_corners_xy = self._get_agent_corners(
-            prev.pos_base,
-            base_orientation=prev.angle_base,
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
-        )
+        # Build occupancy mask for all OTHER active agents (exclude current), or zero mask if single agent
+        def _mask_for_agent_idx(i):
+            st = self.agent.agent_states[i]
+            corners_xy = self._get_agent_corners(
+                st.pos_base,
+                base_orientation=st.angle_base,
+                agent_width=self.env_cfg.agent.width,
+                agent_height=self.env_cfg.agent.height,
+            )
+            return compute_polygon_mask(corners_xy, map_width, map_height)
 
-        polygon_mask_2 = compute_polygon_mask(agent_2_corners_xy, map_width, map_height)
+        def _zero_mask():
+            return jnp.zeros((map_width, map_height), dtype=jnp.bool_)
+
+        current_idx = self.agent.current_agent
+
+        def _maybe_mask(i):
+            include = jnp.logical_and(self.agent.agent_active[i] == 1, i != current_idx)
+            return jax.lax.cond(include, lambda: _mask_for_agent_idx(i), _zero_mask)
+
+        mask0 = _maybe_mask(0)
+        mask1 = _maybe_mask(1)
+        mask2 = _maybe_mask(2)
+        mask3 = _maybe_mask(3)
+        # Combine masks (int masks 0/1)
+        polygon_mask_2 = jnp.maximum(jnp.maximum(mask0, mask1), jnp.maximum(mask2, mask3))
 
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
@@ -2414,7 +2430,7 @@ class State(NamedTuple):
 
 
             #progress_clamped = progress_clamped * potential_multiplier * scale
-            progress_clamped = progress_clamped * potential_multiplier * 2
+            progress_clamped = progress_clamped * potential_multiplier * 1
             #progress_clamped = progress_clamped * potential_multiplier
 
             def _success_reward():
