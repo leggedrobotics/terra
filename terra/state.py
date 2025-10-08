@@ -482,7 +482,7 @@ class State(NamedTuple):
             return compute_polygon_mask(corners_xy, map_width, map_height)
 
         def _zero_mask():
-            return jnp.zeros((map_width, map_height), dtype=jnp.bool_)
+            return jnp.zeros((map_height, map_width), dtype=jnp.bool_)
 
         current_idx = self.agent.current_agent
 
@@ -504,21 +504,19 @@ class State(NamedTuple):
             self.world.action_map.map, self.world.padding_mask.map
             
         )
-        
-        
-        dig_mask = self._build_dig_dump_cone().reshape(map_width, map_height)
-        dig_mask_2 = self._build_dig_dump_cone_2().reshape(map_width, map_height)
+        # Note: Interaction cones are not used for movement validity; collisions are handled via other agents' polygons
+        # DIAG: disable other-agent blocking to test crowding hypothesis
+        # traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
 
-        #traversability_mask = jnp.where(dig_mask_2, 1, traversability_mask)
+        
+        #traversability_mask = traversability_mask
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
-        #traversability_mask = jnp.where( dig_mask,1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         # Mask out the cells where the agent is located.
         # jnp.where(polygon_mask_2, 1 ,traversability_mask)
-        #valid_traversability_2 = jnp.all(jnp.where(polygon_mask_2,dig_mask, 0) == 0)    
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
         #jax.debug.print("Valid bounds: {valid_bounds}, Valid traversability: {valid_traversability}",valid_bounds=valid_bounds, valid_traversability=valid_traversability)
-        return jnp.logical_and(jnp.logical_and(valid_bounds, valid_traversability),valid_traversability)
+        return jnp.logical_and(valid_bounds, valid_traversability)
 
     @staticmethod
     def _valid_move_to_valid_mask(valid_move: jnp.bool_) -> Array:
@@ -1159,14 +1157,6 @@ class State(NamedTuple):
     def _get_base_angle_rad(self) -> Float:
         cur = self._get_current_agent_state()
         return angle_idx_to_rad(cur.angle_base, self.env_cfg.agent.angles_base)
-    
-    def _get_cabin_angle_rad_2(self) -> Float:
-        prev = self._get_prev_agent_state()
-        return angle_idx_to_rad(prev.angle_cabin, self.env_cfg.agent.angles_cabin)
-
-    def _get_base_angle_rad_2(self) -> Float:
-        prev = self._get_prev_agent_state()
-        return angle_idx_to_rad(prev.angle_base, self.env_cfg.agent.angles_base)
 
     def _get_arm_angle_rad(self) -> Float:
         base_angle = self._get_base_angle_rad()
@@ -1174,10 +1164,7 @@ class State(NamedTuple):
         return wrap_angle_rad(base_angle + cabin_angle)
 
 
-    def _get_arm_angle_rad_2(self) -> Float:
-        base_angle = self._get_base_angle_rad_2()
-        cabin_angle = self._get_cabin_angle_rad_2()
-        return wrap_angle_rad(base_angle + cabin_angle)
+    
     
     def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
         """
@@ -1483,34 +1470,7 @@ class State(NamedTuple):
             lambda: action_map  # Return unchanged map when soil mechanics disabled
         )
 
-    def _get_map_local_and_cyl_coords_2(self):
-        """
-        Returns:
-            - map_cyl_coords: (2, width*height) map with [r, theta] rows
-            - map_local_coords_base: (2, width*height) map with [x, y] rows
-        """
-        prev = self._get_prev_agent_state()
-        current_pos_idx = self._get_current_pos_vector_idx(
-            pos_base=prev.pos_base,
-            map_height=self.env_cfg.maps.edge_length_px,
-        )
-        map_global_coords = self._map_to_flattened_global_coords(
-            self.world.width, self.world.height, self.env_cfg.tile_size
-        )
-        current_pos = self._get_current_pos_from_flattened_map(
-            map_global_coords, current_pos_idx
-        )
-        current_arm_angle = self._get_arm_angle_rad_2()
-
-        # Local coordinates including the cabin rotation
-        current_state_arm = jnp.hstack((current_pos, current_arm_angle))
-        map_local_coords_arm = apply_rot_transl(current_state_arm, map_global_coords)
-        map_cyl_coords = apply_local_cartesian_to_cyl(map_local_coords_arm)
-
-        # Local coordinates excluding the cabin rotation
-        current_state_base = jnp.hstack((current_pos, self._get_base_angle_rad_2()))
-        map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
-        return map_cyl_coords, map_local_coords_base
+    # Removed unused _get_map_local_and_cyl_coords_2
     
     def _get_map_local_and_cyl_coords(self):
         """
@@ -1743,30 +1703,7 @@ class State(NamedTuple):
         )
     
 
-    def _build_dig_dump_cone_2(self) -> Array:
-        """
-        Returns the masked workspace cone in cartesian coords. Every tile in the cone is included as +1.
-        Uses different workspace shapes for different agent types:
-        - Excavator/Wheeled: Cylindrical cone (original parameters)
-        - Skid Steer: Cylindrical cone (closer, smaller parameters)
-        """
-        current_agent_type = self._get_prev_agent_state().agent_type[0]
-        
-        # Get coordinates for cylindrical approach (used by both agent types)
-        map_cyl_coords, map_local_coords_base = self._get_map_local_and_cyl_coords_2()
-        
-        def _get_excavator_cone():
-            return self._get_dig_dump_mask(map_cyl_coords, map_local_coords_base)
-        
-        def _get_skidsteer_cone():
-            return self._get_dig_dump_mask_skidsteer(map_cyl_coords, map_local_coords_base)
-        
-        # Use JAX conditional to select workspace type based on agent type
-        return jax.lax.cond(
-            current_agent_type == 2,  # Skid steer
-            _get_skidsteer_cone,
-            _get_excavator_cone       # Default for excavator (0) and wheeled (1)
-        )
+    # Removed unused _build_dig_dump_cone_2
 
     def _exclude_dig_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
@@ -2387,78 +2324,78 @@ class State(NamedTuple):
         is_excavator = cur.agent_type[0] == 0
         is_skidsteer = cur.agent_type[0] == 2
         
-        def _excavator_dump_rewards():
-            # Telescoping relocation reward: use progress since lift with effective baseline
-            baseline_before = cur.carry_baseline_potential
-            after_lift = cur.carry_potential_after_lift
-            current_potential = self._compute_relocation_potential(self.world.action_map.map)
-            new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
-            # Use same effective baseline logic as in dump gating
-            baseline_eff = baseline_before + (current_potential - after_lift)
-            effective_progress = (baseline_eff - new_potential)
-            cap = jnp.float32(200.0)
-            progress_clamped = jnp.clip(effective_progress, -cap, cap)
-            # Dump success/fail
-            dump_failed = jnp.allclose(
-                cur.loaded, new_state._get_prev_agent_state().loaded
-            )
-
-            
-            # jax.debug.print("[DEBUG] Potential Rewards:")
-            # jax.debug.print("  potential (before lift): {}", baseline_before)
-            # jax.debug.print("  potential (after lift): {}", after_lift)
-            # jax.debug.print("  potential (new after dump): {}", new_potential)
-            # jax.debug.print("  effective progress: {}", effective_progress)
-            # jax.debug.print("  progress clamped: {}", progress_clamped) 
-
-            is_moving_dumped_dirt = self.agent.moving_dumped_dirt
-            potential_multiplier = jax.lax.cond(
-                is_skidsteer,
-                lambda: 1.0,  # Skidsteer gets full reward for all dirt
-                lambda: jax.lax.cond(
-                    is_moving_dumped_dirt,
-                    lambda: 0.1,  # Excavator gets half reward for relocating dumped dirt
-                    lambda: 1.0   # Excavator gets full reward for relocating newly dug dirt
-                )
-            )
-            # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
-            avg_target_tiles = jnp.float32(170.0)
-            # Use only dig target tiles (foundations): target_map < 0
-            dig_target_tiles = jnp.sum(self.world.target_map.map < 0)
-            scale_raw = avg_target_tiles / jnp.maximum(jnp.float32(1.0), dig_target_tiles.astype(jnp.float32))
-            scale = jnp.clip(scale_raw, jnp.float32(0.8), jnp.float32(2.5))
-
-
-            #progress_clamped = progress_clamped * potential_multiplier * scale
-            progress_clamped = progress_clamped * potential_multiplier * 1
-            #progress_clamped = progress_clamped * potential_multiplier
-
-            def _success_reward():
-                dump_progress = self._get_action_map_dump_progress(
-                    self.world.action_map.map,
-                    new_state.world.action_map.map,
-                    self.world.target_map.map,
-                )
-                # Dump bonus only for skidsteers (relocation specialists)
-                
-                dump_bonus = jax.lax.cond(
-                    is_skidsteer,
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5,   # Strong relocation specialization
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5 * potential_multiplier # Small efficiency bonus for direct dumps
-                )
-                meaningful_threshold = jnp.float32(0.1)
-                
-                return jax.lax.cond(
-                    progress_clamped > meaningful_threshold,
-                    lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
-                    lambda: -jnp.float32(1.0),
-                )
-            def _failed_dump():
-                return self.env_cfg.rewards.dump_wrong
-            return jax.lax.cond(dump_failed, _failed_dump, _success_reward)
         
-        # Use potential-based dump rewards for all agent types (including skid steer)
-        return _excavator_dump_rewards()
+        # Telescoping relocation reward: use progress since lift with effective baseline
+        baseline_before = cur.carry_baseline_potential
+        after_lift = cur.carry_potential_after_lift
+        current_potential = self._compute_relocation_potential(self.world.action_map.map)
+        new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
+        # Use same effective baseline logic as in dump gating
+        baseline_eff = baseline_before + (current_potential - after_lift)
+        effective_progress = (baseline_eff - new_potential)
+        cap = jnp.float32(200.0)
+        progress_clamped = jnp.clip(effective_progress, -cap, cap)
+        # Dump success/fail
+        dump_failed = jnp.allclose(
+            cur.loaded, new_state._get_prev_agent_state().loaded
+        )
+
+        
+        # jax.debug.print("[DEBUG] Potential Rewards:")
+        # jax.debug.print("  potential (before lift): {}", baseline_before)
+        # jax.debug.print("  potential (after lift): {}", after_lift)
+        # jax.debug.print("  potential (new after dump): {}", new_potential)
+        # jax.debug.print("  effective progress: {}", effective_progress)
+        # jax.debug.print("  progress clamped: {}", progress_clamped) 
+
+        is_moving_dumped_dirt = self.agent.moving_dumped_dirt
+        potential_multiplier = jax.lax.cond(
+            is_skidsteer,
+            lambda: 1.0,  # Skidsteer gets full reward for all dirt
+            lambda: jax.lax.cond(
+                is_moving_dumped_dirt,
+                lambda: 0.1,  # Excavator gets 0.1x reward for relocating dumped dirt
+                lambda: 1.0   # Excavator gets full reward for relocating newly dug dirt
+            )
+        )
+        # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
+        avg_target_tiles = jnp.float32(170.0)
+        # Use only dig target tiles (foundations): target_map < 0
+        dig_target_tiles = jnp.sum(self.world.target_map.map < 0)
+        scale_raw = avg_target_tiles / jnp.maximum(jnp.float32(1.0), dig_target_tiles.astype(jnp.float32))
+        scale = jnp.clip(scale_raw, jnp.float32(2.0), jnp.float32(5.0)) / 2
+
+
+        progress_clamped = progress_clamped * potential_multiplier * scale #*2
+        #progress_clamped = progress_clamped * potential_multiplier * 1
+        #progress_clamped = progress_clamped * potential_multiplier
+
+        def _success_reward():
+            dump_progress = self._get_action_map_dump_progress(
+                self.world.action_map.map,
+                new_state.world.action_map.map,
+                self.world.target_map.map,
+            )
+            # Dump bonus only for skidsteers (relocation specialists)
+            
+            dump_bonus = jax.lax.cond(
+                is_skidsteer,
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5,   # Strong relocation specialization
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5 * potential_multiplier # Small efficiency bonus for direct dumps
+            )
+            meaningful_threshold = jnp.float32(0.1)
+            
+            return jax.lax.cond(
+                progress_clamped > meaningful_threshold,
+                lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
+                lambda: -jnp.float32(1.0),
+            )
+        def _failed_dump():
+            return self.env_cfg.rewards.dump_wrong
+
+
+        return jax.lax.cond(dump_failed, _failed_dump, _success_reward)
+        
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
@@ -2525,25 +2462,25 @@ class State(NamedTuple):
         dirt_gained = new_loaded - old_loaded
 
         # Only check for penalty if dirt was gained
-        def _reward_or_penalty():
-            # Use the existing progress function to check if dump zone dirt decreased
-            progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-            # If progress is negative, dirt was removed from a dump zone
-            # return jax.lax.cond(
-            #     progress < 0,
-            #     lambda: self.env_cfg.rewards.skid_auto_load_from_dumpzone_penalty,
-            #     lambda: self.env_cfg.rewards.skid_auto_load,
-            # )
+        # def _reward_or_penalty():
+        #     # Use the existing progress function to check if dump zone dirt decreased
+        #     progress = self._get_action_map_dump_progress(
+        #         self.world.action_map.map,
+        #         new_state.world.action_map.map,
+        #         self.world.target_map.map,
+        #     )
+        #     # If progress is negative, dirt was removed from a dump zone
+        #     # return jax.lax.cond(
+        #     #     progress < 0,
+        #     #     lambda: self.env_cfg.rewards.skid_auto_load_from_dumpzone_penalty,
+        #     #     lambda: self.env_cfg.rewards.skid_auto_load,
+        #     # )
 
-            return jax.lax.cond(
-                progress < 0,
-                lambda: self._calculate_dump_zone_reward(progress, cur.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
-                lambda: self.env_cfg.rewards.skid_auto_load,
-            )
+        #     return jax.lax.cond(
+        #         progress < 0,
+        #         lambda: self._calculate_dump_zone_reward(progress, cur.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
+        #         lambda: self.env_cfg.rewards.skid_auto_load,
+        #     )
 
 
             # Penalty commented out:
@@ -2567,49 +2504,49 @@ class State(NamedTuple):
         new_loaded = prev_new.loaded[0]
         dirt_dumped = old_loaded - new_loaded
         
-        def _successful_dump():
-            # Check if dumped in correct areas (target map > 0)
-            action_map_dump_progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
+        # def _successful_dump():
+        #     # Check if dumped in correct areas (target map > 0)
+        #     action_map_dump_progress = self._get_action_map_dump_progress(
+        #         self.world.action_map.map,
+        #         new_state.world.action_map.map,
+        #         self.world.target_map.map,
+        #     )
             
-            # EFFICIENCY FIX: Calculate efficiency as ratio of correct placement
-            # This eliminates the edge-dumping exploit by rewarding based on percentage
-            def _calculate_efficiency_reward():
-                # Give reward based on absolute amount of dirt moved, not percentage
+        #     # EFFICIENCY FIX: Calculate efficiency as ratio of correct placement
+        #     # This eliminates the edge-dumping exploit by rewarding based on percentage
+        #     def _calculate_efficiency_reward():
+        #         # Give reward based on absolute amount of dirt moved, not percentage
                 
                 
-                # min_reward = 15.0
-                # max_reward = self.env_cfg.rewards.skid_dump_correct
+        #         # min_reward = 15.0
+        #         # max_reward = self.env_cfg.rewards.skid_dump_correct
                 
-                # # Scale reward based on absolute dirt amount moved
-                # # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
-                # min_dirt = 1.0
-                # max_dirt = 20.0
+        #         # # Scale reward based on absolute dirt amount moved
+        #         # # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
+        #         # min_dirt = 1.0
+        #         # max_dirt = 20.0
                 
-                # # Clamp dirt amount to reasonable range
-                # clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
+        #         # # Clamp dirt amount to reasonable range
+        #         # clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
                 
-                # # Linear interpolation between min and max reward based on dirt amount
-                # reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-                # scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
+        #         # # Linear interpolation between min and max reward based on dirt amount
+        #         # reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
+        #         # scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
                 
-                # return scaled_reward
-                return self._calculate_dump_zone_reward(action_map_dump_progress, cur.loaded[0])
+        #         # return scaled_reward
+        #         return self._calculate_dump_zone_reward(action_map_dump_progress, cur.loaded[0])
             
             
-            def _wrong_dump_penalty():
-                # If no progress in dump zones, give penalty proportional to amount dumped
-                return self.env_cfg.rewards.skid_dump_wrong
+        #     def _wrong_dump_penalty():
+        #         # If no progress in dump zones, give penalty proportional to amount dumped
+        #         return self.env_cfg.rewards.skid_dump_wrong
             
-            # Reward based on correct placement efficiency
-            return jax.lax.cond(
-                action_map_dump_progress > 0,
-                _calculate_efficiency_reward,
-                _wrong_dump_penalty
-            )
+        #     # Reward based on correct placement efficiency
+        #     return jax.lax.cond(
+        #         action_map_dump_progress > 0,
+        #         _calculate_efficiency_reward,
+        #         _wrong_dump_penalty
+        #     )
         
         def _failed_dump():
             # Tried to dump but failed (no dirt unloaded)
@@ -2751,13 +2688,7 @@ class State(NamedTuple):
             trench_axes = self.world.trench_axes
             trench_type = self.world.trench_type
 
-            # 1. Distance reward
-            d_tiles = get_min_distance_point_to_lines(agent_pos, trench_axes, trench_type)
-            d_tiles = jax.lax.cond(d_tiles > self.env_cfg.agent.width / 2, lambda: d_tiles, lambda: 0.0)
-            d_meters = d_tiles * self.env_cfg.tile_size
-            proximity_reward = d_meters * self.env_cfg.distance_coefficient
-
-            # 2. Alignment reward
+            # Find the closest trench for both distance and alignment calculations
             def find_closest_trench_idx(i, state):
                 dist, best_idx = state
                 curr_dist = get_distance_point_to_line(agent_pos, trench_axes[i])
@@ -2765,12 +2696,19 @@ class State(NamedTuple):
                 new_dist = jnp.minimum(dist, curr_dist)
                 return (new_dist, new_best_idx)
 
-            _, closest_idx = jax.lax.fori_loop(
+            d_tiles, closest_idx = jax.lax.fori_loop(
                 0, trench_type,
                 find_closest_trench_idx,
-                (jnp.array(9999.0), jnp.array(0))
+                (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0))
             )
 
+            # 1. Distance reward - only for closest trench
+            d_tiles = jax.lax.cond(d_tiles > self.env_cfg.agent.width / 2, lambda: d_tiles, lambda: jnp.array(0.0, dtype=jnp.float32))
+            d_meters = d_tiles * self.env_cfg.tile_size
+            
+            proximity_reward = d_meters * self.env_cfg.distance_coefficient
+
+            # 2. Alignment reward - only for closest trench
             # Get trench line equation [a, b, c] for ax + by = c
             closest_trench = trench_axes[closest_idx]
 
@@ -2797,18 +2735,9 @@ class State(NamedTuple):
             # Explicitly ensure the final result is scalar before returning
             return jnp.squeeze(total_reward)
 
-        # Only apply trench rewards to excavators (type 0), not skidsteers (type 2)
-        # This encourages role specialization: excavators focus on trenches, skidsteers on relocation
-        cur = self._get_current_agent_state()
-        is_excavator = cur.agent_type[0] == 0
-        should_apply_trench_rewards = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
-        
-        r = jax.lax.cond(
-            should_apply_trench_rewards,
-            _get_trench_reward,
-            lambda: 0.0,
-        )
-        return r
+        # Calculate trench reward for the current agent
+        # Agent type check is now handled in the main reward function
+        return _get_trench_reward()
 
     def _get_reward(self, new_state: "State", action_handler: Action):
         action = action_handler.action
@@ -2863,6 +2792,13 @@ class State(NamedTuple):
             lambda: self._calculate_terminal_reward(completion_percentage),
             lambda: 0.0,
         )
+        # Divide terminal reward by number of active agents to share credit fairly
+        active_count_f32 = jnp.sum(self.agent.agent_active.astype(jnp.float32))
+        denom = jnp.maximum(active_count_f32, jnp.float32(1.0))
+        #terminal_r = terminal_r * 2 / denom
+        terminal_r = terminal_r * 2 / denom
+
+
         # terminal_r = jax.lax.cond(
         #     done_task,
         #     lambda: self.env_cfg.rewards.terminal,
@@ -2877,10 +2813,25 @@ class State(NamedTuple):
         #components["agent1_rewards"] = components["agent1_rewards"] + terminal_r
         #components["agent2_rewards"] = components["agent2_rewards"] + terminal_r
 
-        # Apply trench rewards
-        trench_r = self._get_trench_specific_rewards()
+        # Apply trench rewards - only for excavators (type 0)
+        # Each excavator gets its own trench reward based on its position
+        current_agent_type = self._get_current_agent_state().agent_type[0]
+        is_excavator = current_agent_type == 0
+        should_apply_trench = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
+        
+        trench_r = jax.lax.cond(
+            should_apply_trench,
+            self._get_trench_specific_rewards,
+            lambda: 0.0,
+        )
         reward += trench_r
-        components["trench"] = trench_r
+        
+        # Only log trench reward when it's an excavator's turn to avoid noise in plots
+        components["trench"] = jax.lax.cond(
+            is_excavator,
+            lambda: trench_r,
+            lambda: jnp.nan,  # Use NaN for skidsteer turns so they don't appear in plots
+        )
 
         # Existence
         existence_r = self.env_cfg.rewards.existence
@@ -2909,7 +2860,7 @@ class State(NamedTuple):
         2. Relocation tasks: all dirt must be in dump zones (no dirt in neutral areas)
         3. Cooperative tasks: excavator digs, skidsteer moves dirt - both must be complete
 
-        On top of that, both agents should not be loaded.
+        On top of that, all agents should not be loaded.
         """
 
         def _check_done_dump():
@@ -2949,6 +2900,15 @@ class State(NamedTuple):
                 # Only do expensive operations when agents are unloaded
                 # Get designated dump zones from target_map (target_map > 0)
                 designated_dump_zones = target_map > 0
+                # Create 1-tile buffer around dump zones using morphological dilation (3x3 kernel)
+                kernel_3x3 = jnp.ones((3, 3), dtype=jnp.float32)
+                dump_zones_with_buffer = jax.scipy.signal.correlate2d(
+                    designated_dump_zones.astype(jnp.float32),
+                    kernel_3x3,
+                    mode='same',
+                    boundary='fill',
+                    fillvalue=0.0
+                ) > 0
                 
                 # Check total dirt in environment
                 total_dirt = jnp.sum(action_map > 0)
@@ -2956,12 +2916,11 @@ class State(NamedTuple):
                 # If there's no dirt at all, something is wrong - don't terminate
                 # (Relocation tasks should always have dirt to move)
                 def _check_dirt_distribution():
-                    # Find dirt locations outside designated dump zones
-                    # dirt_outside_designated = (action_map > 0) & (target_map <= 0)
-                    dirt_outside_designated = jnp.logical_and(action_map > 0, jnp.logical_not(designated_dump_zones))
+                    # Find dirt locations outside the buffered dump zones
+                    dirt_outside_buffered = jnp.logical_and(action_map > 0, jnp.logical_not(dump_zones_with_buffer))
                     
-                    # Task complete if NO dirt exists outside designated dump zones
-                    return jnp.logical_not(jnp.any(dirt_outside_designated))
+                    # Task complete if NO dirt exists outside buffered dump zones
+                    return jnp.logical_not(jnp.any(dirt_outside_buffered))
                 
                 def _no_dirt_case():
                     # If no dirt exists, don't terminate (likely environment initialization issue)
@@ -3228,10 +3187,30 @@ class State(NamedTuple):
         return action_mask
 
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
+        # Recompute target_tiles as union of cones for all active agents
+        map_width = self.world.width
+        map_height = self.world.height
+        def cone_for_agent(agent_idx):
+            agent_active = jax.lax.switch(
+                agent_idx,
+                [
+                    lambda: self.agent.agent_active[0],
+                    lambda: self.agent.agent_active[1],
+                    lambda: self.agent.agent_active[2],
+                    lambda: self.agent.agent_active[3],
+                ]
+            )
+            def gen():
+                temp_state = self._replace(agent=self.agent._replace(current_agent=agent_idx))
+                return temp_state._build_dig_dump_cone().reshape(map_width, map_height)
+            def zeros():
+                return jnp.zeros((map_width, map_height), dtype=jnp.bool_)
+            return jax.lax.cond(agent_active == 1, gen, zeros)
+        cones = jax.vmap(cone_for_agent)(jnp.arange(4))
+        target_tiles_mask = jnp.any(cones, axis=0).reshape(-1)
         infos = {
             "action_mask": self._get_action_mask(dummy_action),
-            "target_tiles": ~(~self._build_dig_dump_cone().reshape(-1)*~self._build_dig_dump_cone_2()),
-            # Include termination_type directly without done_task
+            "target_tiles": target_tiles_mask,
             "task_done": task_done,
         }
         return infos

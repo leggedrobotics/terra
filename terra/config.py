@@ -107,11 +107,11 @@ class Rewards(NamedTuple):
     def dense():
         return Rewards(
             existence=-0.25,   # -0.25      -0.1 for 96x96 maps
-            collision_move=-0.2,
+            collision_move=-0.02,  #-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
             move_with_turned_wheels=-0.1,  # Reduced penalty was -0.1
-            collision_turn=-0.1,
+            collision_turn=-0.01, #-0.1,
             base_turn=-0.1,  #-0.1  
             cabin_turn=-0.05,  
             wheel_turn=-0.05,  
@@ -198,7 +198,7 @@ class EnvConfig(NamedTuple):
     
     # Agent types configuration: (agent1_type, agent2_type)
     # 0=tracked, 1=wheeled, 2=skidsteer
-    agent_types: tuple = (0, 2)  # Default: tracked + skidsteer
+    agent_types: tuple = (0, 2)  # Default: tracked + skidsteer, override with --agent_types in training script
 
     @classmethod
     def new(cls):
@@ -211,19 +211,25 @@ class MapsDimsConfig(NamedTuple):
 
 
 class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20  # Reduced from 20 for faster progression
-    decrease_level_threshold: int = 100  # Reduced from 50 for quicker regression
+    increase_level_threshold: int = 20  
+    decrease_level_threshold: int = 80  
     last_level_type = "random"  # ["random", "none"]
 
     # NOTE: all maps need to have the same size
-    # Mixed Agent Training Curriculum: Skid Steer (Agent 0) + Excavator (Agent 2)
     levels = [
+
         # {
-        #     "maps_path": "trenches/single_dumpzone",
-        #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "maps_path": "foundations", 
+        #     "max_steps_in_episode": 800,
         #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": True,
+        #     "apply_trench_rewards": False,
         # },
+        {
+            "maps_path": "trenches/single",
+            "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": True,
+        },
         # {
         #     "maps_path": "foundations_dumpzones_harder_nodump",
         #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
@@ -246,12 +252,39 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones_v3", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+    
+        # {
+        #     "maps_path": "foundations_dumpzones_v3_separated", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+
+
+
+        # {
+        #     "maps_path": "trenches/single_dumpzone_v2",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
+
+        # {
+        #     "maps_path": "trenches/separated_v2",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+
+
+
+
 
 
         # {
@@ -274,12 +307,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
 
 
-        # {
-        #     "maps_path": "trenches/single_dumpzone_v2",
-        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": True,
-        # },
+        
 
 
         
@@ -296,12 +324,7 @@ class CurriculumGlobalConfig(NamedTuple):
         
         
         # Stage 2: Foundation Coordination - Learn to work together on mixed tasks
-        # {
-        #     "maps_path": "foundations", 
-        #     "max_steps_in_episode": 350,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        
         
         # # Stage 3: Basic Excavation - Excavator leads, skid steer supports
         # {

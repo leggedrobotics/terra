@@ -169,6 +169,14 @@ Running the standard map generation will produce the following folder structure.
             - custom
 ```
 
+### Distance maps
+Distance maps are required by the reward system. They store, for each tile, the distance to the dump zones, i.e., tiles where the target map equals 1 (target_map == 1). They also speed up path-planning heuristics. You can generate distance maps for any existing map directory using the tools/generate_distance_maps.py script, without changing the map content.
+
+Basic approach
+- Dump-zone distance (required): compute distance to the nearest dump-zone tile, derived from the target map positive mask (target_map == 1)
+
+
+
 ### Training Configurations
 In Terra the settings are expressed as curriculum levels. To set the levels of the training, you can edit the `config.py` file. For example, if you want to start your training with dense rewards on foundations and then shift to shorter episodes with sparse rewards, you can set the curriculum as follows.
 ``` python
