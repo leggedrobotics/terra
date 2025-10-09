@@ -1985,81 +1985,82 @@ class State(NamedTuple):
         is_excavator = (curd.agent_type[0] == 0)
         is_loaded = (curd.loaded[0] > 0)
 
-        if not (is_excavator and is_loaded):
-            return self
+        def _attempt_transfer():
+            map_shape = self.world.action_map.map.shape
+            dump_mask_2d = dump_mask.reshape(map_shape)
 
-        map_shape = self.world.action_map.map.shape
-        dump_mask_2d = dump_mask.reshape(map_shape)
+            def base_in_cone_for(idx: int):
+                st = self.agent.agent_states[idx]
+                x = jnp.clip(st.pos_base[0].astype(jnp.int32), 0, self.world.width - 1)
+                y = jnp.clip(st.pos_base[1].astype(jnp.int32), 0, self.world.height - 1)
+                return dump_mask_2d[x, y]
 
-        def base_in_cone_for(idx: int):
-            st = self.agent.agent_states[idx]
-            x = jnp.clip(st.pos_base[0].astype(jnp.int32), 0, self.world.width - 1)
-            y = jnp.clip(st.pos_base[1].astype(jnp.int32), 0, self.world.height - 1)
-            return dump_mask_2d[x, y]
-
-        current_idx = self.agent.current_agent
-        active = self.agent.agent_active.astype(jnp.bool_)
-        types = jnp.array([
-            self.agent.agent_states[0].agent_type[0],
-            self.agent.agent_states[1].agent_type[0],
-            self.agent.agent_states[2].agent_type[0],
-            self.agent.agent_states[3].agent_type[0],
-        ])
-        base_in = jnp.array([
-            base_in_cone_for(0),
-            base_in_cone_for(1),
-            base_in_cone_for(2),
-            base_in_cone_for(3),
-        ])
-        not_current = jnp.array([
-            0 != current_idx,
-            1 != current_idx,
-            2 != current_idx,
-            3 != current_idx,
-        ])
-        is_truck_vec = (types == 3)
-        candidates = jnp.logical_and(jnp.logical_and(active, is_truck_vec), jnp.logical_and(base_in, not_current))
-
-        any_candidate = jnp.any(candidates)
-        if not any_candidate:
-            return self
-
-        # Select first candidate index deterministically
-        large = jnp.int32(1000000)
-        idxs = jnp.array([0, 1, 2, 3], dtype=jnp.int32)
-        scores = jnp.where(candidates, idxs, idxs + large)
-        sel_idx = jnp.argmin(scores)
-        capacity = jnp.int32(getattr(self.env_cfg, 'truck_capacity', 127))
-
-        def _get_sel_state(i):
-            return jax.lax.switch(i, [
-                lambda: self.agent.agent_states[0],
-                lambda: self.agent.agent_states[1],
-                lambda: self.agent.agent_states[2],
-                lambda: self.agent.agent_states[3],
+            current_idx = self.agent.current_agent
+            active = self.agent.agent_active.astype(jnp.bool_)
+            types = jnp.array([
+                self.agent.agent_states[0].agent_type[0],
+                self.agent.agent_states[1].agent_type[0],
+                self.agent.agent_states[2].agent_type[0],
+                self.agent.agent_states[3].agent_type[0],
             ])
-        
-        sel_state = _get_sel_state(sel_idx)
-        truck_loaded = sel_state.loaded[0].astype(jnp.int32)
-        cur_loaded = curd.loaded[0].astype(jnp.int32)
-        remaining_cap = jnp.maximum(capacity - truck_loaded, 0)
-        transfer = jnp.minimum(cur_loaded, remaining_cap)
+            base_in = jnp.array([
+                base_in_cone_for(0),
+                base_in_cone_for(1),
+                base_in_cone_for(2),
+                base_in_cone_for(3),
+            ])
+            not_current = jnp.array([
+                0 != current_idx,
+                1 != current_idx,
+                2 != current_idx,
+                3 != current_idx,
+            ])
+            is_truck_vec = (types == 3)
+            candidates = jnp.logical_and(jnp.logical_and(active, is_truck_vec), jnp.logical_and(base_in, not_current))
 
-        if transfer <= 0:
-            return self
+            any_candidate = jnp.any(candidates)
 
-        # Apply transfer
-        new_truck = sel_state._replace(
-            loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
-            carry_baseline_potential=jnp.float32(curd.carry_baseline_potential),
-            carry_potential_after_lift=jnp.float32(curd.carry_potential_after_lift),
-        )
-        updated = self._set_agent_state_at(sel_idx, new_truck)
-        cur_after = updated._get_current_agent_state()
-        new_cur = cur_after._replace(
-            loaded=jnp.array([jnp.maximum(cur_loaded - transfer, 0)], dtype=IntLowDim)
-        )
-        return updated._set_current_agent_state(new_cur)
+            def _do_transfer():
+                # Select first candidate index deterministically
+                large = jnp.int32(1000000)
+                idxs = jnp.array([0, 1, 2, 3], dtype=jnp.int32)
+                scores = jnp.where(candidates, idxs, idxs + large)
+                sel_idx = jnp.argmin(scores)
+                capacity = jnp.int32(getattr(self.env_cfg, 'truck_capacity', 127))
+
+                def _get_sel_state(i):
+                    return jax.lax.switch(i, [
+                        lambda: self.agent.agent_states[0],
+                        lambda: self.agent.agent_states[1],
+                        lambda: self.agent.agent_states[2],
+                        lambda: self.agent.agent_states[3],
+                    ])
+                
+                sel_state = _get_sel_state(sel_idx)
+                truck_loaded = sel_state.loaded[0].astype(jnp.int32)
+                cur_loaded = curd.loaded[0].astype(jnp.int32)
+                remaining_cap = jnp.maximum(capacity - truck_loaded, 0)
+                transfer = jnp.minimum(cur_loaded, remaining_cap)
+
+                def _apply_transfer():
+                    # Apply transfer
+                    new_truck = sel_state._replace(
+                        loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
+                        carry_baseline_potential=jnp.float32(curd.carry_baseline_potential),
+                        carry_potential_after_lift=jnp.float32(curd.carry_potential_after_lift),
+                    )
+                    updated = self._set_agent_state_at(sel_idx, new_truck)
+                    cur_after = updated._get_current_agent_state()
+                    new_cur = cur_after._replace(
+                        loaded=jnp.array([jnp.maximum(cur_loaded - transfer, 0)], dtype=IntLowDim)
+                    )
+                    return updated._set_current_agent_state(new_cur)
+
+                return jax.lax.cond(transfer > 0, _apply_transfer, lambda: self)
+
+            return jax.lax.cond(any_candidate, _do_transfer, lambda: self)
+
+        return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt_transfer, lambda: self)
 
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
