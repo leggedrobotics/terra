@@ -3595,15 +3595,19 @@ class State(NamedTuple):
             d2 = jnp.where(mask, d2, jnp.float32(1e9))
             min_d2 = jnp.min(d2)
 
-            # Binary proximity bonus: +p if within R tiles
-            R = jnp.float32(15.0)
-            p = jnp.float32(0.1)
-            near = min_d2 <= (R * R)
-            bonus = jnp.where(near, p, 0.0)
+            # Proximity bonus: +0.5 if within excavator's arm reach
+            dig_portion_radius = self.env_cfg.agent.move_tiles
+            tile_size = self.env_cfg.tile_size
+            max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
+            min_distance_from_agent = tile_size * max_agent_dim
+            fixed_extension = 0.5
+            r_max = (fixed_extension + 1 + 0.2) * dig_portion_radius * tile_size + min_distance_from_agent #0.2 is buffer
+            near = min_d2 <= (r_max * r_max)
+            bonus = jnp.where(near, 0.5, 0.0)
 
             # Optional small penalty for sitting on dig tiles when empty
             on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
-            q = jnp.float32(0.02)
+            q = jnp.float32(0.05)   # Increased from 0.02 to 0.1
             penalty = jnp.where(on_dig, q, 0.0)
 
             # Disable bonus when on dig tiles; apply penalty instead
