@@ -3589,8 +3589,8 @@ class State(NamedTuple):
             min_d2 = jnp.min(d2)
 
             # Binary proximity bonus: +p if within R tiles
-            R = jnp.float32(3.0)
-            p = jnp.float32(0.03)
+            R = jnp.float32(15.0)
+            p = jnp.float32(0.1)
             near = min_d2 <= (R * R)
             bonus = jnp.where(near, p, 0.0)
 
