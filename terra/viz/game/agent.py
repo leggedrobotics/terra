@@ -168,7 +168,7 @@ class Agent:
             cabin_width = rect_width * 0.25  # 25% of agent width (longer side)
             # Position cabin flush at the back end: offset = -(half_base_length + half_cabin_length)
             cabin_offset = -(total_depth / 2.0 + cabin_length / 2.0)
-            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_width, cabin_length, cabin_offset)
+            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_length, cabin_width, cabin_offset)
 
             out = {
                 "body": {

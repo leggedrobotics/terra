@@ -2043,10 +2043,29 @@ class State(NamedTuple):
                 transfer = jnp.minimum(cur_loaded, remaining_cap)
 
                 def _apply_transfer():
-                    # Apply transfer
+                    # Apply transfer with baseline adjustment like skidsteer
+                    started_loading = (truck_loaded == 0)
+                    
+                    def _adjust_baseline_for_world_changes():
+                        # Current world potential before this transfer
+                        current_potential = curd.carry_baseline_potential
+                        # Previous after-lift potential from last load
+                        previous_after_lift = sel_state.carry_potential_after_lift
+                        # Adjust baseline: if world got worse (higher potential), increase baseline
+                        # If world got better (lower potential), decrease baseline (make it harder)
+                        world_change = current_potential - previous_after_lift
+                        return sel_state.carry_baseline_potential + world_change
+                    
+                    new_carry_base = jax.lax.select(
+                        started_loading, 
+                        curd.carry_baseline_potential,  # First load: use excavator's baseline
+                        _adjust_baseline_for_world_changes()  # Subsequent loads: adjust for world changes
+                    )
+                    
+                    # Use excavator's after-lift potential as the new after-lift potential
                     new_truck = sel_state._replace(
                         loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
-                        carry_baseline_potential=jnp.float32(curd.carry_baseline_potential),
+                        carry_baseline_potential=jnp.float32(new_carry_base),
                         carry_potential_after_lift=jnp.float32(curd.carry_potential_after_lift),
                     )
                     updated = self._set_agent_state_at(sel_idx, new_truck)
