@@ -2042,25 +2042,25 @@ class State(NamedTuple):
                 transfer = jnp.minimum(cur_loaded, remaining_cap)
 
                 def _apply_transfer():
-                        # Update truck baselines similar to skidsteer autoload logic
-                        current_potential = self._compute_relocation_potential(self.world.action_map.map)
-                        started_loading = jnp.logical_and(sel_state.loaded[0] == 0, transfer > 0)
+                    # Update truck baselines similar to skidsteer autoload logic
+                    current_potential = self._compute_relocation_potential(self.world.action_map.map)
+                    started_loading = jnp.logical_and(sel_state.loaded[0] == 0, transfer > 0)
 
-                        def _adjust_baseline_for_world_changes():
-                            world_change = current_potential - sel_state.carry_potential_after_lift
-                            return sel_state.carry_baseline_potential + world_change
+                    # Pre-compute the adjusted baseline to avoid issues with jax.lax.select
+                    world_change = current_potential - sel_state.carry_potential_after_lift
+                    adjusted_baseline = sel_state.carry_baseline_potential + world_change
 
-                        new_carry_base = jax.lax.select(
-                            started_loading,
-                            jnp.float32(curd.carry_baseline_potential),  # seed from excavator for first load
-                            _adjust_baseline_for_world_changes(),         # subsequent loads: adjust baseline
-                        )
+                    new_carry_base = jax.lax.select(
+                        started_loading,
+                        jnp.float32(curd.carry_baseline_potential),  # seed from excavator for first load
+                        jnp.float32(adjusted_baseline),              # subsequent loads: adjust baseline
+                    )
 
-                        new_truck = sel_state._replace(
-                            loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
-                            carry_baseline_potential=jnp.float32(new_carry_base),
-                            carry_potential_after_lift=jnp.float32(current_potential),
-                        )
+                    new_truck = sel_state._replace(
+                        loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
+                        carry_baseline_potential=jnp.float32(new_carry_base),
+                        carry_potential_after_lift=jnp.float32(current_potential),
+                    )
                     updated = self._set_agent_state_at(sel_idx, new_truck)
                     cur_after = updated._get_current_agent_state()
                     new_cur = cur_after._replace(
