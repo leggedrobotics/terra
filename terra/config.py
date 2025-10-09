@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 6  # number of tiles of progress for every move action
+    move_tiles: int = 5  #6 number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
@@ -107,13 +107,13 @@ class Rewards(NamedTuple):
     def dense():
         return Rewards(
             existence=-0.25,   # -0.25      -0.1 for 96x96 maps
-            collision_move=-0.02,  #-0.2,
+            collision_move=-0.2,  #-0.2,
             move_while_loaded=-0.0,  # Reduced penalty  was -0.01
             move=-0.1,  # Heavily reduced movement penalty was -0.1
             move_with_turned_wheels=-0.1,  # Reduced penalty was -0.1
-            collision_turn=-0.01, #-0.1,
+            collision_turn=-0.1, #-0.1,
             base_turn=-0.1,  #-0.1  
-            cabin_turn=-0.05,  
+            cabin_turn=-0.05,
             wheel_turn=-0.05,  
             dig_wrong=-0.25,
             dump_wrong=-1.0,
@@ -218,18 +218,18 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     levels = [
 
-        # {
-        #     "maps_path": "foundations", 
-        #     "max_steps_in_episode": 800,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
         {
-            "maps_path": "trenches/single",
-            "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+            "maps_path": "foundations", 
+            "max_steps_in_episode": 700,
             "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": True,
+            "apply_trench_rewards": False,
         },
+        # {
+        #     "maps_path": "trenches/single",
+        #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": True,
+        # },
         # {
         #     "maps_path": "foundations_dumpzones_harder_nodump",
         #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500

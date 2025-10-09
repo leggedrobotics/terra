@@ -1185,8 +1185,12 @@ class State(NamedTuple):
 
         # Fixed middle-point arm extension (halfway between 0 and 1)
         fixed_extension = 0.5
-        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+        #r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        #r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+
+        r_min = min_distance_from_agent
+        r_max = min_distance_from_agent + dig_portion_radius * tile_size
+        
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
@@ -2892,7 +2896,12 @@ class State(NamedTuple):
             Optimized version that early exits and avoids full map operations.
             """
             # Early exit: if any active agent is loaded, task cannot be complete
-            loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+            loaded_per_agent_dyn = jnp.array([
+                self.agent.agent_states[0].loaded[0],
+                self.agent.agent_states[1].loaded[0],
+                self.agent.agent_states[2].loaded[0],
+                self.agent.agent_states[3].loaded[0]
+            ])
             active_dyn = self.agent.agent_active.astype(jnp.bool_)
             agents_loaded = jnp.any(jnp.logical_and(active_dyn, loaded_per_agent_dyn > 0))
             
@@ -2960,7 +2969,12 @@ class State(NamedTuple):
             
             # Additional check: ensure all active agents are unloaded for cooperative completion
             # This prevents premature termination when any agent still has dirt
-            loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+            loaded_per_agent_dyn = jnp.array([
+                self.agent.agent_states[0].loaded[0],
+                self.agent.agent_states[1].loaded[0],
+                self.agent.agent_states[2].loaded[0],
+                self.agent.agent_states[3].loaded[0]
+            ])
             active_dyn = self.agent.agent_active.astype(jnp.bool_)
             all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
             cooperative_complete = jnp.logical_and(cooperative_complete, all_unloaded_dyn)
@@ -2975,7 +2989,12 @@ class State(NamedTuple):
         
         # Check if there are skidsteer agents available (type 2) among active agents
         # Check for any active skidsteer agents without dynamic tuple indexing
-        agent_types = jnp.array([st.agent_type[0] for st in self.agent.agent_states])
+        agent_types = jnp.array([
+            self.agent.agent_states[0].agent_type[0],
+            self.agent.agent_states[1].agent_type[0],
+            self.agent.agent_states[2].agent_type[0],
+            self.agent.agent_states[3].agent_type[0]
+        ])
         has_skidsteer_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 2))
         
         # Only use relocation logic if skidsteer agents are available
@@ -3018,7 +3037,12 @@ class State(NamedTuple):
         )
         
         # Task is complete when requirements are met AND all active agents are unloaded
-        loaded_per_agent_dyn = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+        loaded_per_agent_dyn = jnp.array([
+            self.agent.agent_states[0].loaded[0],
+            self.agent.agent_states[1].loaded[0],
+            self.agent.agent_states[2].loaded[0],
+            self.agent.agent_states[3].loaded[0]
+        ])
         active_dyn = self.agent.agent_active.astype(jnp.bool_)
         all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
         done_task = jnp.logical_and(task_requirements_met, all_unloaded_dyn)
@@ -3527,7 +3551,12 @@ class State(NamedTuple):
         undug_dirt = jnp.sum(jnp.where(undug_areas, 1.0, 0.0))  # Count undug tiles as 1 unit each
         # Sum dirt currently loaded across all active agents.
         # Avoid dynamic tuple indexing by statically stacking per-agent loaded values.
-        loaded_per_agent = jnp.array([st.loaded[0] for st in self.agent.agent_states])
+        loaded_per_agent = jnp.array([
+            self.agent.agent_states[0].loaded[0],
+            self.agent.agent_states[1].loaded[0],
+            self.agent.agent_states[2].loaded[0],
+            self.agent.agent_states[3].loaded[0]
+        ])
         loaded_dirt = jnp.sum(jnp.where(self.agent.agent_active, loaded_per_agent, 0))
         total_dirt = moved_dirt + undug_dirt + loaded_dirt
         
