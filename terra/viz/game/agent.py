@@ -156,23 +156,29 @@ class Agent:
             body_color = COLORS["agent_body"]
             cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
 
-        # Truck rendering override: base same size as other agents + simple rear cabin
+        # Truck rendering override: base same size as excavator + cabin on top
         if agent_type == 3:
-            total_depth = self.height * self.tile_size
-            rect_width = self.width * self.tile_size
-            # Use the standard body rectangle as the truck base (same dims as other agents)
-            bed_vertices = agent_body
-            # Add a cabin at the back end of the base, flush with the end
-            # Cabin: same length (shorter side) as agent, 25% of agent width (longer side)
-            cabin_length = self.height * self.tile_size  # same as agent length (shorter side)
-            cabin_width = rect_width * 0.25  # 25% of agent width (longer side)
-            # Position cabin flush at the back end: offset = -(half_base_length + half_cabin_length)
-            cabin_offset = -(total_depth / 2.0 + cabin_length / 2.0)
+            excavator_length = self.height * self.tile_size  # excavator's shorter side
+            excavator_width = self.width * self.tile_size     # excavator's longer side
+            
+            # Truck base: same size as excavator (cabin will be on top, not extending)
+            truck_base_length = excavator_length  # same as excavator length
+            truck_base_width = excavator_width    # same width as excavator
+            
+            # Create truck base rectangle (same size as excavator)
+            truck_base_vertices = oriented_rect((center_y, center_x), base_angle_degrees, truck_base_length, truck_base_width)
+            
+            # Add a cabin on top of the base at the back end (overlapping, not extending)
+            # Cabin: same length (shorter side) as excavator, 25% of excavator width (longer side)
+            cabin_length = excavator_length  # same as excavator length (shorter side)
+            cabin_width = excavator_width * 0.25  # 25% of excavator width (longer side)
+            # Position cabin on top at the back end: offset = -(half_base_length - half_cabin_length)
+            cabin_offset = -(truck_base_length / 2.0 - cabin_length / 2.0)
             truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_length, cabin_width, cabin_offset)
 
             out = {
                 "body": {
-                    "vertices": bed_vertices,
+                    "vertices": truck_base_vertices,
                     "width": w,
                     "height": h,
                     "color": body_color,
