@@ -2,9 +2,10 @@
 
 ![img](assets/overview.gif)
 
-Terra is a flexible and abstracted grid world environment for training intelligent agents in the context of earthworks planning. It makes it possible to approach motion and excavation high-level planning as a reinforcement learning problem, providing a multi-GPU JAX-accelerated environment. We show that we can train an agent capable of planning earthworks in trenches and foundations environments in less than 1 minute on 8 Nvidia RTX-4090 GPUs.
+Terra is a flexible and abstracted grid world environment for training intelligent agents in the context of earthworks planning. It makes it possible to approach motion and excavation high-level planning as a reinforcement learning problem, providing a multi-GPU JAX-accelerated environment with support for 1-4 agents working cooperatively. We show that we can train an agent capable of planning earthworks in trenches and foundations environments in less than 1 minute on 8 Nvidia RTX-4090 GPUs.
 
 ## Features
+- 🤖 Multi-Agent Support: Train 1-4 agents working cooperatively on earthwork tasks
 - 🚜 Two Agent Types: Wheeled and tracked excavator embodiments for different types of actions
 - 🏞️ Realistic Maps: Up-to-3-axes trenches and building foundations with obstacles and dumping constraints
 - 🔥 Performance: Easily scale to more than 1M steps per second on a single GPU
@@ -26,10 +27,14 @@ The JAX installation is hardware-dependent and therefore needs to be done separa
 ## Usage
 The standard workflow is made of the following steps:
 1. Generate the maps by following this [README](https://github.com/leggedrobotics/terra/blob/main/terra/env_generation/README.md) (you can check out a preview of the generated maps in the `data/` folder)
-2. Set up the curriculum in `config.py`
-2. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
-3. Train 🚀
-4. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
+2. Generate distance maps by running (example):
+   ```bash
+   python tools/generate_distance_maps.py --dataset your_path/train/foundations
+   ```
+3. Set up the curriculum in `config.py`
+4. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
+5. Train 🚀
+6. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
 
 # Environment Setup Instructions
 
@@ -170,11 +175,7 @@ Running the standard map generation will produce the following folder structure.
 ```
 
 ### Distance maps
-Distance maps are required by the reward system. They store, for each tile, the distance to the dump zones, i.e., tiles where the target map equals 1 (target_map == 1). They also speed up path-planning heuristics. You can generate distance maps for any existing map directory using the tools/generate_distance_maps.py script, without changing the map content.
-
-Basic approach
-- Dump-zone distance (required): compute distance to the nearest dump-zone tile, derived from the target map positive mask (target_map == 1)
-
+Distance maps are required by the reward system. They store, for each tile, the distance to the dump zones, i.e., tiles where the target map equals 1 (target_map == 1). You can generate distance maps for any existing map directory using the tools/generate_distance_maps.py script, without changing the map content. 
 
 
 ### Training Configurations

@@ -775,14 +775,16 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         is_loaded = cur.loaded[0] > 0
         
         # Movement rules:
-        # - Non-skid steers: only when not loaded
-        # - Skid steer: can always move (supports empty, push mode, and transport mode)
+        # - Non-skid steers/truck: allow movement when:
+        #   * Skid steer or Truck: always can move
+        #   * Others: only when not loaded
         can_move = jnp.logical_or(
-            is_skid_steer,  # Skid steer - can always move
-            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
+            jnp.logical_or(is_skid_steer, is_truck),  # Skid steer or Truck - can always move
+            jnp.logical_not(is_loaded)  # Others - only when not loaded
         )
         
         return jax.lax.cond(can_move, _move_forward, self._do_nothing)
@@ -917,15 +919,17 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         is_loaded = cur.loaded[0] > 0
         shovel_lifted = cur.shovel_lifted[0] > 0
         
         # Movement rules:
-        # - Non-skid steers: only when not loaded
-        # - Skid steer: can always move (handles dirt dropping automatically when needed)
+        # - Non-skid steers/truck: allow movement when:
+        #   * Skid steer or Truck: can always move
+        #   * Others: only when not loaded
         can_move = jnp.logical_or(
-            is_skid_steer,  # Skid steer - can always move
-            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
+            jnp.logical_or(is_skid_steer, is_truck),
+            jnp.logical_not(is_loaded)
         )
         
         return jax.lax.cond(can_move, _move_backward, self._do_nothing)
@@ -1009,14 +1013,16 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
-        # - Non-skid steers: only when not loaded
-        # - Skid steer: can always rotate (supports empty, push mode, and transport mode)
+        # - Non-skid steers/truck:
+        #   * Skid steer or Truck: can always rotate
+        #   * Others: only when not loaded
         can_rotate = jnp.logical_or(
-            is_skid_steer,  # Skid steer - can always rotate
-            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
+            jnp.logical_or(is_skid_steer, is_truck),
+            jnp.logical_not(is_loaded)
         )
         
         return jax.lax.cond(can_rotate, _rotate_clock, self._do_nothing)
@@ -1037,23 +1043,26 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
-        # - Non-skid steers: only when not loaded
-        # - Skid steer: can always rotate (supports empty, push mode, and transport mode)
+        # - Non-skid steers/truck:
+        #   * Skid steer or Truck: can always rotate
+        #   * Others: only when not loaded
         can_rotate = jnp.logical_or(
-            is_skid_steer,  # Skid steer - can always rotate
-            jnp.logical_not(is_loaded)  # Non-skid steer - only when not loaded
+            jnp.logical_or(is_skid_steer, is_truck),
+            jnp.logical_not(is_loaded)
         )
         
         return jax.lax.cond(can_rotate, _rotate_anticlock, self._do_nothing)
 
     def _handle_cabin_clock(self) -> "State":
         """Handle cabin clockwise rotation. Does nothing for skid steer."""
-        # Skid steer cannot rotate cabin
+        # Skid steer and Truck cannot rotate cabin
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         
         def _cabin_clock():
             cur2 = self._get_current_agent_state()
@@ -1064,13 +1073,14 @@ class State(NamedTuple):
 
             return self._set_current_agent_state(cur2._replace(angle_cabin=new_angle_cabin))
         
-        return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_clock)
+        return jax.lax.cond(jnp.logical_or(is_skid_steer, is_truck), self._do_nothing, _cabin_clock)
 
     def _handle_cabin_anticlock(self) -> "State":
         """Handle cabin anti-clockwise rotation. Does nothing for skid steer."""
-        # Skid steer cannot rotate cabin
+        # Skid steer and Truck cannot rotate cabin
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         
         def _cabin_anticlock():
             cur2 = self._get_current_agent_state()
@@ -1081,7 +1091,7 @@ class State(NamedTuple):
 
             return self._set_current_agent_state(cur2._replace(angle_cabin=new_angle_cabin))
         
-        return jax.lax.cond(is_skid_steer, self._do_nothing, _cabin_anticlock)
+        return jax.lax.cond(jnp.logical_or(is_skid_steer, is_truck), self._do_nothing, _cabin_anticlock)
 
     def _handle_turn_wheels_left(self) -> "State":
         cur = self._get_current_agent_state()
@@ -1185,11 +1195,11 @@ class State(NamedTuple):
 
         # Fixed middle-point arm extension (halfway between 0 and 1)
         fixed_extension = 0.5
-        #r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        #r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
 
-        r_min = min_distance_from_agent
-        r_max = min_distance_from_agent + dig_portion_radius * tile_size
+        #r_min = min_distance_from_agent
+        #r_max = min_distance_from_agent + dig_portion_radius * tile_size
         
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
@@ -1964,11 +1974,94 @@ class State(NamedTuple):
             flattened_action_map,
         )
         return s
+    def _try_truck_transfer_on_excavator_dump(self) -> "State":
+        """
+        Attempt to transfer excavator load into any truck whose base center lies in the dump cone.
+        Returns a potentially updated State; caller can compare loaded before/after to detect transfer.
+        """
+        dump_mask = self._build_dig_dump_cone()
+        curd = self._get_current_agent_state()
+        is_excavator = (curd.agent_type[0] == 0)
+        is_loaded = (curd.loaded[0] > 0)
+
+        def _attempt():
+            map_shape = self.world.action_map.map.shape
+            dump_mask_2d = dump_mask.reshape(map_shape)
+
+            def base_in_cone_for(idx: int):
+                st = self.agent.agent_states[idx]
+                x = jnp.clip(st.pos_base[0].astype(jnp.int32), 0, self.world.width - 1)
+                y = jnp.clip(st.pos_base[1].astype(jnp.int32), 0, self.world.height - 1)
+                return dump_mask_2d[x, y]
+
+            current_idx = self.agent.current_agent
+            active = self.agent.agent_active.astype(jnp.bool_)
+            types = jnp.array([
+                self.agent.agent_states[0].agent_type[0],
+                self.agent.agent_states[1].agent_type[0],
+                self.agent.agent_states[2].agent_type[0],
+                self.agent.agent_states[3].agent_type[0],
+            ])
+            base_in = jnp.array([
+                base_in_cone_for(0),
+                base_in_cone_for(1),
+                base_in_cone_for(2),
+                base_in_cone_for(3),
+            ])
+            not_current = jnp.array([
+                0 != current_idx,
+                1 != current_idx,
+                2 != current_idx,
+                3 != current_idx,
+            ])
+            is_truck_vec = (types == 3)
+            candidates = jnp.logical_and(jnp.logical_and(active, is_truck_vec), jnp.logical_and(base_in, not_current))
+
+            any_candidate = jnp.any(candidates)
+            large = jnp.int32(1000000)
+            idxs = jnp.array([0, 1, 2, 3], dtype=jnp.int32)
+            scores = jnp.where(candidates, idxs, idxs + large)
+            sel_idx = jnp.argmin(scores)
+            capacity = jnp.int32(getattr(self.env_cfg, 'truck_capacity', 127))
+
+            def _transfer_to_selected():
+                def _get_sel_state(i):
+                    return jax.lax.switch(i, [
+                        lambda: self.agent.agent_states[0],
+                        lambda: self.agent.agent_states[1],
+                        lambda: self.agent.agent_states[2],
+                        lambda: self.agent.agent_states[3],
+                    ])
+                sel_state = _get_sel_state(sel_idx)
+                truck_loaded = sel_state.loaded[0].astype(jnp.int32)
+                cur_loaded = curd.loaded[0].astype(jnp.int32)
+                remaining_cap = jnp.maximum(capacity - truck_loaded, 0)
+                transfer = jnp.minimum(cur_loaded, remaining_cap)
+
+                def _apply_transfer():
+                    new_truck = sel_state._replace(
+                        loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim)
+                    )
+                    updated = self._set_agent_state_at(sel_idx, new_truck)
+                    cur_after = updated._get_current_agent_state()
+                    new_cur = cur_after._replace(
+                        loaded=jnp.array([jnp.maximum(cur_loaded - transfer, 0)], dtype=IntLowDim)
+                    )
+                    return updated._set_current_agent_state(new_cur)
+
+                return jax.lax.cond(transfer > 0, _apply_transfer, lambda: self)
+
+            return jax.lax.cond(any_candidate, _transfer_to_selected, lambda: self)
+
+        return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt, lambda: self)
+
     def _handle_dump(self) -> "State":
         dump_mask = self._build_dig_dump_cone()
-        # Only restrict dumping to dump zones for skid steer agents
+        dump_mask = self._build_dig_dump_cone()
+        # Only restrict dumping to dump zones for skid steer and truck agents
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         
         def _apply_dump_zone_restriction():
             # For skid steer: restrict to only dump zones (target_map > 0)
@@ -1980,7 +2073,7 @@ class State(NamedTuple):
             return dump_mask
         
         dump_mask = jax.lax.cond(
-            is_skid_steer,
+            jnp.logical_or(is_skid_steer, is_truck),
             _apply_dump_zone_restriction,
             _no_dump_zone_restriction
         )
@@ -1993,6 +2086,8 @@ class State(NamedTuple):
         def _apply_dump():
             # Calculate volume distribution only when we actually have a valid dump area
             curd = self._get_current_agent_state()
+
+            # Try truck transfer outside via helper (called from DO). Here proceed with world dump only.
             remaining_volume = curd.loaded % dump_volume
             even_volume_per_tile = (
                 curd.loaded - remaining_volume
@@ -2095,6 +2190,7 @@ class State(NamedTuple):
         """
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 3
         
         def _skid_steer_do():
             cur = self._get_current_agent_state()
@@ -2158,7 +2254,22 @@ class State(NamedTuple):
         def _tracked_wheeled_do():
             cur = self._get_current_agent_state()
             is_loaded = cur.loaded[0] > 0
-            return jax.lax.cond(is_loaded, self._handle_dump, self._handle_dig)
+            # For trucks: DO dumps when loaded, no-op when empty (no digging)
+            def _truck_do():
+                return jax.lax.cond(is_loaded, self._handle_dump, self._do_nothing)
+            def _excavator_do():
+                # Try truck transfer; if it transfers, return that state; else proceed to dump/dig
+                before = self
+                after = before._try_truck_transfer_on_excavator_dump()
+                cur_before = before._get_current_agent_state()
+                cur_after = after._get_current_agent_state()
+                did_transfer = cur_after.loaded[0] < cur_before.loaded[0]
+                def _return_after_transfer():
+                    return after
+                def _fallback_dump_or_dig():
+                    return jax.lax.cond(is_loaded, self._handle_dump, self._handle_dig)
+                return jax.lax.cond(did_transfer, _return_after_transfer, _fallback_dump_or_dig)
+            return jax.lax.cond(is_truck, _truck_do, _excavator_do)
         
         return jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
 
@@ -2359,7 +2470,7 @@ class State(NamedTuple):
             lambda: jax.lax.cond(
                 is_moving_dumped_dirt,
                 lambda: 0.1,  # Excavator gets 0.1x reward for relocating dumped dirt
-                lambda: 1.0   # Excavator gets full reward for relocating newly dug dirt
+                lambda: 3.0   # Excavator gets full reward for relocating newly dug dirt
             )
         )
         # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
@@ -2370,7 +2481,7 @@ class State(NamedTuple):
         scale = jnp.clip(scale_raw, jnp.float32(2.0), jnp.float32(5.0)) / 2
 
 
-        progress_clamped = progress_clamped * potential_multiplier * scale #*2
+        progress_clamped = progress_clamped * potential_multiplier * scale
         #progress_clamped = progress_clamped * potential_multiplier * 1
         #progress_clamped = progress_clamped * potential_multiplier
 
@@ -2770,8 +2881,11 @@ class State(NamedTuple):
         def get_skidsteer_rewards():
             return self._get_rewards_skidsteer(new_state, action)
         
-        # Route rewards based on agent type: 0=tracked, 1=wheeled, 2=skidsteer
-        reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards]
+        # Route rewards based on agent type: 0=tracked, 1=wheeled, 2=skidsteer, 3=truck
+        # For truck, use dedicated reward handler
+        def get_truck_rewards():
+            return self._get_rewards_truck(new_state, action)
+        reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards, get_truck_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
         reward += agent_reward
@@ -3388,6 +3502,88 @@ class State(NamedTuple):
             lambda: 0.0
         )
         
+        return reward
+
+    def _get_rewards_truck(self, new_state: "State", action: ActionType) -> Float:
+        """Truck-specific rewards: proximity shaping when empty, avoid dig tiles penalty, reuse movement rewards."""
+        reward = 0.0
+        action = action[0]
+
+        # Reuse tracked movement/base/cabin rewards logic (truck has cabin disabled already)
+        reward += jax.lax.cond(
+            (action == TrackedActionType.FORWARD)
+            | (action == TrackedActionType.BACKWARD),
+            self._handle_rewards_move,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+        reward += jax.lax.cond(
+            (action == TrackedActionType.CLOCK)
+            | (action == TrackedActionType.ANTICLOCK),
+            self._handle_rewards_base_turn,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+        reward += jax.lax.cond(
+            action == TrackedActionType.DO,
+            lambda new_state, action: self._handle_rewards_do(new_state, action)[0],
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        # Proximity shaping when empty
+        cur = self._get_current_agent_state()
+        is_truck = cur.agent_type[0] == 3
+        is_empty = cur.loaded[0] == 0
+
+        def _proximity_term():
+            # Distance to nearest excavator base (squared)
+            active = self.agent.agent_active.astype(jnp.bool_)
+            types = jnp.array([
+                self.agent.agent_states[0].agent_type[0],
+                self.agent.agent_states[1].agent_type[0],
+                self.agent.agent_states[2].agent_type[0],
+                self.agent.agent_states[3].agent_type[0],
+            ])
+            posxs = jnp.array([
+                self.agent.agent_states[0].pos_base[0],
+                self.agent.agent_states[1].pos_base[0],
+                self.agent.agent_states[2].pos_base[0],
+                self.agent.agent_states[3].pos_base[0],
+            ]).astype(jnp.float32)
+            posys = jnp.array([
+                self.agent.agent_states[0].pos_base[1],
+                self.agent.agent_states[1].pos_base[1],
+                self.agent.agent_states[2].pos_base[1],
+                self.agent.agent_states[3].pos_base[1],
+            ]).astype(jnp.float32)
+
+            is_excavator = (types == 0)
+            mask = jnp.logical_and(active, is_excavator)
+            dx = posxs - cur.pos_base[0].astype(jnp.float32)
+            dy = posys - cur.pos_base[1].astype(jnp.float32)
+            d2 = dx * dx + dy * dy
+            d2 = jnp.where(mask, d2, jnp.float32(1e9))
+            min_d2 = jnp.min(d2)
+
+            # Binary proximity bonus: +p if within R tiles
+            R = jnp.float32(3.0)
+            p = jnp.float32(0.03)
+            near = min_d2 <= (R * R)
+            bonus = jnp.where(near, p, 0.0)
+
+            # Optional small penalty for sitting on dig tiles when empty
+            on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
+            q = jnp.float32(0.02)
+            penalty = jnp.where(on_dig, q, 0.0)
+
+            # Disable bonus when on dig tiles; apply penalty instead
+            return jnp.where(on_dig, -penalty, bonus)
+
+        reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
         return reward
 
     def _handle_rewards_move_skidsteer(

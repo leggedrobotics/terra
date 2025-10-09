@@ -105,7 +105,35 @@ class Agent:
         cabin_relative_degrees = agent_cabin_to_angle(angle_cabin, self.angles_cabin)
         global_cabin_angle = (cabin_relative_degrees + base_angle_degrees) % 360
         
-        # Create cabin triangle
+        # Helper to create an oriented rectangle given a local center offset (forward is +X in cabin space here)
+        def oriented_rect(center_xy, base_deg, rect_width_px, rect_depth_px, forward_offset_px):
+            # Local center relative to agent center in forward direction
+            local_cx = forward_offset_px
+            local_cy = 0.0
+            # Rotate local center by base angle
+            ang = math.radians(base_deg)
+            off_x = local_cx * math.cos(ang) - local_cy * math.sin(ang)
+            off_y = local_cx * math.sin(ang) + local_cy * math.cos(ang)
+            cx = center_xy[0] + off_x
+            cy = center_xy[1] + off_y
+
+            half_w = rect_width_px / 2.0
+            half_d = rect_depth_px / 2.0
+            # Rectangle in local coordinates (depth along forward axis)
+            local_pts = [
+                (-half_d, -half_w),  # back-left
+                ( half_d, -half_w),  # front-left
+                ( half_d,  half_w),  # front-right
+                (-half_d,  half_w),  # back-right
+            ]
+            verts = []
+            for lx, ly in local_pts:
+                rx = lx * math.cos(ang) - ly * math.sin(ang)
+                ry = lx * math.sin(ang) + ly * math.cos(ang)
+                verts.append((center_xy[0] + rx + off_x, center_xy[1] + ry + off_y))
+            return verts
+
+        # Create cabin triangle by default (non-truck)
         scaling = self.tile_size / 3
         points = [
             (3 / scaling, 0),
@@ -120,22 +148,52 @@ class Agent:
         if agent_type == 2:  # Skid steer
             body_color = COLORS["skid_steer_body"]
             cabin_color = COLORS["skid_steer_cabin"]["loaded"] if loaded else COLORS["skid_steer_cabin"]["not_loaded"]
+        elif agent_type == 3:  # Truck
+            # Dark green shades
+            body_color = (0, 90, 40)
+            cabin_color = (0, 110, 50)
         else:  # Tracked or wheeled (default)
             body_color = COLORS["agent_body"]
             cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
 
-        out = {
-            "body": {
-                "vertices": agent_body,
-                "width": w,
-                "height": h,
-                "color": body_color,
-            },
-            "cabin": {
-                "vertices": agent_cabin,
-                "color": cabin_color,
-            },
-        }
+        # Truck rendering override: two simple rectangles
+        if agent_type == 3:
+            total_depth = self.height * self.tile_size
+            bed_depth = total_depth * 0.6
+            cabin_depth = total_depth - bed_depth
+            rect_width = self.width * self.tile_size
+            # Bed forward (no cone change needed)
+            bed_offset = cabin_depth / 2.0
+            bed_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width, bed_depth, bed_offset)
+            # Cabin backward (behind center)
+            cabin_offset = -bed_depth / 2.0
+            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width * 0.8, cabin_depth, cabin_offset)
+
+            out = {
+                "body": {
+                    "vertices": bed_vertices,
+                    "width": w,
+                    "height": h,
+                    "color": body_color,
+                },
+                "cabin": {
+                    "vertices": truck_cabin_vertices,
+                    "color": cabin_color,
+                },
+            }
+        else:
+            out = {
+                "body": {
+                    "vertices": agent_body,
+                    "width": w,
+                    "height": h,
+                    "color": body_color,
+                },
+                "cabin": {
+                    "vertices": agent_cabin,
+                    "color": cabin_color,
+                },
+            }
         
         # Add shovel for skid steer agents
         if agent_type == 2:

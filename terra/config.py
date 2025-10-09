@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 5  #6 number of tiles of progress for every move action
+    move_tiles: int = 6  #6 number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
