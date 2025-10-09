@@ -156,18 +156,17 @@ class Agent:
             body_color = COLORS["agent_body"]
             cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
 
-        # Truck rendering override: two simple rectangles
+        # Truck rendering override: base same size as other agents + simple rear cabin
         if agent_type == 3:
             total_depth = self.height * self.tile_size
-            bed_depth = total_depth * 0.6
-            cabin_depth = total_depth - bed_depth
             rect_width = self.width * self.tile_size
-            # Bed forward (no cone change needed)
-            bed_offset = cabin_depth / 2.0
-            bed_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width, bed_depth, bed_offset)
-            # Cabin backward (behind center)
-            cabin_offset = -bed_depth / 2.0
-            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width * 0.8, cabin_depth, cabin_offset)
+            # Use the standard body rectangle as the truck base (same dims as other agents)
+            bed_vertices = agent_body
+            # Add a cabin on top of the base at the back, same width, 20% of base length
+            cabin_depth = total_depth * 0.2
+            # Center the cabin within the back of the base: offset = -(half_base_depth - half_cabin_depth)
+            cabin_offset = -(total_depth / 2.0 - cabin_depth / 2.0)
+            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width, cabin_depth, cabin_offset)
 
             out = {
                 "body": {
