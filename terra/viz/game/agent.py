@@ -166,7 +166,7 @@ class Agent:
             truck_base_width = excavator_width    # same width as excavator
             
             # Create truck base rectangle (same size as excavator)
-            truck_base_vertices = oriented_rect((center_y, center_x), base_angle_degrees, truck_base_length, truck_base_width)
+            truck_base_vertices = oriented_rect((center_y, center_x), base_angle_degrees, truck_base_length, truck_base_width, 0.0)
             
             # Add a cabin on top of the base at the back end (overlapping, not extending)
             # Cabin: same length (shorter side) as excavator, 25% of excavator width (longer side)

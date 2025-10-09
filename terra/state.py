@@ -3321,6 +3321,14 @@ class State(NamedTuple):
         mask = mask.at[5].set(False)  # cabin_anticlock
         return mask
 
+    def _get_action_mask_truck(self):
+        # Get the tracked action mask as base
+        mask = self._get_action_mask_tracked()
+        # Disable cabin actions for truck (same as skidsteer)
+        mask = mask.at[4].set(False)  # cabin_clock
+        mask = mask.at[5].set(False)  # cabin_anticlock
+        return mask
+
     def _get_action_mask(self, dummy_action: Action):
         """
         Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
@@ -3340,8 +3348,11 @@ class State(NamedTuple):
         def get_skidsteer_mask():
             return self._get_action_mask_skidsteer()
         
+        def get_truck_mask():
+            return self._get_action_mask_truck()
+        
         # Create a list of functions for jax.lax.switch
-        mask_functions = [get_tracked_mask, get_wheeled_mask, get_skidsteer_mask]
+        mask_functions = [get_tracked_mask, get_wheeled_mask, get_skidsteer_mask, get_truck_mask]
         
         # Use jax.lax.switch with clamped index to handle any agent_type value
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(mask_functions) - 1)
