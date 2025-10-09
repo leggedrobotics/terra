@@ -162,11 +162,13 @@ class Agent:
             rect_width = self.width * self.tile_size
             # Use the standard body rectangle as the truck base (same dims as other agents)
             bed_vertices = agent_body
-            # Add a cabin on top of the base at the back, same width, 20% of base length
-            cabin_depth = total_depth * 0.2
-            # Center the cabin within the back of the base: offset = -(half_base_depth - half_cabin_depth)
-            cabin_offset = -(total_depth / 2.0 - cabin_depth / 2.0)
-            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, rect_width, cabin_depth, cabin_offset)
+            # Add a cabin at the back end of the base, flush with the end
+            # Cabin: same length (shorter side) as agent, 25% of agent width (longer side)
+            cabin_length = self.height * self.tile_size  # same as agent length (shorter side)
+            cabin_width = rect_width * 0.25  # 25% of agent width (longer side)
+            # Position cabin flush at the back end: offset = -(half_base_length + half_cabin_length)
+            cabin_offset = -(total_depth / 2.0 + cabin_length / 2.0)
+            truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_width, cabin_length, cabin_offset)
 
             out = {
                 "body": {
