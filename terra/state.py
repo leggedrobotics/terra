@@ -3612,8 +3612,9 @@ class State(NamedTuple):
             max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
             min_distance_from_agent = tile_size * max_agent_dim
             fixed_extension = 0.5
-            r_max = (fixed_extension + 1 + 0.2) * dig_portion_radius * tile_size + min_distance_from_agent #0.2 is buffer
-            near = min_d2 <= (r_max * r_max)
+            r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent #0.2 is buffer
+            r_max_tiles = r_max_world / tile_size  # Convert to tile units
+            near = min_d2 <= (r_max_tiles * r_max_tiles)
             bonus = jnp.where(near, 0.5, 0.0)
 
             # Optional small penalty for sitting on dig tiles when empty

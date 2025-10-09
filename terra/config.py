@@ -198,7 +198,7 @@ class EnvConfig(NamedTuple):
     
     # Agent types configuration: (agent1_type, agent2_type)
     # 0=tracked, 1=wheeled, 2=skidsteer
-    agent_types: tuple = (0, 2)  # Default: tracked + skidsteer, override with --agent_types in training script
+    agent_types: tuple = (0, 3)  # Default: tracked + skidsteer, override with --agent_types in training script
 
     @classmethod
     def new(cls):
