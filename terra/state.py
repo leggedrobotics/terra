@@ -3644,13 +3644,29 @@ class State(NamedTuple):
             near_after = min_d_new <= r_max_tiles
             stay_bonus = jnp.where(near_after, jnp.float32(0.5), jnp.float32(0.0))
 
-            # Small penalty for sitting on dig tiles when empty (avoid blocking)
-            on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
-            penalty = jnp.where(on_dig, jnp.float32(0.05), jnp.float32(0.0))
+            # Small penalty for sitting on dig tiles when empty (temporarily disabled)
+            # on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
+            # penalty = jnp.where(on_dig, jnp.float32(0.05), jnp.float32(0.0))
 
-            # If on dig tile, suppress proximity bonus and apply penalty
-            shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
-            return shaped
+            # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
+            # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
+            shaped = delta_reward + stay_bonus
+
+            # Debug print only when a positive proximity reward is granted
+            def _dbg():
+                jax.debug.print(
+                    "[TRUCK PROX DEBUG] agent={} old_d={:.3f} new_d={:.3f} delta={:.3f} near={} reward={:.3f}",
+                    self.agent.current_agent,
+                    min_d_old,
+                    min_d_new,
+                    (min_d_old - min_d_new),
+                    near_after,
+                    shaped,
+                )
+                return shaped
+            def _no_dbg():
+                return shaped
+            return jax.lax.cond(shaped > 0, _dbg, _no_dbg)
 
         reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
         return reward
