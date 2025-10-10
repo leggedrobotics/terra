@@ -2917,7 +2917,7 @@ class State(NamedTuple):
         # Inline debug: tag reward with agent index and type for clarity in logs
         def _dbg_reward_print(_: int):
             jax.debug.print(
-                "[REWARD DEBUG] agent_idx={} agent_type={} reward={:.4f}",
+                "[REWARD DEBUG] agent_idx={} agent_type={} reward={}",
                 self.agent.current_agent,
                 current_agent_type,
                 agent_reward,
@@ -3665,7 +3665,7 @@ class State(NamedTuple):
             # Debug print only when a positive proximity reward is granted
             def _dbg():
                 jax.debug.print(
-                    "[TRUCK PROX DEBUG] agent={} old_d={:.3f} new_d={:.3f} delta={:.3f} near={} reward={:.3f}",
+                    "[TRUCK PROX DEBUG] agent={} old_d={} new_d={} delta={} near={} reward={}",
                     self.agent.current_agent,
                     min_d_old,
                     min_d_new,
