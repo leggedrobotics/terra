@@ -172,8 +172,8 @@ class Agent:
             # Cabin: same length (shorter side) as excavator, 25% of excavator width (longer side)
             cabin_length = excavator_length  # same as excavator length (shorter side)
             cabin_width = excavator_width * 0.25  # 25% of excavator width (longer side)
-            # Position cabin at the back end: offset forward by half the base length
-            cabin_offset = truck_base_length / 2.0
+            # Position cabin at the back end: offset backward by half the base length
+            cabin_offset = -truck_base_length / 2.0
             truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_length, cabin_width, cabin_offset)
 
             out = {
