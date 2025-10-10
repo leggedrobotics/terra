@@ -2914,6 +2914,18 @@ class State(NamedTuple):
         reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards, get_truck_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
+        # Inline debug: tag reward with agent index and type for clarity in logs
+        def _dbg_reward_print(_: int):
+            jax.debug.print(
+                "[REWARD DEBUG] agent_idx={} agent_type={} reward={:.4f}",
+                self.agent.current_agent,
+                current_agent_type,
+                agent_reward,
+            )
+            return 0
+        def _no_dbg(_: int):
+            return 0
+        _ = jax.lax.cond(jnp.abs(agent_reward) > 0.0, _dbg_reward_print, _no_dbg, 0)
         reward += agent_reward
         
         # Attribute per-step agent reward to the current agent index (active-first ordering in obs only)
@@ -3628,10 +3640,8 @@ class State(NamedTuple):
             min_d_old = jnp.sqrt(min_d2_old)
             min_d_new = jnp.sqrt(min_d2_new)
 
-            # Distance improvement reward (positive if moved closer)
-            # Scale modestly to act as shaping without dominating task rewards
-            move_closer_coef = jnp.float32(0.25)
-            delta_reward = move_closer_coef * (min_d_old - min_d_new)
+            # Distance improvement reward: constant bonus if moved closer (binary)
+            delta_reward = jnp.where(min_d_new < min_d_old, jnp.float32(0.25), jnp.float32(0.0))
 
             # Bonus for being within excavator working range
             dig_portion_radius = self.env_cfg.agent.move_tiles
