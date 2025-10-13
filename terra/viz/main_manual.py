@@ -53,7 +53,6 @@ def main():
     x11_available = test_x11_availability()
     
     batch_cfg = BatchConfig()
-    action_type = batch_cfg.action_type
     n_envs_x = 1
     n_envs_y = 1
     n_envs = n_envs_x * n_envs_y
@@ -72,10 +71,14 @@ def main():
     # Example: Configure different agent and action types
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(0, 1)))(jnp.arange(n_envs))  # Excavator+Tracked, Truck+Wheeled
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 2), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, SkidSteer+Wheeled
+    # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, Truck+Wheeled
     env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))  # Default: (0,2) agents, (0,0) actions
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
+    
+    # Get action type from the current agent (will be updated as we switch agents)
+    action_type = None  # Will be set dynamically based on current agent
     print(f"{timestep.state.agent.width=}")
     print(f"{timestep.state.agent.height=}")
     
@@ -93,10 +96,24 @@ def main():
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
 
+    def get_current_action_type():
+        """Get the action type for the current active agent"""
+        current_agent_idx = timestep.state.agent.current_agent.item()
+        current_agent_state = timestep.state.agent.agent_states[current_agent_idx]
+        action_type_val = current_agent_state.action_type[0].item()
+        
+        # Import action types
+        from terra.config import TrackedAction, WheeledAction
+        if action_type_val == 0:
+            return TrackedAction()
+        else:
+            return WheeledAction()
+    
     def repeat_action(action, n_times=n_envs):
-        return action_type.new(action.action[None].repeat(n_times, 0))
+        return action.new(action.action[None].repeat(n_times, 0))
 
     # Trigger the JIT compilation
+    action_type = get_current_action_type()
     timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
     end_time = time.time()
     print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
@@ -105,27 +122,29 @@ def main():
     while playing:
         for event in pg.event.get():
             if event.type == KEYDOWN:
+                # Get the current action type for the active agent
+                current_action_type = get_current_action_type()
                 action = None
                 if event.key == K_UP:
-                    action = action_type.forward()
+                    action = current_action_type.forward()
                 elif event.key == K_DOWN:
-                    action = action_type.backward()
+                    action = current_action_type.backward()
                 elif event.key == K_LEFT:
-                    action = action_type.anticlock()
+                    action = current_action_type.anticlock()
                 elif event.key == K_RIGHT:
-                    action = action_type.clock()
+                    action = current_action_type.clock()
                 elif event.key == K_a:
-                    action = action_type.cabin_anticlock()
+                    action = current_action_type.cabin_anticlock()
                 elif event.key == K_d:
-                    action = action_type.cabin_clock()
+                    action = current_action_type.cabin_clock()
                 elif event.key == K_k:
-                    action = action_type.wheels_left()
+                    action = current_action_type.wheels_left()
                 elif event.key == K_l:
-                    action = action_type.wheels_right()
+                    action = current_action_type.wheels_right()
                 elif event.key == K_SPACE:
-                    action = action_type.do()
+                    action = current_action_type.do()
                 elif event.key == K_RETURN:
-                    action = action_type.do_nothing()
+                    action = current_action_type.do_nothing()
 
                 if action is not None:
                     print("Action: ", action)
@@ -194,7 +213,7 @@ def main():
                     # Show action types for all agents
                     print("🚗 Action Types for all agents:")
                     for i in range(num_agents):
-                        if agent_active[i]:
+                        if agent_active[i].item():  # Convert JAX array to Python boolean
                             agent_state = timestep.state.agent.agent_states[i]
                             agent_type = agent_state.agent_type[0].item()
                             action_type = agent_state.action_type[0].item()
