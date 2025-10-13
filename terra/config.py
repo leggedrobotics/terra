@@ -197,8 +197,12 @@ class EnvConfig(NamedTuple):
     tile_size: float = 0  # updated in the code
     
     # Agent types configuration: (agent1_type, agent2_type)
-    # 0=tracked, 1=wheeled, 2=skidsteer
-    agent_types: tuple = (0, 3)  # Default: tracked + skidsteer, override with --agent_types in training script
+    # 0=excavator, 1=truck, 2=skidsteer
+    agent_types: tuple = (0, 2)  # Default: excavator + skidsteer, override with --agent_types in training script
+    
+    # Action types configuration: (action1_type, action2_type) - optional override
+    # 0=tracked, 1=wheeled
+    action_types: tuple = (0, 0)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
 
     @classmethod
     def new(cls):
@@ -252,12 +256,12 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        # {
-        #     "maps_path": "foundations_dumpzones_v3", 
-        #     "max_steps_in_episode": 800,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "foundations_dumpzones_v3", 
+            "max_steps_in_episode": 800,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 
@@ -275,12 +279,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": True,
         # },
 
-        {
-            "maps_path": "trenches/separated_v2",
-            "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "trenches/separated_v2",
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
 
 
 

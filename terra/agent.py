@@ -30,7 +30,8 @@ class AgentState(NamedTuple):
     angle_cabin: IntLowDim
     wheel_angle: IntLowDim
     loaded: IntLowDim
-    agent_type: IntLowDim  # 0=tracked, 1=wheeled, 2=skid steer
+    agent_type: IntLowDim  # 0=excavator, 1=truck, 2=skidsteer
+    action_type: IntLowDim  # 0=tracked, 1=wheeled (movement mechanism)
     shovel_lifted: IntLowDim  # 0=lowered, 1=lifted (for skid steer only)
     # Per-agent baseline potential cached at start of carry (0 -> >0)
     carry_baseline_potential: jnp.float32 = jnp.float32(0.0)
@@ -62,7 +63,8 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
         action_map: Array,
-        agent_types: tuple = (0, 0),  # variable length; 0=tracked, 1=wheeled, 2=skid steer
+        agent_types: tuple = (0, 0),  # variable length; 0=excavator, 1=truck, 2=skidsteer
+        action_types: tuple = (0, 0),  # action types; 0=tracked, 1=wheeled
     ) -> tuple["Agent", jax.random.PRNGKey]:
         # Determine number of agents to initialize (clip to MAX_AGENTS)
         MAX_AGENTS = 4
@@ -139,6 +141,7 @@ class Agent(NamedTuple):
             wheel_angle=jnp.array([0], dtype=IntLowDim),
             loaded=jnp.array([0], dtype=IntLowDim),
             agent_type=jnp.array([0], dtype=IntLowDim),
+            action_type=jnp.array([0], dtype=IntLowDim),  # Default to tracked
             shovel_lifted=jnp.array([0], dtype=IntLowDim),
         )
         
@@ -167,13 +170,18 @@ class Agent(NamedTuple):
                 height,
             )
 
+            # Determine action_type based on action_types tuple
+            agent_type_val = agent_types[i] if i < len(agent_types) else 0
+            action_type_val = action_types[i] if i < len(action_types) else 0
+            
             st_i = AgentState(
                 pos_base=pos_i.astype(IntMap),
                 angle_base=angle_i.astype(IntLowDim),
                 angle_cabin=jnp.full((1,), 0, dtype=IntLowDim),
                 wheel_angle=jnp.full((1,), 0, dtype=IntLowDim),
                 loaded=jnp.full((1,), 0, dtype=IntLowDim),
-                agent_type=jnp.full((1,), agent_types[i] if i < len(agent_types) else 0, dtype=IntLowDim),
+                agent_type=jnp.full((1,), agent_type_val, dtype=IntLowDim),
+                action_type=jnp.full((1,), action_type_val, dtype=IntLowDim),
                 shovel_lifted=jnp.full((1,), 0, dtype=IntLowDim),
                 carry_baseline_potential=jnp.float32(0.0),
                 carry_potential_after_lift=jnp.float32(0.0),

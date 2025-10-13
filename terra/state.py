@@ -28,9 +28,16 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
-# Flag to enable soil mechanics
-ENABLE_SOIL_MECHANICS = True
-# If TRUE: Call _apply_dump() with use_condensed_dump=True to use a more concentrated dump that works better for soil mechanics
+# Soil mechanics is always enabled; concentrated dump is tuned to work well with it
+
+# Reward and scoring constants (tuned elsewhere; centralized here for readability)
+PROGRESS_CAP = jnp.float32(200.0)
+AVG_TARGET_TILES = jnp.float32(170.0)
+SCALE_MIN = jnp.float32(2.0)
+SCALE_MAX = jnp.float32(5.0)
+DUMP_MEANINGFUL_THRESHOLD = jnp.float32(0.1)
+SKIDSTEER_DUMP_BONUS_MULT = jnp.float32(0.5)
+OTHER_DUMP_BONUS_MULT = jnp.float32(0.5)
 
 
 class State(NamedTuple):
@@ -81,8 +88,6 @@ class State(NamedTuple):
         action_map: Array,
         distance_map_override: Array | None = None,
     ) -> "State":
-        # TEMP HACK: Set all dirt height 1 to 5 for testing
-        #action_map = jnp.where(action_map == 1, 5, action_map)
 
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map,
@@ -91,9 +96,11 @@ class State(NamedTuple):
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
         agent_types = getattr(env_cfg, 'agent_types', (0, 2))
+        # Get action types from env_cfg, defaulting to (0, 0) for backwards compatibility
+        action_types = getattr(env_cfg, 'action_types', (0, 0))
         agent, key = Agent.new(
             key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map,
-            agent_types=agent_types
+            agent_types=agent_types, action_types=action_types
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
@@ -163,8 +170,6 @@ class State(NamedTuple):
         Resets the already-existing State
         """
         key, _ = jax.random.split(self.key)
-        # TEMP HACK: Set all dirt height 1 to 5 for testing
-        #action_map = jnp.where(action_map == 1, 5, action_map)
         return self.new(
             key=key,
             env_cfg=env_cfg,
@@ -239,6 +244,7 @@ class State(NamedTuple):
 
     # --- Helper accessors to migrate to array-only agent states ---
     def _get_current_agent_state(self):
+        """Return the current agent's `AgentState`. Fixed to first 4 agents."""
         # Fixed cases for MAX_AGENTS=4
         return jax.lax.switch(
             self.agent.current_agent,
@@ -251,6 +257,7 @@ class State(NamedTuple):
         )
 
     def _get_next_agent_state(self):
+        """Return the next agent's `AgentState` (cyclic over active agents)."""
         next_idx = (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
         return jax.lax.switch(
             next_idx,
@@ -263,6 +270,7 @@ class State(NamedTuple):
         )
 
     def _get_prev_agent_state(self):
+        """Return the previous agent's `AgentState` (cyclic over active agents)."""
         prev_idx = (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
         return jax.lax.switch(
             prev_idx,
@@ -275,6 +283,7 @@ class State(NamedTuple):
         )
 
     def _set_agent_state_at(self, idx: int, new_state):
+        """Set the `AgentState` at index `idx` to `new_state` and return updated State."""
         # Use jax.lax.switch to set the agent state at the given index
         def set_at_0():
             return self.agent._replace(agent_states=(
@@ -300,21 +309,27 @@ class State(NamedTuple):
         return self._replace(agent=updated_agent)
 
     def _current_idx(self):
+        """Index of current agent (int)."""
         return self.agent.current_agent
 
     def _next_idx(self):
+        """Index of next agent (int), cyclic over num_agents."""
         return (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
 
     def _prev_idx(self):
+        """Index of previous agent (int), cyclic over num_agents."""
         return (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
 
     def _set_current_agent_state(self, new_state):
+        """Replace current agent's `AgentState` with `new_state`."""
         return self._set_agent_state_at(self._current_idx(), new_state)
 
     def _set_next_agent_state(self, new_state):
+        """Replace next agent's `AgentState` with `new_state`."""
         return self._set_agent_state_at(self._next_idx(), new_state)
 
     def _set_prev_agent_state(self, new_state):
+        """Replace previous agent's `AgentState` with `new_state`."""
         return self._set_agent_state_at(self._prev_idx(), new_state)
 
     
@@ -499,14 +514,10 @@ class State(NamedTuple):
 
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
-
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.padding_mask.map
             
         )
-        # Note: Interaction cones are not used for movement validity; collisions are handled via other agents' polygons
-        # DIAG: disable other-agent blocking to test crowding hypothesis
-        # traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
 
         
         #traversability_mask = traversability_mask
@@ -515,7 +526,6 @@ class State(NamedTuple):
         # Mask out the cells where the agent is located.
         # jnp.where(polygon_mask_2, 1 ,traversability_mask)
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
-        #jax.debug.print("Valid bounds: {valid_bounds}, Valid traversability: {valid_traversability}",valid_bounds=valid_bounds, valid_traversability=valid_traversability)
         return jnp.logical_and(valid_bounds, valid_traversability)
 
     @staticmethod
@@ -681,22 +691,8 @@ class State(NamedTuple):
                 new_map_2d = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
                 
                 # Apply soil mechanics (conserves dirt - only redistributes)
-                def _apply_soil_collapse():
-                    auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
-                    expanded_mask = new_state._expand_mask_for_soil_mechanics(auto_load_mask_2d)
-                    collapsed_map = new_state._apply_local_soil_mechanics(
-                        new_map_2d, expanded_mask
-                    )
-                    return collapsed_map
-                
-                def _skip_soil_collapse():
-                    return new_map_2d
-                
-                final_map = jax.lax.cond(
-                    ENABLE_SOIL_MECHANICS,
-                    _apply_soil_collapse,
-                    _skip_soil_collapse
-                )
+                auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
+                final_map = new_state._apply_local_soil_mechanics(new_map_2d, auto_load_mask_2d)
                 final_map = final_map.astype(new_state.world.action_map.map.dtype)
                 
                 # Load agent with the exact amount that was in the workspace
@@ -775,7 +771,7 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         is_loaded = cur.loaded[0] > 0
         
         # Movement rules:
@@ -919,7 +915,7 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         is_loaded = cur.loaded[0] > 0
         shovel_lifted = cur.shovel_lifted[0] > 0
         
@@ -1013,7 +1009,7 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
@@ -1043,7 +1039,7 @@ class State(NamedTuple):
         # Check agent conditions
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         is_loaded = cur.loaded[0] > 0
         
         # Rotation rules:
@@ -1062,7 +1058,7 @@ class State(NamedTuple):
         # Skid steer and Truck cannot rotate cabin
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         
         def _cabin_clock():
             cur2 = self._get_current_agent_state()
@@ -1080,7 +1076,7 @@ class State(NamedTuple):
         # Skid steer and Truck cannot rotate cabin
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         
         def _cabin_anticlock():
             cur2 = self._get_current_agent_state()
@@ -1279,15 +1275,9 @@ class State(NamedTuple):
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
         #Optionally apply soil mechanics using the global flag
-        def apply_soil_mech():
-            map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
-            dig_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
-            return self._apply_local_soil_mechanics_simplified(map_2d, dig_mask_2d).reshape(-1)
-        return jax.lax.cond(
-            ENABLE_SOIL_MECHANICS,
-            apply_soil_mech,
-            lambda: new_flattened_map
-        )
+        map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
+        dig_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+        return self._apply_local_soil_mechanics(map_2d, dig_mask_2d).reshape(-1)
 
     def _apply_dump_mask(
         self,
@@ -1296,7 +1286,7 @@ class State(NamedTuple):
         even_volume_per_tile: IntLowDim,
         remaining_volume: IntLowDim,
         target_map: Array,
-        use_condensed_dump: bool = False
+        use_condensed_dump: bool = True
     ) -> Array:
         """
         TODO: delta_dig_remaining now is added with a naive approach - should be added
@@ -1340,15 +1330,9 @@ class State(NamedTuple):
 
             simple_result = (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
             # Optionally apply soil mechanics using the global flag
-            def apply_soil_mech():
-                map_2d = simple_result.reshape(self.world.action_map.map.shape)
-                mask_2d = dump_mask_final.reshape(self.world.action_map.map.shape)
-                return self._apply_local_soil_mechanics_simplified(map_2d, self._expand_mask_for_soil_mechanics(mask_2d)).reshape(-1)
-            return jax.lax.cond(
-                ENABLE_SOIL_MECHANICS,
-                apply_soil_mech,
-                lambda: simple_result
-            )
+            map_2d = simple_result.reshape(self.world.action_map.map.shape)
+            mask_2d = dump_mask_final.reshape(self.world.action_map.map.shape)
+            return self._apply_local_soil_mechanics(map_2d, mask_2d).reshape(-1)
 
         def _apply_concentrated_dump():
             y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
@@ -1388,11 +1372,7 @@ class State(NamedTuple):
             bonus_mask_flat = bonus_indices <= remaining_concentrated_volume
             bonus_volume_2d = bonus_mask_flat.reshape(map_2d_shape).astype(IntMap)
             new_map_2d = flattened_map.reshape(map_2d_shape).astype(IntMap) + volume_per_tile_2d + bonus_volume_2d
-            final_map_2d = jax.lax.cond(
-                ENABLE_SOIL_MECHANICS,
-                lambda: self._apply_local_soil_mechanics_simplified(new_map_2d, self._expand_mask_for_soil_mechanics(final_concentrated_mask_2d)),
-                lambda: new_map_2d
-            )
+            final_map_2d = self._apply_local_soil_mechanics(new_map_2d, final_concentrated_mask_2d)
             return final_map_2d.flatten()
 
         return jax.lax.cond(
@@ -1436,20 +1416,19 @@ class State(NamedTuple):
         # This ensures soil mechanics don't affect obstacles or non-dumpable areas
         return jnp.logical_and(expanded, validity_mask)
 
-    def _apply_local_soil_mechanics_simplified(self, action_map: Array, affected_mask: Array) -> Array:
+    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
+        # Defensive: skip soil mechanics if not 2D
         if action_map.ndim != 2:
             return action_map
         def collapse_body(map_2d, mask):
+            # Expand the mask inside for consistency with single-agent style
             mask = mask.astype(jnp.bool_)
+            mask = self._expand_mask_for_soil_mechanics(mask)
             n_iters = 3  # Number of collapse iterations
             def collapse_step(i, map_2d):
                 """One iteration of soil collapse - move dirt between neighbors."""
-                # JAX-compatible defensive check: ensure map_2d is always treated as 2D
-                # Use jax.lax.cond to handle potential dimension issues during tracing
                 def handle_valid_2d(map_2d):
-                    # Process the valid 2D map with soil mechanics
                     result = map_2d
-                    # Check all 4 directional neighbors
                     for dy, dx in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                         # Get neighbor heights by shifting the map
                         shifted = jnp.roll(result, shift=(dy, dx), axis=(0, 1))
@@ -1461,10 +1440,7 @@ class State(NamedTuple):
                         result = jnp.roll(result, shift=(-dy, -dx), axis=(0, 1))
                     return result
                 def handle_invalid_shape(map_2d):
-                    # Return a safe default - this should never execute at runtime
-                    # but is needed for JAX tracing completeness
                     return jnp.zeros_like(action_map, dtype=map_2d.dtype)
-                # JAX-compatible shape check using jnp.where for static shape determination
                 is_valid_2d = (jnp.ndim(map_2d) == 2) & (jnp.shape(map_2d)[0] > 0) & (jnp.shape(map_2d)[1] > 0)
                 return jax.lax.cond(is_valid_2d, handle_valid_2d, handle_invalid_shape, map_2d)
             map_2d = jax.lax.fori_loop(0, n_iters, collapse_step, map_2d)
@@ -1474,15 +1450,7 @@ class State(NamedTuple):
             return collapse_body(action_map, affected_mask)
         return jax.lax.cond(has_affected, do_collapse, lambda _: action_map, operand=None)
 
-    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
-        # Defensive: skip soil mechanics if not 2D
-        if action_map.ndim != 2:
-            return action_map
-        return jax.lax.cond(
-            ENABLE_SOIL_MECHANICS,
-            lambda: self._apply_local_soil_mechanics_simplified(action_map, affected_mask),
-            lambda: action_map  # Return unchanged map when soil mechanics disabled
-        )
+    
 
     # Removed unused _get_map_local_and_cyl_coords_2
     
@@ -1711,7 +1679,7 @@ class State(NamedTuple):
         
         # Use JAX conditional to select workspace type based on agent type
         return jax.lax.cond(
-            jnp.logical_or(current_agent_type == 2, current_agent_type == 3),  # Skid steer or Truck
+            jnp.logical_or(current_agent_type == 2, current_agent_type == 1),  # Skid steer or Truck
             _get_skidsteer_cone,
             _get_excavator_cone       # Default for excavator (0) and wheeled (1)
         )
@@ -1862,27 +1830,9 @@ class State(NamedTuple):
                 self.world.action_map.map.shape
             )
             
-            # Now apply soil mechanics using the saved cone mask
-            def _apply_soil_collapse():
-                # Use the saved cone mask for soil mechanics
-                cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
-                
-                # Apply soil mechanics to collapse dirt into the hole
-                expanded_mask = self._expand_mask_for_soil_mechanics(cone_mask_2d)
-                collapsed_map = self._apply_local_soil_mechanics(
-                    new_map_global_coords, expanded_mask
-                )
-                return collapsed_map
-            
-            def _skip_soil_collapse():
-                return new_map_global_coords
-            
-            # Apply soil mechanics only if enabled during training
-            final_map = jax.lax.cond(
-                ENABLE_SOIL_MECHANICS,
-                _apply_soil_collapse,
-                _skip_soil_collapse
-            )
+            # Now apply soil mechanics using the saved cone mask (always enabled)
+            cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+            final_map = self._apply_local_soil_mechanics(new_map_global_coords, cone_mask_2d)
             
             # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
             # The soil mechanics might move additional dirt from border into cone
@@ -1994,11 +1944,22 @@ class State(NamedTuple):
                 dump_mask_2d.astype(jnp.float32), kernel_3x3, mode='same', boundary='fill', fillvalue=0.0
             ) > 0
 
-            def base_in_cone_for(idx: int):
-                st = self.agent.agent_states[idx]
-                x = jnp.clip(st.pos_base[0].astype(jnp.int32), 0, self.world.width - 1)
-                y = jnp.clip(st.pos_base[1].astype(jnp.int32), 0, self.world.height - 1)
-                return dump_mask_2d_dilated[x, y]
+            # Vectorized candidate detection
+            pos_x = jnp.array([
+                self.agent.agent_states[0].pos_base[0],
+                self.agent.agent_states[1].pos_base[0],
+                self.agent.agent_states[2].pos_base[0],
+                self.agent.agent_states[3].pos_base[0],
+            ]).astype(jnp.int32)
+            pos_y = jnp.array([
+                self.agent.agent_states[0].pos_base[1],
+                self.agent.agent_states[1].pos_base[1],
+                self.agent.agent_states[2].pos_base[1],
+                self.agent.agent_states[3].pos_base[1],
+            ]).astype(jnp.int32)
+            pos_x = jnp.clip(pos_x, 0, self.world.width - 1)
+            pos_y = jnp.clip(pos_y, 0, self.world.height - 1)
+            base_in = dump_mask_2d_dilated[pos_x, pos_y]
 
             current_idx = self.agent.current_agent
             active = self.agent.agent_active.astype(jnp.bool_)
@@ -2008,20 +1969,14 @@ class State(NamedTuple):
                 self.agent.agent_states[2].agent_type[0],
                 self.agent.agent_states[3].agent_type[0],
             ])
-            base_in = jnp.array([
-                base_in_cone_for(0),
-                base_in_cone_for(1),
-                base_in_cone_for(2),
-                base_in_cone_for(3),
-            ])
             not_current = jnp.array([
                 0 != current_idx,
                 1 != current_idx,
                 2 != current_idx,
                 3 != current_idx,
             ])
-            is_truck_vec = (types == 3)
-            candidates = jnp.logical_and(jnp.logical_and(active, is_truck_vec), jnp.logical_and(base_in, not_current))
+            is_truck_vec = (types == 1)
+            candidates = jnp.logical_and(active, jnp.logical_and(is_truck_vec, jnp.logical_and(base_in, not_current)))
 
             any_candidate = jnp.any(candidates)
 
@@ -2033,15 +1988,12 @@ class State(NamedTuple):
                 sel_idx = jnp.argmin(scores)
                 capacity = jnp.int32(getattr(self.env_cfg, 'truck_capacity', 127))
 
-                def _get_sel_state(i):
-                    return jax.lax.switch(i, [
-                        lambda: self.agent.agent_states[0],
-                        lambda: self.agent.agent_states[1],
-                        lambda: self.agent.agent_states[2],
-                        lambda: self.agent.agent_states[3],
-                    ])
-                
-                sel_state = _get_sel_state(sel_idx)
+                sel_state = jax.lax.switch(sel_idx, [
+                    lambda: self.agent.agent_states[0],
+                    lambda: self.agent.agent_states[1],
+                    lambda: self.agent.agent_states[2],
+                    lambda: self.agent.agent_states[3],
+                ])
                 truck_loaded = sel_state.loaded[0].astype(jnp.int32)
                 cur_loaded = curd.loaded[0].astype(jnp.int32)
                 remaining_cap = jnp.maximum(capacity - truck_loaded, 0)
@@ -2050,24 +2002,12 @@ class State(NamedTuple):
                 def _apply_transfer():
                     # Apply transfer with baseline adjustment like skidsteer
                     started_loading = (truck_loaded == 0)
-                    
-                    def _adjust_baseline_for_world_changes():
-                        # Current world potential before this transfer
-                        current_potential = curd.carry_baseline_potential
-                        # Previous after-lift potential from last load
-                        previous_after_lift = sel_state.carry_potential_after_lift
-                        # Adjust baseline: if world got worse (higher potential), increase baseline
-                        # If world got better (lower potential), decrease baseline (make it harder)
-                        world_change = current_potential - previous_after_lift
-                        return sel_state.carry_baseline_potential + world_change
-                    
-                    new_carry_base = jax.lax.select(
-                        started_loading, 
-                        curd.carry_baseline_potential,  # First load: use excavator's baseline
-                        _adjust_baseline_for_world_changes()  # Subsequent loads: adjust for world changes
-                    )
-                    
-                    # Use excavator's after-lift potential as the new after-lift potential
+                    current_potential = curd.carry_baseline_potential
+                    previous_after_lift = sel_state.carry_potential_after_lift
+                    world_change = current_potential - previous_after_lift
+                    adjusted_baseline = sel_state.carry_baseline_potential + world_change
+                    new_carry_base = jax.lax.select(started_loading, curd.carry_baseline_potential, adjusted_baseline)
+
                     new_truck = sel_state._replace(
                         loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
                         carry_baseline_potential=jnp.float32(new_carry_base),
@@ -2092,7 +2032,7 @@ class State(NamedTuple):
         # Only restrict dumping to dump zones for skid steer and truck agents
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         
         def _apply_dump_zone_restriction():
             # For skid steer: restrict to only dump zones (target_map > 0)
@@ -2153,7 +2093,7 @@ class State(NamedTuple):
                 _clear_last_dig_mask,
                 _keep_last_dig_mask
             )
-            current_potential = self._compute_relocation_potential(self.world.action_map.map)            
+            current_potential = self._compute_relocation_potential(self.world.action_map.map)
             # Predict potential post-dump and gate regressive dumps relative to effective baseline
             predicted_potential = self._compute_relocation_potential(new_map_global_coords)
             curb = self._get_current_agent_state()
@@ -2221,7 +2161,7 @@ class State(NamedTuple):
         """
         cur = self._get_current_agent_state()
         is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         
         def _skid_steer_do():
             cur = self._get_current_agent_state()
@@ -2479,8 +2419,7 @@ class State(NamedTuple):
         # Use same effective baseline logic as in dump gating
         baseline_eff = baseline_before + (current_potential - after_lift)
         effective_progress = (baseline_eff - new_potential)
-        cap = jnp.float32(200.0)
-        progress_clamped = jnp.clip(effective_progress, -cap, cap)
+        progress_clamped = jnp.clip(effective_progress, -PROGRESS_CAP, PROGRESS_CAP)
         # Dump success/fail
         dump_failed = jnp.allclose(
             cur.loaded, new_state._get_prev_agent_state().loaded
@@ -2505,11 +2444,11 @@ class State(NamedTuple):
             )
         )
         # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
-        avg_target_tiles = jnp.float32(170.0)
+        avg_target_tiles = AVG_TARGET_TILES
         # Use only dig target tiles (foundations): target_map < 0
         dig_target_tiles = jnp.sum(self.world.target_map.map < 0)
         scale_raw = avg_target_tiles / jnp.maximum(jnp.float32(1.0), dig_target_tiles.astype(jnp.float32))
-        scale = jnp.clip(scale_raw, jnp.float32(2.0), jnp.float32(5.0)) / 2
+        scale = jnp.clip(scale_raw, SCALE_MIN, SCALE_MAX) / 2
 
 
         progress_clamped = progress_clamped * potential_multiplier * scale
@@ -2526,10 +2465,10 @@ class State(NamedTuple):
             
             dump_bonus = jax.lax.cond(
                 is_skidsteer,
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5,   # Strong relocation specialization
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * 0.5 * potential_multiplier # Small efficiency bonus for direct dumps
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * SKIDSTEER_DUMP_BONUS_MULT,
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * OTHER_DUMP_BONUS_MULT * potential_multiplier
             )
-            meaningful_threshold = jnp.float32(0.1)
+            meaningful_threshold = DUMP_MEANINGFUL_THRESHOLD
             
             return jax.lax.cond(
                 progress_clamped > meaningful_threshold,
@@ -2845,11 +2784,10 @@ class State(NamedTuple):
         def get_skidsteer_rewards():
             return self._get_rewards_skidsteer(new_state, action)
         
-        # Route rewards based on agent type: 0=tracked, 1=wheeled, 2=skidsteer, 3=truck
-        # For truck, use dedicated reward handler
+        # Route rewards based on agent type: 0=excavator, 1=truck, 2=skidsteer
         def get_truck_rewards():
             return self._get_rewards_truck(new_state, action)
-        reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards, get_truck_rewards]
+        reward_functions = [get_tracked_rewards, get_truck_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
         
@@ -3075,7 +3013,7 @@ class State(NamedTuple):
             self.agent.agent_states[3].agent_type[0]
         ])
         has_skidsteer_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 2))
-        has_truck_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 3))
+        has_truck_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 1))
         has_transport_agent = jnp.logical_or(has_skidsteer_agent, has_truck_agent)
         
         # Relocation tasks do not require a transport agent; excavator alone could relocate
@@ -3276,7 +3214,8 @@ class State(NamedTuple):
         """
         num_actions = dummy_action.get_num_actions()
         
-        # Check agent type from the current agent state
+        # Check action type from the current agent state (not agent type)
+        current_action_type = self._get_current_agent_state().action_type[0]
         current_agent_type = self._get_current_agent_state().agent_type[0]
         
         # Use JAX switch instead of if statements for JIT compatibility
@@ -3292,12 +3231,10 @@ class State(NamedTuple):
         def get_truck_mask():
             return self._get_action_mask_truck()
         
-        # Create a list of functions for jax.lax.switch
-        mask_functions = [get_tracked_mask, get_wheeled_mask, get_skidsteer_mask, get_truck_mask]
-        
-        # Use jax.lax.switch with clamped index to handle any agent_type value
-        clamped_agent_type = jnp.clip(current_agent_type, 0, len(mask_functions) - 1)
-        action_mask = jax.lax.switch(clamped_agent_type, mask_functions)
+        # Route based on action_type for all vehicles
+        mask_functions = [get_tracked_mask, get_wheeled_mask]
+        clamped_action_type = jnp.clip(current_action_type, 0, len(mask_functions) - 1)
+        action_mask = jax.lax.switch(clamped_action_type, mask_functions)
             
         action_mask = action_mask[:num_actions]
         return action_mask
@@ -3514,7 +3451,7 @@ class State(NamedTuple):
 
         # Proximity shaping when empty
         cur = self._get_current_agent_state()
-        is_truck = cur.agent_type[0] == 3
+        is_truck = cur.agent_type[0] == 1
         is_empty = cur.loaded[0] == 0
 
         def _proximity_term():
@@ -3576,6 +3513,10 @@ class State(NamedTuple):
             max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
             min_distance_from_agent = tile_size * max_agent_dim
             fixed_extension = 0.5
+
+            
+            #r_max_world = (min_distance_from_agent + dig_portion_radius * tile_size) * 1.3
+
             r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
             r_max_tiles = r_max_world / tile_size
             near_after = min_d_new <= r_max_tiles
