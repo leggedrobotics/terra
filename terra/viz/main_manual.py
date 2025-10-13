@@ -217,8 +217,9 @@ def main():
                             # Try to get the scalar value directly
                             is_active = agent_active[i].item() == 1
                         except ValueError:
-                            # If that fails, use JAX comparison and convert
-                            is_active = bool(jnp.array(agent_active[i] == 1))
+                            # If that fails, use JAX comparison and check if any element is True
+                            comparison_result = agent_active[i] == 1
+                            is_active = jnp.any(comparison_result).item()
                         
                         if is_active:
                             agent_state = timestep.state.agent.agent_states[i]
