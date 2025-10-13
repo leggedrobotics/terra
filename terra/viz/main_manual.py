@@ -68,12 +68,27 @@ def main():
 
     print("Starting the environment...")
     start_time = time.time()
-    env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))
+    
+    # Example: Configure different agent and action types
+    # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(0, 1)))(jnp.arange(n_envs))  # Excavator+Tracked, Truck+Wheeled
+    # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 2), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, SkidSteer+Wheeled
+    env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))  # Default: (0,2) agents, (0,0) actions
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
     print(f"{timestep.state.agent.width=}")
     print(f"{timestep.state.agent.height=}")
+    
+    # Show agent and action type configuration
+    agent_types = timestep.state.env_cfg.agent_types
+    action_types = timestep.state.env_cfg.action_types
+    print(f"🤖 Agent Types: {agent_types}")
+    print(f"🚗 Action Types: {action_types}")
+    
+    # Show which action type is currently being used
+    current_action_type = timestep.state.agent.agent_states[0].action_type[0].item()
+    action_type_names = {0: "Tracked", 1: "Wheeled"}
+    print(f"🎮 Current Action Type: {current_action_type} ({action_type_names.get(current_action_type, 'Unknown')})")
 
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
@@ -126,16 +141,19 @@ def main():
                     current_agent_idx = timestep.state.agent.current_agent.item()  # Convert JAX array to Python int
                     current_agent_state = timestep.state.agent.agent_states[current_agent_idx]
                     agent_type = current_agent_state.agent_type[0].item()  # Convert JAX array to Python int
+                    action_type = current_agent_state.action_type[0].item()  # Convert JAX array to Python int
                     reward_value = timestep.reward.item()
                     action_num = action.action[0].item()  # Convert JAX array to Python int
                     
                     agent_type_names = {0: "Excavator", 1: "Truck", 2: "Skid Steer"}
+                    action_type_names = {0: "Tracked", 1: "Wheeled"}
                     reward_function_names = {0: "_get_rewards_tracked()", 1: "_get_rewards_truck()", 2: "_get_rewards_skidsteer()"}
                     
                     agent_name = agent_type_names.get(agent_type, f"Unknown({agent_type})")
+                    action_name_type = action_type_names.get(action_type, f"Unknown({action_type})")
                     reward_func = reward_function_names.get(agent_type, f"unknown_function({agent_type})")
                     
-                    print(f"🎯 REWARD: {reward_value:.4f} | Agent: {agent_name} | Function: {reward_func}")
+                    print(f"🎯 REWARD: {reward_value:.4f} | Agent: {agent_name} | Action Type: {action_name_type} | Function: {reward_func}")
                     
                     # For skid steers, show additional debugging for specific reward components
                     if agent_type == 2:  # Skid steer
@@ -172,6 +190,18 @@ def main():
                     num_agents = timestep.state.agent.num_agents.item()  # Convert JAX array to Python int
                     agent_active = timestep.state.agent.agent_active
                     print(f"🤖 MULTI-AGENT: Current={current_agent_idx}, Total={num_agents}, Active={agent_active}")
+                    
+                    # Show action types for all agents
+                    print("🚗 Action Types for all agents:")
+                    for i in range(num_agents):
+                        if agent_active[i]:
+                            agent_state = timestep.state.agent.agent_states[i]
+                            agent_type = agent_state.agent_type[0].item()
+                            action_type = agent_state.action_type[0].item()
+                            agent_name = agent_type_names.get(agent_type, f"Unknown({agent_type})")
+                            action_name_type = action_type_names.get(action_type, f"Unknown({action_type})")
+                            print(f"   Agent {i}: {agent_name} ({action_name_type})")
+                    
                     print("-" * 40)
 
             elif event.type == QUIT:
