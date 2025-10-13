@@ -280,6 +280,11 @@ class Game:
                     offset_vertices = [(v[0] - min_x, v[1] - min_y) for v in body_vertices]
                     pg.draw.polygon(agent_surface, body_color, offset_vertices)
                     
+                    # Draw body border if it exists (for trucks)
+                    if "border_color" in agent.agent["body"]:
+                        border_color = agent.agent["body"]["border_color"]
+                        pg.draw.polygon(agent_surface, border_color, offset_vertices, 2)  # 2 pixel border width
+                    
                     # Draw shovel first (behind the body) if it exists
                     if "shovel" in agent.agent:
                         shovel_vertices = agent.agent["shovel"]["vertices"]
@@ -292,6 +297,11 @@ class Game:
                     cabin_offset = [(v[0] - min_x, v[1] - min_y) for v in cabin_vertices]
                     cabin_color = agent.agent["cabin"]["color"]
                     pg.draw.polygon(agent_surface, cabin_color, cabin_offset)
+                    
+                    # Draw cabin border if it exists (for trucks)
+                    if "border_color" in agent.agent["cabin"]:
+                        cabin_border_color = agent.agent["cabin"]["border_color"]
+                        pg.draw.polygon(agent_surface, cabin_border_color, cabin_offset, 2)  # 2 pixel border width
                     env_surfaces.append(agent_surface)
             
             agent_surfaces.append(env_surfaces)

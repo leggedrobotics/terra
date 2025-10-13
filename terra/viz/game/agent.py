@@ -1,7 +1,7 @@
 import numpy as np
 import math
 import pygame as pg
-from .settings import COLORS
+from .settings import COLORS, darken_color
 from .utils import agent_base_to_angle
 from .utils import agent_cabin_to_angle
 from .utils import rotate_triangle
@@ -149,9 +149,12 @@ class Agent:
             body_color = COLORS["skid_steer_body"]
             cabin_color = COLORS["skid_steer_cabin"]["loaded"] if loaded else COLORS["skid_steer_cabin"]["not_loaded"]
         elif agent_type == 3:  # Truck
-            # Dark green shades
-            body_color = (0, 90, 40)
-            cabin_color = (0, 110, 50)
+            # Dark green shades with loading state variation
+            if loaded:
+                body_color = (0, 70, 30)  # Darker when loaded
+            else:
+                body_color = (0, 90, 40)  # Normal when empty
+            cabin_color = (0, 0, 0)  # Black cabin
         else:  # Tracked or wheeled (default)
             body_color = COLORS["agent_body"]
             cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
@@ -176,16 +179,22 @@ class Agent:
             cabin_offset = -truck_base_length / 2.0
             truck_cabin_vertices = oriented_rect((center_y, center_x), base_angle_degrees, cabin_length, cabin_width, cabin_offset)
 
+            # Create darker border colors for visual depth
+            body_border_color = darken_color(body_color, 0.6)
+            cabin_border_color = darken_color(cabin_color, 0.6)
+
             out = {
                 "body": {
                     "vertices": truck_base_vertices,
                     "width": w,
                     "height": h,
                     "color": body_color,
+                    "border_color": body_border_color,
                 },
                 "cabin": {
                     "vertices": truck_cabin_vertices,
                     "color": cabin_color,
+                    "border_color": cabin_border_color,
                 },
             }
         else:

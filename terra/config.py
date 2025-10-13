@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 6  #6 number of tiles of progress for every move action
+    move_tiles: int = 5  #6 number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
@@ -246,18 +246,18 @@ class CurriculumGlobalConfig(NamedTuple):
         
         # {
         #     "maps_path": "foundations_hybrid_dumpzones",
-        #     "max_steps_in_episode":1200,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
         # 
 
-        {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones_v3", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 
@@ -275,12 +275,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": True,
         # },
 
-        # {
-        #     "maps_path": "trenches/separated_v2",
-        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "trenches/separated_v2",
+            "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
 
 
 

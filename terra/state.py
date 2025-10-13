@@ -1988,12 +1988,17 @@ class State(NamedTuple):
         def _attempt_transfer():
             map_shape = self.world.action_map.map.shape
             dump_mask_2d = dump_mask.reshape(map_shape)
+            # Tolerance: allow transfer if truck base is within a 1-tile dilation of the cone
+            kernel_3x3 = jnp.ones((3, 3), dtype=jnp.float32)
+            dump_mask_2d_dilated = jax.scipy.signal.correlate2d(
+                dump_mask_2d.astype(jnp.float32), kernel_3x3, mode='same', boundary='fill', fillvalue=0.0
+            ) > 0
 
             def base_in_cone_for(idx: int):
                 st = self.agent.agent_states[idx]
                 x = jnp.clip(st.pos_base[0].astype(jnp.int32), 0, self.world.width - 1)
                 y = jnp.clip(st.pos_base[1].astype(jnp.int32), 0, self.world.height - 1)
-                return dump_mask_2d[x, y]
+                return dump_mask_2d_dilated[x, y]
 
             current_idx = self.agent.current_agent
             active = self.agent.agent_active.astype(jnp.bool_)
@@ -2602,30 +2607,6 @@ class State(NamedTuple):
         new_loaded = prev_new.loaded[0]
         dirt_gained = new_loaded - old_loaded
 
-        # Only check for penalty if dirt was gained
-        # def _reward_or_penalty():
-        #     # Use the existing progress function to check if dump zone dirt decreased
-        #     progress = self._get_action_map_dump_progress(
-        #         self.world.action_map.map,
-        #         new_state.world.action_map.map,
-        #         self.world.target_map.map,
-        #     )
-        #     # If progress is negative, dirt was removed from a dump zone
-        #     # return jax.lax.cond(
-        #     #     progress < 0,
-        #     #     lambda: self.env_cfg.rewards.skid_auto_load_from_dumpzone_penalty,
-        #     #     lambda: self.env_cfg.rewards.skid_auto_load,
-        #     # )
-
-        #     return jax.lax.cond(
-        #         progress < 0,
-        #         lambda: self._calculate_dump_zone_reward(progress, cur.loaded[0]), #- self.env_cfg.rewards.skid_auto_load,  # Use unified function
-        #         lambda: self.env_cfg.rewards.skid_auto_load,
-        #     )
-
-
-            # Penalty commented out:
-            #return self.env_cfg.rewards.skid_auto_load
 
         # Route successful auto-load to dig rewards (single-agent parity)
         return jax.lax.cond(
@@ -2645,49 +2626,6 @@ class State(NamedTuple):
         new_loaded = prev_new.loaded[0]
         dirt_dumped = old_loaded - new_loaded
         
-        # def _successful_dump():
-        #     # Check if dumped in correct areas (target map > 0)
-        #     action_map_dump_progress = self._get_action_map_dump_progress(
-        #         self.world.action_map.map,
-        #         new_state.world.action_map.map,
-        #         self.world.target_map.map,
-        #     )
-            
-        #     # EFFICIENCY FIX: Calculate efficiency as ratio of correct placement
-        #     # This eliminates the edge-dumping exploit by rewarding based on percentage
-        #     def _calculate_efficiency_reward():
-        #         # Give reward based on absolute amount of dirt moved, not percentage
-                
-                
-        #         # min_reward = 15.0
-        #         # max_reward = self.env_cfg.rewards.skid_dump_correct
-                
-        #         # # Scale reward based on absolute dirt amount moved
-        #         # # Small dumps (1-5 units) get min_reward, large dumps (20+ units) get max_reward
-        #         # min_dirt = 1.0
-        #         # max_dirt = 20.0
-                
-        #         # # Clamp dirt amount to reasonable range
-        #         # clamped_dirt = jnp.clip(action_map_dump_progress, min_dirt, max_dirt)
-                
-        #         # # Linear interpolation between min and max reward based on dirt amount
-        #         # reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-        #         # scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
-                
-        #         # return scaled_reward
-        #         return self._calculate_dump_zone_reward(action_map_dump_progress, cur.loaded[0])
-            
-            
-        #     def _wrong_dump_penalty():
-        #         # If no progress in dump zones, give penalty proportional to amount dumped
-        #         return self.env_cfg.rewards.skid_dump_wrong
-            
-        #     # Reward based on correct placement efficiency
-        #     return jax.lax.cond(
-        #         action_map_dump_progress > 0,
-        #         _calculate_efficiency_reward,
-        #         _wrong_dump_penalty
-        #     )
         
         def _failed_dump():
             # Tried to dump but failed (no dirt unloaded)
@@ -2914,18 +2852,7 @@ class State(NamedTuple):
         reward_functions = [get_tracked_rewards, get_wheeled_rewards, get_skidsteer_rewards, get_truck_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
-        # Inline debug: tag reward with agent index and type for clarity in logs
-        def _dbg_reward_print(_: int):
-            jax.debug.print(
-                "[REWARD DEBUG] agent_idx={} agent_type={} reward={}",
-                self.agent.current_agent,
-                current_agent_type,
-                agent_reward,
-            )
-            return 0
-        def _no_dbg(_: int):
-            return 0
-        _ = jax.lax.cond(jnp.abs(agent_reward) > 0.0, _dbg_reward_print, _no_dbg, 0)
+        
         reward += agent_reward
         
         # Attribute per-step agent reward to the current agent index (active-first ordering in obs only)
@@ -3661,22 +3588,7 @@ class State(NamedTuple):
             # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
             # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
             shaped = delta_reward + stay_bonus
-
-            # Debug print only when a positive proximity reward is granted
-            def _dbg():
-                jax.debug.print(
-                    "[TRUCK PROX DEBUG] agent={} old_d={} new_d={} delta={} near={} reward={}",
-                    self.agent.current_agent,
-                    min_d_old,
-                    min_d_new,
-                    (min_d_old - min_d_new),
-                    near_after,
-                    shaped,
-                )
-                return shaped
-            def _no_dbg():
-                return shaped
-            return jax.lax.cond(shaped > 0, _dbg, _no_dbg)
+            return shaped
 
         reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
         return reward
