@@ -77,8 +77,7 @@ def main():
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
     
-    # Get action type from the current agent (will be updated as we switch agents)
-    action_type = None  # Will be set dynamically based on current agent
+    # Action type will be determined dynamically based on current agent
     print(f"{timestep.state.agent.width=}")
     print(f"{timestep.state.agent.height=}")
     
@@ -113,8 +112,8 @@ def main():
         return action.new(action.action[None].repeat(n_times, 0))
 
     # Trigger the JIT compilation
-    action_type = get_current_action_type()
-    timestep = env.step(timestep, repeat_action(action_type.do_nothing()), _rng)
+    current_action_type = get_current_action_type()
+    timestep = env.step(timestep, repeat_action(current_action_type.do_nothing()), _rng)
     end_time = time.time()
     print(f"Environment started. Compilation time: {end_time - start_time} seconds.")
 
@@ -213,7 +212,8 @@ def main():
                     # Show action types for all agents
                     print("🚗 Action Types for all agents:")
                     for i in range(num_agents):
-                        if agent_active[i].item():  # Convert JAX array to Python boolean
+                        # Check if agent is active using the same pattern as the codebase
+                        if agent_active[i] == 1:
                             agent_state = timestep.state.agent.agent_states[i]
                             agent_type = agent_state.agent_type[0].item()
                             action_type = agent_state.action_type[0].item()
