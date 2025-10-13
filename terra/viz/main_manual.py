@@ -212,8 +212,15 @@ def main():
                     # Show action types for all agents
                     print("🚗 Action Types for all agents:")
                     for i in range(num_agents):
-                        # Check if agent is active using the same pattern as the codebase
-                        if agent_active[i] == 1:
+                        # Check if agent is active - use JAX-compatible approach
+                        try:
+                            # Try to get the scalar value directly
+                            is_active = agent_active[i].item() == 1
+                        except ValueError:
+                            # If that fails, use JAX comparison and convert
+                            is_active = bool(jnp.array(agent_active[i] == 1))
+                        
+                        if is_active:
                             agent_state = timestep.state.agent.agent_states[i]
                             agent_type = agent_state.agent_type[0].item()
                             action_type = agent_state.action_type[0].item()
