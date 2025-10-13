@@ -59,7 +59,7 @@ def is_done_task(action_map: np.ndarray,
     Inputs:
       - action_map: HxW float
       - target_map: HxW float
-      - agent_types: length-4 array of ints (0=tracked, 1=wheeled, 2=skidsteer, 3=truck)
+      - agent_types: length-4 array of ints (0=excavator, 1=truck, 2=skidsteer)
       - agent_active: length-4 bool array
       - loaded: length-4 float array (carried dirt per agent)
     """
@@ -67,7 +67,7 @@ def is_done_task(action_map: np.ndarray,
     has_dig_requirements = np.any(target_map < 0)
 
     has_skidsteer_agent = np.any(agent_active & (agent_types == 2))
-    has_truck_agent = np.any(agent_active & (agent_types == 3))
+    has_truck_agent = np.any(agent_active & (agent_types == 1))
     has_transport_agent = has_skidsteer_agent or has_truck_agent
 
     # Relocation: dump only (no dig). Does not require transport agent.
@@ -120,8 +120,8 @@ def demo_cases():
     # But place some dirt elsewhere to simulate spoil not in dump zone
     action[2:4, 2:4] = 1.0   # dirt outside dump zone
 
-    # Agents: excavator (0) and truck (3)
-    agent_types = np.array([0, 3, 0, 0], dtype=np.int32)
+    # Agents: excavator (0) and truck (1)
+    agent_types = np.array([0, 1, 0, 0], dtype=np.int32)
     agent_active = np.array([True, True, False, False], dtype=bool)
     loaded = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 

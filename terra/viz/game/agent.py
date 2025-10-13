@@ -148,7 +148,7 @@ class Agent:
         if agent_type == 2:  # Skid steer
             body_color = COLORS["skid_steer_body"]
             cabin_color = COLORS["skid_steer_cabin"]["loaded"] if loaded else COLORS["skid_steer_cabin"]["not_loaded"]
-        elif agent_type == 3:  # Truck
+        elif agent_type == 1:  # Truck
             # Dark green shades with loading state variation
             if loaded:
                 body_color = (0, 70, 30)  # Darker when loaded
@@ -160,7 +160,7 @@ class Agent:
             cabin_color = COLORS["agent_cabin"]["loaded"] if loaded else COLORS["agent_cabin"]["not_loaded"]
 
         # Truck rendering override: base same size as excavator + cabin on top
-        if agent_type == 3:
+        if agent_type == 1:
             excavator_length = self.height * self.tile_size  # excavator's shorter side
             excavator_width = self.width * self.tile_size     # excavator's longer side
             

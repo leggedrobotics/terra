@@ -3004,7 +3004,7 @@ class State(NamedTuple):
         has_dump_requirements = jnp.any(target_map > 0)
         has_dig_requirements = jnp.any(target_map < 0)
         
-        # Check if there are skidsteer or truck agents available (type 2 or 3) among active agents
+        # Check if there are skidsteer or truck agents available (type 2 or 1) among active agents
         # Check for any active skidsteer or truck agents without dynamic tuple indexing
         agent_types = jnp.array([
             self.agent.agent_states[0].agent_type[0],

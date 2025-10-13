@@ -129,8 +129,8 @@ def main():
                     reward_value = timestep.reward.item()
                     action_num = action.action[0].item()  # Convert JAX array to Python int
                     
-                    agent_type_names = {0: "Tracked/Excavator", 1: "Wheeled", 2: "Skid Steer"}
-                    reward_function_names = {0: "_get_rewards_tracked()", 1: "_get_rewards_wheeled()", 2: "_get_rewards_skidsteer()"}
+                    agent_type_names = {0: "Excavator", 1: "Truck", 2: "Skid Steer"}
+                    reward_function_names = {0: "_get_rewards_tracked()", 1: "_get_rewards_truck()", 2: "_get_rewards_skidsteer()"}
                     
                     agent_name = agent_type_names.get(agent_type, f"Unknown({agent_type})")
                     reward_func = reward_function_names.get(agent_type, f"unknown_function({agent_type})")
