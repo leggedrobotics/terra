@@ -28,16 +28,19 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import wrap_angle_rad
 
-# Soil mechanics is always enabled; concentrated dump is tuned to work well with it
 
-# Reward and scoring constants (tuned elsewhere; centralized here for readability)
+
+# Reward and scoring constants
 PROGRESS_CAP = jnp.float32(200.0)
 AVG_TARGET_TILES = jnp.float32(170.0)
 SCALE_MIN = jnp.float32(2.0)
 SCALE_MAX = jnp.float32(5.0)
-DUMP_MEANINGFUL_THRESHOLD = jnp.float32(0.1)
-SKIDSTEER_DUMP_BONUS_MULT = jnp.float32(0.5)
-OTHER_DUMP_BONUS_MULT = jnp.float32(0.5)
+
+
+DUMP_BONUS_MULT = jnp.float32(0.5)
+EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.1)
+EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(2.0)
+TRANSPORT_RELOCATE_MULT = jnp.float32(2.0)
 
 
 class State(NamedTuple):
@@ -207,10 +210,11 @@ class State(NamedTuple):
             self._handle_do,
             self._do_nothing,
         ]
+        # Route by the current agent's movement mechanism (action_type), not the incoming action.type
+        # 0 = tracked handlers block, 1 = wheeled handlers block
+        current_action_type = self._get_current_agent_state().action_type[0]
         cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
-        offset_idx = (cumulative_len @ jax.nn.one_hot(action.type[0], 2)).astype(
-            IntLowDim
-        )
+        offset_idx = (cumulative_len @ jax.nn.one_hot(current_action_type, 2)).astype(IntLowDim)
 
         state = jax.lax.cond(
             jnp.logical_or(action.action[0] == -1, action.action[0] == 7),
@@ -2434,14 +2438,13 @@ class State(NamedTuple):
         # jax.debug.print("  progress clamped: {}", progress_clamped) 
 
         is_moving_dumped_dirt = self.agent.moving_dumped_dirt
-        potential_multiplier = jax.lax.cond(
-            is_skidsteer,
-            lambda: 1.0,  # Skidsteer gets full reward for all dirt
-            lambda: jax.lax.cond(
-                is_moving_dumped_dirt,
-                lambda: 0.1,  # Excavator gets 0.1x reward for relocating dumped dirt
-                lambda: 3.0   # Excavator gets full reward for relocating newly dug dirt
-            )
+        has_transport_agent = self._has_transport_agent()
+        is_truck = cur.agent_type[0] == 1
+        is_transport = jnp.logical_or(is_skidsteer, is_truck)
+        potential_multiplier = self._compute_potential_multiplier(
+            is_transport,
+            is_moving_dumped_dirt,
+            has_transport_agent,
         )
         # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
         avg_target_tiles = AVG_TARGET_TILES
@@ -2451,6 +2454,7 @@ class State(NamedTuple):
         scale = jnp.clip(scale_raw, SCALE_MIN, SCALE_MAX) / 2
 
 
+        # Apply relocation multiplier returned from the helper
         progress_clamped = progress_clamped * potential_multiplier * scale
         #progress_clamped = progress_clamped * potential_multiplier * 1
         #progress_clamped = progress_clamped * potential_multiplier
@@ -2464,11 +2468,11 @@ class State(NamedTuple):
             # Dump bonus only for skidsteers (relocation specialists)
             
             dump_bonus = jax.lax.cond(
-                is_skidsteer,
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * SKIDSTEER_DUMP_BONUS_MULT,
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * OTHER_DUMP_BONUS_MULT * potential_multiplier
+                is_transport,
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier,
+                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier
             )
-            meaningful_threshold = DUMP_MEANINGFUL_THRESHOLD
+            meaningful_threshold = jnp.float32(0.1)
             
             return jax.lax.cond(
                 progress_clamped > meaningful_threshold,
@@ -3192,21 +3196,7 @@ class State(NamedTuple):
         )
         return action_mask
 
-    def _get_action_mask_skidsteer(self):
-        # Get the tracked action mask as base
-        mask = self._get_action_mask_tracked()
-        # Disable cabin actions for skid steer
-        mask = mask.at[4].set(False)  # cabin_clock
-        mask = mask.at[5].set(False)  # cabin_anticlock
-        return mask
-
-    def _get_action_mask_truck(self):
-        # Get the tracked action mask as base
-        mask = self._get_action_mask_tracked()
-        # Disable cabin actions for truck (same as skidsteer)
-        mask = mask.at[4].set(False)  # cabin_clock
-        mask = mask.at[5].set(False)  # cabin_anticlock
-        return mask
+    # Removed specialized masks; we apply agent-type cabin masking after movement mask
 
     def _get_action_mask(self, dummy_action: Action):
         """
@@ -3225,17 +3215,31 @@ class State(NamedTuple):
         def get_wheeled_mask():
             return self._get_action_mask_wheeled()
         
-        def get_skidsteer_mask():
-            return self._get_action_mask_skidsteer()
+        # skidsteer handled by generic cabin disable stage
         
-        def get_truck_mask():
-            return self._get_action_mask_truck()
-        
-        # Route based on action_type for all vehicles
+        # 1) Route movement mask by action_type (tracked vs wheeled)
         mask_functions = [get_tracked_mask, get_wheeled_mask]
         clamped_action_type = jnp.clip(current_action_type, 0, len(mask_functions) - 1)
         action_mask = jax.lax.switch(clamped_action_type, mask_functions)
-            
+
+        # 2) Apply agent-type specific mask (independent of movement type)
+        # Disable cabin actions for trucks (1) and skidsteers (2)
+        def _disable_cabin(mask):
+            mask = mask.at[4].set(False)
+            mask = mask.at[5].set(False)
+            return mask
+
+        action_mask = jax.lax.cond(
+            current_agent_type == 1,
+            lambda: _disable_cabin(action_mask),
+            lambda: action_mask,
+        )
+        action_mask = jax.lax.cond(
+            current_agent_type == 2,
+            lambda: _disable_cabin(action_mask),
+            lambda: action_mask,
+        )
+
         action_mask = action_mask[:num_actions]
         return action_mask
 
@@ -3608,6 +3612,40 @@ class State(NamedTuple):
         min_dist = jnp.sqrt(jnp.min(masked_dists))
         map_diagonal = jnp.sqrt(width**2 + height**2)
         return jnp.where(jnp.isfinite(min_dist), min_dist / map_diagonal, 0.0)
+
+    # ---- Helper utilities (extracted) ----
+    def _agent_types_vec(self):
+        return jnp.array([
+            self.agent.agent_states[0].agent_type[0],
+            self.agent.agent_states[1].agent_type[0],
+            self.agent.agent_states[2].agent_type[0],
+            self.agent.agent_states[3].agent_type[0],
+        ])
+
+    def _has_transport_agent(self) -> jnp.bool_:
+        active_mask = self.agent.agent_active.astype(jnp.bool_)
+        types = self._agent_types_vec()
+        has_skid = jnp.any(jnp.logical_and(active_mask, types == 2))
+        has_truck = jnp.any(jnp.logical_and(active_mask, types == 1))
+        return jnp.logical_or(has_skid, has_truck)
+
+    @staticmethod
+    def _compute_potential_multiplier(is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_, has_transport_agent: jnp.bool_) -> jnp.float32:
+        # Transport agents (skid steer, truck): use dedicated transport relocation multiplier
+        def for_transport():
+            return TRANSPORT_RELOCATE_MULT
+        # Excavator: penalize relocating dumped dirt only when a transport agent exists
+        def for_excavator():
+            def with_transport():
+                return jax.lax.cond(
+                    is_moving_dumped_dirt,
+                    lambda: EXCAVATOR_RELOCATE_DUMPED_MULT,
+                    lambda: EXCAVATOR_RELOCATE_DUG_DIRT_MULT,
+                )
+            def without_transport():
+                return EXCAVATOR_RELOCATE_DUG_DIRT_MULT
+            return jax.lax.cond(has_transport_agent, with_transport, without_transport)
+        return jax.lax.cond(is_transport, for_transport, for_excavator)
 
     def _calculate_dump_zone_reward(self, action_map_progress: Float, loaded_capacity: Float) -> Float:
         """

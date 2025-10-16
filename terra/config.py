@@ -144,7 +144,7 @@ class Rewards(NamedTuple):
             collision_move=-0.1,
             move_while_loaded=0.0,
             move=-0.05,
-            move_with_turned_wheels=-0.15,
+            move_with_turned_wheels=-0.05,
             collision_turn=-0.1,
             base_turn=-0.1,
             cabin_turn=-0.01,

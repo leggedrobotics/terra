@@ -99,6 +99,10 @@ class Agent(NamedTuple):
                 height,
             )
             
+            # Determine action_type based on action_types tuple
+            agent_type_val = agent_types[i] if i < len(agent_types) else 0
+            action_type_val = action_types[i] if i < len(action_types) else 0
+
             # Create agent state
             st_i = AgentState(
                 pos_base=pos_i,
@@ -106,7 +110,8 @@ class Agent(NamedTuple):
                 angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
                 wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
                 loaded=jnp.full((1,), 0, dtype=jnp.int8),
-                agent_type=jnp.full((1,), agent_types[i] if i < len(agent_types) else 0, dtype=jnp.int8),
+                agent_type=jnp.full((1,), agent_type_val, dtype=jnp.int8),
+                action_type=jnp.full((1,), action_type_val, dtype=jnp.int8),
                 shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),
                 carry_baseline_potential=jnp.float32(0.0),
                 carry_potential_after_lift=jnp.float32(0.0),
