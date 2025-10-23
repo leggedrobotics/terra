@@ -7,8 +7,8 @@ from terra.actions import WheeledAction  # noqa: F401
 
 
 class ExcavatorDims(NamedTuple):
-    WIDTH: float = 6.08  # longer side
-    HEIGHT: float = 3.5  # shorter side
+    WIDTH: float = 6.08  # longer side in meters
+    HEIGHT: float = 3.5  # shorter side in meters
 
 
 class RewardsType(IntEnum):
@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 5  #6 number of tiles of progress for every move action
+    move_tiles: int = 6  #6 number of tiles of progress for every move action
     #  Note: move_tiles is also used as radius of excavation
     #       (we dig as much as move_tiles in the radial distance)
 
@@ -198,11 +198,17 @@ class EnvConfig(NamedTuple):
     
     # Agent types configuration: (agent1_type, agent2_type)
     # 0=excavator, 1=truck, 2=skidsteer
-    agent_types: tuple = (0, 2)  # Default: excavator + skidsteer, override with --agent_types in training script
+    agent_types: tuple = (0,)  # Default: excavator + skidsteer, override with --agent_types in training script
     
     # Action types configuration: (action1_type, action2_type) - optional override
     # 0=tracked, 1=wheeled
-    action_types: tuple = (0, 0)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
+    action_types: tuple = (0,)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
+
+    # Agent capacities
+    # Truck maximum load capacity (units of dirt)
+    truck_capacity: int = 30 #30
+    # Skid steer maximum load capacity (units of dirt)
+    skidsteer_capacity: int = 20
 
     @classmethod
     def new(cls):
@@ -243,7 +249,7 @@ class CurriculumGlobalConfig(NamedTuple):
 
         # {
         #     "maps_path": "experimental_96x96",
-        #     "max_steps_in_episode":1600,  # 600 Balanced: increased from 300 but reduced from 500
+        #     "max_steps_in_episode":900,  # 600 Balanced: increased from 300 but reduced from 500
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },

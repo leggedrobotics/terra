@@ -2,7 +2,7 @@
 """
 Generate experimental 96x96 maps with foundations, dump zones, obstacles, and non-dumpables.
 This is an intermediate size between 64x64 and 128x128 for better memory efficiency.
-Includes all features from 128x128: foundation buildings, specific dump zones, 3-tile borders, obstacles, non-dumpables, and experimental variations.
+Includes: foundation buildings, specific dump zones, 3-tile borders, obstacles, non-dumpables, and experimental variations.
 """
 
 import os
@@ -223,7 +223,7 @@ def create_experimental_96x96_maps(
 
     # Choose different downsampling factors for different curriculum levels
     downsampling_factors = {
-        save_folder: 1,  # No downsampling for 96x96
+        save_folder: 2,  # No downsampling for 96x96
     }
 
     # Get the full dataset path using os.path.join

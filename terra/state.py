@@ -39,8 +39,9 @@ SCALE_MAX = jnp.float32(5.0)
 
 DUMP_BONUS_MULT = jnp.float32(0.5)
 EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.1)
-EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(2.0)
-TRANSPORT_RELOCATE_MULT = jnp.float32(2.0)
+# Increased multiplier to better reward efficient dirt relocation with smaller workspace
+EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(3.0)  # Increased from 2.0
+TRANSPORT_RELOCATE_MULT = jnp.float32(3.0)
 
 
 class State(NamedTuple):
@@ -76,7 +77,7 @@ class State(NamedTuple):
 
     env_steps: int
 
-    # Note: Removed current_relocation_potential cache - always compute fresh for multi-agent reliability
+
 
     @classmethod
     def new(
@@ -212,14 +213,15 @@ class State(NamedTuple):
         ]
         # Route by the current agent's movement mechanism (action_type), not the incoming action.type
         # 0 = tracked handlers block, 1 = wheeled handlers block
-        current_action_type = self._get_current_agent_state().action_type[0]
+        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
         cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
         offset_idx = (cumulative_len @ jax.nn.one_hot(current_action_type, 2)).astype(IntLowDim)
 
+        action_idx = jnp.squeeze(action.action)
         state = jax.lax.cond(
-            jnp.logical_or(action.action[0] == -1, action.action[0] == 7),
+            jnp.logical_or(action_idx == -1, action_idx == 7),
             self._do_nothing,
-            lambda: jax.lax.switch(offset_idx + action.action[0], handlers_list),
+            lambda: jax.lax.switch(offset_idx + action_idx, handlers_list),
         )
         state = jax.lax.cond(
             turn, 
@@ -658,7 +660,8 @@ class State(NamedTuple):
         shovel_lowered = cur.shovel_lifted[0] == 0
         
         # Fixed workspace capacity and current load
-        workspace_capacity = jnp.int32(127)  # Fixed capacity within int8 range
+        # Use configured skid steer capacity (fallback to 127 for backward compatibility)
+        workspace_capacity = jnp.int32(getattr(self.env_cfg, 'skidsteer_capacity', 127))
         current_load = jnp.int32(cur.loaded[0])  # Convert to int32 (use current)
         
         should_auto_load = jnp.logical_and(is_skid_steer, shovel_lowered)
@@ -1190,16 +1193,21 @@ class State(NamedTuple):
 
         max_agent_dim = jnp.max(
             jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
-        )
-        min_distance_from_agent = tile_size * max_agent_dim
+        ) #in tiles
+
+        min_distance_from_agent = tile_size * max_agent_dim #in meters
 
         # Fixed middle-point arm extension (halfway between 0 and 1)
-        fixed_extension = 0.5
-        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+        fixed_extension = 0.5 # in meters
+
+        #r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+        #r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
 
         #r_min = min_distance_from_agent
         #r_max = min_distance_from_agent + dig_portion_radius * tile_size
+
+        r_min = fixed_extension + min_distance_from_agent
+        r_max = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
         
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
@@ -1487,128 +1495,128 @@ class State(NamedTuple):
         map_local_coords_base = apply_rot_transl(current_state_base, map_global_coords)
         return map_cyl_coords, map_local_coords_base
 
-    def _build_dig_dump_cone_standalone(self) -> Array:
-        """
-        Returns the masked workspace cone in cartesian coords without any function dependencies.
-        All transformations and calculations are performed inline.
-        """
-        # Get agent state information
-        cur = self._get_current_agent_state()
-        pos_base = cur.pos_base
-        map_width = self.world.width
-        map_height = self.world.height
-        tile_size = self.env_cfg.tile_size
+    # def _build_dig_dump_cone_standalone(self) -> Array:
+    #     """
+    #     Returns the masked workspace cone in cartesian coords without any function dependencies.
+    #     All transformations and calculations are performed inline.
+    #     """
+    #     # Get agent state information
+    #     cur = self._get_current_agent_state()
+    #     pos_base = cur.pos_base
+    #     map_width = self.world.width
+    #     map_height = self.world.height
+    #     tile_size = self.env_cfg.tile_size
         
-        # Calculate position index in flattened map
-        current_pos_idx = pos_base @ jnp.array([[self.env_cfg.maps.edge_length_px], [1]], dtype=IntMap)
+    #     # Calculate position index in flattened map
+    #     current_pos_idx = pos_base @ jnp.array([[self.env_cfg.maps.edge_length_px], [1]], dtype=IntMap)
         
-        # Create flattened global coordinates
-        tile_offset = tile_size / 2
-        x_row = jnp.tile(jnp.vstack(jnp.arange(map_width)), map_height).reshape(-1)
-        y_row = jnp.tile(jnp.arange(map_height), map_width)
-        map_global_coords = jnp.vstack([x_row, y_row])
-        map_global_coords = map_global_coords * tile_size
-        map_global_coords = map_global_coords + tile_offset
+    #     # Create flattened global coordinates
+    #     tile_offset = tile_size / 2
+    #     x_row = jnp.tile(jnp.vstack(jnp.arange(map_width)), map_height).reshape(-1)
+    #     y_row = jnp.tile(jnp.arange(map_height), map_width)
+    #     map_global_coords = jnp.vstack([x_row, y_row])
+    #     map_global_coords = map_global_coords * tile_size
+    #     map_global_coords = map_global_coords + tile_offset
         
-        # Get current position from flattened map
-        num_tiles = map_global_coords.shape[1]
-        idx_one_hot = jax.nn.one_hot(current_pos_idx, num_tiles, dtype=Float)
-        current_pos = map_global_coords @ idx_one_hot[0]
-        # Ensure current_pos is properly shaped
-        current_pos = jnp.reshape(current_pos, (2,))
+    #     # Get current position from flattened map
+    #     num_tiles = map_global_coords.shape[1]
+    #     idx_one_hot = jax.nn.one_hot(current_pos_idx, num_tiles, dtype=Float)
+    #     current_pos = map_global_coords @ idx_one_hot[0]
+    #     # Ensure current_pos is properly shaped
+    #     current_pos = jnp.reshape(current_pos, (2,))
         
-        # Get angles and ensure they're scalars
-        base_angle_rad = angle_idx_to_rad(cur.angle_base, self.env_cfg.agent.angles_base)
-        base_angle_rad = jnp.squeeze(base_angle_rad)  # Ensure scalar
+    #     # Get angles and ensure they're scalars
+    #     base_angle_rad = angle_idx_to_rad(cur.angle_base, self.env_cfg.agent.angles_base)
+    #     base_angle_rad = jnp.squeeze(base_angle_rad)  # Ensure scalar
     
-        cabin_angle_rad = angle_idx_to_rad(cur.angle_cabin, self.env_cfg.agent.angles_cabin)
-        cabin_angle_rad = jnp.squeeze(cabin_angle_rad)  # Ensure scalar
+    #     cabin_angle_rad = angle_idx_to_rad(cur.angle_cabin, self.env_cfg.agent.angles_cabin)
+    #     cabin_angle_rad = jnp.squeeze(cabin_angle_rad)  # Ensure scalar
     
-        # Calculate arm angle and ensure it's a scalar
-        arm_angle_rad = wrap_angle_rad(base_angle_rad + cabin_angle_rad)
-        arm_angle_rad = jnp.squeeze(arm_angle_rad)  # Ensure scalar
+    #     # Calculate arm angle and ensure it's a scalar
+    #     arm_angle_rad = wrap_angle_rad(base_angle_rad + cabin_angle_rad)
+    #     arm_angle_rad = jnp.squeeze(arm_angle_rad)  # Ensure scalar
     
-        # Calculate local coordinates with arm rotation (apply_rot_transl inlined)
-        cos_a_arm = jnp.cos(arm_angle_rad)
-        sin_a_arm = jnp.sin(arm_angle_rad)
-        # Create 2x2 rotation matrix
-        rotation_arm = jnp.array([
-            [cos_a_arm, -sin_a_arm],
-            [sin_a_arm, cos_a_arm]
-        ])
+    #     # Calculate local coordinates with arm rotation (apply_rot_transl inlined)
+    #     cos_a_arm = jnp.cos(arm_angle_rad)
+    #     sin_a_arm = jnp.sin(arm_angle_rad)
+    #     # Create 2x2 rotation matrix
+    #     rotation_arm = jnp.array([
+    #         [cos_a_arm, -sin_a_arm],
+    #         [sin_a_arm, cos_a_arm]
+    #     ])
     
-        # Apply rotation and translation for arm coordinates
-        map_local_coords_arm = rotation_arm @ map_global_coords
-        map_local_coords_arm = map_local_coords_arm - rotation_arm @ current_pos.reshape(2, 1)
+    #     # Apply rotation and translation for arm coordinates
+    #     map_local_coords_arm = rotation_arm @ map_global_coords
+    #     map_local_coords_arm = map_local_coords_arm - rotation_arm @ current_pos.reshape(2, 1)
     
-        # Convert to cylindrical coordinates
-        r = jnp.sqrt(map_local_coords_arm[0]**2 + map_local_coords_arm[1]**2)
-        theta = jnp.arctan2(map_local_coords_arm[1], map_local_coords_arm[0])
-        map_cyl_coords = jnp.vstack([r, theta])
+    #     # Convert to cylindrical coordinates
+    #     r = jnp.sqrt(map_local_coords_arm[0]**2 + map_local_coords_arm[1]**2)
+    #     theta = jnp.arctan2(map_local_coords_arm[1], map_local_coords_arm[0])
+    #     map_cyl_coords = jnp.vstack([r, theta])
     
-        # Create base local coordinates
-        cos_a_base = jnp.cos(base_angle_rad)
-        sin_a_base = jnp.sin(base_angle_rad)
-        rotation_base = jnp.array([
-            [cos_a_base, -sin_a_base],
-            [sin_a_base, cos_a_base]
-        ])
-        map_local_coords_base = rotation_base @ map_global_coords
-        map_local_coords_base = map_local_coords_base - rotation_base @ current_pos.reshape(2, 1)
+    #     # Create base local coordinates
+    #     cos_a_base = jnp.cos(base_angle_rad)
+    #     sin_a_base = jnp.sin(base_angle_rad)
+    #     rotation_base = jnp.array([
+    #         [cos_a_base, -sin_a_base],
+    #         [sin_a_base, cos_a_base]
+    #     ])
+    #     map_local_coords_base = rotation_base @ map_global_coords
+    #     map_local_coords_base = map_local_coords_base - rotation_base @ current_pos.reshape(2, 1)
     
-        # Rest of the function remains unchanged
-        # Calculate dig mask from cylindrical coordinates
-        dig_portion_radius = self.env_cfg.agent.move_tiles
-        max_agent_dim = jnp.max(
-            jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
-        )
-        min_distance_from_agent = tile_size * max_agent_dim
+    #     # Rest of the function remains unchanged
+    #     # Calculate dig mask from cylindrical coordinates
+    #     dig_portion_radius = self.env_cfg.agent.move_tiles
+    #     max_agent_dim = jnp.max(
+    #         jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
+    #     )
+    #     min_distance_from_agent = tile_size * max_agent_dim
         
-        # Fixed extension parameters
-        fixed_extension = 0.5
-        r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
-        r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
-        theta_max = 2 * jnp.pi / self.env_cfg.agent.angles_cabin
-        theta_min = -theta_max
+    #     # Fixed extension parameters
+    #     fixed_extension = 0.5
+    #     r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
+    #     r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
+    #     theta_max = 2 * jnp.pi / self.env_cfg.agent.angles_cabin
+    #     theta_min = -theta_max
         
-        # Apply radius and angle constraints
-        dig_mask_r = jnp.logical_and(
-            map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
-        )
-        dig_mask_theta = jnp.logical_and(
-            map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
-        )
-        dig_dump_mask_cyl = jnp.logical_and(dig_mask_r, dig_mask_theta)
+    #     # Apply radius and angle constraints
+    #     dig_mask_r = jnp.logical_and(
+    #         map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
+    #     )
+    #     dig_mask_theta = jnp.logical_and(
+    #         map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
+    #     )
+    #     dig_dump_mask_cyl = jnp.logical_and(dig_mask_r, dig_mask_theta)
         
-        # Apply agent size constraints (from _get_dig_dump_mask)
-        agent_width = self.env_cfg.agent.width * tile_size
-        agent_height = self.env_cfg.agent.height * tile_size
-        eps = tile_size / 2  # margin to avoid rounding errors
+    #     # Apply agent size constraints (from _get_dig_dump_mask)
+    #     agent_width = self.env_cfg.agent.width * tile_size
+    #     agent_height = self.env_cfg.agent.height * tile_size
+    #     eps = tile_size / 2  # margin to avoid rounding errors
         
-        # Check if coordinates are outside agent's bounds
-        dig_dump_mask_cart_x = jnp.where(
-            jnp.logical_or(
-                map_local_coords_base[0] >= jnp.floor((agent_width + eps) / 2),
-                map_local_coords_base[0] <= -jnp.floor((agent_width + eps) / 2),
-            ),
-            1,
-            0,
-        )
-        dig_dump_mask_cart_y = jnp.where(
-            jnp.logical_or(
-                map_local_coords_base[1] >= jnp.floor((agent_height + eps) / 2),
-                map_local_coords_base[1] <= -jnp.floor((agent_height + eps) / 2),
-            ),
-            1,
-            0,
-        )
-        dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(jnp.bool_)
+    #     # Check if coordinates are outside agent's bounds
+    #     dig_dump_mask_cart_x = jnp.where(
+    #         jnp.logical_or(
+    #             map_local_coords_base[0] >= jnp.floor((agent_width + eps) / 2),
+    #             map_local_coords_base[0] <= -jnp.floor((agent_width + eps) / 2),
+    #         ),
+    #         1,
+    #         0,
+    #     )
+    #     dig_dump_mask_cart_y = jnp.where(
+    #         jnp.logical_or(
+    #             map_local_coords_base[1] >= jnp.floor((agent_height + eps) / 2),
+    #             map_local_coords_base[1] <= -jnp.floor((agent_height + eps) / 2),
+    #         ),
+    #         1,
+    #         0,
+    #     )
+    #     dig_dump_mask_cart = (dig_dump_mask_cart_x + dig_dump_mask_cart_y).astype(jnp.bool_)
         
-        # Combine cylindrical and cartesian masks
-        dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
+    #     # Combine cylindrical and cartesian masks
+    #     dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
         
-        # Reshape to match map dimensions
-        return dig_dump_mask.reshape(map_width, map_height)
+    #     # Reshape to match map dimensions
+    #     return dig_dump_mask.reshape(map_width, map_height)
         
     def _get_dig_dump_mask_rectangular_skidsteer(self, map_local_coords: Array) -> Array:
         """
@@ -3517,11 +3525,13 @@ class State(NamedTuple):
             max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
             min_distance_from_agent = tile_size * max_agent_dim
             fixed_extension = 0.5
-
+            
+            
+            r_max_world = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
             
             #r_max_world = (min_distance_from_agent + dig_portion_radius * tile_size) * 1.3
 
-            r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
+            #r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
             r_max_tiles = r_max_world / tile_size
             near_after = min_d_new <= r_max_tiles
             stay_bonus = jnp.where(near_after, jnp.float32(0.5), jnp.float32(0.0))
