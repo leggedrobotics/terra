@@ -2588,22 +2588,6 @@ class State(NamedTuple):
             _failed_dump
         )
 
-    def _handle_rewards_skid_steer_shovel_control(
-        self, new_state: "State"
-    ) -> Float:
-        """Small reward for effective shovel control"""
-        cur = self._get_current_agent_state()
-        prev_new = new_state._get_prev_agent_state()
-        old_shovel = cur.shovel_lifted[0]
-        new_shovel = prev_new.shovel_lifted[0]
-        shovel_changed = old_shovel != new_shovel
-        
-        # Small reward for shovel state changes (encourages learning control)
-        return jax.lax.cond(
-            shovel_changed,
-            lambda: self.env_cfg.rewards.skid_shovel_control,
-            lambda: 0.0
-        )
 
     def _handle_rewards_skid_steer_do(
         self, new_state: "State", action: TrackedActionType
@@ -2626,8 +2610,7 @@ class State(NamedTuple):
         
        
         
-        # Add shovel control rewards
-        reward += self._handle_rewards_skid_steer_shovel_control(new_state)
+        # Shovel control rewards removed (unused)
         
         return reward
 
@@ -3385,11 +3368,7 @@ class State(NamedTuple):
             lambda: 0.0
         )
 
-        # Holding dirt penalty
-        reward += jax.lax.cond(
-            self._get_current_agent_state().loaded[0] > 0,
-            lambda: self.env_cfg.rewards.holding_dirt,
-            lambda: 0.0)
+        # Holding dirt penalty (removed - unused reward)
 
         # Base turn rewards (same as tracked)
         reward += jax.lax.cond(
@@ -3410,24 +3389,7 @@ class State(NamedTuple):
             action,
         )
         
-        # Reward for moving or rotating while loaded and shovel is up, only if actually moved or rotated
-        reward += jax.lax.cond(
-            (
-                ((action == TrackedActionType.FORWARD) | (action == TrackedActionType.BACKWARD))
-                & (self._get_current_agent_state().loaded[0] > 0)
-                & (self._get_current_agent_state().shovel_lifted[0] > 0)
-                & self._check_agent_moved_on_move_action(self, new_state)
-            )
-            |
-            (
-                ((action == TrackedActionType.CLOCK) | (action == TrackedActionType.ANTICLOCK))
-                & (self._get_current_agent_state().loaded[0] > 0)
-                & (self._get_current_agent_state().shovel_lifted[0] > 0)
-                & self._check_agent_turn_on_turn_action(self, new_state)
-            ),
-            lambda: self.env_cfg.rewards.skid_move_loaded_shovel_up,
-            lambda: 0.0
-        )
+        # Removed unused reward for moving/rotating while loaded with shovel up
         
         return reward
 
@@ -3595,33 +3557,8 @@ class State(NamedTuple):
         # new_dist = self._get_min_distance_to_dump_zone_for_agent(new_state.agent.agent_state_2.pos_base)
         # distance_improvement = old_dist - new_dist  # Positive if getting closer
         
-        # # Reward/penalize based on distance change to dump zones when loaded
-        # reward += jax.lax.cond(
-        #     self.agent.agent_state.loaded[0] > 0,
-        #     lambda: self.env_cfg.rewards.move_to_dump_zone * distance_improvement,
-        #     lambda: 0.0,
-        # )
 
         return reward
-    def _get_min_distance_to_dump_zone_for_agent(self, agent_pos: Array) -> Float:
-        """
-        Returns the minimum Euclidean distance from a given agent position to any DESIGNATED dump zone tile,
-        normalized by the map diagonal. Matches single-agent helper.
-        """
-        dump_zones_mask = self.world.target_map.map > 0
-        width = self.world.width
-        height = self.world.height
-        xs = jnp.arange(width)
-        ys = jnp.arange(height)
-        grid_x, grid_y = jnp.meshgrid(xs, ys, indexing='ij')
-        agent_pos_flat = jnp.atleast_1d(jnp.ravel(agent_pos))
-        agent_x = agent_pos_flat[0]
-        agent_y = agent_pos_flat[1]
-        dists = (grid_x - agent_x) ** 2 + (grid_y - agent_y) ** 2
-        masked_dists = jnp.where(dump_zones_mask, dists, jnp.inf)
-        min_dist = jnp.sqrt(jnp.min(masked_dists))
-        map_diagonal = jnp.sqrt(width**2 + height**2)
-        return jnp.where(jnp.isfinite(min_dist), min_dist / map_diagonal, 0.0)
 
     # ---- Helper utilities (extracted) ----
     def _agent_types_vec(self):
@@ -3657,47 +3594,6 @@ class State(NamedTuple):
             return jax.lax.cond(has_transport_agent, with_transport, without_transport)
         return jax.lax.cond(is_transport, for_transport, for_excavator)
 
-    def _calculate_dump_zone_reward(self, action_map_progress: Float, loaded_capacity: Float) -> Float:
-        """
-        Calculate reward/penalty for dump zone progress using consistent scaling.
-        Positive progress (dumping) gets positive reward, negative progress (lifting) gets negative penalty.
-        Uses loaded_capacity as reference for efficiency bonus.
-        """
-        # Use the same scaling logic as _calculate_efficiency_reward
-        min_reward = 15.0
-        max_reward = self.env_cfg.rewards.skid_dump_correct
-        
-        # Scale based on absolute dirt amount
-        # Small amounts (1-5 units) get min_reward, large amounts (20+ units) get max_reward
-        min_dirt = 1.0
-        max_dirt = 20.0
-        
-        # Use absolute value for scaling
-        abs_progress = jnp.abs(action_map_progress)
-        clamped_dirt = jnp.clip(abs_progress, min_dirt, max_dirt)
-        
-        # Linear interpolation between min and max reward/penalty based on dirt amount
-        reward_ratio = (clamped_dirt - min_dirt) / (max_dirt - min_dirt + 1e-8)
-        scaled_reward = min_reward + reward_ratio * (max_reward - min_reward)
-        
-        # Apply perfect efficiency bonus based on percentage of loaded capacity used
-        # This prevents reward farming: agent can't lift small amounts and dump large amounts for net positive reward
-        efficiency_ratio = abs_progress / jnp.maximum(loaded_capacity, 1e-6)
-        perfect_bonus = jnp.where(
-            efficiency_ratio >= 0.95,  # Using 95%+ of capacity
-            1.2,  # 20% bonus for efficient use of capacity
-            1.0
-        )
-        
-        # Apply additional 20% penalty increase for negative progress (lifting from dump zones)
-        penalty_multiplier = jax.lax.cond(
-            action_map_progress < 0,  # Only for penalties
-            lambda: 1.05,  # 20% stronger penalty
-            lambda: 1.0   # No change for rewards
-        )
-        
-        # Return positive reward for positive progress, negative penalty for negative progress
-        return (scaled_reward * perfect_bonus * penalty_multiplier) * jnp.sign(action_map_progress)
 
     def _calculate_terminal_reward(self, completion_percentage: Float) -> Float:
         """
