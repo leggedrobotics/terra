@@ -106,30 +106,32 @@ class Rewards(NamedTuple):
     @staticmethod
     def dense():
         return Rewards(
-            existence=-0.25,   # -0.25      -0.1 for 96x96 maps
-            collision_move=-0.2,  #-0.2,
-            move_while_loaded=-0.0,  # Reduced penalty  was -0.01
-            move=-0.1,  # Heavily reduced movement penalty was -0.1
-            move_with_turned_wheels=-0.1,  # Reduced penalty was -0.1
-            collision_turn=-0.1, #-0.1,
-            base_turn=-0.1,  #-0.1  
+            existence=-0.25,  #-0.1 for 96x96 maps 
+            collision_move=-0.2,  
+            move_while_loaded=-0.0,  
+            move=-0.1,  
+            move_with_turned_wheels=-0.1,  
+            collision_turn=-0.1, 
+            base_turn=-0.1,  
             cabin_turn=-0.05,
             wheel_turn=-0.05,  
             dig_wrong=-0.25,
             dump_wrong=-1.0,
-            dig_correct=0.6,  #1.5    0.2      0.35
-            dump_correct=1.0,  #0.15   0.0
+            dig_correct=0.6,  
+            dump_correct=1.0,
 
             # Skid steer specific rewards
-            skid_move=-0.05,                 # Remove positive movement reward to discourage random movement
+            skid_move=-0.05,             
+            skid_dump_wrong=-0.6, 
+
+
             terminal=200.0, #250.0
             normalizer=70.0,
 
             #UNUSED REWARDS
-            skid_dump_correct=50.0,         # 5  20  # Large reward for correct dumping (0.05 after normalization)
-            skid_dump_wrong=-0.6,          #-0.5  # Moderate penalty for failed dumps (-0.005 after normalization)
+            skid_dump_correct=0.0,         # 5  20  # Large reward for correct dumping (0.05 after normalization)
             skid_shovel_control=0.0,       # Small reward for shovel control (0.0001 after normalization)
-            skid_auto_load=0.7,              # Core reward: agents need to load dirt to dump it (0.005 after normalization)
+            skid_auto_load=0.0,              # Core reward: agents need to load dirt to dump it (0.005 after normalization)
             holding_dirt=-0.0,        #-0.1      # Per-step penalty for holding dirt (-0.001 after normalization)
             skid_lift_shovel_with_dirt=0.0,  # 0.05 New: reward for lifting shovel with dirt (0.0005 after normalization)
             skid_move_loaded_shovel_up=0.0,  # 0.02 New: reward for moving while loaded and shovel is up (0.0002 after normalization)
@@ -198,17 +200,17 @@ class EnvConfig(NamedTuple):
     
     # Agent types configuration: (agent1_type, agent2_type)
     # 0=excavator, 1=truck, 2=skidsteer
-    agent_types: tuple = (0,)  # Default: excavator + skidsteer, override with --agent_types in training script
+    agent_types: tuple = (0,1)  # Default: excavator + skidsteer, override with --agent_types in training script
     
     # Action types configuration: (action1_type, action2_type) - optional override
     # 0=tracked, 1=wheeled
-    action_types: tuple = (0,)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
+    action_types: tuple = (0,0)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
 
     # Agent capacities
-    # Truck maximum load capacity (units of dirt)
-    truck_capacity: int = 30 #30
-    # Skid steer maximum load capacity (units of dirt)
-    skidsteer_capacity: int = 20
+    # Truck maximum load capacity (units of dirt), set to the workspace capacity of the excavator to have the same abstraction level
+    truck_capacity: int = 52 
+    # Skid steer maximum load capacity (units of dirt), set to the workspace capacity of the excavator to have the same abstraction level
+    skidsteer_capacity: int = 52
 
     @classmethod
     def new(cls):
