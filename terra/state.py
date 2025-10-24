@@ -40,8 +40,8 @@ SCALE_MAX = jnp.float32(5.0)
 DUMP_BONUS_MULT = jnp.float32(0.5)
 EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.1)
 # Increased multiplier to better reward efficient dirt relocation with smaller workspace
-EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(3.0)  # Increased from 2.0
-TRANSPORT_RELOCATE_MULT = jnp.float32(3.0)
+EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(2.0)  # Increased from 2.0
+TRANSPORT_RELOCATE_MULT = jnp.float32(2.0)
 
 
 class State(NamedTuple):
