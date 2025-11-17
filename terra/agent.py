@@ -247,7 +247,7 @@ class Agent(NamedTuple):
                 return slot_pos.astype(IntMap), slot_angle.astype(IntLowDim), per_agent_keys[i]
 
             def _use_random(_):
-                return _get_random_init_state(
+                pos, ang, key_out = _get_random_init_state(
                     per_agent_keys[i],
                     env_cfg,
                     max_traversable_x,
@@ -258,6 +258,7 @@ class Agent(NamedTuple):
                     height,
                     allowed_mask,
                 )
+                return pos, ang.astype(IntLowDim), key_out
 
             pos_i, angle_i, per_agent_keys[i] = jax.lax.cond(
                 use_slot,
