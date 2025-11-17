@@ -92,6 +92,7 @@ class Agent(NamedTuple):
             ).astype(jnp.bool_)
         else:
             truck_spawn_allowed_mask = full_allowed_mask
+        truck_spawn_positions, truck_spawn_angles, truck_spawn_valid = _compute_truck_spawn_slots(dumpability_map)
         
         def place_agent(carry, i):
             combined_mask, keys, states = carry
@@ -100,7 +101,11 @@ class Agent(NamedTuple):
             
             agent_type_val = agent_types[i] if i < len(agent_types) else 0
             action_type_val = action_types[i] if i < len(action_types) else 0
-            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
+            allowed_mask = jax.lax.cond(
+                agent_type_val == 1,
+                lambda: truck_spawn_allowed_mask,
+                lambda: full_allowed_mask,
+            )
             pos_i, angle_i, new_key = _get_random_init_state(
                 keys[i],
                 env_cfg,
@@ -167,6 +172,7 @@ class Agent(NamedTuple):
         # since the scan approach is too complex for NamedTuple handling
         combined_mask = initial_mask
         built_states = []
+        truck_slot_idx = 0
         
         for i in range(MAX_AGENTS):
             if i >= n_agents:
@@ -176,19 +182,57 @@ class Agent(NamedTuple):
                 
             agent_type_val = agent_types[i] if i < len(agent_types) else 0
             action_type_val = action_types[i] if i < len(action_types) else 0
-            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
-
-            pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
-                per_agent_keys[i],
-                env_cfg,
-                max_traversable_x,
-                max_traversable_y,
-                combined_mask,
-                action_map,
-                width,
-                height,
-                allowed_mask,
+            allowed_mask = jax.lax.cond(
+                agent_type_val == 1,
+                lambda: truck_spawn_allowed_mask,
+                lambda: full_allowed_mask,
             )
+
+            if agent_type_val == 1:
+                if truck_slot_idx < truck_spawn_positions.shape[0]:
+                    slot_pos = truck_spawn_positions[truck_slot_idx]
+                    slot_angle = truck_spawn_angles[truck_slot_idx]
+                    slot_valid = truck_spawn_valid[truck_slot_idx]
+                else:
+                    slot_pos = jnp.zeros((2,), dtype=IntMap)
+                    slot_angle = jnp.zeros((1,), dtype=IntLowDim)
+                    slot_valid = jnp.bool_(False)
+                truck_slot_idx += 1
+
+                def _use_slot(_):
+                    return slot_pos, slot_angle, per_agent_keys[i]
+
+                def _use_random(_):
+                    return _get_random_init_state(
+                        per_agent_keys[i],
+                        env_cfg,
+                        max_traversable_x,
+                        max_traversable_y,
+                        combined_mask,
+                        action_map,
+                        width,
+                        height,
+                        allowed_mask,
+                    )
+
+                pos_i, angle_i, per_agent_keys[i] = jax.lax.cond(
+                    slot_valid,
+                    _use_slot,
+                    _use_random,
+                    operand=None,
+                )
+            else:
+                pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
+                    per_agent_keys[i],
+                    env_cfg,
+                    max_traversable_x,
+                    max_traversable_y,
+                    combined_mask,
+                    action_map,
+                    width,
+                    height,
+                    allowed_mask,
+                )
             
             st_i = AgentState(
                 pos_base=pos_i.astype(IntMap),
@@ -330,3 +374,73 @@ def _get_random_init_state(
     )
 
     return pos_base, angle_base, key
+
+
+def _compute_truck_spawn_slots(dumpability_map: Array | None):
+    if dumpability_map is None:
+        zero_positions = jnp.zeros((4, 2), dtype=IntMap)
+        zero_angles = jnp.zeros((4, 1), dtype=IntLowDim)
+        zero_valid = jnp.zeros((4,), dtype=jnp.bool_)
+        return zero_positions, zero_angles, zero_valid
+
+    road_mask = (dumpability_map == 0)
+    height, width = road_mask.shape
+
+    row_full = jnp.all(road_mask, axis=1)
+    col_full = jnp.all(road_mask, axis=0)
+
+    top_width = _prefix_true_length(row_full)
+    bottom_width = _prefix_true_length(jnp.flip(row_full, axis=0))
+    left_width = _prefix_true_length(col_full)
+    right_width = _prefix_true_length(jnp.flip(col_full, axis=0))
+
+    width_half = jnp.int32(width // 2)
+    height_half = jnp.int32(height // 2)
+
+    top_center = jnp.array([width_half, top_width // 2], dtype=IntMap)
+    bottom_start = height - bottom_width
+    bottom_center = jnp.array(
+        [width_half, bottom_start + bottom_width // 2],
+        dtype=IntMap,
+    )
+    left_center = jnp.array([left_width // 2, height_half], dtype=IntMap)
+    right_start = width - right_width
+    right_center = jnp.array(
+        [right_start + right_width // 2, height_half],
+        dtype=IntMap,
+    )
+
+    positions = jnp.stack(
+        [top_center, bottom_center, left_center, right_center],
+        axis=0,
+    )
+
+    angles = jnp.stack(
+        [
+            jnp.array([0], dtype=IntLowDim),
+            jnp.array([0], dtype=IntLowDim),
+            jnp.array([1], dtype=IntLowDim),
+            jnp.array([1], dtype=IntLowDim),
+        ],
+        axis=0,
+    )
+
+    valid = jnp.array(
+        [
+            top_width > 0,
+            bottom_width > 0,
+            left_width > 0,
+            right_width > 0,
+        ],
+        dtype=jnp.bool_,
+    )
+
+    return positions, angles, valid
+
+
+def _prefix_true_length(arr: Array) -> IntMap:
+    inv = jnp.logical_not(arr)
+    first_false = jnp.argmax(inv)
+    has_false = jnp.any(inv)
+    length = jnp.where(has_false, first_false, arr.shape[0])
+    return length.astype(IntMap)

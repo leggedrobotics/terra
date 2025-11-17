@@ -54,31 +54,31 @@ def create_single_dump_zone_64x64_flush(img_terra_pad, size_dump_min, size_dump_
             corner_choice = random.randint(0, 3)
             if corner_choice in (0, 1):
                 # Top edge
-                # Fixed size: longer along X
-                dump_width = 15
-                dump_height = 8
+                # Fixed size: closer to square
+                dump_width = 16
+                dump_height = 12
                 y = 0
                 # Anchor to left or right corner
                 x = 0 if corner_choice == 0 else max(0, width - dump_width)
             else:
                 # Bottom edge
-                dump_width = 15
-                dump_height = 8
+                dump_width = 16
+                dump_height = 12
                 y = max(0, height - dump_height)
                 x = 0 if corner_choice == 2 else max(0, width - dump_width)
         else:
             # Fallback: any border (uniform)
             border_choice = random.randint(0, 3)  # 0=top,1=bottom,2=left,3=right
             if border_choice in (0, 1):
-                # Horizontal border: fixed longer along X
-                dump_width = 15
-                dump_height = 8
+                # Horizontal border: closer to square (wider than tall)
+                dump_width = 18
+                dump_height = 12
                 x = random.randint(border_offset, max(width - dump_width - border_offset, border_offset))
                 y = 0 if border_choice == 0 else height - dump_height
             else:
-                # Vertical border: fixed longer along Y
-                dump_width = 8
-                dump_height = 15
+                # Vertical border: closer to square (taller than wide)
+                dump_width = 12
+                dump_height = 18
                 x = 0 if border_choice == 2 else width - dump_width
                 y = random.randint(border_offset, max(height - dump_height - border_offset, border_offset))
 
@@ -123,7 +123,7 @@ def create_experimental_64x64_maps_roads_noborder(
     size_dump_min=8,
     size_dump_max=14,
     experimental_variations=True,
-    road_width=6):
+    road_width=10):
     """
     Creates experimental 64x64 foundation environments with roads and a smaller dump zone flush to the border.
     """
@@ -337,7 +337,7 @@ def generate_experimental_64x64_roads_noborder_terra(dataset_folder, size, n_img
     print(f"  experimental_64x64_roads_noborder conversion completed")
 
 
-def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=4, must_touch_rect=None):
+def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=10, must_touch_rect=None):
     """
     Create 1-2 roads with variety: single road, parallel roads, or crossing roads.
     Roads are placed near borders with consistent width, avoiding obstacles. Roads are not drawn on the main image;
@@ -492,7 +492,7 @@ def main():
         size_dump_min=4,   # smaller for 64x64
         size_dump_max=10,
         experimental_variations=True,
-        road_width=6,
+        road_width=10,
     )
 
     print("Experimental 64x64 (roads, no border) map generation completed!")

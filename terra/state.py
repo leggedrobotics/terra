@@ -480,7 +480,7 @@ class State(NamedTuple):
         # Use JAX conditional to avoid unnecessary computation when no dirt is present
         return jax.lax.cond(has_dirt, _with_selective_dirt_collision, _without_dirt)
 
-    def _is_valid_move(self, agent_corners: Array) -> Array:
+    def _is_valid_move(self, agent_corners: Array, allow_truck_neutral: bool = False) -> Array:
         """
         Checks if the move is valid by computing the agent occupancy mask (using a
         polygon mask) and ensuring all affected grid cells are traversable.
@@ -542,11 +542,13 @@ class State(NamedTuple):
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
 
         def _truck_tiles_ok():
+            if allow_truck_neutral:
+                return jnp.bool_(True)
             truck_allowed = self._truck_allowed_tiles_mask()
             return jnp.all(jnp.where(polygon_mask, truck_allowed, True))
 
         is_truck = self._get_current_agent_state().agent_type[0] == 1
-        truck_constraint = jax.lax.cond(is_truck, _truck_tiles_ok, lambda: True)
+        truck_constraint = jax.lax.cond(is_truck, _truck_tiles_ok, lambda: jnp.bool_(True))
 
         return jnp.logical_and(jnp.logical_and(valid_bounds, valid_traversability), truck_constraint)
 
@@ -997,7 +999,7 @@ class State(NamedTuple):
         )
         
         # Check if this rotated polygon is valid.
-        valid_move = self._is_valid_move(candidate_corners)
+        valid_move = self._is_valid_move(candidate_corners, allow_truck_neutral=True)
         
         # Choose the new angle if valid, else the old angle.
         return jax.lax.cond(valid_move, 
