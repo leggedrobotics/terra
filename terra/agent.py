@@ -3,6 +3,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 from jax import Array
+from jax import core
 
 from terra.config import EnvConfig
 from terra.settings import IntLowDim
@@ -174,19 +175,25 @@ class Agent(NamedTuple):
         built_states = []
         truck_slot_idx = 0
         
+        def _get_agent_type(idx: int) -> int:
+            if idx < len(agent_types):
+                return core.concrete_or_error(int, agent_types[idx], "agent_types must be static (python ints)")
+            return 0
+
+        def _get_action_type(idx: int) -> int:
+            if idx < len(action_types):
+                return core.concrete_or_error(int, action_types[idx], "action_types must be static (python ints)")
+            return 0
+
         for i in range(MAX_AGENTS):
             if i >= n_agents:
                 # Pad with dummy state
                 built_states.append(dummy_state)
                 continue
                 
-            agent_type_val = agent_types[i] if i < len(agent_types) else 0
-            action_type_val = action_types[i] if i < len(action_types) else 0
-            allowed_mask = jax.lax.cond(
-                agent_type_val == 1,
-                lambda: truck_spawn_allowed_mask,
-                lambda: full_allowed_mask,
-            )
+            agent_type_val = _get_agent_type(i)
+            action_type_val = _get_action_type(i)
+            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
 
             if agent_type_val == 1:
                 if truck_slot_idx < truck_spawn_positions.shape[0]:
