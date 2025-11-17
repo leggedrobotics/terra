@@ -204,12 +204,12 @@ class CurriculumGlobalConfig(NamedTuple):
     # NOTE: all maps need to have the same size
     levels = [
 
-        # {
-        #     "maps_path": "foundations", 
-        #     "max_steps_in_episode": 700,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "foundations_1.5", 
+            "max_steps_in_episode": 800,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         # {
         #     "maps_path": "trenches/single",
         #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
@@ -238,12 +238,12 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones_v3_fence", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 

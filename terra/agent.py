@@ -63,6 +63,8 @@ class Agent(NamedTuple):
         max_traversable_y: int,
         padding_mask: Array,
         action_map: Array,
+        dumpability_map: Array | None = None,
+        target_map: Array | None = None,
         agent_types: tuple = (0, 0),  # variable length; 0=excavator, 1=truck, 2=skidsteer
         action_types: tuple = (0, 0),  # action types; 0=tracked, 1=wheeled
     ) -> tuple["Agent", jax.random.PRNGKey]:
@@ -82,12 +84,23 @@ class Agent(NamedTuple):
 
         # Use JAX-compatible loop for agent placement
         map_width, map_height = padding_mask.shape
+        full_allowed_mask = jnp.ones_like(padding_mask, dtype=jnp.bool_)
+        if dumpability_map is not None and target_map is not None:
+            truck_spawn_allowed_mask = jnp.logical_or(
+                dumpability_map == 0,
+                target_map > 0,
+            ).astype(jnp.bool_)
+        else:
+            truck_spawn_allowed_mask = full_allowed_mask
         
         def place_agent(carry, i):
             combined_mask, keys, states = carry
             # Only place agent if i < n_agents
             should_place = i < n_agents
             
+            agent_type_val = agent_types[i] if i < len(agent_types) else 0
+            action_type_val = action_types[i] if i < len(action_types) else 0
+            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
             pos_i, angle_i, new_key = _get_random_init_state(
                 keys[i],
                 env_cfg,
@@ -97,11 +110,8 @@ class Agent(NamedTuple):
                 action_map,
                 width,
                 height,
+                allowed_mask,
             )
-            
-            # Determine action_type based on action_types tuple
-            agent_type_val = agent_types[i] if i < len(agent_types) else 0
-            action_type_val = action_types[i] if i < len(action_types) else 0
 
             # Create agent state
             st_i = AgentState(
@@ -164,6 +174,10 @@ class Agent(NamedTuple):
                 built_states.append(dummy_state)
                 continue
                 
+            agent_type_val = agent_types[i] if i < len(agent_types) else 0
+            action_type_val = action_types[i] if i < len(action_types) else 0
+            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
+
             pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
                 per_agent_keys[i],
                 env_cfg,
@@ -173,11 +187,8 @@ class Agent(NamedTuple):
                 action_map,
                 width,
                 height,
+                allowed_mask,
             )
-
-            # Determine action_type based on action_types tuple
-            agent_type_val = agent_types[i] if i < len(agent_types) else 0
-            action_type_val = action_types[i] if i < len(action_types) else 0
             
             st_i = AgentState(
                 pos_base=pos_i.astype(IntMap),
@@ -242,6 +253,7 @@ def _get_random_init_state(
     action_map: Array,
     agent_width: int,
     agent_height: int,
+    allowed_mask: Array,
 ):
     def _get_random_agent_state(carry):
         key, padding_mask, pos_base, angle_base = carry
@@ -294,7 +306,10 @@ def _get_random_init_state(
 
             obstacle_inside = jnp.any(jnp.logical_and(polygon_mask, padding_mask == 1))
             action_illegal = jnp.any(jnp.logical_and(polygon_mask, action_map != 0))
-            return obstacle_inside | action_illegal
+            allowed_violation = jnp.any(
+                jnp.logical_and(polygon_mask, jnp.logical_not(allowed_mask))
+            )
+            return obstacle_inside | action_illegal | allowed_violation
 
         keep_searching = jax.lax.cond(
             jnp.any(pos_base < 0) | jnp.any(angle_base < 0),

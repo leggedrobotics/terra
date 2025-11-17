@@ -103,16 +103,8 @@ class State(NamedTuple):
         # Get action types from env_cfg, defaulting to (0, 0) for backwards compatibility
         action_types = getattr(env_cfg, 'action_types', (0, 0))
         agent, key = Agent.new(
-            key,
-            env_cfg,
-            world.max_traversable_x,
-            world.max_traversable_y,
-            padding_mask,
-            action_map,
-            world.dumpability_mask.map,
-            world.target_map.map,
-            agent_types=agent_types,
-            action_types=action_types,
+            key, env_cfg, world.max_traversable_x, world.max_traversable_y, padding_mask, action_map,
+            agent_types=agent_types, action_types=action_types
         )
         agent = jax.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
@@ -540,15 +532,7 @@ class State(NamedTuple):
         # Mask out the cells where the agent is located.
         # jnp.where(polygon_mask_2, 1 ,traversability_mask)
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
-
-        def _truck_tiles_ok():
-            truck_allowed = self._truck_allowed_tiles_mask()
-            return jnp.all(jnp.where(polygon_mask, truck_allowed, True))
-
-        is_truck = self._get_current_agent_state().agent_type[0] == 1
-        truck_constraint = jax.lax.cond(is_truck, _truck_tiles_ok, lambda: True)
-
-        return jnp.logical_and(jnp.logical_and(valid_bounds, valid_traversability), truck_constraint)
+        return jnp.logical_and(valid_bounds, valid_traversability)
 
     @staticmethod
     def _valid_move_to_valid_mask(valid_move: jnp.bool_) -> Array:
@@ -1477,25 +1461,6 @@ class State(NamedTuple):
         def do_collapse(_):
             return collapse_body(action_map, affected_mask)
         return jax.lax.cond(has_affected, do_collapse, lambda _: action_map, operand=None)
-
-    def _truck_allowed_tiles_mask(self) -> Array:
-        """
-        Returns boolean mask where trucks are allowed to stand: non-dumpable tiles, dump zones,
-        or any tile within a 1-tile (3x3) neighborhood of those areas.
-        """
-        base_allowed = jnp.logical_or(
-            self.world.dumpability_mask.map == 0,
-            self.world.target_map.map > 0,
-        ).astype(jnp.float32)
-        kernel = jnp.ones((3, 3), dtype=jnp.float32)
-        dilated = jax.scipy.signal.correlate2d(
-            base_allowed,
-            kernel,
-            mode="same",
-            boundary="fill",
-            fillvalue=0.0,
-        ) > 0
-        return dilated
 
     
 
