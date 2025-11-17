@@ -3,7 +3,6 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 from jax import Array
-from jax import core
 
 from terra.config import EnvConfig
 from terra.settings import IntLowDim
@@ -94,6 +93,24 @@ class Agent(NamedTuple):
         else:
             truck_spawn_allowed_mask = full_allowed_mask
         truck_spawn_positions, truck_spawn_angles, truck_spawn_valid = _compute_truck_spawn_slots(dumpability_map)
+
+        def _prepare_type_array(values, max_len, dtype=jnp.int32, default=0):
+            arr = jnp.asarray(values, dtype=dtype)
+            if arr.ndim == 0:
+                arr = jnp.reshape(arr, (1,))
+            pad_len = max_len - arr.shape[0]
+            arr = jnp.pad(arr, (0, max(pad_len, 0)), constant_values=default)
+            return arr[:max_len]
+
+        agent_types_tensor = _prepare_type_array(agent_types, MAX_AGENTS, dtype=jnp.int32, default=0)
+        action_types_tensor = _prepare_type_array(action_types, MAX_AGENTS, dtype=jnp.int32, default=0)
+
+        is_truck_flags = (agent_types_tensor == 1)
+        truck_slot_indices = jnp.where(
+            is_truck_flags,
+            jnp.cumsum(is_truck_flags.astype(IntLowDim)) - 1,
+            jnp.full_like(agent_types_tensor, -1, dtype=IntLowDim),
+        )
         
         def place_agent(carry, i):
             combined_mask, keys, states = carry
@@ -173,63 +190,64 @@ class Agent(NamedTuple):
         # since the scan approach is too complex for NamedTuple handling
         combined_mask = initial_mask
         built_states = []
-        truck_slot_idx = 0
         
-        def _get_agent_type(idx: int) -> int:
-            if idx < len(agent_types):
-                return core.concrete_or_error(int, agent_types[idx], "agent_types must be static (python ints)")
-            return 0
-
-        def _get_action_type(idx: int) -> int:
-            if idx < len(action_types):
-                return core.concrete_or_error(int, action_types[idx], "action_types must be static (python ints)")
-            return 0
-
         for i in range(MAX_AGENTS):
             if i >= n_agents:
                 # Pad with dummy state
                 built_states.append(dummy_state)
                 continue
                 
-            agent_type_val = _get_agent_type(i)
-            action_type_val = _get_action_type(i)
-            allowed_mask = truck_spawn_allowed_mask if agent_type_val == 1 else full_allowed_mask
+            agent_type_val = agent_types_tensor[i]
+            action_type_val = action_types_tensor[i]
+            is_truck_flag = is_truck_flags[i]
+            allowed_mask = jax.lax.cond(
+                is_truck_flag,
+                lambda _: truck_spawn_allowed_mask,
+                lambda _: full_allowed_mask,
+                operand=None,
+            )
 
-            if agent_type_val == 1:
-                if truck_slot_idx < truck_spawn_positions.shape[0]:
-                    slot_pos = truck_spawn_positions[truck_slot_idx]
-                    slot_angle = truck_spawn_angles[truck_slot_idx]
-                    slot_valid = truck_spawn_valid[truck_slot_idx]
-                else:
-                    slot_pos = jnp.zeros((2,), dtype=IntMap)
-                    slot_angle = jnp.zeros((1,), dtype=IntLowDim)
-                    slot_valid = jnp.bool_(False)
-                truck_slot_idx += 1
+            slot_idx = truck_slot_indices[i]
 
-                def _use_slot(_):
-                    return slot_pos, slot_angle, per_agent_keys[i]
+            def _slot_lookup(array, idx):
+                zero_value = jnp.zeros_like(array[0])
 
-                def _use_random(_):
-                    return _get_random_init_state(
-                        per_agent_keys[i],
-                        env_cfg,
-                        max_traversable_x,
-                        max_traversable_y,
-                        combined_mask,
-                        action_map,
-                        width,
-                        height,
-                        allowed_mask,
-                    )
+                def _take(valid_idx):
+                    valid_idx = valid_idx.astype(jnp.int32)
+                    slice_ = jax.lax.dynamic_slice_in_dim(array, valid_idx, 1, axis=0)
+                    return jnp.squeeze(slice_, axis=0)
 
-                pos_i, angle_i, per_agent_keys[i] = jax.lax.cond(
-                    slot_valid,
-                    _use_slot,
-                    _use_random,
-                    operand=None,
+                return jax.lax.cond(
+                    jnp.logical_and(idx >= 0, idx < array.shape[0]),
+                    _take,
+                    lambda _: zero_value,
+                    idx,
                 )
-            else:
-                pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
+
+            def _slot_valid(idx):
+                def _take(valid_idx):
+                    valid_idx = valid_idx.astype(jnp.int32)
+                    return jax.lax.dynamic_slice_in_dim(
+                        truck_spawn_valid.astype(jnp.bool_), valid_idx, 1, axis=0
+                    )[0]
+
+                return jax.lax.cond(
+                    jnp.logical_and(idx >= 0, idx < truck_spawn_valid.shape[0]),
+                    _take,
+                    lambda _: jnp.bool_(False),
+                    idx,
+                )
+
+            slot_valid = _slot_valid(slot_idx)
+            use_slot = jnp.logical_and(is_truck_flag, slot_valid)
+
+            def _use_slot(_):
+                slot_pos = _slot_lookup(truck_spawn_positions, slot_idx)
+                slot_angle = _slot_lookup(truck_spawn_angles, slot_idx)
+                return slot_pos.astype(IntMap), slot_angle.astype(IntLowDim), per_agent_keys[i]
+
+            def _use_random(_):
+                return _get_random_init_state(
                     per_agent_keys[i],
                     env_cfg,
                     max_traversable_x,
@@ -240,6 +258,13 @@ class Agent(NamedTuple):
                     height,
                     allowed_mask,
                 )
+
+            pos_i, angle_i, per_agent_keys[i] = jax.lax.cond(
+                use_slot,
+                _use_slot,
+                _use_random,
+                operand=None,
+            )
             
             st_i = AgentState(
                 pos_base=pos_i.astype(IntMap),
