@@ -2525,7 +2525,11 @@ class State(NamedTuple):
                 lambda: -jnp.float32(1.0),
             )
         def _failed_dump():
-            return self.env_cfg.rewards.dump_wrong
+            return jax.lax.cond(
+                is_truck,
+                lambda: self.env_cfg.rewards.dump_wrong / 5.0,
+                lambda: self.env_cfg.rewards.dump_wrong,
+            )
 
 
         return jax.lax.cond(dump_failed, _failed_dump, _success_reward)
@@ -2689,6 +2693,83 @@ class State(NamedTuple):
             new_state,
             action,
         )
+        
+        # Transfer bonus: reward excavator for successfully transferring dirt to truck
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
+        prev_new = new_state._get_prev_agent_state()
+        
+        # Check if excavator's loaded decreased (potential transfer)
+        excavator_loaded_decreased = jnp.logical_and(
+            cur.loaded[0] > 0,
+            prev_new.loaded[0] < cur.loaded[0],
+        )
+        
+        # Check if any truck's loaded increased (confirm transfer happened)
+        active = self.agent.agent_active.astype(jnp.bool_)
+        types = jnp.array([
+            self.agent.agent_states[0].agent_type[0],
+            self.agent.agent_states[1].agent_type[0],
+            self.agent.agent_states[2].agent_type[0],
+            self.agent.agent_states[3].agent_type[0],
+        ])
+        is_truck_vec = (types == 1)
+        
+        # Get loaded states before and after
+        loaded_before = jnp.array([
+            self.agent.agent_states[0].loaded[0],
+            self.agent.agent_states[1].loaded[0],
+            self.agent.agent_states[2].loaded[0],
+            self.agent.agent_states[3].loaded[0],
+        ])
+        loaded_after = jnp.array([
+            new_state.agent.agent_states[0].loaded[0],
+            new_state.agent.agent_states[1].loaded[0],
+            new_state.agent.agent_states[2].loaded[0],
+            new_state.agent.agent_states[3].loaded[0],
+        ])
+        
+        # Check if any truck's loaded increased
+        truck_loaded_increased = jnp.any(
+            jnp.logical_and(
+                active,
+                jnp.logical_and(
+                    is_truck_vec,
+                    loaded_after > loaded_before
+                )
+            )
+        )
+        
+        transfer_happened = jnp.logical_and(
+            excavator_loaded_decreased,
+            truck_loaded_increased
+        )
+        
+        # Only give transfer bonus for DO actions (transfers only happen during DO)
+        is_do_action = (action == TrackedActionType.DO)
+        
+        def _compute_transfer_bonus():
+            # Compute transfer bonus same as if excavator dumped into dump zone
+            # Amount transferred - use directly as progress
+            amount_transferred = cur.loaded[0] - prev_new.loaded[0]
+            progress = jnp.float32(amount_transferred)
+            
+            # Compute dump bonus (same as in _handle_rewards_dump, but without potential multiplier)
+            dump_bonus = jnp.maximum(progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT
+            
+           
+            return dump_bonus
+        
+        transfer_bonus = jax.lax.cond(
+            jnp.logical_and(
+                is_excavator,
+                jnp.logical_and(is_do_action, transfer_happened)
+            ),
+            _compute_transfer_bonus,
+            lambda: jnp.float32(0.0),
+        )
+        
+        reward += transfer_bonus
         return reward
 
     def _get_rewards_wheeled(self, new_state: "State", action: ActionType) -> Float:
@@ -3460,17 +3541,10 @@ class State(NamedTuple):
             action,
         )
 
-        # Bonus if this truck started loading (went from 0 to >0)
-        cur_loaded = self._get_current_agent_state().loaded[0]
-        new_loaded = new_state._get_prev_agent_state().loaded[0]
-        started_loading = jnp.logical_and(cur_loaded == 0, new_loaded > 0)
-        reward += jax.lax.cond(started_loading, lambda: jnp.float32(1.0), lambda: jnp.float32(0.0))
-
         # Proximity shaping when empty
         cur = self._get_current_agent_state()
         is_truck = cur.agent_type[0] == 1
         is_empty = cur.loaded[0] == 0
-        is_loaded = ~is_empty
 
         def _proximity_term():
             # Identify active excavators and gather their positions
@@ -3482,6 +3556,15 @@ class State(NamedTuple):
                 self.agent.agent_states[3].agent_type[0],
             ])
             is_excavator = (types == 0)
+            
+            # Check if any excavator is loaded
+            loaded = jnp.array([
+                self.agent.agent_states[0].loaded[0],
+                self.agent.agent_states[1].loaded[0],
+                self.agent.agent_states[2].loaded[0],
+                self.agent.agent_states[3].loaded[0],
+            ])
+            excavator_loaded = jnp.any(jnp.logical_and(active, jnp.logical_and(is_excavator, loaded > 0)))
 
             posxs = jnp.array([
                 self.agent.agent_states[0].pos_base[0],
@@ -3522,8 +3605,12 @@ class State(NamedTuple):
             min_d_old = jnp.sqrt(min_d2_old)
             min_d_new = jnp.sqrt(min_d2_new)
 
-            # Distance improvement reward: constant bonus if moved closer (binary)
-            delta_reward = jnp.where(min_d_new < min_d_old, jnp.float32(0.25), jnp.float32(0.0))
+            # Distance change reward: bonus when moving closer, symmetric penalty when moving away
+            delta_reward = jnp.where(
+                min_d_new < min_d_old,
+                jnp.float32(0.125),
+                jnp.where(min_d_new > min_d_old, jnp.float32(-0.125), jnp.float32(0.0)),
+            )
 
             # Bonus for being within excavator working range
             dig_portion_radius = self.env_cfg.agent.move_tiles
@@ -3549,30 +3636,28 @@ class State(NamedTuple):
             # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
             # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
             shaped = delta_reward + stay_bonus
-            return shaped
+            # Only give proximity reward when excavator is loaded
+            return jnp.where(excavator_loaded, shaped, jnp.float32(0.0))
 
         reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
 
-        def _loaded_proximity_term():
-            old_pos = cur.pos_base.astype(jnp.float32)
-            new_pos = new_state._get_prev_agent_state().pos_base.astype(jnp.float32)
-            dist_before = self._min_distance_to_dump_zone(old_pos)
-            dist_after = self._min_distance_to_dump_zone(new_pos)
-            delta = dist_before - dist_after
-            bonus = jnp.where(delta > 0, jnp.float32(0.15), jnp.float32(0.0))
-            penalty = jnp.where(delta < 0, jnp.float32(-0.15), jnp.float32(0.0))
-            return bonus + penalty
-
-        is_move_action = jnp.logical_or(
-            action == TrackedActionType.FORWARD,
-            action == TrackedActionType.BACKWARD,
+        prev_new = new_state._get_prev_agent_state()
+        started_loading = jnp.logical_and(
+            cur.loaded[0] == 0,
+            prev_new.loaded[0] > 0,
         )
-        reward += jax.lax.cond(
-            jnp.logical_and(is_truck, is_loaded),
-            lambda: jax.lax.cond(is_move_action, _loaded_proximity_term, lambda: jnp.float32(0.0)),
-            lambda: jnp.float32(0.0),
-        )
-
+        
+        def _loading_reward_term():
+            # One-time reward for successfully receiving dirt from excavator
+            return jnp.float32(0.5)
+        
+        reward += jax.lax.cond(jnp.logical_and(is_truck, started_loading), _loading_reward_term, lambda: 0.0)
+        
+        # Reward for truck when it successfully receives dirt (transition from empty to loaded)
+        # Similar to how excavator gets reward when it starts loading dirt
+        
+        
+        
         return reward
 
     def _handle_rewards_move_skidsteer(
@@ -3640,20 +3725,6 @@ class State(NamedTuple):
         has_skid = jnp.any(jnp.logical_and(active_mask, types == 2))
         has_truck = jnp.any(jnp.logical_and(active_mask, types == 1))
         return jnp.logical_or(has_skid, has_truck)
-
-    def _min_distance_to_dump_zone(self, pos_base: Array) -> Float:
-        dump_mask = self.world.target_map.map > 0
-        def _calc_distance():
-            yy, xx = jnp.indices(dump_mask.shape)
-            yy = yy.astype(jnp.float32)
-            xx = xx.astype(jnp.float32)
-            pos = pos_base.astype(jnp.float32)
-            dy = yy - pos[0]
-            dx = xx - pos[1]
-            dists = jnp.sqrt(dy * dy + dx * dx)
-            masked = jnp.where(dump_mask, dists, jnp.float32(1e6))
-            return jnp.min(masked)
-        return jax.lax.cond(jnp.any(dump_mask), _calc_distance, lambda: jnp.float32(0.0))
 
     @staticmethod
     def _compute_potential_multiplier(is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_, has_transport_agent: jnp.bool_) -> jnp.float32:

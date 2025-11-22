@@ -85,14 +85,26 @@ class Agent(NamedTuple):
         # Use JAX-compatible loop for agent placement
         map_width, map_height = padding_mask.shape
         full_allowed_mask = jnp.ones_like(padding_mask, dtype=jnp.bool_)
-        if dumpability_map is not None and target_map is not None:
-            truck_spawn_allowed_mask = jnp.logical_or(
-                dumpability_map == 0,
-                target_map > 0,
-            ).astype(jnp.bool_)
+        # For trucks: spawn on non-dumpable tiles (roads) within 10px of border
+        if dumpability_map is not None:
+            non_dumpable_mask = (dumpability_map == 0).astype(jnp.bool_)
+            # Create border mask: within 10px of any edge
+            max_border_dist = 8
+            y_coords = jnp.arange(map_height)[:, None]  # (H, 1)
+            x_coords = jnp.arange(map_width)[None, :]   # (1, W)
+            dist_to_top = y_coords
+            dist_to_bottom = map_height - 1 - y_coords
+            dist_to_left = x_coords
+            dist_to_right = map_width - 1 - x_coords
+            min_dist_to_edge = jnp.minimum(
+                jnp.minimum(dist_to_top, dist_to_bottom),
+                jnp.minimum(dist_to_left, dist_to_right)
+            )
+            border_mask = (min_dist_to_edge <= max_border_dist)
+            # Intersect: must be non-dumpable AND within 10px of border
+            truck_spawn_allowed_mask = jnp.logical_and(non_dumpable_mask, border_mask)
         else:
             truck_spawn_allowed_mask = full_allowed_mask
-        truck_spawn_positions, truck_spawn_angles, truck_spawn_valid = _compute_truck_spawn_slots(dumpability_map)
 
         def _prepare_type_array(values, max_len, dtype=jnp.int32, default=0):
             arr = jnp.asarray(values, dtype=dtype)
@@ -104,13 +116,6 @@ class Agent(NamedTuple):
 
         agent_types_tensor = _prepare_type_array(agent_types, MAX_AGENTS, dtype=jnp.int32, default=0)
         action_types_tensor = _prepare_type_array(action_types, MAX_AGENTS, dtype=jnp.int32, default=0)
-
-        is_truck_flags = (agent_types_tensor == 1)
-        truck_slot_indices = jnp.where(
-            is_truck_flags,
-            jnp.cumsum(is_truck_flags.astype(IntLowDim)) - 1,
-            jnp.full_like(agent_types_tensor, -1, dtype=IntLowDim),
-        )
         
         def place_agent(carry, i):
             combined_mask, keys, states = carry
@@ -119,11 +124,14 @@ class Agent(NamedTuple):
             
             agent_type_val = agent_types[i] if i < len(agent_types) else 0
             action_type_val = action_types[i] if i < len(action_types) else 0
+            is_truck = (agent_type_val == 1)
             allowed_mask = jax.lax.cond(
-                agent_type_val == 1,
+                is_truck,
                 lambda: truck_spawn_allowed_mask,
                 lambda: full_allowed_mask,
             )
+            # For trucks: accept if ANY part is on non-dumpable tiles
+            require_all_allowed = jnp.logical_not(is_truck)
             pos_i, angle_i, new_key = _get_random_init_state(
                 keys[i],
                 env_cfg,
@@ -134,6 +142,7 @@ class Agent(NamedTuple):
                 width,
                 height,
                 allowed_mask,
+                require_all_allowed,
             )
 
             # Create agent state
@@ -199,73 +208,31 @@ class Agent(NamedTuple):
                 
             agent_type_val = agent_types_tensor[i]
             action_type_val = action_types_tensor[i]
-            is_truck_flag = is_truck_flags[i]
+            is_truck_flag = (agent_type_val == 1)
+            
+            # Trucks spawn on non-dumpable tiles (roads), others spawn anywhere
             allowed_mask = jax.lax.cond(
                 is_truck_flag,
                 lambda _: truck_spawn_allowed_mask,
                 lambda _: full_allowed_mask,
                 operand=None,
             )
-
-            slot_idx = truck_slot_indices[i]
-
-            def _slot_lookup(array, idx):
-                zero_value = jnp.zeros_like(array[0])
-
-                def _take(valid_idx):
-                    valid_idx = valid_idx.astype(jnp.int32)
-                    slice_ = jax.lax.dynamic_slice_in_dim(array, valid_idx, 1, axis=0)
-                    return jnp.squeeze(slice_, axis=0)
-
-                return jax.lax.cond(
-                    jnp.logical_and(idx >= 0, idx < array.shape[0]),
-                    _take,
-                    lambda _: zero_value,
-                    idx,
-                )
-
-            def _slot_valid(idx):
-                def _take(valid_idx):
-                    valid_idx = valid_idx.astype(jnp.int32)
-                    return jax.lax.dynamic_slice_in_dim(
-                        truck_spawn_valid.astype(jnp.bool_), valid_idx, 1, axis=0
-                    )[0]
-
-                return jax.lax.cond(
-                    jnp.logical_and(idx >= 0, idx < truck_spawn_valid.shape[0]),
-                    _take,
-                    lambda _: jnp.bool_(False),
-                    idx,
-                )
-
-            slot_valid = _slot_valid(slot_idx)
-            use_slot = jnp.logical_and(is_truck_flag, slot_valid)
-
-            def _use_slot(_):
-                slot_pos = _slot_lookup(truck_spawn_positions, slot_idx)
-                slot_angle = _slot_lookup(truck_spawn_angles, slot_idx)
-                return slot_pos.astype(IntMap), slot_angle.astype(IntLowDim), per_agent_keys[i]
-
-            def _use_random(_):
-                pos, ang, key_out = _get_random_init_state(
-                    per_agent_keys[i],
-                    env_cfg,
-                    max_traversable_x,
-                    max_traversable_y,
-                    combined_mask,
-                    action_map,
-                    width,
-                    height,
-                    allowed_mask,
-                )
-                return pos, ang.astype(IntLowDim), key_out
-
-            pos_i, angle_i, per_agent_keys[i] = jax.lax.cond(
-                use_slot,
-                _use_slot,
-                _use_random,
-                operand=None,
+            # For trucks: accept if ANY part is on non-dumpable tiles
+            # For others: require ALL parts to be on allowed tiles (default)
+            require_all_allowed = jnp.logical_not(is_truck_flag)
+            pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
+                per_agent_keys[i],
+                env_cfg,
+                max_traversable_x,
+                max_traversable_y,
+                combined_mask,
+                action_map,
+                width,
+                height,
+                allowed_mask,
+                require_all_allowed,
             )
+            angle_i = angle_i.astype(IntLowDim)
             
             st_i = AgentState(
                 pos_base=pos_i.astype(IntMap),
@@ -331,6 +298,7 @@ def _get_random_init_state(
     agent_width: int,
     agent_height: int,
     allowed_mask: Array,
+    require_all_allowed: Array = jnp.bool_(True),
 ):
     def _get_random_agent_state(carry):
         key, padding_mask, pos_base, angle_base = carry
@@ -383,9 +351,27 @@ def _get_random_init_state(
 
             obstacle_inside = jnp.any(jnp.logical_and(polygon_mask, padding_mask == 1))
             action_illegal = jnp.any(jnp.logical_and(polygon_mask, action_map != 0))
-            allowed_violation = jnp.any(
-                jnp.logical_and(polygon_mask, jnp.logical_not(allowed_mask))
+            
+            # Check allowed_mask: if require_all_allowed=True, reject if ANY part is not allowed
+            # if require_all_allowed=False, accept if ANY part is allowed
+            def _check_all_parts_allowed():
+                return jnp.any(
+                    jnp.logical_and(polygon_mask, jnp.logical_not(allowed_mask))
+                )
+            
+            def _check_any_part_allowed():
+                # Accept if ANY part is on allowed tiles
+                allowed_satisfied = jnp.any(
+                    jnp.logical_and(polygon_mask, allowed_mask)
+                )
+                return jnp.logical_not(allowed_satisfied)
+            
+            allowed_violation = jax.lax.cond(
+                require_all_allowed,
+                _check_all_parts_allowed,
+                _check_any_part_allowed,
             )
+            
             return obstacle_inside | action_illegal | allowed_violation
 
         keep_searching = jax.lax.cond(
@@ -409,66 +395,6 @@ def _get_random_init_state(
     return pos_base, angle_base, key
 
 
-def _compute_truck_spawn_slots(dumpability_map: Array | None):
-    if dumpability_map is None:
-        zero_positions = jnp.zeros((4, 2), dtype=IntMap)
-        zero_angles = jnp.zeros((4, 1), dtype=IntLowDim)
-        zero_valid = jnp.zeros((4,), dtype=jnp.bool_)
-        return zero_positions, zero_angles, zero_valid
-
-    road_mask = (dumpability_map == 0)
-    height, width = road_mask.shape
-
-    row_full = jnp.all(road_mask, axis=1)
-    col_full = jnp.all(road_mask, axis=0)
-
-    top_width = _prefix_true_length(row_full)
-    bottom_width = _prefix_true_length(jnp.flip(row_full, axis=0))
-    left_width = _prefix_true_length(col_full)
-    right_width = _prefix_true_length(jnp.flip(col_full, axis=0))
-
-    width_half = jnp.int32(width // 2)
-    height_half = jnp.int32(height // 2)
-
-    top_center = jnp.array([width_half, top_width // 2], dtype=IntMap)
-    bottom_start = height - bottom_width
-    bottom_center = jnp.array(
-        [width_half, bottom_start + bottom_width // 2],
-        dtype=IntMap,
-    )
-    left_center = jnp.array([left_width // 2, height_half], dtype=IntMap)
-    right_start = width - right_width
-    right_center = jnp.array(
-        [right_start + right_width // 2, height_half],
-        dtype=IntMap,
-    )
-
-    positions = jnp.stack(
-        [top_center, bottom_center, left_center, right_center],
-        axis=0,
-    )
-
-    angles = jnp.stack(
-        [
-            jnp.array([0], dtype=IntLowDim),
-            jnp.array([0], dtype=IntLowDim),
-            jnp.array([1], dtype=IntLowDim),
-            jnp.array([1], dtype=IntLowDim),
-        ],
-        axis=0,
-    )
-
-    valid = jnp.array(
-        [
-            top_width > 0,
-            bottom_width > 0,
-            left_width > 0,
-            right_width > 0,
-        ],
-        dtype=jnp.bool_,
-    )
-
-    return positions, angles, valid
 
 
 def _prefix_true_length(arr: Array) -> IntMap:

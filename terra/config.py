@@ -205,7 +205,7 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
 
         {
-            "maps_path": "foundations_1.5", 
+            "maps_path": "experimental_64x64_roads_noborder", 
             "max_steps_in_episode": 800,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
@@ -239,7 +239,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # 
 
         # {
-        #     "maps_path": "foundations_dumpzones_v3_fence", 
+        #     "maps_path": "foundations_dumpzones_v3", 
         #     "max_steps_in_episode": 800,
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,

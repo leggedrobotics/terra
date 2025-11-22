@@ -47,40 +47,16 @@ def create_single_dump_zone_64x64_flush(img_terra_pad, size_dump_min, size_dump_
     border_offset = 0
     max_attempts = 200
     for attempt in range(max_attempts):
-        # Prefer corners strongly: for the majority of attempts, pick a corner-anchored placement
-        prefer_corner = (attempt < int(0.75 * max_attempts))
-        if prefer_corner:
-            # Choose one of the 4 corners: 0=top-left,1=top-right,2=bottom-left,3=bottom-right
-            corner_choice = random.randint(0, 3)
-            if corner_choice in (0, 1):
-                # Top edge
-                # Fixed size: closer to square
-                dump_width = 16
-                dump_height = 12
-                y = 0
-                # Anchor to left or right corner
-                x = 0 if corner_choice == 0 else max(0, width - dump_width)
-            else:
-                # Bottom edge
-                dump_width = 16
-                dump_height = 12
-                y = max(0, height - dump_height)
-                x = 0 if corner_choice == 2 else max(0, width - dump_width)
+        # Force corner placement: choose strictly among the four corners
+        corner_choice = random.randint(0, 3)
+        dump_width = 16
+        dump_height = 12
+        if corner_choice in (0, 1):
+            y = 0
+            x = 0 if corner_choice == 0 else max(0, width - dump_width)
         else:
-            # Fallback: any border (uniform)
-            border_choice = random.randint(0, 3)  # 0=top,1=bottom,2=left,3=right
-            if border_choice in (0, 1):
-                # Horizontal border: closer to square (wider than tall)
-                dump_width = 18
-                dump_height = 12
-                x = random.randint(border_offset, max(width - dump_width - border_offset, border_offset))
-                y = 0 if border_choice == 0 else height - dump_height
-            else:
-                # Vertical border: closer to square (taller than wide)
-                dump_width = 12
-                dump_height = 18
-                x = 0 if border_choice == 2 else width - dump_width
-                y = random.randint(border_offset, max(height - dump_height - border_offset, border_offset))
+            y = max(0, height - dump_height)
+            x = 0 if corner_choice == 2 else max(0, width - dump_width)
 
         dump_area_found = foundation_mask[y:y+dump_height, x:x+dump_width]
         dig_area = np.all(img_terra_pad[y:y+dump_height, x:x+dump_width] == color_dict["digging"], axis=-1)
@@ -167,10 +143,9 @@ def create_experimental_64x64_maps_roads_noborder(
             ) as json_file:
                 metadata = json.load(json_file)
 
-            # Aim for ~32x32 foundations within 64x64
-            target_foundation_size = 32
-            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / target_foundation_size))) * downsampling_factor
-            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / target_foundation_size))) * downsampling_factor
+            # Match downsampling strategy from foundations_dumpzones_v3 for consistent foundation sizing
+            downsample_factor_w = int(max(1, math.ceil(img.shape[1] / max_size))) * downsampling_factor
+            downsample_factor_h = int(max(1, math.ceil(img.shape[0] / max_size))) * downsampling_factor
 
             img_downsampled = skimage.measure.block_reduce(
                 img, (downsample_factor_h, downsample_factor_w, 1), np.max
@@ -238,7 +213,24 @@ def create_experimental_64x64_maps_roads_noborder(
             cumulative_mask = np.zeros(img_terra_pad.shape[:2], dtype=np.bool_)
             cumulative_mask[np.all(img_terra_pad == color_dict["digging"], axis=-1)] = True
 
-            # Add obstacles (cap to max 2 as requested)
+            # Create a single dump zone flush with border (smaller sizes) BEFORE obstacles
+            img_terra_pad, dump_cumulative_mask, dump_rect = create_single_dump_zone_64x64_flush(
+                img_terra_pad, size_dump_min, size_dump_max, foundation_mask
+            )
+            cumulative_mask = dump_cumulative_mask | cumulative_mask
+
+            # Add roads BEFORE obstacles, enforcing at least one road touches the dump zone
+            img_terra_pad, _, road_positions = create_roads_64x64(
+                img_terra_pad,
+                cumulative_mask,
+                road_width=road_width,
+                must_touch_rect=dump_rect,
+            )
+            # Reserve road area so obstacles can't overwrite it
+            for x, y, w, h in road_positions:
+                cumulative_mask[y:y+h, x:x+w] = True
+
+            # After dump zone and road are placed, add obstacles (cap to max 2)
             _n_obs_max = min(n_obs_max, 2)
             _n_obs_min = min(n_obs_min, _n_obs_max)
             occ, cumulative_mask = add_obstacles(
@@ -249,21 +241,6 @@ def create_experimental_64x64_maps_roads_noborder(
                 size_obstacle_min,
                 size_obstacle_max,
             )
-
-            # Create a single dump zone flush with border (smaller sizes)
-            img_terra_pad, dump_cumulative_mask, dump_rect = create_single_dump_zone_64x64_flush(
-                img_terra_pad, size_dump_min, size_dump_max, foundation_mask
-            )
-
-            # Add roads, enforcing at least one road intersects/touches the dump zone
-            img_terra_pad, _, road_positions = create_roads_64x64(
-                img_terra_pad,
-                cumulative_mask,
-                road_width=road_width,
-                must_touch_rect=dump_rect,
-            )
-
-            cumulative_mask = dump_cumulative_mask | cumulative_mask
 
             # Dumpability map: start dumpable everywhere
             dmp = np.ones_like(img_terra_pad) * 255
@@ -345,7 +322,7 @@ def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=10, must_touch
     """
     height, width = img_terra_pad.shape[:2]
 
-    road_config = random.choice(["single", "parallel", "crossing"])
+    road_config = "single"
     roads_to_add = []
 
     # If we must touch a given rectangle (dump zone), place a border-aligned road on the same edge
@@ -380,46 +357,36 @@ def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=10, must_touch
 
     forced = None
     if must_touch_rect is not None:
-        # Deterministic crossing-at-borders layout with one road ending in dump zone
+        # Randomly choose one road aligned with one of the dump zone edges (dump zones are in corners, so they touch 2 edges)
         x0, y0, w0, h0 = must_touch_rect
         dump_on_top = (y0 == 0)
         dump_on_bottom = (y0 + h0 >= height)
         dump_on_left = (x0 == 0)
         dump_on_right = (x0 + w0 >= width)
 
-        # Choose a canonical corner to ensure crossing: prefer top-left; for right/bottom edges, adjust accordingly
         roads_to_add = []
+        # Collect all edges the dump zone touches (corners touch 2 edges)
+        possible_roads = []
+        
         if dump_on_top:
-            # Horizontal road along top border from left corner to inside dump
-            end_x = max(road_width, min(width, x0 + max(1, w0 // 2)))
-            roads_to_add.append({"direction": "horizontal", "y": 0, "x": 0, "width": end_x, "height": road_width})
-            # Vertical road along left border full height to ensure crossing at (0,0)
-            roads_to_add.append({"direction": "vertical", "x": 0, "y": 0, "width": road_width, "height": height})
-        elif dump_on_bottom:
-            # Horizontal road along bottom border from left corner to inside dump
-            end_x = max(road_width, min(width, x0 + max(1, w0 // 2)))
-            roads_to_add.append({"direction": "horizontal", "y": max(0, height - road_width), "x": 0, "width": end_x, "height": road_width})
-            # Vertical road along left border full height to ensure crossing at (0, height-road_width)
-            roads_to_add.append({"direction": "vertical", "x": 0, "y": 0, "width": road_width, "height": height})
-        elif dump_on_left:
-            # Vertical road along left border from top corner to inside dump
-            end_y = max(road_width, min(height, y0 + max(1, h0 // 2)))
-            roads_to_add.append({"direction": "vertical", "x": 0, "y": 0, "width": road_width, "height": end_y})
-            # Horizontal road along top border full width to ensure crossing at (0,0)
-            roads_to_add.append({"direction": "horizontal", "y": 0, "x": 0, "width": width, "height": road_width})
-        elif dump_on_right:
-            # Vertical road along right border from top corner to inside dump
-            end_y = max(road_width, min(height, y0 + max(1, h0 // 2)))
-            roads_to_add.append({"direction": "vertical", "x": max(0, width - road_width), "y": 0, "width": road_width, "height": end_y})
-            # Horizontal road along top border full width to ensure crossing at (width-road_width, 0)
-            roads_to_add.append({"direction": "horizontal", "y": 0, "x": 0, "width": width, "height": road_width})
+            possible_roads.append({"direction": "horizontal", "y": 0, "x": 0, "width": width, "height": road_width})
+        if dump_on_bottom:
+            possible_roads.append({"direction": "horizontal", "y": max(0, height - road_width), "x": 0, "width": width, "height": road_width})
+        if dump_on_left:
+            possible_roads.append({"direction": "vertical", "x": 0, "y": 0, "width": road_width, "height": height})
+        if dump_on_right:
+            possible_roads.append({"direction": "vertical", "x": max(0, width - road_width), "y": 0, "width": road_width, "height": height})
+        
+        # Randomly choose one of the possible roads
+        if len(possible_roads) > 0:
+            roads_to_add.append(random.choice(possible_roads))
         else:
             # Fallback to previous forced touching when ambiguous
             forced = add_forced_touching_road(must_touch_rect)
             if forced is not None:
                 roads_to_add.append(forced)
 
-    if must_touch_rect is None and road_config == "single":
+    if must_touch_rect is None:
         if random.random() < 0.5:
             side = random.choice(["top", "bottom"])
             y_pos = 0 if side == "top" else max(0, height - road_width)
@@ -429,50 +396,30 @@ def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=10, must_touch
             x_pos = 0 if side == "left" else max(0, width - road_width)
             roads_to_add.append({"direction": "vertical", "x": x_pos, "y": 0, "width": road_width, "height": height})
 
-    elif must_touch_rect is None and road_config == "parallel":
-        if random.random() < 0.5:
-            y1 = 0
-            y2 = max(0, height - road_width)
-            roads_to_add.append({"direction": "horizontal", "y": y1, "x": 0, "width": width, "height": road_width})
-            roads_to_add.append({"direction": "horizontal", "y": y2, "x": 0, "width": width, "height": road_width})
-        else:
-            x1 = 0
-            x2 = max(0, width - road_width)
-            roads_to_add.append({"direction": "vertical", "x": x1, "y": 0, "width": road_width, "height": height})
-            roads_to_add.append({"direction": "vertical", "x": x2, "y": 0, "width": road_width, "height": height})
-
-    elif must_touch_rect is None:  # crossing
-        y_pos = 0 if random.random() < 0.5 else max(0, height - road_width)
-        x_pos = 0 if random.random() < 0.5 else max(0, width - road_width)
-        roads_to_add.append({"direction": "horizontal", "y": y_pos, "x": 0, "width": width, "height": road_width})
-        roads_to_add.append({"direction": "vertical", "x": x_pos, "y": 0, "width": road_width, "height": height})
-
-    # Enforce maximum of 2 roads; keep any forced road
+    # Enforce exactly one road
     if must_touch_rect is not None and forced is not None:
-        # Ensure forced road is first
-        roads_to_add = [forced] + [r for r in roads_to_add if r is not forced]
-    if len(roads_to_add) > 2:
-        roads_to_add = roads_to_add[:2]
+        roads_to_add = [forced]
+    if len(roads_to_add) > 1:
+        roads_to_add = roads_to_add[:1]
+    if len(roads_to_add) == 0:
+        fallback = {"direction": "horizontal", "y": 0, "x": 0, "width": width, "height": road_width}
+        roads_to_add = [fallback]
 
     road_positions = []
     for road in roads_to_add:
         x, y, w, h = road.get("x", 0), road.get("y", 0), road.get("width", 0), road.get("height", 0)
         obstacle_mask = np.all(img_terra_pad == color_dict["obstacle"], axis=-1)
         area_has_obstacles = np.any(obstacle_mask[y:y+h, x:x+w])
-        if not area_has_obstacles:
-            road_positions.append((x, y, w, h))
-            print(f"Added {road['direction']} road at ({x}, {y}) with size {w}x{h} (invisible, non-dumpable)")
-        else:
-            print(f"Warning: Could not place {road['direction']} road due to obstacles")
+        if area_has_obstacles:
+            print(f"Warning: Road at ({x}, {y}) intersects obstacles; marking as road anyway.")
+        road_positions.append((x, y, w, h))
+        print(f"Added {road['direction']} road at ({x}, {y}) with size {w}x{h} (invisible, non-dumpable)")
 
     # If we required a touching road but failed to add any, try once more with horizontal preference
     if must_touch_rect is not None and len(road_positions) == 0:
-        fallback = {"direction": "horizontal", "y": 0, "x": 0, "width": width, "height": road_width}
-        x, y, w, h = 0, 0, width, road_width
-        obstacle_mask = np.all(img_terra_pad == color_dict["obstacle"], axis=-1)
-        if not np.any(obstacle_mask[y:y+h, x:x+w]):
-            road_positions.append((x, y, w, h))
-            print("Added fallback horizontal road at top edge to touch dump zone")
+        fallback = (0, 0, width, road_width)
+        road_positions.append(fallback)
+        print("Added fallback horizontal road at top edge to touch dump zone")
 
     return img_terra_pad, cumulative_mask, road_positions
 
