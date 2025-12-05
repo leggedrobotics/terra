@@ -1482,22 +1482,34 @@ class State(NamedTuple):
 
     def _truck_allowed_tiles_mask(self) -> Array:
         """
-        Returns boolean mask where trucks are allowed to stand: non-dumpable tiles, dump zones,
-        or any tile within a 1-tile (3x3) neighborhood of those areas.
+        Returns boolean mask where trucks are allowed to stand.
+        If truck_road_restricted=True: roads (non-dumpable tiles) OR dump zones (original behavior).
+        If truck_road_restricted=False: everywhere (no restrictions).
+        Both modes include 1-tile (3x3) neighborhood dilation for smoother movement.
         """
-        base_allowed = jnp.logical_or(
-            self.world.dumpability_mask.map == 0,
-            self.world.target_map.map > 0,
-        ).astype(jnp.float32)
-        kernel = jnp.ones((3, 3), dtype=jnp.float32)
-        dilated = jax.scipy.signal.correlate2d(
-            base_allowed,
-            kernel,
-            mode="same",
-            boundary="fill",
-            fillvalue=0.0,
-        ) > 0
-        return dilated
+        is_road_restricted = getattr(self.env_cfg, 'truck_road_restricted', False)
+        
+        def _road_restricted_mask():
+            # Original behavior: roads OR dump zones
+            base_allowed = jnp.logical_or(
+                self.world.dumpability_mask.map == 0,
+                self.world.target_map.map > 0,
+            ).astype(jnp.float32)
+            kernel = jnp.ones((3, 3), dtype=jnp.float32)
+            dilated = jax.scipy.signal.correlate2d(
+                base_allowed,
+                kernel,
+                mode="same",
+                boundary="fill",
+                fillvalue=0.0,
+            ) > 0
+            return dilated
+        
+        def _free_roaming_mask():
+            # No restrictions: allow everywhere (valid tiles checked later)
+            return jnp.ones_like(self.world.dumpability_mask.map, dtype=jnp.bool_)
+        
+        return jax.lax.cond(is_road_restricted, _road_restricted_mask, _free_roaming_mask)
 
     
 
@@ -2511,19 +2523,38 @@ class State(NamedTuple):
                 self.world.target_map.map,
             )
             # Dump bonus only for skidsteers (relocation specialists)
+            # When truck is road-restricted and excavator is dumping, no dump bonus
+            is_road_restricted = getattr(self.env_cfg, 'truck_road_restricted', False)
+            should_zero_bonus = jnp.logical_and(is_road_restricted, ~is_transport)
             
             dump_bonus = jax.lax.cond(
-                is_transport,
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier,
-                lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier
+                should_zero_bonus,
+                lambda: jnp.float32(0.0),
+                lambda: jax.lax.cond(
+                    is_transport,
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier,
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier
+                )
             )
             meaningful_threshold = jnp.float32(0.1)
             
-            return jax.lax.cond(
-                progress_clamped > meaningful_threshold,
-                lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
-                lambda: -jnp.float32(1.0),
-            )
+            def _truck_success():
+                return jax.lax.cond(
+                    dump_progress > meaningful_threshold,
+                    lambda: jnp.float32(2.0) + dump_bonus,
+                    lambda: -jnp.float32(1.0),
+                )
+
+            def _non_truck_success():
+                return jax.lax.cond(
+                    progress_clamped > meaningful_threshold,
+                    lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
+                    lambda: -jnp.float32(1.0),
+                )
+
+            # Use truck-specific reward only when road-restricted, otherwise use same as other agents
+            use_truck_reward = jnp.logical_and(is_truck, is_road_restricted)
+            return jax.lax.cond(use_truck_reward, _truck_success, _non_truck_success)
         def _failed_dump():
             return self.env_cfg.rewards.dump_wrong
 
@@ -3464,7 +3495,7 @@ class State(NamedTuple):
         cur_loaded = self._get_current_agent_state().loaded[0]
         new_loaded = new_state._get_prev_agent_state().loaded[0]
         started_loading = jnp.logical_and(cur_loaded == 0, new_loaded > 0)
-        reward += jax.lax.cond(started_loading, lambda: jnp.float32(1.0), lambda: jnp.float32(0.0))
+        reward += jax.lax.cond(started_loading, lambda: jnp.float32(2.0), lambda: jnp.float32(0.0))
 
         # Proximity shaping when empty
         cur = self._get_current_agent_state()
@@ -3473,95 +3504,113 @@ class State(NamedTuple):
         is_loaded = ~is_empty
 
         def _proximity_term():
-            # Identify active excavators and gather their positions
-            active = self.agent.agent_active.astype(jnp.bool_)
-            types = jnp.array([
-                self.agent.agent_states[0].agent_type[0],
-                self.agent.agent_states[1].agent_type[0],
-                self.agent.agent_states[2].agent_type[0],
-                self.agent.agent_states[3].agent_type[0],
-            ])
-            is_excavator = (types == 0)
+            old_pos = cur.pos_base.astype(jnp.float32)
+            new_pos = new_state._get_prev_agent_state().pos_base.astype(jnp.float32)
+            pos_changed = jnp.any(old_pos != new_pos)
 
-            posxs = jnp.array([
-                self.agent.agent_states[0].pos_base[0],
-                self.agent.agent_states[1].pos_base[0],
-                self.agent.agent_states[2].pos_base[0],
-                self.agent.agent_states[3].pos_base[0],
-            ]).astype(jnp.float32)
-            posys = jnp.array([
-                self.agent.agent_states[0].pos_base[1],
-                self.agent.agent_states[1].pos_base[1],
-                self.agent.agent_states[2].pos_base[1],
-                self.agent.agent_states[3].pos_base[1],
-            ]).astype(jnp.float32)
+            def _compute_proximity_reward():
+                # Identify active excavators and gather their positions
+                active = self.agent.agent_active.astype(jnp.bool_)
+                types = jnp.array([
+                    self.agent.agent_states[0].agent_type[0],
+                    self.agent.agent_states[1].agent_type[0],
+                    self.agent.agent_states[2].agent_type[0],
+                    self.agent.agent_states[3].agent_type[0],
+                ])
+                is_excavator = (types == 0)
 
-            # Old (pre-action) truck position from current state
-            old_x = cur.pos_base[0].astype(jnp.float32)
-            old_y = cur.pos_base[1].astype(jnp.float32)
-            # New (post-action) truck position from new_state previous agent (after swap)
-            new_agent_state = new_state._get_prev_agent_state()
-            new_x = new_agent_state.pos_base[0].astype(jnp.float32)
-            new_y = new_agent_state.pos_base[1].astype(jnp.float32)
+                posxs = jnp.array([
+                    self.agent.agent_states[0].pos_base[0],
+                    self.agent.agent_states[1].pos_base[0],
+                    self.agent.agent_states[2].pos_base[0],
+                    self.agent.agent_states[3].pos_base[0],
+                ]).astype(jnp.float32)
+                posys = jnp.array([
+                    self.agent.agent_states[0].pos_base[1],
+                    self.agent.agent_states[1].pos_base[1],
+                    self.agent.agent_states[2].pos_base[1],
+                    self.agent.agent_states[3].pos_base[1],
+                ]).astype(jnp.float32)
 
-            # Mask to only consider active excavators
-            mask = jnp.logical_and(active, is_excavator)
+                old_x, old_y = old_pos
+                new_x, new_y = new_pos
 
-            # Compute squared distances to nearest excavator for old and new positions
-            dx_old = posxs - old_x
-            dy_old = posys - old_y
-            d2_old = jnp.where(mask, dx_old * dx_old + dy_old * dy_old, jnp.float32(1e9))
-            min_d2_old = jnp.min(d2_old)
+                # Mask to only consider active excavators
+                mask = jnp.logical_and(active, is_excavator)
 
-            dx_new = posxs - new_x
-            dy_new = posys - new_y
-            d2_new = jnp.where(mask, dx_new * dx_new + dy_new * dy_new, jnp.float32(1e9))
-            min_d2_new = jnp.min(d2_new)
+                # Compute squared distances to nearest excavator for old and new positions
+                dx_old = posxs - old_x
+                dy_old = posys - old_y
+                d2_old = jnp.where(mask, dx_old * dx_old + dy_old * dy_old, jnp.float32(1e9))
+                min_d2_old = jnp.min(d2_old)
 
-            # Convert to distances in tiles
-            min_d_old = jnp.sqrt(min_d2_old)
-            min_d_new = jnp.sqrt(min_d2_new)
+                dx_new = posxs - new_x
+                dy_new = posys - new_y
+                d2_new = jnp.where(mask, dx_new * dx_new + dy_new * dy_new, jnp.float32(1e9))
+                min_d2_new = jnp.min(d2_new)
 
-            # Distance improvement reward: constant bonus if moved closer (binary)
-            delta_reward = jnp.where(min_d_new < min_d_old, jnp.float32(0.25), jnp.float32(0.0))
+                # Convert to distances in tiles
+                min_d_old = jnp.sqrt(min_d2_old)
+                min_d_new = jnp.sqrt(min_d2_new)
 
-            # Bonus for being within excavator working range
-            dig_portion_radius = self.env_cfg.agent.move_tiles
-            tile_size = self.env_cfg.tile_size
-            max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
-            min_distance_from_agent = tile_size * max_agent_dim
-            fixed_extension = 0.5
-            
-            
-            r_max_world = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
-            
-            #r_max_world = (min_distance_from_agent + dig_portion_radius * tile_size) * 1.3
+                # Symmetric distance reward: positive when moving closer, negative when moving away
+                delta_reward = jnp.where(
+                    min_d_new < min_d_old,
+                    jnp.float32(0.15),  # Reward for getting closer
+                    jnp.where(
+                        min_d_new > min_d_old,
+                        jnp.float32(-0.15),  # Penalty for moving away
+                        jnp.float32(0.0)  # No change
+                    )
+                )
 
-            #r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
-            r_max_tiles = r_max_world / tile_size
-            near_after = min_d_new <= r_max_tiles
-            stay_bonus = jnp.where(near_after, jnp.float32(0.5), jnp.float32(0.0))
+                # Bonus for being within excavator working range (reduced to prevent monopolization)
+                dig_portion_radius = self.env_cfg.agent.move_tiles
+                tile_size = self.env_cfg.tile_size
+                max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
+                min_distance_from_agent = tile_size * max_agent_dim
+                fixed_extension = 0.5
+                
+                
+                r_max_world = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
+                
+                #r_max_world = (min_distance_from_agent + dig_portion_radius * tile_size) * 1.3
 
-            # Small penalty for sitting on dig tiles when empty (temporarily disabled)
-            # on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
-            # penalty = jnp.where(on_dig, jnp.float32(0.05), jnp.float32(0.0))
+                #r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
+                r_max_tiles = r_max_world / tile_size
+                near_after = min_d_new <= r_max_tiles
+                stay_bonus = jnp.where(near_after, jnp.float32(0.3), jnp.float32(0.0))  # Reduced from 0.5 to 0.2
 
-            # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
-            # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
-            shaped = delta_reward + stay_bonus
-            return shaped
+                # Small penalty for sitting on dig tiles when empty (temporarily disabled)
+                # on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
+                # penalty = jnp.where(on_dig, jnp.float32(0.05), jnp.float32(0.0))
+
+                # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
+                # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
+                shaped = delta_reward + stay_bonus
+                return shaped
+
+            # Only provide proximity reward if the truck actually moved
+            return jax.lax.cond(pos_changed, _compute_proximity_reward, lambda: jnp.float32(0.0))
 
         reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
 
         def _loaded_proximity_term():
             old_pos = cur.pos_base.astype(jnp.float32)
             new_pos = new_state._get_prev_agent_state().pos_base.astype(jnp.float32)
-            dist_before = self._min_distance_to_dump_zone(old_pos)
-            dist_after = self._min_distance_to_dump_zone(new_pos)
-            delta = dist_before - dist_after
-            bonus = jnp.where(delta > 0, jnp.float32(0.15), jnp.float32(0.0))
-            penalty = jnp.where(delta < 0, jnp.float32(-0.15), jnp.float32(0.0))
-            return bonus + penalty
+            # Only compute distances if position actually changed
+            pos_changed = ~jnp.allclose(old_pos, new_pos, atol=1e-6)
+            
+            def _compute_reward():
+                dist_before = self._min_distance_to_dump_zone(old_pos)
+                dist_after = self._min_distance_to_dump_zone(new_pos)
+                delta = dist_before - dist_after
+                bonus = jnp.where(delta > 0, jnp.float32(0.2), jnp.float32(0.0))
+                penalty = jnp.where(delta < 0, jnp.float32(-0.2), jnp.float32(0.0))
+                return bonus + penalty
+            
+            # If position didn't change (collision), no reward/penalty
+            return jax.lax.cond(pos_changed, _compute_reward, lambda: jnp.float32(0.0))
 
         is_move_action = jnp.logical_or(
             action == TrackedActionType.FORWARD,
@@ -3691,7 +3740,12 @@ class State(NamedTuple):
             # This makes the curve steeper and discourages mediocre completion
             scaled_percentage = (completion_percentage - min_threshold) / (1.0 - min_threshold)
             exponential_percentage = scaled_percentage ** 2  # Square for steep curve
-            return base_reward * exponential_percentage
+            perfect_completion_bonus = jax.lax.cond(
+                completion_percentage >= jnp.float32(0.999),
+                lambda: base_reward * jnp.float32(0.2),
+                lambda: jnp.float32(0.0),
+            )
+            return base_reward * exponential_percentage + perfect_completion_bonus
         
         return jax.lax.cond(
             completion_percentage < min_threshold,

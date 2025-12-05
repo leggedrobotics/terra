@@ -2519,10 +2519,12 @@ class State(NamedTuple):
             )
             meaningful_threshold = jnp.float32(0.1)
             
+            # Reduced penalty for small progress to avoid discouraging early learning
+            # Still penalizes failed dumps, but less harsh for marginal progress
             return jax.lax.cond(
                 progress_clamped > meaningful_threshold,
                 lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
-                lambda: -jnp.float32(1.0),
+                lambda: -jnp.float32(0.5),  # Reduced from -1.0 to allow more exploration
             )
         def _failed_dump():
             return jax.lax.cond(
@@ -2749,16 +2751,9 @@ class State(NamedTuple):
         is_do_action = (action == TrackedActionType.DO)
         
         def _compute_transfer_bonus():
-            # Compute transfer bonus same as if excavator dumped into dump zone
-            # Amount transferred - use directly as progress
-            amount_transferred = cur.loaded[0] - prev_new.loaded[0]
-            progress = jnp.float32(amount_transferred)
-            
-            # Compute dump bonus (same as in _handle_rewards_dump, but without potential multiplier)
-            dump_bonus = jnp.maximum(progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT
-            
-           
-            return dump_bonus
+            # Transfer bonus disabled - excavator already gets relocation potential rewards
+            # and truck gets loading bonus, so separate transfer bonus is redundant
+            return jnp.float32(0.0)
         
         transfer_bonus = jax.lax.cond(
             jnp.logical_and(
@@ -3606,10 +3601,11 @@ class State(NamedTuple):
             min_d_new = jnp.sqrt(min_d2_new)
 
             # Distance change reward: bonus when moving closer, symmetric penalty when moving away
+            # Increased slightly to speed up learning without harming long-term planning
             delta_reward = jnp.where(
                 min_d_new < min_d_old,
-                jnp.float32(0.125),
-                jnp.where(min_d_new > min_d_old, jnp.float32(-0.125), jnp.float32(0.0)),
+                jnp.float32(0.2),
+                jnp.where(min_d_new > min_d_old, jnp.float32(-0.2), jnp.float32(0.0)),
             )
 
             # Bonus for being within excavator working range
@@ -3649,7 +3645,8 @@ class State(NamedTuple):
         
         def _loading_reward_term():
             # One-time reward for successfully receiving dirt from excavator
-            return jnp.float32(0.5)
+            # Increased to encourage coordination with excavator (matches excavator dig reward)
+            return jnp.float32(1.5)
         
         reward += jax.lax.cond(jnp.logical_and(is_truck, started_loading), _loading_reward_term, lambda: 0.0)
         
@@ -3762,7 +3759,12 @@ class State(NamedTuple):
             # This makes the curve steeper and discourages mediocre completion
             scaled_percentage = (completion_percentage - min_threshold) / (1.0 - min_threshold)
             exponential_percentage = scaled_percentage ** 2  # Square for steep curve
-            return base_reward * exponential_percentage
+            perfect_completion_bonus = jax.lax.cond(
+                completion_percentage >= jnp.float32(0.999),
+                lambda: base_reward * jnp.float32(0.2),
+                lambda: jnp.float32(0.0),
+            )
+            return base_reward * exponential_percentage + perfect_completion_bonus
         
         return jax.lax.cond(
             completion_percentage < min_threshold,

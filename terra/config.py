@@ -185,6 +185,11 @@ class EnvConfig(NamedTuple):
     truck_capacity: int = 52 
     # Skid steer maximum load capacity (units of dirt), set to the workspace capacity of the excavator to have the same abstraction level
     skidsteer_capacity: int = 52
+    
+    # Truck road restrictions
+    # If True, trucks can only move on roads (non-dumpable tiles) OR dump zones (original behavior)
+    # If False, trucks can move everywhere (no restrictions)
+    truck_road_restricted: bool = False
 
     @classmethod
     def new(cls):
@@ -203,13 +208,26 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # NOTE: all maps need to have the same size
     levels = [
-
-        {
-            "maps_path": "experimental_64x64_roads_noborder", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        
+        # {
+        #     "maps_path": "test_map2", 
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+    
+        # {
+        #     "maps_path": "foundations", 
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
+        # {
+        #     "maps_path": "foundations_dumpzones_roads", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # {
         #     "maps_path": "trenches/single",
         #     "max_steps_in_episode": 750,  # 600 Balanced: increased from 300 but reduced from 500
@@ -238,12 +256,12 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        # {
-        #     "maps_path": "foundations_dumpzones_v3", 
-        #     "max_steps_in_episode": 800,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "foundations_dumpzones_v3", 
+            "max_steps_in_episode": 800,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 

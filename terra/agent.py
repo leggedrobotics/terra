@@ -125,13 +125,25 @@ class Agent(NamedTuple):
             agent_type_val = agent_types[i] if i < len(agent_types) else 0
             action_type_val = action_types[i] if i < len(action_types) else 0
             is_truck = (agent_type_val == 1)
+            
+            # Check if trucks are road-restricted
+            is_road_restricted = getattr(env_cfg, 'truck_road_restricted', False)
+            is_truck_road_restricted = jnp.logical_and(is_truck, jnp.bool_(is_road_restricted))
+            
             allowed_mask = jax.lax.cond(
-                is_truck,
+                is_truck_road_restricted,
                 lambda: truck_spawn_allowed_mask,
                 lambda: full_allowed_mask,
             )
-            # For trucks: accept if ANY part is on non-dumpable tiles
-            require_all_allowed = jnp.logical_not(is_truck)
+            # For trucks with road restriction: accept if ANY part is on non-dumpable tiles
+            # For others (including free-roaming trucks): require ALL parts to be on allowed tiles
+            require_all_allowed = jnp.logical_not(is_truck_road_restricted)
+            min_border_distance = jax.lax.cond(
+                agent_type_val == 0,
+                lambda _: jnp.int32(8),
+                lambda _: jnp.int32(-1),
+                operand=None,
+            )
             pos_i, angle_i, new_key = _get_random_init_state(
                 keys[i],
                 env_cfg,
@@ -143,6 +155,7 @@ class Agent(NamedTuple):
                 height,
                 allowed_mask,
                 require_all_allowed,
+                min_border_distance=min_border_distance,
             )
 
             # Create agent state
@@ -210,16 +223,25 @@ class Agent(NamedTuple):
             action_type_val = action_types_tensor[i]
             is_truck_flag = (agent_type_val == 1)
             
-            # Trucks spawn on non-dumpable tiles (roads), others spawn anywhere
+            # Check if trucks are road-restricted
+            is_road_restricted = getattr(env_cfg, 'truck_road_restricted', False)
+            is_truck_road_restricted = jnp.logical_and(is_truck_flag, jnp.bool_(is_road_restricted))
+            
+            # Trucks spawn on non-dumpable tiles (roads) only when road-restricted, otherwise anywhere
             allowed_mask = jax.lax.cond(
-                is_truck_flag,
+                is_truck_road_restricted,
                 lambda _: truck_spawn_allowed_mask,
                 lambda _: full_allowed_mask,
                 operand=None,
             )
-            # For trucks: accept if ANY part is on non-dumpable tiles
-            # For others: require ALL parts to be on allowed tiles (default)
-            require_all_allowed = jnp.logical_not(is_truck_flag)
+            # For trucks with road restriction: accept if ANY part is on non-dumpable tiles
+            # For others (including free-roaming trucks): require ALL parts to be on allowed tiles
+            require_all_allowed = jnp.logical_not(is_truck_road_restricted)
+            min_border_distance = jnp.where(
+                agent_type_val == 0,
+                jnp.int32(8),
+                jnp.int32(-1),
+            )
             pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(
                 per_agent_keys[i],
                 env_cfg,
@@ -231,6 +253,7 @@ class Agent(NamedTuple):
                 height,
                 allowed_mask,
                 require_all_allowed,
+                min_border_distance=min_border_distance,
             )
             angle_i = angle_i.astype(IntLowDim)
             
@@ -299,6 +322,7 @@ def _get_random_init_state(
     agent_height: int,
     allowed_mask: Array,
     require_all_allowed: Array = jnp.bool_(True),
+    min_border_distance: int = -1,
 ):
     def _get_random_agent_state(carry):
         key, padding_mask, pos_base, angle_base = carry
@@ -372,7 +396,23 @@ def _get_random_init_state(
                 _check_any_part_allowed,
             )
             
-            return obstacle_inside | action_illegal | allowed_violation
+            min_border_distance_val = jnp.asarray(min_border_distance, dtype=jnp.int32)
+            has_border_constraint = min_border_distance_val >= 0
+            
+            def _check_border_distance():
+                dist_x = jnp.minimum(pos_base[0], map_width - 1 - pos_base[0])
+                dist_y = jnp.minimum(pos_base[1], map_height - 1 - pos_base[1])
+                min_dist = jnp.minimum(dist_x, dist_y)
+                return min_dist < min_border_distance_val
+            
+            border_violation = jax.lax.cond(
+                has_border_constraint,
+                lambda _: _check_border_distance(),
+                lambda _: jnp.bool_(False),
+                operand=None,
+            )
+            
+            return obstacle_inside | action_illegal | allowed_violation | border_violation
 
         keep_searching = jax.lax.cond(
             jnp.any(pos_base < 0) | jnp.any(angle_base < 0),

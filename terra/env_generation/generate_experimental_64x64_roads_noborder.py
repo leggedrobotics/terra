@@ -103,8 +103,8 @@ def create_experimental_64x64_maps_roads_noborder(
     """
     Creates experimental 64x64 foundation environments with roads and a smaller dump zone flush to the border.
     """
-    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "experimental_64x64_roads_noborder")
-    print(f"Creating experimental 64x64 maps (roads, no border) - saving to: experimental_64x64_roads_noborder/")
+    save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "foundations_dumpzones_roads")
+    print(f"Creating experimental 64x64 maps (roads, no border) - saving to: foundations_dumpzones_roads/")
 
     downsampling_factors = {
         save_folder: 2,
@@ -279,18 +279,18 @@ def generate_experimental_64x64_roads_noborder_terra(dataset_folder, size, n_img
     """Convert roads-noborder experimental 64x64 maps to Terra format."""
     print("Converting experimental 64x64 (roads, no border) maps to Terra format...")
 
-    experimental_dir = Path(dataset_folder) / "experimental_64x64_roads_noborder"
+    experimental_dir = Path(dataset_folder) / "foundations_dumpzones_roads"
     if not experimental_dir.exists():
-        print(f"  experimental_64x64_roads_noborder directory not found: {experimental_dir}")
+        print(f"  foundations_dumpzones_roads directory not found: {experimental_dir}")
         return
 
-    print(f"  Found experimental_64x64_roads_noborder folder - will convert to train/experimental_64x64_roads_noborder")
+    print(f"  Found foundations_dumpzones_roads folder - will convert to train/foundations_dumpzones_roads")
 
     img_folder = experimental_dir / "images"
     metadata_folder = experimental_dir / "metadata"
     occupancy_folder = experimental_dir / "occupancy"
     dumpability_folder = experimental_dir / "dumpability"
-    destination_folder = Path(dataset_folder) / "train" / "experimental_64x64_roads_noborder"
+    destination_folder = Path(dataset_folder) / "train" / "foundations_dumpzones_roads"
 
     destination_folder.mkdir(parents=True, exist_ok=True)
     print(f"  Created destination directory: {destination_folder}")
@@ -311,7 +311,7 @@ def generate_experimental_64x64_roads_noborder_terra(dataset_folder, size, n_img
         actions_folder=None,
     )
 
-    print(f"  experimental_64x64_roads_noborder conversion completed")
+    print(f"  foundations_dumpzones_roads conversion completed")
 
 
 def create_roads_64x64(img_terra_pad, cumulative_mask, road_width=10, must_touch_rect=None):

@@ -3612,7 +3612,12 @@ class State(NamedTuple):
             # This makes the curve steeper and discourages mediocre completion
             scaled_percentage = (completion_percentage - min_threshold) / (1.0 - min_threshold)
             exponential_percentage = scaled_percentage ** 2  # Square for steep curve
-            return base_reward * exponential_percentage
+            perfect_completion_bonus = jax.lax.cond(
+                completion_percentage >= jnp.float32(0.999),
+                lambda: base_reward * jnp.float32(0.2),
+                lambda: jnp.float32(0.0),
+            )
+            return base_reward * exponential_percentage + perfect_completion_bonus
         
         return jax.lax.cond(
             completion_percentage < min_threshold,

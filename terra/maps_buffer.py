@@ -139,37 +139,66 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
 def load_single_map(map_path: str) -> Array:
     """
     Load a single map and its associated files from the specified path.
-    Requires different layout than load_maps_from_disk!
-    Point to a directory containing the following files:
-    - image.npy: The map image
-    - occupancy.npy: The occupancy map
-    - dumpability.npy: The dumpability mask
-    - actions.npy: The actions map (optional)
-    - metadata.json: Metadata file containing trench axes (optional)
+    Supports two directory structures:
+    
+    1. Flat structure (original): Directory containing files directly:
+       - image.npy: The map image
+       - occupancy.npy: The occupancy map
+       - dumpability.npy: The dumpability mask
+       - distance.npy: The distance map
+       - actions.npy: The actions map (optional)
+       - metadata.json: Metadata file containing trench axes (optional)
+    
+    2. Subdirectory structure (like test_map2): Directory with subdirectories:
+       - images/img_1.npy: The map image
+       - occupancy/img_1.npy: The occupancy map
+       - dumpability/img_1.npy: The dumpability mask
+       - distance/img_1.npy: The distance map
+       - actions/img_1.npy: The actions map (optional)
+       - metadata/map.json: Metadata file containing trench axes (optional)
 
     Args: map_path: Path to the map files
     Returns: Tuple containing map data in the same format as load_maps_from_disk
     """
-    # Assuming map_path points to a .npy file in an images directory
     map_path = Path(map_path)
 
+    # Check if subdirectory structure exists
+    images_dir = map_path / "images"
+    has_subdir_structure = images_dir.exists() and (images_dir / "img_1.npy").exists()
+
+    if has_subdir_structure:
+        # Load from subdirectory structure
+        image_file = map_path / "images" / "img_1.npy"
+        occupancy_file = map_path / "occupancy" / "img_1.npy"
+        dumpability_file = map_path / "dumpability" / "img_1.npy"
+        distance_file = map_path / "distance" / "img_1.npy"
+        actions_file = map_path / "actions" / "img_1.npy"
+        metadata_file = map_path / "metadata" / "map.json"
+    else:
+        # Load from flat structure (original behavior)
+        image_file = map_path / "image.npy"
+        occupancy_file = map_path / "occupancy.npy"
+        dumpability_file = map_path / "dumpability.npy"
+        distance_file = map_path / "distance.npy"
+        actions_file = map_path / "actions.npy"
+        metadata_file = map_path / "metadata.json"
+
     # Load map
-    image_file = map_path / "image.npy"
     image = np.load(image_file)
     map_sanity_check(image)
 
     # Load occupancy
-    occupancy_file = map_path / "occupancy.npy"
     occupancy = np.load(occupancy_file)
     occupancy_sanity_check(occupancy)
 
     # Load dumpability mask
-    dumpability_file = map_path / "dumpability.npy"
     dumpability_mask_init = np.load(dumpability_file)
     dumpability_sanity_check(dumpability_mask_init)
 
-    # Check if actions folder exists
-    actions_file = map_path / "actions.npy"
+    # Load distance map
+    distance_map_init = np.load(distance_file)
+
+    # Check if actions map exists
     if actions_file.exists():
         actions_map = np.load(actions_file)
         actions_sanity_check(actions_map)
@@ -180,7 +209,6 @@ def load_single_map(map_path: str) -> Array:
     trench_axes = -97.0 * np.ones((3, 3))  # Default values
     trench_type = -1
     try:
-        metadata_file = map_path / "metadata.json"
         with open(metadata_file) as f:
             trench_ax = json.load(f)["axes_ABC"]
         metadata_sanity_check(trench_ax[0])
@@ -202,6 +230,7 @@ def load_single_map(map_path: str) -> Array:
     trench_axes = jnp.array([trench_axes])
     dumpability_masks_init = jnp.array([dumpability_mask_init], dtype=jnp.bool_)
     actions = jnp.array([actions_map], dtype=IntMap)
+    distances = jnp.array([distance_map_init], dtype=jnp.float32)
 
     return (
         maps,
@@ -209,7 +238,8 @@ def load_single_map(map_path: str) -> Array:
         trench_axes,
         trench_type,
         dumpability_masks_init,
-        actions
+        actions,
+        distances,
     )
 
 
@@ -422,7 +452,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         actions_from_disk = []
         distances_from_disk = []
 
-        # Load the single map
+        # Load the single map (now also returns a distance map)
         (
             maps,
             occupancies,
@@ -430,9 +460,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             trench_type,
             dumpability_masks_init,
             actions,
-        ) = load_single_map(single_map_path)  # NOTE: single-map path legacy loader has no distances
-        # Fill zeros distance for single-map path
-        distances = jnp.zeros_like(maps, dtype=jnp.float32)
+            distances,
+        ) = load_single_map(single_map_path)
 
         # Repeat the map for each curriculum level
         num_levels = len(batch_cfg.curriculum_global.levels)
