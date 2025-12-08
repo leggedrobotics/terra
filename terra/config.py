@@ -256,12 +256,12 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
         # 
 
-        {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations_dumpzones_v3", 
+        #     "max_steps_in_episode": 800,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 
@@ -297,12 +297,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
-        # {
-        #     "maps_path": "relocations_harder",
-        #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        {
+            "maps_path": "relocations_harder",
+            "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         # {
         #     "maps_path": "trenches/single_dumpzone",
         #     "max_steps_in_episode":800,  # 600 Balanced: increased from 300 but reduced from 500

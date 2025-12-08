@@ -38,10 +38,10 @@ SCALE_MAX = jnp.float32(5.0)
 
 
 DUMP_BONUS_MULT = jnp.float32(0.5)
-EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.1)
-# Increased multiplier to better reward efficient dirt relocation with smaller workspace
-EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(2.0)  # Increased from 2.0
-TRANSPORT_RELOCATE_MULT = jnp.float32(2.0)
+EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.2)
+
+EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(1.8)  
+TRANSPORT_RELOCATE_MULT = jnp.float32(1.8)
 
 
 class State(NamedTuple):
@@ -2524,8 +2524,15 @@ class State(NamedTuple):
             )
             # Dump bonus only for skidsteers (relocation specialists)
             # When truck is road-restricted and excavator is dumping, no dump bonus
+            # Only apply this if there's actually a truck agent in the environment
             is_road_restricted = getattr(self.env_cfg, 'truck_road_restricted', False)
-            should_zero_bonus = jnp.logical_and(is_road_restricted, ~is_transport)
+            active_mask = self.agent.agent_active.astype(jnp.bool_)
+            types = self._agent_types_vec()
+            has_truck_agent = jnp.any(jnp.logical_and(active_mask, types == 1))
+            should_zero_bonus = jnp.logical_and(
+                jnp.logical_and(is_road_restricted, has_truck_agent),
+                ~is_transport
+            )
             
             dump_bonus = jax.lax.cond(
                 should_zero_bonus,
