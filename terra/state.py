@@ -37,9 +37,10 @@ SCALE_MIN = jnp.float32(2.0)
 SCALE_MAX = jnp.float32(5.0)
 
 
+# Legacy constants (kept for backwards compatibility, but prefer env_cfg values)
+# These are used as fallbacks if env_cfg doesn't have the fields
 DUMP_BONUS_MULT = jnp.float32(0.5)
 EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.2)
-
 EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(1.5)  
 TRANSPORT_RELOCATE_MULT = jnp.float32(1.5)
 
@@ -2539,8 +2540,8 @@ class State(NamedTuple):
                 lambda: jnp.float32(0.0),
                 lambda: jax.lax.cond(
                     is_transport,
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier,
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * DUMP_BONUS_MULT * potential_multiplier
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * jnp.float32(getattr(self.env_cfg, 'dump_bonus_mult', DUMP_BONUS_MULT)) * potential_multiplier,
+                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * jnp.float32(getattr(self.env_cfg, 'dump_bonus_mult', DUMP_BONUS_MULT)) * potential_multiplier
                 )
             )
             meaningful_threshold = jnp.float32(0.1)
@@ -3711,21 +3712,25 @@ class State(NamedTuple):
             return jnp.min(masked)
         return jax.lax.cond(jnp.any(dump_mask), _calc_distance, lambda: jnp.float32(0.0))
 
-    @staticmethod
-    def _compute_potential_multiplier(is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_, has_transport_agent: jnp.bool_) -> jnp.float32:
+    def _compute_potential_multiplier(self, is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_, has_transport_agent: jnp.bool_) -> jnp.float32:
+        # Get multipliers from env_cfg, falling back to legacy constants for backwards compatibility
+        transport_mult = jnp.float32(getattr(self.env_cfg, 'transport_relocate_mult', TRANSPORT_RELOCATE_MULT))
+        excavator_dumped_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dumped_mult', EXCAVATOR_RELOCATE_DUMPED_MULT))
+        excavator_dug_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dug_dirt_mult', EXCAVATOR_RELOCATE_DUG_DIRT_MULT))
+        
         # Transport agents (skid steer, truck): use dedicated transport relocation multiplier
         def for_transport():
-            return TRANSPORT_RELOCATE_MULT
+            return transport_mult
         # Excavator: penalize relocating dumped dirt only when a transport agent exists
         def for_excavator():
             def with_transport():
                 return jax.lax.cond(
                     is_moving_dumped_dirt,
-                    lambda: EXCAVATOR_RELOCATE_DUMPED_MULT,
-                    lambda: EXCAVATOR_RELOCATE_DUG_DIRT_MULT,
+                    lambda: excavator_dumped_mult,
+                    lambda: excavator_dug_mult,
                 )
             def without_transport():
-                return EXCAVATOR_RELOCATE_DUG_DIRT_MULT
+                return excavator_dug_mult
             return jax.lax.cond(has_transport_agent, with_transport, without_transport)
         return jax.lax.cond(is_transport, for_transport, for_excavator)
 

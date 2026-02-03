@@ -190,6 +190,13 @@ class EnvConfig(NamedTuple):
     # If True, trucks can only move on roads (non-dumpable tiles) OR dump zones (original behavior)
     # If False, trucks can move everywhere (no restrictions)
     truck_road_restricted: bool = False
+    
+    # Reward multipliers for tuning agent behavior incentives
+    # These can be overridden per training configuration
+    dump_bonus_mult: float = 0.5  # Multiplier for dump rewards
+    excavator_relocate_dumped_mult: float = 0.2  # Multiplier for excavator relocating dumped material
+    excavator_relocate_dug_dirt_mult: float = 1.5  # Multiplier for excavator relocating dug dirt
+    transport_relocate_mult: float = 1.5  # Multiplier for transport (truck/skidsteer) relocation rewards
 
     @classmethod
     def new(cls):
@@ -208,6 +215,13 @@ class CurriculumGlobalConfig(NamedTuple):
 
     # NOTE: all maps need to have the same size
     levels = [
+
+        {
+            "maps_path": "foundations_dumpzones_v3", 
+            "max_steps_in_episode": 800,
+            "rewards_type": RewardsType.DENSE,
+            "apply_trench_rewards": False,
+        },
         
         # {
         #     "maps_path": "test_map2", 
@@ -216,12 +230,12 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
     
-        {
-            "maps_path": "foundations", 
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
+        # {
+        #     "maps_path": "foundations", 
+        #     "max_steps_in_episode": 600,
+        #     "rewards_type": RewardsType.DENSE,
+        #     "apply_trench_rewards": False,
+        # },
         # {
         #     "maps_path": "foundations_dumpzones_roads", 
         #     "max_steps_in_episode": 800,
@@ -254,14 +268,7 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
-        # 
-
-        # {
-        #     "maps_path": "foundations_dumpzones_v3", 
-        #     "max_steps_in_episode": 800,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
+        #
     
         # {
         #     "maps_path": "foundations_dumpzones_v3_separated", 
@@ -310,19 +317,14 @@ class CurriculumGlobalConfig(NamedTuple):
         #     "apply_trench_rewards": False,
         # },
 
-
-        
-
-
-        
-
-
         # {
         #     "maps_path": "relocations",
         #     "max_steps_in_episode": 550,  # Balanced: increased from 400 but reduced from 600
         #     "rewards_type": RewardsType.DENSE,
         #     "apply_trench_rewards": False,
         # },
+        
+
         
         # Stage 1: Basic Skills - Learn individual capabilities
         
@@ -379,53 +381,7 @@ class CurriculumGlobalConfig(NamedTuple):
         # },
     ]
 
-'''
-class CurriculumGlobalConfig(NamedTuple):
-    increase_level_threshold: int = 20
-    decrease_level_threshold: int = 50
-    last_level_type = "random"  # ["random", "none"]
 
-    # NOTE: all maps need to have the same size
-    levels = [
-        {
-            "maps_path": "trenches/easy",
-            "max_steps_in_episode": 600,
-            "rewards_type": RewardsType.DENSE,
-            "apply_trench_rewards": False,
-        },
-        # {
-        #     "maps_path": "trenches/easy",
-        #     "max_steps_in_episode": 600,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "trenches/medium",
-        #     "max_steps_in_episode": 600,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "trenches/hard",
-        #     "max_steps_in_episode": 600,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "foundations",
-        #     "max_steps_in_episode": 600,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": False,
-        # },
-        # {
-        #     "maps_path": "trenches/hard",
-        #     "max_steps_in_episode": 600,
-        #     "rewards_type": RewardsType.DENSE,
-        #     "apply_trench_rewards": True,
-        # },
-        
-    ]
-'''
 
 
 class BatchConfig(NamedTuple):
