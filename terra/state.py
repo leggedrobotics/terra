@@ -2531,7 +2531,7 @@ class State(NamedTuple):
             types = self._agent_types_vec()
             has_truck_agent = jnp.any(jnp.logical_and(active_mask, types == 1))
             should_zero_bonus = jnp.logical_and(
-                jnp.logical_and(is_road_restricted, has_truck_agent),
+                jnp.logical_and(True, has_truck_agent),  #removed is_road_restricted
                 ~is_transport
             )
             
@@ -2690,10 +2690,18 @@ class State(NamedTuple):
         
         return reward
 
-    def _get_rewards_tracked(self, new_state: "State", action: ActionType) -> Float:
+    def _get_rewards_excavator(self, new_state: "State", action: ActionType) -> Float:
+        """Combined reward function for tracked and wheeled excavators.
+        Routes the turn reward (action indices 2,3) via action_type:
+          - tracked (0): base turn reward (body rotation)
+          - wheeled (1): wheel turn reward (steering adjustment)
+        All other rewards (move, cabin, do) are identical.
+        """
         reward = 0.0
         action = action[0]
+        current_action_type = self._get_current_agent_state().action_type[0]
 
+        # FORWARD / BACKWARD (indices 0, 1) — same for both
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
@@ -2703,15 +2711,25 @@ class State(NamedTuple):
             action,
         )
 
+        # TURN (indices 2, 3) — branch on action_type
+        def _turn_reward_dispatch(new_state, action):
+            return jax.lax.cond(
+                current_action_type == 1,
+                self._handle_rewards_wheel_turn,
+                self._handle_rewards_base_turn,
+                new_state, action,
+            )
+
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            self._handle_rewards_base_turn,
+            _turn_reward_dispatch,
             lambda new_state, action: 0.0,
             new_state,
             action,
         )
 
+        # CABIN (indices 4, 5) — same for both
         reward += jax.lax.cond(
             (action == TrackedActionType.CABIN_CLOCK)
             | (action == TrackedActionType.CABIN_ANTICLOCK),
@@ -2721,48 +2739,9 @@ class State(NamedTuple):
             action,
         )
 
+        # DO (index 6) — same for both
         reward += jax.lax.cond(
             action == TrackedActionType.DO,
-            lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
-            lambda new_state, action: 0.0,
-            new_state,
-            action,
-        )
-        return reward
-
-    def _get_rewards_wheeled(self, new_state: "State", action: ActionType) -> Float:
-        reward = 0.0
-        action = action[0]
-
-        reward += jax.lax.cond(
-            (action == WheeledActionType.FORWARD)
-            | (action == WheeledActionType.BACKWARD),
-            self._handle_rewards_move,
-            lambda new_state, action: 0.0,
-            new_state,
-            action,
-        )
-
-        reward += jax.lax.cond(
-            (action == WheeledActionType.WHEELS_LEFT)
-            | (action == WheeledActionType.WHEELS_RIGHT),
-            self._handle_rewards_wheel_turn,
-            lambda new_state, action: 0.0,
-            new_state,
-            action,
-        )
-
-        reward += jax.lax.cond(
-            (action == WheeledActionType.CABIN_CLOCK)
-            | (action == WheeledActionType.CABIN_ANTICLOCK),
-            self._handle_rewards_cabin_turn,
-            lambda new_state, action: 0.0,
-            new_state,
-            action,
-        )
-
-        reward += jax.lax.cond(
-            action == WheeledActionType.DO,
             lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
             lambda new_state, action: 0.0,
             new_state,
@@ -2846,11 +2825,8 @@ class State(NamedTuple):
         # Action-dependent - route to appropriate reward function based on agent type
         current_agent_type = self._get_current_agent_state().agent_type[0]
         
-        def get_tracked_rewards():
-            return self._get_rewards_tracked(new_state, action)
-        
-        def get_wheeled_rewards():
-            return self._get_rewards_wheeled(new_state, action)
+        def get_excavator_rewards():
+            return self._get_rewards_excavator(new_state, action)
             
         def get_skidsteer_rewards():
             return self._get_rewards_skidsteer(new_state, action)
@@ -2858,7 +2834,7 @@ class State(NamedTuple):
         # Route rewards based on agent type: 0=excavator, 1=truck, 2=skidsteer
         def get_truck_rewards():
             return self._get_rewards_truck(new_state, action)
-        reward_functions = [get_tracked_rewards, get_truck_rewards, get_skidsteer_rewards]
+        reward_functions = [get_excavator_rewards, get_truck_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
         
@@ -3425,6 +3401,7 @@ class State(NamedTuple):
         """Specialized reward function for skid steer operations"""
         reward = 0.0
         action = action[0]
+        current_action_type = self._get_current_agent_state().action_type[0]
 
         # Movement rewards (skidsteer-specific, no move_while_loaded penalty)
         movement_reward = jax.lax.cond(
@@ -3446,11 +3423,19 @@ class State(NamedTuple):
 
         # Holding dirt penalty (removed - unused reward)
 
-        # Base turn rewards (same as tracked)
+        # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
+        def _skid_turn_dispatch(new_state, action):
+            return jax.lax.cond(
+                current_action_type == 1,
+                self._handle_rewards_wheel_turn,
+                self._handle_rewards_base_turn,
+                new_state, action,
+            )
+
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            self._handle_rewards_base_turn,
+            _skid_turn_dispatch,
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -3474,7 +3459,9 @@ class State(NamedTuple):
         reward = 0.0
         action = action[0]
 
-        # Reuse tracked movement/base/cabin rewards logic (truck has cabin disabled already)
+        current_action_type = self._get_current_agent_state().action_type[0]
+
+        # Reuse movement/cabin rewards logic (truck has cabin disabled already)
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
@@ -3483,14 +3470,25 @@ class State(NamedTuple):
             new_state,
             action,
         )
+
+        # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
+        def _truck_turn_dispatch(new_state, action):
+            return jax.lax.cond(
+                current_action_type == 1,
+                self._handle_rewards_wheel_turn,
+                self._handle_rewards_base_turn,
+                new_state, action,
+            )
+
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            self._handle_rewards_base_turn,
+            _truck_turn_dispatch,
             lambda new_state, action: 0.0,
             new_state,
             action,
         )
+
         reward += jax.lax.cond(
             action == TrackedActionType.DO,
             lambda new_state, action: self._handle_rewards_do(new_state, action)[0],
