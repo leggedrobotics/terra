@@ -686,8 +686,5 @@ def copy_and_increment_filenames(source_folder, destination_folder):
         source_path = os.path.join(source_folder, filename)
         destination_path = os.path.join(destination_folder, new_filename)
 
-        # Check if the destination file already exists to avoid overwriting
-        if not os.path.exists(destination_path):
-            shutil.copy2(source_path, destination_path)
-        else:
-            print(f"File {new_filename} already exists in the destination folder. Skipping.")
+        # Overwrite existing files
+        shutil.copy2(source_path, destination_path)

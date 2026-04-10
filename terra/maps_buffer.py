@@ -63,8 +63,7 @@ class MapsBuffer(NamedTuple):
             distance_maps=distance_maps.astype(jnp.float32),
         )
 
-    @partial(jax.jit, static_argnums=(0,))
-    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
+    def _select_map(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
         curriculum_level = env_cfg.curriculum.level
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
@@ -78,6 +77,10 @@ class MapsBuffer(NamedTuple):
         action_map = self.action_maps[curriculum_level, idx]
         distance_map = self.distance_maps[curriculum_level, idx]
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
+        return self._select_map(key, env_cfg)
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
@@ -95,9 +98,26 @@ class MapsBuffer(NamedTuple):
         trench_type = trench_type.astype(jnp.int32)
         return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
 
+    def sample_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
+        (
+            map,
+            padding_mask,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            action_map,
+            distance_map,
+            key,
+        ) = self._select_map(key, env_cfg)
+        trench_type = trench_type.astype(jnp.int32)
+        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
+
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
         return self.get_map(key, env_cfg)
+
+    def sample_map_init(self, key: int, env_cfg):
+        return self.sample_map(key, env_cfg)
 
 
 def map_sanity_check(map: Array) -> None:

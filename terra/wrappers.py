@@ -68,8 +68,8 @@ class TraversabilityMaskWrapper:
         combined_agent_mask = jnp.any(agent_masks, axis=0)
         traversability_mask = jnp.where(combined_agent_mask, -1, traversability_mask)
 
-        padding_mask = state.world.padding_mask.map
-        tm = jnp.where(padding_mask == 1, padding_mask, traversability_mask)
+        static_base = state.world.static_traversability_base.map
+        tm = jnp.where(static_base == 1, static_base, traversability_mask)
         # Generate interaction mask for all active agents
         def get_agent_interaction_mask(agent_idx):
             # Get agent state using jax.lax.switch
@@ -127,12 +127,29 @@ class TraversabilityMaskWrapper:
 
 class LocalMapWrapper:
     @staticmethod
-    def _wrap(state: State, map_to_wrap: Array, agent_idx: int = 0) -> Array:
+    def _obstacle_boundary_mask(padding_mask: Array) -> Array:
         """
-        Encodes the local map in the GridWorld for a specific agent.
+        Convert a dense obstacle mask into a thinner boundary-only mask for observations.
 
-        The local map is of dim angles_cabin, and encodes the cumulative
-        sum of tiles to dig in the area spanned by the cyilindrical tile.
+        This keeps full obstacles for collision checks elsewhere, but avoids feeding
+        large filled regions into the local obstacle summary map.
+        """
+        obstacle = padding_mask == 1
+        padded = jnp.pad(obstacle, 1, mode="constant", constant_values=False)
+        interior = (
+            padded[1:-1, 1:-1]
+            & padded[:-2, 1:-1]
+            & padded[2:, 1:-1]
+            & padded[1:-1, :-2]
+            & padded[1:-1, 2:]
+        )
+        boundary = obstacle & (~interior)
+        return boundary.astype(padding_mask.dtype)
+
+    @staticmethod
+    def _build_local_cartesian_masks(state: State, agent_idx: int = 0) -> tuple[Array, Array]:
+        """
+        Build the per-angle local workspace masks once for a specific agent.
         """
         # Get agent state using jax.lax.switch for JAX compatibility
         def get_agent_state(idx):
@@ -158,12 +175,6 @@ class LocalMapWrapper:
         current_pos = state._get_current_pos_from_flattened_map(
             map_global_coords, current_pos_idx
         )
-        current_arm_angle = get_arm_angle_int(
-            agent_state.angle_base,
-            agent_state.angle_cabin,
-            state.env_cfg.agent.angles_base,
-            state.env_cfg.agent.angles_cabin,
-        )
 
         # Get the cumsum of the action height map in cyl coords, for every of [r, theta] portion of local space
         angles_cabin = (
@@ -187,6 +198,19 @@ class LocalMapWrapper:
         local_cartesian_masks = jax.vmap(lambda map: state._get_dig_dump_mask_cyl(map))(
             possible_maps_cyl_coords
         )
+        current_arm_angle = get_arm_angle_int(
+            agent_state.angle_base,
+            agent_state.angle_cabin,
+            state.env_cfg.agent.angles_base,
+            state.env_cfg.agent.angles_cabin,
+        )
+        return local_cartesian_masks, current_arm_angle
+
+    @staticmethod
+    def _wrap_with_masks(state: State, map_to_wrap: Array, local_cartesian_masks: Array, current_arm_angle: Array) -> Array:
+        """
+        Encodes the local map using precomputed per-angle workspace masks.
+        """
         map_to_wrap_reshaped = map_to_wrap.reshape(state.world.height, state.world.width)
         local_cyl_height_map = jax.vmap(
             lambda mask: (map_to_wrap_reshaped * mask.reshape(state.world.height, state.world.width)).sum()
@@ -198,6 +222,21 @@ class LocalMapWrapper:
         )
 
         return local_cyl_height_map.astype(IntLowDim)
+
+    @staticmethod
+    def _wrap(state: State, map_to_wrap: Array, agent_idx: int = 0) -> Array:
+        """
+        Encodes the local map in the GridWorld for a specific agent.
+
+        The local map is of dim angles_cabin, and encodes the cumulative
+        sum of tiles to dig in the area spanned by the cyilindrical tile.
+        """
+        local_cartesian_masks, current_arm_angle = LocalMapWrapper._build_local_cartesian_masks(
+            state, agent_idx
+        )
+        return LocalMapWrapper._wrap_with_masks(
+            state, map_to_wrap, local_cartesian_masks, current_arm_angle
+        )
 
     
     @staticmethod
@@ -250,9 +289,12 @@ class LocalMapWrapper:
 
     @staticmethod
     def wrap_obstacle_mask(state: State, agent_idx: int = 0) -> State:
+        obstacle_obs_mask = LocalMapWrapper._obstacle_boundary_mask(
+            state.world.padding_mask.map
+        )
         local_map_obstacles = LocalMapWrapper._wrap(
             state,
-            state.world.padding_mask.map,
+            obstacle_obs_mask,
             agent_idx,
         )
         return state._replace(
@@ -271,10 +313,59 @@ class LocalMapWrapper:
         
         # Create local maps for the currently active agent
         current_agent_idx = state.agent.current_agent
-        state = LocalMapWrapper.wrap_target_map(state, current_agent_idx)
-        state = LocalMapWrapper.wrap_action_map(state, current_agent_idx)
-        state = LocalMapWrapper.wrap_dumpability_mask(state, current_agent_idx)
-        state = LocalMapWrapper.wrap_obstacle_mask(state, current_agent_idx)
+        local_cartesian_masks, current_arm_angle = LocalMapWrapper._build_local_cartesian_masks(
+            state, current_agent_idx
+        )
+
+        target_map_pos = jnp.clip(state.world.target_map.map, a_min=0)
+        target_map_neg = jnp.clip(state.world.target_map.map, a_max=0)
+        action_map_pos = jnp.clip(state.world.action_map.map, a_min=0)
+        action_map_neg = jnp.clip(state.world.action_map.map, a_max=0)
+        obstacle_obs_mask = LocalMapWrapper._obstacle_boundary_mask(
+            state.world.padding_mask.map
+        )
+
+        local_map_target_pos = LocalMapWrapper._wrap_with_masks(
+            state, target_map_pos, local_cartesian_masks, current_arm_angle
+        )
+        local_map_target_neg = LocalMapWrapper._wrap_with_masks(
+            state, target_map_neg, local_cartesian_masks, current_arm_angle
+        )
+        local_map_action_pos = LocalMapWrapper._wrap_with_masks(
+            state, action_map_pos, local_cartesian_masks, current_arm_angle
+        )
+        local_map_action_neg = LocalMapWrapper._wrap_with_masks(
+            state, action_map_neg, local_cartesian_masks, current_arm_angle
+        )
+        local_map_dumpability = LocalMapWrapper._wrap_with_masks(
+            state, state.world.dumpability_mask.map, local_cartesian_masks, current_arm_angle
+        )
+        local_map_obstacles = LocalMapWrapper._wrap_with_masks(
+            state, obstacle_obs_mask, local_cartesian_masks, current_arm_angle
+        )
+
+        state = state._replace(
+            world=state.world._replace(
+                local_map_target_pos=state.world.local_map_target_pos._replace(
+                    map=local_map_target_pos
+                ),
+                local_map_target_neg=state.world.local_map_target_neg._replace(
+                    map=local_map_target_neg
+                ),
+                local_map_action_pos=state.world.local_map_action_pos._replace(
+                    map=local_map_action_pos
+                ),
+                local_map_action_neg=state.world.local_map_action_neg._replace(
+                    map=local_map_action_neg
+                ),
+                local_map_dumpability=state.world.local_map_dumpability._replace(
+                    map=local_map_dumpability
+                ),
+                local_map_obstacles=state.world.local_map_obstacles._replace(
+                    map=local_map_obstacles
+                ),
+            )
+        )
         
         # Debug prints removed for training performance
         

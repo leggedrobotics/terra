@@ -108,13 +108,24 @@ class TerraEnv(NamedTuple):
 
         observations = self._state_to_obs_dict(state)
         dummy_action = BatchConfig().action_type.do_nothing()
+        dummy_info = {
+            # Keep the reset info pytree structure aligned with step() without
+            # simulating a full action mask / cone union during initialization.
+            "action_mask": jnp.zeros(
+                (dummy_action.get_num_actions(),), dtype=jnp.bool_
+            ),
+            "target_tiles": jnp.zeros(
+                (state.world.width * state.world.height,), dtype=jnp.bool_
+            ),
+            "task_done": jnp.zeros((), dtype=jnp.bool_),
+        }
 
         return TimeStep(
             state=state,
             observation=observations,
             reward=jnp.zeros(()),
             done=jnp.zeros((), dtype=bool),
-            info=state._get_infos(dummy_action, False),
+            info=dummy_info,
             env_cfg=env_cfg,
         )
 
@@ -434,8 +445,10 @@ class TerraEnvBatch:
     def _get_map(self, maps_buffer_keys: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map)(maps_buffer_keys, env_cfgs)
 
-    @partial(jax.jit, static_argnums=(0,))
-    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+    def _sample_reset_maps(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
+        return jax.vmap(self.maps_buffer.sample_map_init)(key, env_cfgs)
+
+    def _prepare_reset_device(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey):
         env_cfgs = self.curriculum_manager.reset_cfgs(env_cfgs)
         env_cfgs = self.update_env_cfgs(env_cfgs)
         (
@@ -446,8 +459,35 @@ class TerraEnvBatch:
             dumpability_mask_init,
             action_maps,
             distance_maps,
-            new_rng_key,
-        ) = self._get_map_init(rng_key, env_cfgs)
+            _,
+        ) = self._sample_reset_maps(rng_key, env_cfgs)
+        return (
+            env_cfgs,
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            action_maps,
+            distance_maps,
+        )
+
+    def prepare_reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey):
+        return jax.vmap(self._prepare_reset_device)(env_cfgs, rng_key)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def reset_prepared(
+        self,
+        env_cfgs: EnvConfig,
+        rng_key: jax.random.PRNGKey,
+        target_maps: Array,
+        padding_masks: Array,
+        trench_axes: Array,
+        trench_type: Array,
+        dumpability_mask_init: Array,
+        action_maps: Array,
+        distance_maps: Array,
+    ) -> State:
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key,
             target_maps,
@@ -460,6 +500,29 @@ class TerraEnvBatch:
             env_cfgs,
         )
         return timestep
+
+    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+        (
+            env_cfgs,
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            action_maps,
+            distance_maps,
+        ) = self._prepare_reset_device(env_cfgs, rng_key)
+        return self.reset_prepared(
+            env_cfgs,
+            rng_key,
+            target_maps,
+            padding_masks,
+            trench_axes,
+            trench_type,
+            dumpability_mask_init,
+            action_maps,
+            distance_maps,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def step(

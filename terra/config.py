@@ -164,8 +164,10 @@ class EnvConfig(NamedTuple):
     rewards: Rewards = Rewards.dense()
 
     apply_trench_rewards: bool = False
-    alignment_coefficient: float = -0.16 #-0.08
-    distance_coefficient: float = -0.08 #-0.04
+    alignment_coefficient: float = -0.16  # stronger trench-axis alignment
+    distance_coefficient: float = -0.14   #-0.04
+    # Cabin alignment shaping disabled for now (handled indirectly via stronger base alignment).
+    cabin_alignment_coefficient: float = 0.0
 
     curriculum: CurriculumConfig = CurriculumConfig()
 

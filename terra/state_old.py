@@ -414,14 +414,14 @@ class State(NamedTuple):
         return biased_corners
 
     @staticmethod
-    def _build_traversability_mask(map: Array, static_traversability_base: Array) -> Array:
+    def _build_traversability_mask(map: Array, padding_mask: Array) -> Array:
         """
         Efficient traversability mask with selective dirt collision.
         Small dirt patches are traversable, only very dense dirt formations block movement.
         
         Args:
             - map: (N, M) Array of ints (action_map)
-            - static_traversability_base: (N, M) Array of ints, 1 if not traversable, 0 if traversable
+            - padding_mask: (N, M) Array of ints, 1 if not traversable, 0 if traversable
         Returns:
             - traversability_mask: (N, M) Array of ints
                 1 for non traversable, 0 for traversable
@@ -432,7 +432,7 @@ class State(NamedTuple):
             - 3x3 dirt patches: Mostly traversable (edges passable)
             - Large solid dirt formations: Blocked (8+ dirt tiles in 3x3 area)
             - Scattered dirt: Always traversable
-            - Static obstacles: Always blocked
+            - Padding obstacles: Always blocked
         """
         # Fast path: if no dirt, just return padding mask
         has_dirt = jnp.any(map != 0)
@@ -472,11 +472,11 @@ class State(NamedTuple):
             )
             
             # Combine: block padding obstacles OR dirt obstacles
-            return jnp.logical_or(static_traversability_base == 1, dirt_obstacles).astype(IntLowDim)
+            return jnp.logical_or(padding_mask == 1, dirt_obstacles).astype(IntLowDim)
         
         def _without_dirt():
-            # No dirt present, just return the cached static obstacle base
-            return static_traversability_base.astype(IntLowDim)
+            # No dirt present, just return padding mask
+            return (padding_mask == 1).astype(IntLowDim)
         
         # Use JAX conditional to avoid unnecessary computation when no dirt is present
         return jax.lax.cond(has_dirt, _with_selective_dirt_collision, _without_dirt)
@@ -530,7 +530,7 @@ class State(NamedTuple):
         
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(
-            self.world.action_map.map, self.world.static_traversability_base.map
+            self.world.action_map.map, self.world.padding_mask.map
             
         )
 
@@ -1774,23 +1774,16 @@ class State(NamedTuple):
         Also, removes the possibility of moving the tiles within the same workspace,
         even if not all tiles are occupied.
         """
-        recent_dumped_dig_mask = self.world.last_dig_mask.map & (
-            self.world.action_map.map > 0
+        cone_mask_2d = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        # Use boolean logic and any() to avoid large integer reductions on flattened arrays
+        cond_has_overlap = jnp.any(
+            self.world.last_dig_mask.map & (self.world.action_map.map > 0) & cone_mask_2d
         )
-        has_recent_dumped_dig = jnp.any(recent_dumped_dig_mask)
-
-        def _compute_overlap(_: None) -> Array:
-            cone_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
-            return jnp.any(recent_dumped_dig_mask & cone_mask)
-
-        cond_has_overlap = jax.lax.cond(
-            has_recent_dumped_dig,
-            _compute_overlap,
-            lambda _: jnp.bool_(False),
-            operand=None,
+        dig_map_mask = jax.lax.cond(
+            cond_has_overlap,
+            lambda: (~cone_mask_2d).reshape(-1),
+            lambda: jnp.ones_like(dump_mask, dtype=jnp.bool_),
         )
-        cone_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape).reshape(-1)
-        dig_map_mask = jnp.logical_or(~cone_mask, ~cond_has_overlap)
 
         return dump_mask * dig_map_mask
 
@@ -2538,7 +2531,7 @@ class State(NamedTuple):
             types = self._agent_types_vec()
             has_truck_agent = jnp.any(jnp.logical_and(active_mask, types == 1))
             should_zero_bonus = jnp.logical_and(
-                jnp.logical_and(True, has_truck_agent),  #removed is_road_restricted
+                jnp.logical_and(is_road_restricted, has_truck_agent),
                 ~is_transport
             )
             
@@ -2697,18 +2690,10 @@ class State(NamedTuple):
         
         return reward
 
-    def _get_rewards_excavator(self, new_state: "State", action: ActionType) -> Float:
-        """Combined reward function for tracked and wheeled excavators.
-        Routes the turn reward (action indices 2,3) via action_type:
-          - tracked (0): base turn reward (body rotation)
-          - wheeled (1): wheel turn reward (steering adjustment)
-        All other rewards (move, cabin, do) are identical.
-        """
+    def _get_rewards_tracked(self, new_state: "State", action: ActionType) -> Float:
         reward = 0.0
         action = action[0]
-        current_action_type = self._get_current_agent_state().action_type[0]
 
-        # FORWARD / BACKWARD (indices 0, 1) — same for both
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
@@ -2718,25 +2703,15 @@ class State(NamedTuple):
             action,
         )
 
-        # TURN (indices 2, 3) — branch on action_type
-        def _turn_reward_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
-
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            _turn_reward_dispatch,
+            self._handle_rewards_base_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
         )
 
-        # CABIN (indices 4, 5) — same for both
         reward += jax.lax.cond(
             (action == TrackedActionType.CABIN_CLOCK)
             | (action == TrackedActionType.CABIN_ANTICLOCK),
@@ -2746,7 +2721,6 @@ class State(NamedTuple):
             action,
         )
 
-        # DO (index 6) — same for both
         reward += jax.lax.cond(
             action == TrackedActionType.DO,
             lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
@@ -2756,7 +2730,47 @@ class State(NamedTuple):
         )
         return reward
 
-    def _get_trench_specific_rewards(self, action: ActionType) -> Float:
+    def _get_rewards_wheeled(self, new_state: "State", action: ActionType) -> Float:
+        reward = 0.0
+        action = action[0]
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.FORWARD)
+            | (action == WheeledActionType.BACKWARD),
+            self._handle_rewards_move,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.WHEELS_LEFT)
+            | (action == WheeledActionType.WHEELS_RIGHT),
+            self._handle_rewards_wheel_turn,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            (action == WheeledActionType.CABIN_CLOCK)
+            | (action == WheeledActionType.CABIN_ANTICLOCK),
+            self._handle_rewards_cabin_turn,
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+
+        reward += jax.lax.cond(
+            action == WheeledActionType.DO,
+            lambda new_state, action: self._handle_rewards_do(new_state, action)[0],  # Just take total
+            lambda new_state, action: 0.0,
+            new_state,
+            action,
+        )
+        return reward
+
+    def _get_trench_specific_rewards(self) -> Float:
         def _get_trench_reward():
             cur = self._get_current_agent_state()
             agent_pos = cur.pos_base
@@ -2777,12 +2791,11 @@ class State(NamedTuple):
                 (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0))
             )
 
-            # 1. Distance (centering) reward - closest trench axis.
-            # Remove the large deadzone used previously, so being even slightly off-center
-            # consistently gets penalized (distance_coefficient is negative by default).
+            # 1. Distance reward - only for closest trench
+            d_tiles = jax.lax.cond(d_tiles > self.env_cfg.agent.width / 2, lambda: d_tiles, lambda: jnp.array(0.0, dtype=jnp.float32))
             d_meters = d_tiles * self.env_cfg.tile_size
-            proximity_scale = jnp.float32(1.0)  # slightly stronger off-center penalty
-            proximity_reward = d_meters * self.env_cfg.distance_coefficient * proximity_scale
+            
+            proximity_reward = d_meters * self.env_cfg.distance_coefficient
 
             # 2. Alignment reward - only for closest trench
             # Get trench line equation [a, b, c] for ax + by = c
@@ -2792,13 +2805,8 @@ class State(NamedTuple):
             trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
             trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
 
-            # Get the excavator's absolute cabin/arm angle in radians.
-            # This aligns the trench reward with the actual dig workspace direction.
-            agent_angle = self._get_arm_angle_rad()
-
-            # Previous base-alignment version kept commented for easy revert:
-            # # Get agent angle in radians
-            # agent_angle = self._get_base_angle_rad()
+            # Get agent angle in radians
+            agent_angle = self._get_base_angle_rad()
 
             # Calculate angular difference (normalized between 0 and pi/2)
             angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
@@ -2809,11 +2817,9 @@ class State(NamedTuple):
             alignment_score = 2.0 * angle_diff / jnp.pi
 
             # Apply alignment reward - lower when aligned with trench
-            # Previous behavior aligned the chassis/base with the trench.
-            # Active behavior aligns the absolute cabin/arm direction instead.
             alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
 
-            # Final calculation: distance + base alignment only
+            # Final calculation should be scalar + scalar
             total_reward = proximity_reward + alignment_reward
             # Explicitly ensure the final result is scalar before returning
             return jnp.squeeze(total_reward)
@@ -2840,8 +2846,11 @@ class State(NamedTuple):
         # Action-dependent - route to appropriate reward function based on agent type
         current_agent_type = self._get_current_agent_state().agent_type[0]
         
-        def get_excavator_rewards():
-            return self._get_rewards_excavator(new_state, action)
+        def get_tracked_rewards():
+            return self._get_rewards_tracked(new_state, action)
+        
+        def get_wheeled_rewards():
+            return self._get_rewards_wheeled(new_state, action)
             
         def get_skidsteer_rewards():
             return self._get_rewards_skidsteer(new_state, action)
@@ -2849,7 +2858,7 @@ class State(NamedTuple):
         # Route rewards based on agent type: 0=excavator, 1=truck, 2=skidsteer
         def get_truck_rewards():
             return self._get_rewards_truck(new_state, action)
-        reward_functions = [get_excavator_rewards, get_truck_rewards, get_skidsteer_rewards]
+        reward_functions = [get_tracked_rewards, get_truck_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
         
@@ -2904,7 +2913,7 @@ class State(NamedTuple):
         
         trench_r = jax.lax.cond(
             should_apply_trench,
-            lambda: self._get_trench_specific_rewards(action),
+            self._get_trench_specific_rewards,
             lambda: 0.0,
         )
         reward += trench_r
@@ -3416,7 +3425,6 @@ class State(NamedTuple):
         """Specialized reward function for skid steer operations"""
         reward = 0.0
         action = action[0]
-        current_action_type = self._get_current_agent_state().action_type[0]
 
         # Movement rewards (skidsteer-specific, no move_while_loaded penalty)
         movement_reward = jax.lax.cond(
@@ -3438,19 +3446,11 @@ class State(NamedTuple):
 
         # Holding dirt penalty (removed - unused reward)
 
-        # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
-        def _skid_turn_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
-
+        # Base turn rewards (same as tracked)
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            _skid_turn_dispatch,
+            self._handle_rewards_base_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
@@ -3474,9 +3474,7 @@ class State(NamedTuple):
         reward = 0.0
         action = action[0]
 
-        current_action_type = self._get_current_agent_state().action_type[0]
-
-        # Reuse movement/cabin rewards logic (truck has cabin disabled already)
+        # Reuse tracked movement/base/cabin rewards logic (truck has cabin disabled already)
         reward += jax.lax.cond(
             (action == TrackedActionType.FORWARD)
             | (action == TrackedActionType.BACKWARD),
@@ -3485,25 +3483,14 @@ class State(NamedTuple):
             new_state,
             action,
         )
-
-        # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
-        def _truck_turn_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
-
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
             | (action == TrackedActionType.ANTICLOCK),
-            _truck_turn_dispatch,
+            self._handle_rewards_base_turn,
             lambda new_state, action: 0.0,
             new_state,
             action,
         )
-
         reward += jax.lax.cond(
             action == TrackedActionType.DO,
             lambda new_state, action: self._handle_rewards_do(new_state, action)[0],

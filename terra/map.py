@@ -51,6 +51,7 @@ class GridWorld(NamedTuple):
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
 
     # Dummies for wrappers
+    static_traversability_base: GridMap = GridMap.dummy_map()
     traversability_mask: GridMap = GridMap.dummy_map()
     local_map_target_pos: GridMap = GridMap.dummy_map()
     local_map_target_neg: GridMap = GridMap.dummy_map()
@@ -101,6 +102,7 @@ class GridWorld(NamedTuple):
         action_map = GridMap.new(IntLowDim(action_map))
         target_map = GridMap.new(IntLowDim(target_map))
         padding_mask = GridMap.new(IntLowDim(padding_mask))
+        static_traversability_base = GridMap.new((padding_mask.map == 1).astype(IntLowDim))
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
@@ -113,6 +115,7 @@ class GridWorld(NamedTuple):
             padding_mask=padding_mask,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            static_traversability_base=static_traversability_base,
             dumpability_mask=dumpability_mask,
             dumpability_mask_init=dumpability_mask_init_gm,
             last_dig_mask=last_dig_mask,

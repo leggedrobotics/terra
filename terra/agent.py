@@ -85,9 +85,13 @@ class Agent(NamedTuple):
         # Use JAX-compatible loop for agent placement
         map_width, map_height = padding_mask.shape
         full_allowed_mask = jnp.ones_like(padding_mask, dtype=jnp.bool_)
-        # For trucks: spawn on non-dumpable tiles (roads) within 10px of border
+        spawnable_mask = full_allowed_mask
+        # Default spawning avoids non-dumpable tiles when a dumpability map is available.
+        # This keeps excavators from initializing in road-like or explicitly forbidden regions.
         if dumpability_map is not None:
-            non_dumpable_mask = (dumpability_map == 0).astype(jnp.bool_)
+            spawnable_mask = (dumpability_map != 0).astype(jnp.bool_)
+            non_dumpable_mask = jnp.logical_not(spawnable_mask)
+            # For trucks: spawn on non-dumpable tiles (roads) within 10px of border
             # Create border mask: within 10px of any edge
             max_border_dist = 8
             y_coords = jnp.arange(map_height)[:, None]  # (H, 1)
@@ -133,7 +137,7 @@ class Agent(NamedTuple):
             allowed_mask = jax.lax.cond(
                 is_truck_road_restricted,
                 lambda: truck_spawn_allowed_mask,
-                lambda: full_allowed_mask,
+                lambda: spawnable_mask,
             )
             # For trucks with road restriction: accept if ANY part is on non-dumpable tiles
             # For others (including free-roaming trucks): require ALL parts to be on allowed tiles
@@ -231,7 +235,7 @@ class Agent(NamedTuple):
             allowed_mask = jax.lax.cond(
                 is_truck_road_restricted,
                 lambda _: truck_spawn_allowed_mask,
-                lambda _: full_allowed_mask,
+                lambda _: spawnable_mask,
                 operand=None,
             )
             # For trucks with road restriction: accept if ANY part is on non-dumpable tiles
