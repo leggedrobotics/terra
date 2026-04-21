@@ -26,15 +26,11 @@ The JAX installation is hardware-dependent and therefore needs to be done separa
 
 ## Usage
 The standard workflow is made of the following steps:
-1. Generate the maps by following this [README](https://github.com/leggedrobotics/terra/blob/main/terra/env_generation/README.md) (you can check out a preview of the generated maps in the `data/` folder)
-2. Generate distance maps by running (example):
-   ```bash
-   python tools/generate_distance_maps.py --dataset your_path/train/foundations
-   ```
-3. Set up the curriculum in `config.py`
-4. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
-5. Train 🚀
-6. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
+1. Generate the maps by following this [README](https://github.com/leggedrobotics/terra/blob/main/terra/env_generation/README.md) (you can check out a preview of the generated maps in the `data/` folder). As of the latest commits, **distance maps are produced automatically as part of map generation** — you no longer need to run a separate step. The `tools/generate_distance_maps.py` script is kept only for regenerating distance maps on pre-existing datasets.
+2. Set up the curriculum in `config.py`
+3. Build your own training script or use the ready-to-use script from our [terra-baselines](https://github.com/leggedrobotics/rl-excavation-planning).
+4. Train 🚀
+5. Run [evaluations](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/eval.py) and [visualization](https://github.com/leggedrobotics/rl-excavation-planning/blob/master/visualize.py).
 
 # Environment Setup Instructions
 
@@ -175,7 +171,24 @@ Running the standard map generation will produce the following folder structure.
 ```
 
 ### Distance maps
-Distance maps are required by the reward system. They store, for each tile, the distance to the dump zones, i.e., tiles where the target map equals 1 (target_map == 1). You can generate distance maps for any existing map directory using the tools/generate_distance_maps.py script, without changing the map content. 
+Distance maps are required by the reward system. They store, for each tile, the distance to the dump zones, i.e., tiles where the target map equals 1 (`target_map == 1`).
+
+As of the latest commits, distance maps are generated **automatically** at the end of every map-generation script (via `terra/env_generation/convert_to_terra.py`, which delegates to `terra/env_generation/distance.py`). The default metric is Manhattan (taxicab), normalized by `realistic_max_distance = 24` (tuned for 64×64 maps with central dump zones). This matches the behavior of the previous standalone `tools/` script, so existing training semantics are preserved.
+
+You only need to invoke the script manually when you want to regenerate distance maps for a dataset that already exists on disk (e.g. after tweaking the normalization, or for datasets produced before this change):
+
+```bash
+python tools/generate_distance_maps.py --dataset your_path/train/foundations
+```
+
+For obstacle-aware (BFS) distance maps, use:
+
+```bash
+python tools/generate_geodesic_distance_maps.py --dataset your_path/train/foundations
+```
+(writes to `distance_geodesic/` so it doesn't overwrite the default `distance/` folder).
+
+To opt out of automatic distance-map generation inside the converter, pass `generate_distance_maps=False` to `_convert_all_imgs_to_terra(...)`.
 
 
 ### Training Configurations

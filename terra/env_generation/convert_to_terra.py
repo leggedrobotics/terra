@@ -14,6 +14,10 @@ import time
 
 import terra.env_generation.utils as utils
 from terra.env_generation.utils import _get_img_mask, color_dict
+from terra.env_generation.distance import (
+    DEFAULT_REALISTIC_MAX_DISTANCE,
+    write_distance_maps,
+)
 
 
 def _convert_img_to_terra(img, all_dumpable=False):
@@ -69,6 +73,10 @@ def _convert_all_imgs_to_terra(
     has_dumpability=True,
     center_padding=False,
     actions_folder=None,
+    generate_distance_maps=True,
+    distance_metric="manhattan",
+    distance_connectivity=4,
+    distance_realistic_max=DEFAULT_REALISTIC_MAX_DISTANCE,
 ):
     max_size = size[1]
     print("max size: ", max_size)
@@ -203,6 +211,17 @@ def _convert_all_imgs_to_terra(
             np.save(destination_folder_actions / f"img_{i + 1}", actions_terra)
     if copy_metadata:
         utils.copy_and_increment_filenames(str(metadata_folder), str(destination_folder_metadata))
+
+    # Distance maps are required by the reward system (see README "Distance maps").
+    # Produce them here so every standalone generator emits a fully-ready Terra
+    # dataset in one pass, instead of requiring a separate `tools/` invocation.
+    if generate_distance_maps:
+        write_distance_maps(
+            destination_folder,
+            metric=distance_metric,
+            connectivity=distance_connectivity,
+            realistic_max_distance=distance_realistic_max,
+        )
 
 
 def generate_foundations_terra(dataset_folder, size, n_imgs, all_dumpable):
