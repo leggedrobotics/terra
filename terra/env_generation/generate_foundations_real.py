@@ -95,15 +95,21 @@ def add_full_span_obstacles_and_nondump(
         vertical = random.choice([True, False])
         obstacle_mask = np.zeros((height, width), dtype=bool)
 
+        # Keep at least one free row/column on each side so that row 0 and
+        # column 0 of the padding/occupancy mask are never fully blocked.
+        # Otherwise GridWorld.max_traversable_x/y collapse to 0, which causes
+        # the agent-spawn rejection sampler (jax.lax.while_loop) to hang
+        # forever at the first env reset (see terra/agent.py).
+        edge_margin = max(1, obstacle_width)
         if vertical:
-            if width <= obstacle_width:
+            if width <= obstacle_width + 2 * edge_margin:
                 continue
-            start = random.randint(0, width - obstacle_width)
+            start = random.randint(edge_margin, width - obstacle_width - edge_margin)
             obstacle_mask[:, start : start + obstacle_width] = True
         else:
-            if height <= obstacle_width:
+            if height <= obstacle_width + 2 * edge_margin:
                 continue
-            start = random.randint(0, height - obstacle_width)
+            start = random.randint(edge_margin, height - obstacle_width - edge_margin)
             obstacle_mask[start : start + obstacle_width, :] = True
 
         if np.any(obstacle_mask & dig_mask):

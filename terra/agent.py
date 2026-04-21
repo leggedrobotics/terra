@@ -340,6 +340,18 @@ def _get_random_init_state(
         max_w = jnp.minimum(max_traversable_x, env_cfg.maps.edge_length_px)
         max_h = jnp.minimum(max_traversable_y, env_cfg.maps.edge_length_px)
 
+        # Defensive clamp: if the padding mask fully occupies row 0 / column 0
+        # (e.g. a full-span obstacle touches the border), max_traversable_*
+        # would be 0 and `maxval` below becomes smaller than `minval`. That
+        # makes `jax.random.randint` return a constant junk value and the
+        # rejection-sampling `while_loop` downstream never terminates.
+        # Clamp to the full map extent so sampling has a valid range; invalid
+        # positions are still filtered out by the while_loop's intersection
+        # check.
+        min_sampling_range = 2 * max_center_coord + 1
+        max_w = jnp.maximum(max_w, min_sampling_range).astype(IntMap)
+        max_h = jnp.maximum(max_h, min_sampling_range).astype(IntMap)
+
         x = jax.random.randint(
             subkey_x,
             (1,),

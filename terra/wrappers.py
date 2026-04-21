@@ -62,53 +62,80 @@ class TraversabilityMaskWrapper:
             polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
             return jnp.where(agent_active, polygon_mask, jnp.zeros_like(polygon_mask))
         
-        # Process all 4 agents (some may be inactive)
-        agent_masks = jax.vmap(process_agent_idx)(jnp.arange(4))
-        # Combine all agent masks
-        combined_agent_mask = jnp.any(agent_masks, axis=0)
+        is_single_agent = state.agent.num_agents == 1
+
+        def _single_agent_masks():
+            agent_state = state.agent.agent_states[0]
+            agent_corners = state._get_agent_corners(
+                agent_state.pos_base,
+                agent_state.angle_base,
+                state.env_cfg.agent.width,
+                state.env_cfg.agent.height,
+            )
+            polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
+            combined_agent_mask = jnp.where(
+                state.agent.agent_active[0],
+                polygon_mask,
+                jnp.zeros_like(polygon_mask),
+            )
+
+            temp_state = state._replace(agent=state.agent._replace(current_agent=jnp.int32(0)))
+            interaction_mask = temp_state._build_dig_dump_cone().reshape(map_width, map_height)
+            return combined_agent_mask, interaction_mask
+
+        def _multi_agent_masks():
+            # Process all 4 agents (some may be inactive)
+            agent_masks = jax.vmap(process_agent_idx)(jnp.arange(4))
+            combined_agent_mask = jnp.any(agent_masks, axis=0)
+
+            # Generate interaction mask for all active agents
+            def get_agent_interaction_mask(agent_idx):
+                # Get agent state using jax.lax.switch
+                agent_state = jax.lax.switch(
+                    agent_idx,
+                    [
+                        lambda: state.agent.agent_states[0],
+                        lambda: state.agent.agent_states[1],
+                        lambda: state.agent.agent_states[2],
+                        lambda: state.agent.agent_states[3],
+                    ]
+                )
+                # Get agent active status
+                agent_active = jax.lax.switch(
+                    agent_idx,
+                    [
+                        lambda: state.agent.agent_active[0],
+                        lambda: state.agent.agent_active[1],
+                        lambda: state.agent.agent_active[2],
+                        lambda: state.agent.agent_active[3],
+                    ]
+                )
+                
+                # Only generate cone for active agents
+                def generate_cone():
+                    # Temporarily set current agent to this agent to generate its cone
+                    temp_state = state._replace(agent=state.agent._replace(current_agent=agent_idx))
+                    return temp_state._build_dig_dump_cone()
+                
+                def no_cone():
+                    return jnp.zeros((map_width * map_height,), dtype=jnp.bool_)
+                
+                cone = jax.lax.cond(agent_active, generate_cone, no_cone)
+                return cone.reshape(map_width, map_height)
+            
+            agent_interaction_masks = jax.vmap(get_agent_interaction_mask)(jnp.arange(4))
+            interaction_mask = jnp.any(agent_interaction_masks, axis=0)
+            return combined_agent_mask, interaction_mask
+
+        combined_agent_mask, interaction_mask = jax.lax.cond(
+            is_single_agent,
+            _single_agent_masks,
+            _multi_agent_masks,
+        )
         traversability_mask = jnp.where(combined_agent_mask, -1, traversability_mask)
 
         static_base = state.world.static_traversability_base.map
         tm = jnp.where(static_base == 1, static_base, traversability_mask)
-        # Generate interaction mask for all active agents
-        def get_agent_interaction_mask(agent_idx):
-            # Get agent state using jax.lax.switch
-            agent_state = jax.lax.switch(
-                agent_idx,
-                [
-                    lambda: state.agent.agent_states[0],
-                    lambda: state.agent.agent_states[1],
-                    lambda: state.agent.agent_states[2],
-                    lambda: state.agent.agent_states[3],
-                ]
-            )
-            # Get agent active status
-            agent_active = jax.lax.switch(
-                agent_idx,
-                [
-                    lambda: state.agent.agent_active[0],
-                    lambda: state.agent.agent_active[1],
-                    lambda: state.agent.agent_active[2],
-                    lambda: state.agent.agent_active[3],
-                ]
-            )
-            
-            # Only generate cone for active agents
-            def generate_cone():
-                # Temporarily set current agent to this agent to generate its cone
-                temp_state = state._replace(agent=state.agent._replace(current_agent=agent_idx))
-                return temp_state._build_dig_dump_cone()
-            
-            def no_cone():
-                return jnp.zeros((map_width * map_height,), dtype=jnp.bool_)
-            
-            cone = jax.lax.cond(agent_active, generate_cone, no_cone)
-            return cone.reshape(map_width, map_height)
-        
-        # Generate interaction masks for all 4 agents
-        agent_interaction_masks = jax.vmap(get_agent_interaction_mask)(jnp.arange(4))
-        # Combine all agent interaction masks
-        interaction_mask = jnp.any(agent_interaction_masks, axis=0)
 
         return state._replace(
             # increase number of steps as well

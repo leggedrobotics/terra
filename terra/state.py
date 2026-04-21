@@ -1774,23 +1774,16 @@ class State(NamedTuple):
         Also, removes the possibility of moving the tiles within the same workspace,
         even if not all tiles are occupied.
         """
-        recent_dumped_dig_mask = self.world.last_dig_mask.map & (
-            self.world.action_map.map > 0
+        cone_mask_2d = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        # Use boolean logic and any() to avoid large integer reductions on flattened arrays
+        cond_has_overlap = jnp.any(
+            self.world.last_dig_mask.map & (self.world.action_map.map > 0) & cone_mask_2d
         )
-        has_recent_dumped_dig = jnp.any(recent_dumped_dig_mask)
-
-        def _compute_overlap(_: None) -> Array:
-            cone_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
-            return jnp.any(recent_dumped_dig_mask & cone_mask)
-
-        cond_has_overlap = jax.lax.cond(
-            has_recent_dumped_dig,
-            _compute_overlap,
-            lambda _: jnp.bool_(False),
-            operand=None,
+        dig_map_mask = jax.lax.cond(
+            cond_has_overlap,
+            lambda: (~cone_mask_2d).reshape(-1),
+            lambda: jnp.ones_like(dump_mask, dtype=jnp.bool_),
         )
-        cone_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape).reshape(-1)
-        dig_map_mask = jnp.logical_or(~cone_mask, ~cond_has_overlap)
 
         return dump_mask * dig_map_mask
 
@@ -2720,12 +2713,11 @@ class State(NamedTuple):
 
         # TURN (indices 2, 3) — branch on action_type
         def _turn_reward_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
+            is_wheeled = (current_action_type == 1)
+            # Evaluate both and select to avoid nested control-flow graph blowup compilation
+            wheeled_r = self._handle_rewards_wheel_turn(new_state, action)
+            tracked_r = self._handle_rewards_base_turn(new_state, action)
+            return jax.lax.select(is_wheeled, wheeled_r, tracked_r)
 
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
@@ -3302,29 +3294,13 @@ class State(NamedTuple):
         return action_mask
 
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
-        # Recompute target_tiles as union of cones for all active agents
-        map_width = self.world.width
-        map_height = self.world.height
-        def cone_for_agent(agent_idx):
-            agent_active = jax.lax.switch(
-                agent_idx,
-                [
-                    lambda: self.agent.agent_active[0],
-                    lambda: self.agent.agent_active[1],
-                    lambda: self.agent.agent_active[2],
-                    lambda: self.agent.agent_active[3],
-                ]
-            )
-            def gen():
-                temp_state = self._replace(agent=self.agent._replace(current_agent=agent_idx))
-                return temp_state._build_dig_dump_cone().reshape(map_width, map_height)
-            def zeros():
-                return jnp.zeros((map_width, map_height), dtype=jnp.bool_)
-            return jax.lax.cond(agent_active == 1, gen, zeros)
-        cones = jax.vmap(cone_for_agent)(jnp.arange(4))
-        target_tiles_mask = jnp.any(cones, axis=0).reshape(-1)
+        # Keep infos cheap: target_tiles is already materialized by the wrapper as
+        # interaction_mask, and action_mask is currently informational only.
+        target_tiles_mask = self.world.interaction_mask.map.reshape(-1)
         infos = {
-            "action_mask": self._get_action_mask(dummy_action),
+            "action_mask": jnp.zeros(
+                (dummy_action.get_num_actions(),), dtype=jnp.bool_
+            ),
             "target_tiles": target_tiles_mask,
             "task_done": task_done,
         }
@@ -3440,12 +3416,10 @@ class State(NamedTuple):
 
         # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
         def _skid_turn_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
+            is_wheeled = (current_action_type == 1)
+            wheeled_r = self._handle_rewards_wheel_turn(new_state, action)
+            tracked_r = self._handle_rewards_base_turn(new_state, action)
+            return jax.lax.select(is_wheeled, wheeled_r, tracked_r)
 
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
@@ -3488,12 +3462,10 @@ class State(NamedTuple):
 
         # Turn rewards — branch on action_type (tracked: body rotation, wheeled: steering)
         def _truck_turn_dispatch(new_state, action):
-            return jax.lax.cond(
-                current_action_type == 1,
-                self._handle_rewards_wheel_turn,
-                self._handle_rewards_base_turn,
-                new_state, action,
-            )
+            is_wheeled = (current_action_type == 1)
+            wheeled_r = self._handle_rewards_wheel_turn(new_state, action)
+            tracked_r = self._handle_rewards_base_turn(new_state, action)
+            return jax.lax.select(is_wheeled, wheeled_r, tracked_r)
 
         reward += jax.lax.cond(
             (action == TrackedActionType.CLOCK)
