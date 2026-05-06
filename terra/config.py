@@ -200,6 +200,13 @@ class EnvConfig(NamedTuple):
     excavator_relocate_dug_dirt_mult: float = 1.5  # Multiplier for excavator relocating dug dirt
     transport_relocate_mult: float = 1.5  # Multiplier for transport (truck/skidsteer) relocation rewards
 
+    # Foundation border digging alignment constraints (env-enforced)
+    enforce_foundation_border_alignment: bool = True
+    foundation_border_width_tiles: int = 2
+    foundation_border_proximity_tiles: float = 1.5
+    foundation_border_hv_tolerance_rad: float = 0.17  # ~9.7deg for horizontal/vertical edges
+    foundation_border_diag_tolerance_rad: float = 0.4  # ~25deg for diagonal edges
+
     @classmethod
     def new(cls):
         return EnvConfig()

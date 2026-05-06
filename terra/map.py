@@ -49,6 +49,8 @@ class GridWorld(NamedTuple):
 
     trench_axes: Array
     trench_type: jnp.int32  # type of trench (number of branches), or -1 if not a trench
+    foundation_border_axes: Array
+    foundation_border_type: jnp.int32  # number of foundation border segments, or -1 if unavailable
 
     # Dummies for wrappers
     static_traversability_base: GridMap = GridMap.dummy_map()
@@ -95,6 +97,8 @@ class GridWorld(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         relocation_distance_map_override: Array | None = None,
@@ -115,6 +119,8 @@ class GridWorld(NamedTuple):
             padding_mask=padding_mask,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            foundation_border_axes=foundation_border_axes,
+            foundation_border_type=foundation_border_type,
             static_traversability_base=static_traversability_base,
             dumpability_mask=dumpability_mask,
             dumpability_mask_init=dumpability_mask_init_gm,

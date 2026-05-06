@@ -27,6 +27,8 @@ class MapsBuffer(NamedTuple):
     dumpability_masks_init: Array  # [map_type, n_maps, W, H]
     trench_axes: Array  # [map_type, n_maps, n_axes_per_map, 3] -- (A, B, C) coefficients for trench axes (-97 if not a trench)
     trench_types: Array  # type of trench (number of branches), or -1 if not a trench
+    foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
+    foundation_border_types: Array  # number of border axes, or -1 if unavailable
     action_maps: Array  # [map_type, n_maps, W, H]
     n_maps: int  # number of maps for each map type
     distance_maps: Array  # [map_type, n_maps, W, H] normalized float32
@@ -46,6 +48,8 @@ class MapsBuffer(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_types: Array,
+        foundation_border_axes: Array,
+        foundation_border_types: Array,
         dumpability_masks_init: Array,
         action_maps: Array,
         distance_maps: Array,
@@ -58,6 +62,8 @@ class MapsBuffer(NamedTuple):
             dumpability_masks_init=dumpability_masks_init.astype(jnp.bool_),
             trench_axes=trench_axes.astype(jnp.float16),
             trench_types=trench_types,
+            foundation_border_axes=foundation_border_axes.astype(jnp.float16),
+            foundation_border_types=foundation_border_types,
             n_maps=maps.shape[1],
             action_maps=action_maps.astype(IntLowDim),
             distance_maps=distance_maps.astype(jnp.float32),
@@ -71,12 +77,15 @@ class MapsBuffer(NamedTuple):
         padding_mask = self.padding_mask[curriculum_level, idx]
         trench_axes = self.trench_axes[curriculum_level, idx]
         trench_type = self.trench_types[curriculum_level]
+        foundation_border_axes = self.foundation_border_axes[curriculum_level, idx]
+        foundation_border_type = self.foundation_border_types[curriculum_level]
         # make sure is int 32
         trench_type = trench_type.astype(jnp.int32)
+        foundation_border_type = foundation_border_type.astype(jnp.int32)
         dumpability_mask_init = self.dumpability_masks_init[curriculum_level, idx]
         action_map = self.action_maps[curriculum_level, idx]
         distance_map = self.distance_maps[curriculum_level, idx]
-        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
+        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
@@ -89,6 +98,8 @@ class MapsBuffer(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_map,
             distance_map,
@@ -96,7 +107,8 @@ class MapsBuffer(NamedTuple):
         ) = self._get_map_from_disk(key, env_cfg)
         # Ensure consistent dtypes for all return values
         trench_type = trench_type.astype(jnp.int32)
-        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
+        foundation_border_type = foundation_border_type.astype(jnp.int32)
+        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     def sample_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         (
@@ -104,13 +116,16 @@ class MapsBuffer(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_map,
             distance_map,
             key,
         ) = self._select_map(key, env_cfg)
         trench_type = trench_type.astype(jnp.int32)
-        return map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map, distance_map, key
+        foundation_border_type = foundation_border_type.astype(jnp.int32)
+        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
@@ -226,21 +241,34 @@ def load_single_map(map_path: str) -> Array:
         actions_map = np.zeros_like(image, dtype=IntMap)
 
     # Try to load metadata
-    trench_axes = -97.0 * np.ones((3, 3))  # Default values
+    max_trench_type = 3
+    max_foundation_border_type = 64
+    trench_axes = -97.0 * np.ones((max_trench_type, 3))  # Default values
     trench_type = -1
+    foundation_border_axes = -97.0 * np.ones((max_foundation_border_type, 3))
+    foundation_border_type = -1
     try:
         with open(metadata_file) as f:
-            trench_ax = json.load(f)["axes_ABC"]
-        metadata_sanity_check(trench_ax[0])
-        trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
-        trench_type = len(trench_ax)
-
-        # Fill in with dummies to reach standard shape
-        max_trench_type = 3
+            metadata = json.load(f)
+        trench_ax = metadata.get("axes_ABC", [])
+        if len(trench_ax) > 0:
+            metadata_sanity_check(trench_ax[0])
+            trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
+            trench_type = len(trench_ax)
         while len(trench_ax) < max_trench_type:
             trench_ax.append([-97, -97, -97])
-
         trench_axes = np.array(trench_ax)
+        foundation_ax = metadata.get("foundation_border_axes_ABC", [])
+        if len(foundation_ax) > 0:
+            metadata_sanity_check(foundation_ax[0])
+            foundation_ax = [[el["A"], el["B"], el["C"]] for el in foundation_ax]
+            foundation_border_type = len(foundation_ax)
+            if len(foundation_ax) > max_foundation_border_type:
+                foundation_ax = foundation_ax[:max_foundation_border_type]
+                foundation_border_type = max_foundation_border_type
+            while len(foundation_ax) < max_foundation_border_type:
+                foundation_ax.append([-97, -97, -97])
+            foundation_border_axes = np.array(foundation_ax)
     except:
         print(f"No metadata found for given map: {map_path}.")
 
@@ -248,6 +276,7 @@ def load_single_map(map_path: str) -> Array:
     maps = jnp.array([image], dtype=IntMap)
     occupancies = jnp.array([occupancy], dtype=IntMap)
     trench_axes = jnp.array([trench_axes])
+    foundation_border_axes = jnp.array([foundation_border_axes])
     dumpability_masks_init = jnp.array([dumpability_mask_init], dtype=jnp.bool_)
     actions = jnp.array([actions_map], dtype=IntMap)
     distances = jnp.array([distance_map_init], dtype=jnp.float32)
@@ -257,6 +286,8 @@ def load_single_map(map_path: str) -> Array:
         occupancies,
         trench_axes,
         trench_type,
+        foundation_border_axes,
+        foundation_border_type,
         dumpability_masks_init,
         actions,
         distances,
@@ -266,22 +297,50 @@ def load_single_map(map_path: str) -> Array:
 def load_maps_from_disk(folder_path: str) -> Array:
     # Set the max number of branches the trench has
     max_trench_type = 3
+    max_foundation_border_type = 64
 
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
+    if dataset_size <= 0:
+        raise RuntimeError("DATASET_SIZE must be > 0.")
     maps = []
     occupancies = []
     dumpability_masks_init = []
     trench_axes = []
+    foundation_border_axes = []
     actions = []
     distances = []
     n_loaded_metadata = 0
     trench_type = -1
+    foundation_border_type = -1
     # Check if the actions folder exists (only for relocations)
     actions_folder = Path(folder_path) / "actions"
     has_actions = actions_folder.exists()
     # Track if we found any distance maps at all
     found_any_distance = False
-    for i in tqdm(range(1, dataset_size + 1), desc="Data Loader"):
+    images_dir = Path(folder_path) / "images"
+    image_files = sorted(images_dir.glob("img_*.npy"))
+    if not image_files:
+        raise RuntimeError(f"No image files found in {images_dir}; expected img_*.npy.")
+
+    available_indices = []
+    for f in image_files:
+        stem = f.stem
+        try:
+            available_indices.append(int(stem.split("_")[1]))
+        except (IndexError, ValueError):
+            continue
+    available_indices = sorted(available_indices)
+    if not available_indices:
+        raise RuntimeError(f"Could not parse any numeric indices from {images_dir}/img_*.npy.")
+
+    selected_indices = available_indices[:dataset_size]
+    if len(selected_indices) < dataset_size:
+        print(
+            f"Warning: requested DATASET_SIZE={dataset_size}, but found only "
+            f"{len(selected_indices)} image files in {images_dir}. Using available files."
+        )
+
+    for i in tqdm(selected_indices, desc="Data Loader"):
         map = np.load(f"{folder_path}/images/img_{i}.npy")
         map_sanity_check(map)
         occupancy = np.load(f"{folder_path}/occupancy/img_{i}.npy")
@@ -319,10 +378,14 @@ def load_maps_from_disk(folder_path: str) -> Array:
         try:
             # Metadata needs to be loaded only for trenches (A, B, C coefficients)
             with open(f"{folder_path}/metadata/trench_{i}.json") as f:
-                trench_ax = json.load(f)["axes_ABC"]
-            metadata_sanity_check(trench_ax[0])
-            trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
-            trench_type = len(trench_ax)
+                metadata = json.load(f)
+            trench_ax = metadata.get("axes_ABC", [])
+            if len(trench_ax) > 0:
+                metadata_sanity_check(trench_ax[0])
+                trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
+                trench_type = len(trench_ax)
+            else:
+                trench_ax = []
 
             # Fill in with dummies the remaining metadata to reach the standard shape
             while len(trench_ax) < max_trench_type:
@@ -335,6 +398,17 @@ def load_maps_from_disk(folder_path: str) -> Array:
                 )
 
             trench_axes.append(trench_ax)
+            foundation_ax = metadata.get("foundation_border_axes_ABC", [])
+            if len(foundation_ax) > 0:
+                metadata_sanity_check(foundation_ax[0])
+                foundation_ax = [[el["A"], el["B"], el["C"]] for el in foundation_ax]
+                foundation_border_type = len(foundation_ax)
+            if len(foundation_ax) > max_foundation_border_type:
+                foundation_ax = foundation_ax[:max_foundation_border_type]
+                foundation_border_type = max_foundation_border_type
+            while len(foundation_ax) < max_foundation_border_type:
+                foundation_ax.append([-97, -97, -97])
+            foundation_border_axes.append(foundation_ax)
             n_loaded_metadata += 1
         except:
             if n_loaded_metadata > 0:
@@ -343,14 +417,22 @@ def load_maps_from_disk(folder_path: str) -> Array:
     # If no distance maps were found at all, raise an error (strict behavior)
     if not found_any_distance:
         raise RuntimeError(f"No distance maps found in {Path(folder_path) / 'distance'}; please provide distance/img_*.npy files.")
-    print(f"Loaded {dataset_size} maps from {folder_path}.")
+    loaded_count = len(maps)
+    print(f"Loaded {loaded_count} maps from {folder_path}.")
     if n_loaded_metadata > 0:
         print(f"Loaded {n_loaded_metadata} metadata files from {folder_path}.")
     else:
         trench_axes = -97.0 * jnp.ones(
             (
-                dataset_size,
+                loaded_count,
                 3,
+                3,
+            )
+        )
+        foundation_border_axes = -97.0 * jnp.ones(
+            (
+                loaded_count,
+                max_foundation_border_type,
                 3,
             )
         )
@@ -360,6 +442,8 @@ def load_maps_from_disk(folder_path: str) -> Array:
         jnp.array(occupancies, dtype=IntMap),
         jnp.array(trench_axes),
         trench_type,
+        jnp.array(foundation_border_axes),
+        foundation_border_type,
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
         jnp.array(actions, dtype=IntMap),
         jnp.array(distances, dtype=jnp.float32),
@@ -469,6 +553,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         dumpability_masks_init_from_disk = []
         trench_axes_list = []
         trench_types = []
+        foundation_border_axes_list = []
+        foundation_border_types = []
         actions_from_disk = []
         distances_from_disk = []
 
@@ -478,6 +564,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             occupancies,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_masks_init,
             actions,
             distances,
@@ -490,6 +578,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         dumpability_masks_init_from_disk = [dumpability_masks_init] * num_levels
         trench_axes_list = [trench_axes] * num_levels
         trench_types = [trench_type] * num_levels
+        foundation_border_axes_list = [foundation_border_axes] * num_levels
+        foundation_border_types = [foundation_border_type] * num_levels
         actions_from_disk = [actions] * num_levels
         distances_from_disk = [distances] * num_levels
     else:
@@ -503,6 +593,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         dumpability_masks_init_from_disk = []
         trench_axes_list = []
         trench_types = []
+        foundation_border_axes_list = []
+        foundation_border_types = []
         actions_from_disk = []
         distances_from_disk = []
         for folder_path in folder_paths:
@@ -511,6 +603,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
                 occupancies,
                 trench_axes,
                 trench_type,
+                foundation_border_axes,
+                foundation_border_type,
                 dumpability_masks_init,
                 actions,
                 distances,
@@ -520,6 +614,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             dumpability_masks_init_from_disk.append(dumpability_masks_init)
             trench_axes_list.append(trench_axes)
             trench_types.append(trench_type)
+            foundation_border_axes_list.append(foundation_border_axes)
+            foundation_border_types.append(foundation_border_type)
             actions_from_disk.append(actions)
             distances_from_disk.append(distances)
     # Apply padding to ALL maps (unified logic like single-agent)
@@ -547,6 +643,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
     dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk_padded)
     trench_axes_list = jnp.array(trench_axes_list)
     trench_types = jnp.array(trench_types)
+    foundation_border_axes_list = jnp.array(foundation_border_axes_list)
+    foundation_border_types = jnp.array(foundation_border_types)
     actions_from_disk_padded = jnp.array(actions_from_disk_padded)
     distances_padded = jnp.array(distances_padded)
     print(f"Maps shape: {maps_from_disk_padded.shape}.")
@@ -554,6 +652,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
     print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
     print(f"Trench axes shape: {trench_axes_list.shape}.")
     print(f"Trench types shape: {trench_types.shape}.")
+    print(f"Foundation border axes shape: {foundation_border_axes_list.shape}.")
+    print(f"Foundation border types shape: {foundation_border_types.shape}.")
     print(f"Actions shape: {actions_from_disk_padded.shape}.")
     print(f"Distance maps shape: {distances_padded.shape}.")
     if shuffle_maps:
@@ -571,6 +671,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             (-1, *dumpability_masks_init_from_disk.shape[2:])
         )
         trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
+        foundation_border_axes_list = foundation_border_axes_list.reshape(
+            (-1, *foundation_border_axes_list.shape[2:])
+        )
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (-1, *actions_from_disk_padded.shape[2:])
         )
@@ -584,6 +687,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             rng, dumpability_masks_init_from_disk, axis=0
         )
         trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
+        foundation_border_axes_list = jax.random.permutation(
+            rng, foundation_border_axes_list, axis=0
+        )
         actions_from_disk_padded = jax.random.permutation(
             rng, actions_from_disk_padded, axis=0
         )
@@ -601,6 +707,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = trench_axes_list.reshape(
             (d0, d1, *trench_axes_list.shape[1:])
         )
+        foundation_border_axes_list = foundation_border_axes_list.reshape(
+            (d0, d1, *foundation_border_axes_list.shape[1:])
+        )
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (d0, d1, *actions_from_disk_padded.shape[1:])
         )
@@ -613,6 +722,8 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         padding_mask=padding_mask,
         trench_axes=trench_axes_list,
         trench_types=trench_types,
+        foundation_border_axes=foundation_border_axes_list,
+        foundation_border_types=foundation_border_types,
         dumpability_masks_init=dumpability_masks_init_from_disk,
         action_maps=actions_from_disk_padded,
         distance_maps=distances_padded,

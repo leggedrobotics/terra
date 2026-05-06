@@ -21,7 +21,7 @@ from terra.env_generation.distance import (
 )
 
 
-def _walk_and_run(root: Path, connectivity: int) -> None:
+def _walk_and_run(root: Path, connectivity: int, obstacle_proximity_cost: bool) -> None:
     for dirpath, _dirnames, _filenames in os.walk(root):
         p = Path(dirpath)
         if (p / "images").exists() and (p / "occupancy").exists():
@@ -31,6 +31,7 @@ def _walk_and_run(root: Path, connectivity: int) -> None:
                     metric="geodesic",
                     connectivity=connectivity,
                     distance_subfolder="distance_geodesic",
+                    obstacle_proximity_cost=obstacle_proximity_cost,
                 )
             except Exception as e:
                 print(f"Skipping {p} due to error: {e}")
@@ -58,6 +59,11 @@ def main():
         default=4,
         help="Grid neighbor connectivity (default: 4)",
     )
+    parser.add_argument(
+        "--obstacle-proximity-cost",
+        action="store_true",
+        help="If set, add extra cost near obstacles on non-dump tiles.",
+    )
     args = parser.parse_args()
 
     root = Path(args.dataset)
@@ -65,13 +71,14 @@ def main():
         raise RuntimeError(f"Dataset path does not exist: {root}")
 
     if args.recursive:
-        _walk_and_run(root, args.connectivity)
+        _walk_and_run(root, args.connectivity, args.obstacle_proximity_cost)
     else:
         write_distance_maps(
             root,
             metric="geodesic",
             connectivity=args.connectivity,
             distance_subfolder="distance_geodesic",
+            obstacle_proximity_cost=args.obstacle_proximity_cost,
         )
 
 

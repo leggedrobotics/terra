@@ -46,6 +46,11 @@ def main():
         default=DEFAULT_REALISTIC_MAX_DISTANCE,
         help="Normalization constant for the Manhattan metric (default: %(default)s)",
     )
+    parser.add_argument(
+        "--obstacle-proximity-cost",
+        action="store_true",
+        help="If set, add extra cost near obstacles on non-dump tiles.",
+    )
     args = parser.parse_args()
 
     root = Path(args.dataset)
@@ -57,12 +62,14 @@ def main():
             root,
             metric="manhattan",
             realistic_max_distance=args.realistic_max_distance,
+            obstacle_proximity_cost=args.obstacle_proximity_cost,
         )
     else:
         write_distance_maps(
             root,
             metric="manhattan",
             realistic_max_distance=args.realistic_max_distance,
+            obstacle_proximity_cost=args.obstacle_proximity_cost,
         )
 
 

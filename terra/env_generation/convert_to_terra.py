@@ -77,6 +77,9 @@ def _convert_all_imgs_to_terra(
     distance_metric="manhattan",
     distance_connectivity=4,
     distance_realistic_max=DEFAULT_REALISTIC_MAX_DISTANCE,
+    distance_obstacle_proximity_cost=False,
+    distance_obstacle_proximity_radius=6,
+    distance_obstacle_proximity_weight=0.35,
 ):
     max_size = size[1]
     print("max size: ", max_size)
@@ -221,6 +224,9 @@ def _convert_all_imgs_to_terra(
             metric=distance_metric,
             connectivity=distance_connectivity,
             realistic_max_distance=distance_realistic_max,
+            obstacle_proximity_cost=distance_obstacle_proximity_cost,
+            obstacle_proximity_radius=distance_obstacle_proximity_radius,
+            obstacle_proximity_weight=distance_obstacle_proximity_weight,
         )
 
 

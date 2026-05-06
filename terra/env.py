@@ -4,6 +4,7 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 from terra.actions import Action
@@ -84,6 +85,8 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map: Array,
@@ -100,6 +103,8 @@ class TerraEnv(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_map,
             distance_map_override=distance_map,
@@ -143,6 +148,8 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map: Array,
@@ -157,6 +164,8 @@ class TerraEnv(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_map,
             distance_map_override=distance_map,
@@ -202,6 +211,8 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map: Array,
@@ -250,6 +261,8 @@ class TerraEnv(NamedTuple):
                 padding_mask,
                 trench_axes,
                 trench_type,
+                foundation_border_axes,
+                foundation_border_type,
                 dumpability_mask_init,
                 action_map,
                 distance_map,
@@ -439,6 +452,30 @@ class TerraEnvBatch:
         )
         return env_cfgs
 
+    def _validate_foundation_border_metadata_requirements(self, env_cfgs: EnvConfig) -> None:
+        """
+        Hard fail when border-alignment enforcement is enabled but foundation border metadata
+        is missing in loaded maps. If enforcement is disabled, allow training to proceed.
+        """
+        # During jit/pmap tracing, env_cfgs fields can be tracers and cannot be converted
+        # to NumPy. Skip Python-side validation in traced contexts.
+        if isinstance(env_cfgs.enforce_foundation_border_alignment, jax.core.Tracer):
+            return
+        enforce = np.asarray(env_cfgs.enforce_foundation_border_alignment)
+        if not np.any(enforce):
+            return
+        border_types = np.asarray(self.maps_buffer.foundation_border_types)
+        # One border_type per curriculum level. Require metadata for every loaded level.
+        missing_levels = np.where(border_types <= 0)[0]
+        if missing_levels.size > 0:
+            raise RuntimeError(
+                "Missing `foundation_border_axes_ABC` metadata for curriculum levels "
+                f"{missing_levels.tolist()} while "
+                "`enforce_foundation_border_alignment=True`. "
+                "Either regenerate/add border metadata or set "
+                "`enforce_foundation_border_alignment=False`."
+            )
+
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
 
@@ -456,6 +493,8 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
@@ -467,12 +506,15 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
         )
 
     def prepare_reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey):
+        self._validate_foundation_border_metadata_requirements(env_cfgs)
         return jax.vmap(self._prepare_reset_device)(env_cfgs, rng_key)
 
     @partial(jax.jit, static_argnums=(0,))
@@ -484,6 +526,8 @@ class TerraEnvBatch:
         padding_masks: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_maps: Array,
         distance_maps: Array,
@@ -494,6 +538,8 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
@@ -502,12 +548,15 @@ class TerraEnvBatch:
         return timestep
 
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+        self._validate_foundation_border_metadata_requirements(env_cfgs)
         (
             env_cfgs,
             target_maps,
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
@@ -519,6 +568,8 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
@@ -538,6 +589,8 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,
@@ -551,6 +604,8 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            foundation_border_axes,
+            foundation_border_type,
             dumpability_mask_init,
             action_maps,
             distance_maps,

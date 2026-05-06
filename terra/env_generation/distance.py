@@ -36,6 +36,8 @@ except Exception:
 
 
 DEFAULT_REALISTIC_MAX_DISTANCE = 24
+DEFAULT_OBSTACLE_PROXIMITY_RADIUS = 6
+DEFAULT_OBSTACLE_PROXIMITY_WEIGHT = 0.35
 
 
 def compute_distance_map_taxicab(
@@ -70,6 +72,27 @@ def compute_distance_map_taxicab(
 
     norm = float(realistic_max_distance) if realistic_max_distance > 0 else 1.0
     return dist / norm
+
+
+def _compute_obstacle_proximity_penalty(
+    obstacle_mask: np.ndarray,
+    radius: int = DEFAULT_OBSTACLE_PROXIMITY_RADIUS,
+) -> np.ndarray:
+    """
+    Returns a [0,1] penalty map where tiles closer to obstacles have larger values.
+    """
+    obstacle = obstacle_mask != 0
+    if _HAS_SCIPY:
+        # Distance to nearest obstacle for non-obstacle tiles.
+        dist_to_obstacle = ndi.distance_transform_cdt(~obstacle, metric="taxicab").astype(
+            np.float32
+        )
+    else:
+        # Fallback: no extra proximity shaping without scipy.
+        return np.zeros_like(obstacle_mask, dtype=np.float32)
+    r = float(max(1, radius))
+    penalty = np.clip((r - dist_to_obstacle) / r, 0.0, 1.0)
+    return penalty.astype(np.float32)
 
 
 def compute_geodesic_distance_map(
@@ -143,6 +166,9 @@ def write_distance_maps(
     realistic_max_distance: int = DEFAULT_REALISTIC_MAX_DISTANCE,
     distance_subfolder: str = "distance",
     verbose: bool = True,
+    obstacle_proximity_cost: bool = False,
+    obstacle_proximity_radius: int = DEFAULT_OBSTACLE_PROXIMITY_RADIUS,
+    obstacle_proximity_weight: float = DEFAULT_OBSTACLE_PROXIMITY_WEIGHT,
 ) -> None:
     """
     Write a `distance/` subfolder inside a Terra-format dataset directory.
@@ -168,9 +194,10 @@ def write_distance_maps(
         raise ValueError(f"Unknown distance metric: {metric!r}")
 
     occupancy_dir = dataset_folder / "occupancy"
-    if metric_norm == "geodesic" and not occupancy_dir.exists():
+    needs_occupancy = (metric_norm == "geodesic") or obstacle_proximity_cost
+    if needs_occupancy and not occupancy_dir.exists():
         raise RuntimeError(
-            f"Geodesic metric requires occupancy folder: {occupancy_dir}"
+            f"Distance-map settings require occupancy folder: {occupancy_dir}"
         )
 
     distance_dir = dataset_folder / distance_subfolder
@@ -191,6 +218,7 @@ def write_distance_maps(
     for idx in indices:
         img_path = images_dir / f"img_{idx}.npy"
         target_map = np.load(img_path)
+        dump_mask = target_map > 0
         if metric_norm == "manhattan":
             dist_map = compute_distance_map_taxicab(
                 target_map, realistic_max_distance=realistic_max_distance
@@ -200,6 +228,17 @@ def write_distance_maps(
             dist_map = compute_geodesic_distance_map(
                 target_map, occupancy_mask, connectivity=connectivity
             )
+        if obstacle_proximity_cost:
+            occupancy_mask = np.load(occupancy_dir / f"img_{idx}.npy")
+            prox_pen = _compute_obstacle_proximity_penalty(
+                occupancy_mask, radius=obstacle_proximity_radius
+            )
+            # Add obstacle-nearness cost only outside dump zones.
+            dist_map = dist_map + np.where(
+                dump_mask,
+                0.0,
+                float(obstacle_proximity_weight) * prox_pen,
+            ).astype(np.float32)
         np.save(distance_dir / f"img_{idx}.npy", dist_map)
 
     if verbose:

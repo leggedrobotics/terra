@@ -89,13 +89,15 @@ class State(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map_override: Array | None = None,
     ) -> "State":
 
         world = GridWorld.new(
-            target_map, padding_mask, trench_axes, trench_type, dumpability_mask_init, action_map,
+            target_map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map,
             relocation_distance_map_override=distance_map_override,
         )
 
@@ -175,6 +177,8 @@ class State(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        foundation_border_axes: Array,
+        foundation_border_type: Array,
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map_override: Array | None = None,
@@ -190,6 +194,8 @@ class State(NamedTuple):
             padding_mask=padding_mask,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            foundation_border_axes=foundation_border_axes,
+            foundation_border_type=foundation_border_type,
             dumpability_mask_init=dumpability_mask_init,
             action_map=action_map,
             distance_map_override=distance_map_override,
@@ -1195,6 +1201,151 @@ class State(NamedTuple):
         cabin_angle = self._get_cabin_angle_rad()
         return wrap_angle_rad(base_angle + cabin_angle)
 
+    def _get_foundation_border_mask(self) -> Array:
+        """Returns a boolean mask for the inside border band of dig target tiles."""
+        dig_target = self.world.target_map.map < 0
+        border_width = jnp.int32(
+            getattr(self.env_cfg, "foundation_border_width_tiles", 2)
+        )
+        border_width = jnp.maximum(border_width, 0)
+        kernel = jnp.ones((3, 3), dtype=jnp.float32)
+
+        def _erode_once(mask: Array) -> Array:
+            mask_f = mask.astype(jnp.float32)
+            all_neighbors_inside = (
+                jax.scipy.signal.convolve2d(
+                    mask_f, kernel, mode="same", boundary="fill", fillvalue=0
+                )
+                == 9.0
+            )
+            return jnp.logical_and(mask, all_neighbors_inside)
+
+        def _erode_step(_, mask):
+            return _erode_once(mask)
+
+        eroded = jax.lax.fori_loop(0, border_width, _erode_step, dig_target)
+        return jnp.logical_and(dig_target, jnp.logical_not(eroded))
+
+    def _get_foundation_border_alignment_mask(self) -> Array:
+        """
+        Border tiles must be dug with arm aligned to edge direction.
+        Uses stricter tolerance for horizontal/vertical edges, looser for diagonal edges.
+        """
+        border_mask = self._get_foundation_border_mask()
+        border_any = jnp.any(border_mask)
+        arm_angle = self._get_arm_angle_rad()
+        max_border_axes = self.world.foundation_border_axes.shape[0]
+        border_type = jnp.int32(self.world.foundation_border_type)
+        current_pos = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        proximity_thr_tiles = jnp.float32(
+            getattr(self.env_cfg, "foundation_border_proximity_tiles", 1.5)
+        )
+
+        def _metadata_alignment_mask():
+            # Choose nearest border segment for each tile and align against its direction.
+            rows, cols = self.world.target_map.map.shape
+            rr = jnp.repeat(jnp.arange(rows)[:, None], cols, axis=1).astype(jnp.float32)
+            cc = jnp.repeat(jnp.arange(cols)[None, :], rows, axis=0).astype(jnp.float32)
+
+            min_dist = jnp.full((rows, cols), 1e9, dtype=jnp.float32)
+            best_idx = jnp.zeros((rows, cols), dtype=jnp.int32)
+
+            def _update_nearest(i, carry):
+                md, bi = carry
+                abc = self.world.foundation_border_axes[i]
+                valid = i < border_type
+                denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                d = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
+                d = jnp.where(valid, d, 1e9)
+                better = d < md
+                md = jnp.where(better, d, md)
+                bi = jnp.where(better, jnp.int32(i), bi)
+                return md, bi
+
+            min_dist, best_idx = jax.lax.fori_loop(
+                0, max_border_axes, _update_nearest, (min_dist, best_idx)
+            )
+
+            chosen_abc = self.world.foundation_border_axes[best_idx]
+            edge_dir = jnp.stack([-chosen_abc[..., 1], chosen_abc[..., 0]], axis=-1)
+            edge_angle = jnp.arctan2(edge_dir[..., 1], edge_dir[..., 0])
+
+            abs_a = jnp.abs(chosen_abc[..., 0])
+            abs_b = jnp.abs(chosen_abc[..., 1])
+            is_vertical_edge = abs_a > (2.0 * abs_b)
+            is_horizontal_edge = abs_b > (2.0 * abs_a)
+            is_hv_edge = jnp.logical_or(is_vertical_edge, is_horizontal_edge)
+
+            hv_tol = jnp.float32(
+                getattr(self.env_cfg, "foundation_border_hv_tolerance_rad", 0.17)
+            )
+            diag_tol = jnp.float32(
+                getattr(self.env_cfg, "foundation_border_diag_tolerance_rad", 0.52)
+            )
+            tol_map = jnp.where(is_hv_edge, hv_tol, diag_tol)
+            angle_diff = jnp.abs(wrap_angle_rad(edge_angle - arm_angle))
+            angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
+            aligned = angle_diff <= tol_map
+
+            # Enforce proximity-to-line for border digging:
+            # border tiles are only diggable when base is close to that border segment.
+            chosen_a = chosen_abc[..., 0]
+            chosen_b = chosen_abc[..., 1]
+            chosen_c = chosen_abc[..., 2]
+            denom = jnp.sqrt(chosen_a * chosen_a + chosen_b * chosen_b) + 1e-6
+            base_line_dist = jnp.abs(
+                chosen_a * current_pos[1] + chosen_b * current_pos[0] + chosen_c
+            ) / denom
+            close_enough = base_line_dist <= proximity_thr_tiles
+
+            allowed_on_border = jnp.logical_and(aligned, close_enough)
+            return jnp.logical_or(
+                jnp.logical_not(border_mask), allowed_on_border
+            ).reshape(-1)
+
+        dig_target = (self.world.target_map.map < 0).astype(jnp.float32)
+        kernel_dx = jnp.array([[-1.0, 0.0, 1.0]], dtype=jnp.float32)
+        kernel_dy = jnp.array([[-1.0], [0.0], [1.0]], dtype=jnp.float32)
+        grad_x = jax.scipy.signal.convolve2d(
+            dig_target, kernel_dx, mode="same", boundary="fill", fillvalue=0
+        )
+        grad_y = jax.scipy.signal.convolve2d(
+            dig_target, kernel_dy, mode="same", boundary="fill", fillvalue=0
+        )
+
+        normal_angle = jnp.arctan2(grad_y, grad_x)
+        edge_angle = wrap_angle_rad(normal_angle + (jnp.pi / 2.0))
+
+        # Classify edge orientation from normal vector.
+        abs_gx = jnp.abs(grad_x)
+        abs_gy = jnp.abs(grad_y)
+        is_vertical_edge = abs_gx > (2.0 * abs_gy)    # tangent ~ y-axis
+        is_horizontal_edge = abs_gy > (2.0 * abs_gx)  # tangent ~ x-axis
+        is_hv_edge = jnp.logical_or(is_vertical_edge, is_horizontal_edge)
+
+        hv_tol = jnp.float32(
+            getattr(self.env_cfg, "foundation_border_hv_tolerance_rad", 0.17)
+        )
+        diag_tol = jnp.float32(
+            getattr(self.env_cfg, "foundation_border_diag_tolerance_rad", 0.52)
+        )
+        tol_map = jnp.where(is_hv_edge, hv_tol, diag_tol)
+
+        angle_diff = jnp.abs(wrap_angle_rad(edge_angle - arm_angle))
+        angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)  # axis alignment (0 or pi)
+        aligned = angle_diff <= tol_map
+
+        has_metadata = jnp.logical_and(border_type > 0, jnp.any(self.world.foundation_border_axes[:, 0] > -96.0))
+        return jax.lax.cond(
+            border_any,
+            lambda: jax.lax.cond(
+                has_metadata,
+                _metadata_alignment_mask,
+                lambda: jnp.logical_or(jnp.logical_not(border_mask), aligned).reshape(-1),
+            ),
+            lambda: jnp.ones_like(border_mask, dtype=jnp.bool_).reshape(-1),
+        )
+
 
     
     
@@ -1745,6 +1896,15 @@ class State(NamedTuple):
             _get_skidsteer_cone,
             _get_excavator_cone       # Default for excavator (0) and wheeled (1)
         )
+
+    def _workspace_intersects_obstacle(self) -> Array:
+        """
+        Returns True when the current workspace overlaps static obstacles.
+        This is used to env-enforce "no dig/dump through obstacles".
+        """
+        workspace_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        obstacle_mask = self.world.padding_mask.map == 1
+        return jnp.any(jnp.logical_and(workspace_mask, obstacle_mask))
     
 
     # Removed unused _build_dig_dump_cone_2
@@ -1829,6 +1989,14 @@ class State(NamedTuple):
             _exclude_last_dig_area,
             _no_dig_exclusion
         )
+        enforce_border_alignment = jnp.bool_(
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+        )
+        border_alignment_mask = jax.lax.cond(
+            enforce_border_alignment,
+            self._get_foundation_border_alignment_mask,
+            lambda: jnp.ones_like(dig_mask, dtype=jnp.bool_),
+        )
 
         return (
             dig_mask
@@ -1836,6 +2004,7 @@ class State(NamedTuple):
             * ambiguity_mask_dig_movesoil
             * max_dig_limit_mask
             * dig_exclusion_mask
+            * border_alignment_mask
         ).astype(jnp.bool_)
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
@@ -1870,122 +2039,128 @@ class State(NamedTuple):
         return new_dumpability_mask * (action_mask_contoured == 0)
 
     def _handle_dig(self) -> "State":
-        dig_mask = self._build_dig_dump_cone()
-        dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-        flattened_action_map = self.world.action_map.map.reshape(-1)
-        selected_tiles_sum = flattened_action_map @ dig_mask
-        moving_dumped_dirt = selected_tiles_sum > 0
-        # if moving dumped dirt, move it all at once
-        # Ensure both branches return the same dtype (int32)
-        dig_volume = jax.lax.cond(
-            moving_dumped_dirt,
-            lambda: selected_tiles_sum.astype(jnp.int32),
-            lambda: dig_mask.sum().astype(jnp.int32),
-        )
+        def _blocked_by_obstacle():
+            return self
 
-        def _apply_dig(volume, fam):
-            # First remove dirt cleanly (without soil mechanics)
-            new_map_global_coords = self._apply_dig_mask(
-                fam, dig_mask, moving_dumped_dirt
-            )
-            new_map_global_coords = new_map_global_coords.reshape(
-                self.world.action_map.map.shape
-            )
-            
-            # Now apply soil mechanics using the saved cone mask (always enabled)
-            cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
-            final_map = self._apply_local_soil_mechanics(new_map_global_coords, cone_mask_2d)
-            
-            # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
-            # The soil mechanics might move additional dirt from border into cone
-            # So we need to calculate the difference between original and new map
-            original_total = jnp.sum(fam)
-            new_total = jnp.sum(final_map.reshape(-1))
-            actual_volume_loaded = original_total - new_total  # This is the actual amount removed
-            
-            new_dumpability_mask = self._get_new_dumpability_mask(
-                final_map,
+        def _dig_when_clear():
+            dig_mask = self._build_dig_dump_cone()
+            dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
+            flattened_action_map = self.world.action_map.map.reshape(-1)
+            selected_tiles_sum = flattened_action_map @ dig_mask
+            moving_dumped_dirt = selected_tiles_sum > 0
+            # if moving dumped dirt, move it all at once
+            # Ensure both branches return the same dtype (int32)
+            dig_volume = jax.lax.cond(
+                moving_dumped_dirt,
+                lambda: selected_tiles_sum.astype(jnp.int32),
+                lambda: dig_mask.sum().astype(jnp.int32),
             )
 
-            # Only update last_dig_mask for excavators, not skidsteers
-            is_excavator = self._get_current_agent_state().agent_type[0] != 2  # Not skidsteer
-            
-            def _update_last_dig_mask():
-                return self.world.last_dig_mask._replace(
-                    map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape))
+            def _apply_dig(volume, fam):
+                # First remove dirt cleanly (without soil mechanics)
+                new_map_global_coords = self._apply_dig_mask(
+                    fam, dig_mask, moving_dumped_dirt
                 )
-            
-            def _keep_last_dig_mask():
-                return self.world.last_dig_mask  # Keep existing mask for skidsteers (don't update it)
-            
-            new_last_dig_mask = jax.lax.cond(
-                is_excavator,
-                _update_last_dig_mask,
-                _keep_last_dig_mask
-            )
-            
-            			# Cache potentials for telescoping and add artificial source for newly dug dirt
-            potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
-            after_lift_potential = self._compute_relocation_potential(final_map)
-            cur2 = self._get_current_agent_state()
-            started_loading = jnp.logical_and(cur2.loaded[0] == 0, actual_volume_loaded > 0)
-            # Artificial source potential for newly dug dirt (only when not moving dumped dirt)
-            def _compute_artificial_source_potential():
-                old_map_2d = self.world.action_map.map
-                new_map_2d = final_map
-                delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
-                non_dump_mask = (self.world.target_map.map <= 0)
-                return jnp.sum(delta_removed * self.world.relocation_distance_map * non_dump_mask)
-            artificial_source_potential = jax.lax.cond(
-                jnp.logical_not(moving_dumped_dirt),
-                _compute_artificial_source_potential,
-                lambda: jnp.float32(0.0)
-            )
-            # If starting to load:
-            # - existing dumped dirt: baseline = potential_before_dig
-            # - newly dug dirt: baseline = potential_before_dig + artificial_source_potential
-            def _baseline_when_starting():
-                return jax.lax.select(
-                    moving_dumped_dirt,
-                    potential_before_dig,
-                    potential_before_dig + artificial_source_potential
+                new_map_global_coords = new_map_global_coords.reshape(
+                    self.world.action_map.map.shape
                 )
-            cur3 = self._get_current_agent_state()
-            new_carry_base = jax.lax.select(
-                started_loading,
-                _baseline_when_starting(),
-                cur3.carry_baseline_potential
-            )
-            updated_state = self._replace(
-                world=self.world._replace(
-                    action_map=self.world.action_map._replace(
-                        map=IntLowDim(final_map)
+
+                # Now apply soil mechanics using the saved cone mask (always enabled)
+                cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+                final_map = self._apply_local_soil_mechanics(new_map_global_coords, cone_mask_2d)
+
+                # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
+                original_total = jnp.sum(fam)
+                new_total = jnp.sum(final_map.reshape(-1))
+                actual_volume_loaded = original_total - new_total
+
+                new_dumpability_mask = self._get_new_dumpability_mask(final_map)
+
+                # Only update last_dig_mask for excavators, not skidsteers
+                is_excavator = self._get_current_agent_state().agent_type[0] != 2
+
+                def _update_last_dig_mask():
+                    return self.world.last_dig_mask._replace(
+                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape))
+                    )
+
+                def _keep_last_dig_mask():
+                    return self.world.last_dig_mask
+
+                new_last_dig_mask = jax.lax.cond(
+                    is_excavator,
+                    _update_last_dig_mask,
+                    _keep_last_dig_mask,
+                )
+
+                # Cache potentials for telescoping and add artificial source for newly dug dirt
+                potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
+                after_lift_potential = self._compute_relocation_potential(final_map)
+                cur2 = self._get_current_agent_state()
+                started_loading = jnp.logical_and(cur2.loaded[0] == 0, actual_volume_loaded > 0)
+
+                def _compute_artificial_source_potential():
+                    old_map_2d = self.world.action_map.map
+                    new_map_2d = final_map
+                    delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
+                    non_dump_mask = (self.world.target_map.map <= 0)
+                    return jnp.sum(
+                        delta_removed * self.world.relocation_distance_map * non_dump_mask
+                    )
+
+                artificial_source_potential = jax.lax.cond(
+                    jnp.logical_not(moving_dumped_dirt),
+                    _compute_artificial_source_potential,
+                    lambda: jnp.float32(0.0),
+                )
+
+                def _baseline_when_starting():
+                    return jax.lax.select(
+                        moving_dumped_dirt,
+                        potential_before_dig,
+                        potential_before_dig + artificial_source_potential,
+                    )
+
+                cur3 = self._get_current_agent_state()
+                new_carry_base = jax.lax.select(
+                    started_loading,
+                    _baseline_when_starting(),
+                    cur3.carry_baseline_potential,
+                )
+                updated_state = self._replace(
+                    world=self.world._replace(
+                        action_map=self.world.action_map._replace(map=IntLowDim(final_map)),
+                        dumpability_mask=self.world.dumpability_mask._replace(
+                            map=jnp.bool_(new_dumpability_mask),
+                        ),
+                        last_dig_mask=new_last_dig_mask,
                     ),
-                    dumpability_mask=self.world.dumpability_mask._replace(
-                        map=jnp.bool_(new_dumpability_mask),
+                    agent=self.agent._replace(
+                        moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
                     ),
-                    last_dig_mask=new_last_dig_mask,
-                ),
-                agent=self.agent._replace(
-                    moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
                 )
-            )
-            return updated_state._set_current_agent_state(
-                cur3._replace(
-                    loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim),
-                    carry_baseline_potential=jnp.float32(new_carry_base),
-                    carry_potential_after_lift=jnp.float32(after_lift_potential),
+                return updated_state._set_current_agent_state(
+                    cur3._replace(
+                        loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim),
+                        carry_baseline_potential=jnp.float32(new_carry_base),
+                        carry_potential_after_lift=jnp.float32(after_lift_potential),
+                    )
                 )
-            )
 
-        s = jax.lax.cond(
-            dig_volume > 0,
-            lambda v, fam: _apply_dig(v, fam),
-            lambda v, fam: self._do_nothing(),
-            dig_volume,
-            flattened_action_map,
+            s = jax.lax.cond(
+                dig_volume > 0,
+                lambda v, fam: _apply_dig(v, fam),
+                lambda v, fam: self._do_nothing(),
+                dig_volume,
+                flattened_action_map,
+            )
+            return s
+
+        return jax.lax.cond(
+            self._workspace_intersects_obstacle(),
+            _blocked_by_obstacle,
+            _dig_when_clear,
         )
-        return s
     def _try_truck_transfer_on_excavator_dump(self) -> "State":
         """
         Attempt to transfer excavator load into any truck whose base center lies in the dump cone.
@@ -2089,115 +2264,108 @@ class State(NamedTuple):
         return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt_transfer, lambda: self)
 
     def _handle_dump(self) -> "State":
-        dump_mask = self._build_dig_dump_cone()
-        dump_mask = self._build_dig_dump_cone()
-        # Only restrict dumping to dump zones for skid steer and truck agents
-        cur = self._get_current_agent_state()
-        is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 1
-        
-        def _apply_dump_zone_restriction():
-            # For skid steer: restrict to only dump zones (target_map > 0)
-            dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
-            return dump_mask * dump_zone_mask
-        
-        def _no_dump_zone_restriction():
-            # For excavators: allow dumping on any valid tile (including neutral)
-            return dump_mask
-        
-        dump_mask = jax.lax.cond(
-            jnp.logical_or(is_skid_steer, is_truck),
-            _apply_dump_zone_restriction,
-            _no_dump_zone_restriction
-        )
-        dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
-        dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
-        dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
-        dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
-        dump_volume = dump_mask.sum()
+        def _blocked_by_obstacle():
+            return self
 
-        def _apply_dump():
-            # Calculate volume distribution only when we actually have a valid dump area
-            curd = self._get_current_agent_state()
+        def _dump_when_clear():
+            dump_mask = self._build_dig_dump_cone()
+            # Only restrict dumping to dump zones for skid steer and truck agents
+            cur = self._get_current_agent_state()
+            is_skid_steer = cur.agent_type[0] == 2
+            is_truck = cur.agent_type[0] == 1
 
-            # Try truck transfer outside via helper (called from DO). Here proceed with world dump only.
-            remaining_volume = curd.loaded % dump_volume
-            even_volume_per_tile = (
-                curd.loaded - remaining_volume
-            ) / dump_volume
-            
-            flattened_action_map = self.world.action_map.map.reshape(-1)
-            new_map_global_coords = self._apply_dump_mask(
-                flattened_action_map,
-                dump_mask,
-                even_volume_per_tile,
-                remaining_volume,
-                self.world.target_map.map,
-                use_condensed_dump=True
+            def _apply_dump_zone_restriction():
+                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+                return dump_mask * dump_zone_mask
+
+            def _no_dump_zone_restriction():
+                return dump_mask
+
+            dump_mask = jax.lax.cond(
+                jnp.logical_or(is_skid_steer, is_truck),
+                _apply_dump_zone_restriction,
+                _no_dump_zone_restriction,
             )
-            new_map_global_coords = new_map_global_coords.reshape(
-                self.world.target_map.map.shape
-            )
+            dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
+            dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
+            dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
+            dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
+            dump_volume = dump_mask.sum()
 
-            			# Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
-            is_excavator = self._get_current_agent_state().agent_type[0] != 2  # Not skidsteer
-        
-            def _clear_last_dig_mask():
-                return self.world.last_dig_mask._replace(
-                    map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
+            def _apply_dump():
+                curd = self._get_current_agent_state()
+                remaining_volume = curd.loaded % dump_volume
+                even_volume_per_tile = (curd.loaded - remaining_volume) / dump_volume
+
+                flattened_action_map = self.world.action_map.map.reshape(-1)
+                new_map_global_coords = self._apply_dump_mask(
+                    flattened_action_map,
+                    dump_mask,
+                    even_volume_per_tile,
+                    remaining_volume,
+                    self.world.target_map.map,
+                    use_condensed_dump=True,
                 )
-            
-            def _keep_last_dig_mask():
-                return self.world.last_dig_mask  # Skidsteer: leave unchanged
-            
-            new_last_dig_mask = jax.lax.cond(
-                is_excavator,
-                _clear_last_dig_mask,
-                _keep_last_dig_mask
-            )
-            current_potential = self._compute_relocation_potential(self.world.action_map.map)
-            # Predict potential post-dump and gate regressive dumps relative to effective baseline
-            predicted_potential = self._compute_relocation_potential(new_map_global_coords)
-            curb = self._get_current_agent_state()
-            baseline_before = curb.carry_baseline_potential
-            after_lift = curb.carry_potential_after_lift
-            baseline_eff = baseline_before + (current_potential - after_lift)
-
-            would_increase_potential = predicted_potential > baseline_eff
-
-            # jax.debug.print("[DEBUG] Baseline Caching:")
-            # jax.debug.print("  potential (before lift): {}", baseline_before)
-            # jax.debug.print("  potential (after lift): {}", after_lift)
-            # jax.debug.print("  potential (current): {}", current_potential)
-            # jax.debug.print("  potential (new): {}", predicted_potential)
-            # jax.debug.print("  baseline effective: {}", baseline_eff)
-            # jax.debug.print("  would increase potential: {}", would_increase_potential)
-
-
-            def _prevent_regressive_dump():
-                return self
-            def _allow_progressive_dump():
-                # Update world and current potential
-                #new_rel_pot = self._compute_relocation_potential(new_map_global_coords)
-                updated_state = self._replace(
-                    world=self.world._replace(
-                        action_map=self.world.action_map._replace(
-                            map=IntLowDim(new_map_global_coords)
-                        ),
-                        last_dig_mask=new_last_dig_mask,
-                    ),
-                    agent=self.agent._replace(
-                        moving_dumped_dirt=jnp.bool_(False),
-                    ),
+                new_map_global_coords = new_map_global_coords.reshape(
+                    self.world.target_map.map.shape
                 )
-                return updated_state._set_current_agent_state(
-                    updated_state._get_current_agent_state()._replace(
-                        loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+
+                # Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
+                is_excavator = self._get_current_agent_state().agent_type[0] != 2
+
+                def _clear_last_dig_mask():
+                    return self.world.last_dig_mask._replace(
+                        map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
                     )
-                )
-            return jax.lax.cond(would_increase_potential, _prevent_regressive_dump, _allow_progressive_dump)
 
-        return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
+                def _keep_last_dig_mask():
+                    return self.world.last_dig_mask
+
+                new_last_dig_mask = jax.lax.cond(
+                    is_excavator, _clear_last_dig_mask, _keep_last_dig_mask
+                )
+                current_potential = self._compute_relocation_potential(self.world.action_map.map)
+                predicted_potential = self._compute_relocation_potential(new_map_global_coords)
+                curb = self._get_current_agent_state()
+                baseline_before = curb.carry_baseline_potential
+                after_lift = curb.carry_potential_after_lift
+                baseline_eff = baseline_before + (current_potential - after_lift)
+                would_increase_potential = predicted_potential > baseline_eff
+
+                def _prevent_regressive_dump():
+                    return self
+
+                def _allow_progressive_dump():
+                    updated_state = self._replace(
+                        world=self.world._replace(
+                            action_map=self.world.action_map._replace(
+                                map=IntLowDim(new_map_global_coords)
+                            ),
+                            last_dig_mask=new_last_dig_mask,
+                        ),
+                        agent=self.agent._replace(
+                            moving_dumped_dirt=jnp.bool_(False),
+                        ),
+                    )
+                    return updated_state._set_current_agent_state(
+                        updated_state._get_current_agent_state()._replace(
+                            loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+                        )
+                    )
+
+                return jax.lax.cond(
+                    would_increase_potential,
+                    _prevent_regressive_dump,
+                    _allow_progressive_dump,
+                )
+
+            return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
+
+        return jax.lax.cond(
+            self._workspace_intersects_obstacle(),
+            _blocked_by_obstacle,
+            _dump_when_clear,
+        )
 
 
 
