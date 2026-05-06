@@ -176,11 +176,11 @@ class EnvConfig(NamedTuple):
     
     # Agent types configuration: (agent1_type, agent2_type)
     # 0=excavator, 1=truck, 2=skidsteer
-    agent_types: tuple = (0,1)  # Default: excavator + skidsteer, override with --agent_types in training script
+    agent_types: tuple = (0,)  # Default: excavator + skidsteer, override with --agent_types in training script
     
     # Action types configuration: (action1_type, action2_type) - optional override
     # 0=tracked, 1=wheeled
-    action_types: tuple = (0,0)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
+    action_types: tuple = (0,)  # Default: (0,0) (uses tracked for all), override with --action_types in training script
 
     # Agent capacities
     # Truck maximum load capacity (units of dirt), set to the workspace capacity of the excavator to have the same abstraction level
@@ -203,9 +203,10 @@ class EnvConfig(NamedTuple):
     # Foundation border digging alignment constraints (env-enforced)
     enforce_foundation_border_alignment: bool = True
     foundation_border_width_tiles: int = 2
-    foundation_border_proximity_tiles: float = 1.5
-    foundation_border_hv_tolerance_rad: float = 0.17  # ~9.7deg for horizontal/vertical edges
-    foundation_border_diag_tolerance_rad: float = 0.4  # ~25deg for diagonal edges
+    foundation_border_proximity_tiles: float = 3.5
+    foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
+    foundation_border_diag_tolerance_rad: float = 0.436  # ~25deg
+    debug_foundation_border_checks: bool = False
 
     @classmethod
     def new(cls):
@@ -226,8 +227,8 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
 
         {
-            "maps_path": "foundations_dumpzones_v3", 
-            "max_steps_in_episode": 800,
+            "maps_path": "foundations_real_ring", 
+            "max_steps_in_episode": 200,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,
         },

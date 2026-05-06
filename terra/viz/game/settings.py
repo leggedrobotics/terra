@@ -23,6 +23,7 @@ COLORS = {
     2: "#000000",  # obstacle
     1: "#002B5B",  # action map dump
     -1: "#26bd6c",  # action map dug
+    -2: "#006b2e",  # correctly dug foundation edge
     6: "#ff6b6b",  # interaction mask (dig/dump cones) - bright red (current agent)
     7: "#ffb3b3",  # interaction mask (dig/dump cones) - pale red (other agents)
     "agent_body": (0, 43, 91),  # Blue for tracked agents

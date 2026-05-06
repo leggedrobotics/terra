@@ -28,7 +28,7 @@ class MapsBuffer(NamedTuple):
     trench_axes: Array  # [map_type, n_maps, n_axes_per_map, 3] -- (A, B, C) coefficients for trench axes (-97 if not a trench)
     trench_types: Array  # type of trench (number of branches), or -1 if not a trench
     foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
-    foundation_border_types: Array  # number of border axes, or -1 if unavailable
+    foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
     action_maps: Array  # [map_type, n_maps, W, H]
     n_maps: int  # number of maps for each map type
     distance_maps: Array  # [map_type, n_maps, W, H] normalized float32
@@ -78,7 +78,7 @@ class MapsBuffer(NamedTuple):
         trench_axes = self.trench_axes[curriculum_level, idx]
         trench_type = self.trench_types[curriculum_level]
         foundation_border_axes = self.foundation_border_axes[curriculum_level, idx]
-        foundation_border_type = self.foundation_border_types[curriculum_level]
+        foundation_border_type = self.foundation_border_types[curriculum_level, idx]
         # make sure is int 32
         trench_type = trench_type.astype(jnp.int32)
         foundation_border_type = foundation_border_type.astype(jnp.int32)
@@ -307,11 +307,11 @@ def load_maps_from_disk(folder_path: str) -> Array:
     dumpability_masks_init = []
     trench_axes = []
     foundation_border_axes = []
+    foundation_border_types = []
     actions = []
     distances = []
     n_loaded_metadata = 0
     trench_type = -1
-    foundation_border_type = -1
     # Check if the actions folder exists (only for relocations)
     actions_folder = Path(folder_path) / "actions"
     has_actions = actions_folder.exists()
@@ -399,6 +399,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
 
             trench_axes.append(trench_ax)
             foundation_ax = metadata.get("foundation_border_axes_ABC", [])
+            foundation_border_type = -1
             if len(foundation_ax) > 0:
                 metadata_sanity_check(foundation_ax[0])
                 foundation_ax = [[el["A"], el["B"], el["C"]] for el in foundation_ax]
@@ -409,10 +410,16 @@ def load_maps_from_disk(folder_path: str) -> Array:
             while len(foundation_ax) < max_foundation_border_type:
                 foundation_ax.append([-97, -97, -97])
             foundation_border_axes.append(foundation_ax)
+            foundation_border_types.append(foundation_border_type)
             n_loaded_metadata += 1
         except:
             if n_loaded_metadata > 0:
                 raise (RuntimeError("Imported some trench metadata, but one failed."))
+            trench_axes.append([[-97, -97, -97] for _ in range(max_trench_type)])
+            foundation_border_axes.append(
+                [[-97, -97, -97] for _ in range(max_foundation_border_type)]
+            )
+            foundation_border_types.append(-1)
             continue
     # If no distance maps were found at all, raise an error (strict behavior)
     if not found_any_distance:
@@ -436,6 +443,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
                 3,
             )
         )
+        foundation_border_types = -1 * jnp.ones((loaded_count,), dtype=jnp.int32)
         print(f"Did NOT load any metadata file from {folder_path}.")
     return (
         jnp.array(maps, dtype=IntMap),
@@ -443,7 +451,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
         jnp.array(trench_axes),
         trench_type,
         jnp.array(foundation_border_axes),
-        foundation_border_type,
+        jnp.array(foundation_border_types, dtype=jnp.int32),
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
         jnp.array(actions, dtype=IntMap),
         jnp.array(distances, dtype=jnp.float32),
@@ -579,7 +587,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = [trench_axes] * num_levels
         trench_types = [trench_type] * num_levels
         foundation_border_axes_list = [foundation_border_axes] * num_levels
-        foundation_border_types = [foundation_border_type] * num_levels
+        foundation_border_types = [jnp.array([foundation_border_type], dtype=jnp.int32)] * num_levels
         actions_from_disk = [actions] * num_levels
         distances_from_disk = [distances] * num_levels
     else:
@@ -674,6 +682,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (-1, *foundation_border_axes_list.shape[2:])
         )
+        foundation_border_types = foundation_border_types.reshape((-1,))
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (-1, *actions_from_disk_padded.shape[2:])
         )
@@ -689,6 +698,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
         foundation_border_axes_list = jax.random.permutation(
             rng, foundation_border_axes_list, axis=0
+        )
+        foundation_border_types = jax.random.permutation(
+            rng, foundation_border_types, axis=0
         )
         actions_from_disk_padded = jax.random.permutation(
             rng, actions_from_disk_padded, axis=0
@@ -710,6 +722,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (d0, d1, *foundation_border_axes_list.shape[1:])
         )
+        foundation_border_types = foundation_border_types.reshape((d0, d1))
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (d0, d1, *actions_from_disk_padded.shape[1:])
         )

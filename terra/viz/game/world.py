@@ -74,6 +74,25 @@ class World:
         
         return hex_color
 
+    def _get_foundation_edge_mask(self, target_map, border_width=2):
+        dig_target = target_map < 0
+        if border_width <= 0 or not np.any(dig_target):
+            return dig_target
+
+        eroded = dig_target.copy()
+        for _ in range(border_width):
+            padded = np.pad(eroded, 1, mode="constant", constant_values=False)
+            neighbors_inside = np.ones_like(eroded, dtype=np.bool_)
+            for dx in range(3):
+                for dy in range(3):
+                    neighbors_inside &= padded[
+                        dx : dx + eroded.shape[0],
+                        dy : dy + eroded.shape[1],
+                    ]
+            eroded = eroded & neighbors_inside
+
+        return dig_target & ~eroded
+
     def update(self, action_map, target_map, obstacles_mask, dumpability_mask, interaction_mask=None):
         action_map = np.asarray(action_map, dtype=np.int32)
         action_map = action_map.swapaxes(0, 1)
@@ -92,6 +111,7 @@ class World:
 
         # Find max dirt amount for gradient normalization (per-frame)
         max_dirt_amount = np.max(action_map[action_map > 0]) if np.any(action_map > 0) else 1
+        foundation_edge_mask = self._get_foundation_edge_mask(target_map)
 
         world = []
 
@@ -124,10 +144,20 @@ class World:
                     tile = self._get_dirt_gradient_color(dirt_amount, max_dirt_amount)
                 if dirt_amount < 0:
                     # action map dug
-                    tile = -1
+                    if (
+                        foundation_edge_mask[grid_x, grid_y]
+                        and dirt_amount <= target_map[grid_x, grid_y]
+                    ):
+                        tile = -2
+                    else:
+                        tile = -1
                 
                 # Add interaction mask visualization (dig/dump cones)
-                if interaction_mask is not None and interaction_mask[grid_x, grid_y]:
+                if (
+                    interaction_mask is not None
+                    and interaction_mask[grid_x, grid_y]
+                    and dirt_amount == 0
+                ):
                     # For now, use the same color for all interaction areas
                     # TODO: Implement current agent vs other agents distinction
                     tile = 6  # Bright red for all interaction areas

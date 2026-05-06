@@ -465,12 +465,11 @@ class TerraEnvBatch:
         if not np.any(enforce):
             return
         border_types = np.asarray(self.maps_buffer.foundation_border_types)
-        # One border_type per curriculum level. Require metadata for every loaded level.
-        missing_levels = np.where(border_types <= 0)[0]
-        if missing_levels.size > 0:
+        missing = np.argwhere(border_types <= 0)
+        if missing.size > 0:
             raise RuntimeError(
-                "Missing `foundation_border_axes_ABC` metadata for curriculum levels "
-                f"{missing_levels.tolist()} while "
+                "Missing `foundation_border_axes_ABC` metadata for curriculum/map indices "
+                f"{missing.tolist()} while "
                 "`enforce_foundation_border_alignment=True`. "
                 "Either regenerate/add border metadata or set "
                 "`enforce_foundation_border_alignment=False`."

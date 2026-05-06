@@ -3,6 +3,7 @@ os.environ['SDL_AUDIODRIVER'] = 'dummy'
 import time
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pygame as pg
 from pygame.locals import (
     K_UP,
@@ -13,6 +14,7 @@ from pygame.locals import (
     K_d,
     K_k,
     K_l,
+    K_r,
     K_SPACE,
     K_RETURN,
     KEYDOWN,
@@ -21,6 +23,123 @@ from pygame.locals import (
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnvBatch
+
+
+def _foundation_border_pixels(target_map):
+    dig = target_map < 0
+    padded = np.pad(dig, 1, constant_values=False)
+    inner = dig.copy()
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            inner &= padded[1 + dr : 1 + dr + dig.shape[0], 1 + dc : 1 + dc + dig.shape[1]]
+    border = dig & ~inner
+    rows, cols = np.where(border)
+    return cols.astype(np.float32), rows.astype(np.float32)
+
+
+def _axis_border_segment(axis, border_cols, border_rows, nearest_axis, axis_idx):
+    if border_cols.size == 0:
+        return None
+
+    a, b, c = (float(axis[0]), float(axis[1]), float(axis[2]))
+    denom = np.hypot(a, b)
+    if denom < 1e-6:
+        return None
+
+    selected = nearest_axis == axis_idx
+    if np.count_nonzero(selected) < 2:
+        return None
+
+    x = border_cols[selected]
+    y = border_rows[selected]
+    signed = (a * x + b * y + c) / denom
+    proj_x = x - signed * (a / denom)
+    proj_y = y - signed * (b / denom)
+
+    dir_x = b / denom
+    dir_y = -a / denom
+    t = proj_x * dir_x + proj_y * dir_y
+    start = int(np.argmin(t))
+    end = int(np.argmax(t))
+    return (proj_x[start], proj_y[start]), (proj_x[end], proj_y[end])
+
+
+def draw_foundation_axis_overlay(env, timestep):
+    renderer = env.terra_env.rendering_engine
+    if renderer is None or renderer.screen is None:
+        return
+
+    axes_batch = np.asarray(timestep.state.world.foundation_border_axes)
+    types_batch = np.asarray(timestep.state.world.foundation_border_type)
+    target_batch = np.asarray(timestep.state.world.target_map.map)
+    if axes_batch.ndim == 2:
+        axes_batch = axes_batch[None, ...]
+    if types_batch.ndim == 0:
+        types_batch = np.asarray([types_batch])
+    if target_batch.ndim == 2:
+        target_batch = target_batch[None, ...]
+
+    tile_size = renderer.tile_size
+    map_size = renderer.maps_size_px
+    map_px = renderer.total_display_size
+    border_px = 4 * tile_size
+
+    colors = [
+        "#ffff00",
+        "#00ffff",
+        "#ff66ff",
+        "#ff9900",
+        "#66ff66",
+        "#ffffff",
+    ]
+
+    for env_idx in range(min(renderer.n_envs, axes_batch.shape[0])):
+        ix = env_idx % renderer.n_envs_y
+        iy = env_idx // renderer.n_envs_y
+        offset_x = ix * (map_px + border_px) + border_px
+        offset_y = iy * (map_px + border_px) + border_px
+        border_type = int(types_batch[min(env_idx, len(types_batch) - 1)])
+        valid_axes = axes_batch[env_idx, : max(border_type, 0)]
+        valid_axes = valid_axes[valid_axes[:, 0] > -96.0]
+        border_cols, border_rows = _foundation_border_pixels(target_batch[env_idx])
+        if valid_axes.size == 0 or border_cols.size == 0:
+            continue
+
+        dists = []
+        for a, b, c in valid_axes:
+            denom = np.hypot(float(a), float(b)) + 1e-6
+            dists.append(np.abs(float(a) * border_cols + float(b) * border_rows + float(c)) / denom)
+        nearest_axis = np.argmin(np.stack(dists, axis=0), axis=0)
+
+        for axis_idx, axis in enumerate(valid_axes):
+            segment = _axis_border_segment(axis, border_cols, border_rows, nearest_axis, axis_idx)
+            if segment is None:
+                continue
+            p0, p1 = segment
+            screen_p0 = (
+                int(offset_x + p0[0] * tile_size),
+                int(offset_y + p0[1] * tile_size),
+            )
+            screen_p1 = (
+                int(offset_x + p1[0] * tile_size),
+                int(offset_y + p1[1] * tile_size),
+            )
+            color = colors[axis_idx % len(colors)]
+            pg.draw.line(renderer.screen, color, screen_p0, screen_p1, 1)
+
+    valid_axes = axes_batch[0][axes_batch[0, :, 0] > -96.0] if axes_batch.shape[0] else np.empty((0, 3))
+    axis_signature = tuple(np.round(valid_axes[:6].reshape(-1), 2).tolist())
+    target_signature = int(np.sum(target_batch[0] * np.arange(1, target_batch[0].size + 1).reshape(target_batch[0].shape)))
+    signature = (target_signature, axis_signature)
+    if getattr(draw_foundation_axis_overlay, "_last_signature", None) != signature:
+        draw_foundation_axis_overlay._last_signature = signature
+        print(
+            "[overlay] target_sig="
+            f"{target_signature} axes={len(valid_axes)} first_axes={axis_signature}"
+        )
+
+    if renderer.display:
+        pg.display.flip()
 
 
 def test_x11_availability():
@@ -72,7 +191,9 @@ def main():
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(0, 1)))(jnp.arange(n_envs))  # Excavator+Tracked, Truck+Wheeled
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 2), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, SkidSteer+Wheeled
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, Truck+Wheeled
-    env_cfgs = jax.vmap(lambda x: EnvConfig.new())(jnp.arange(n_envs))  # Default: (0,2) agents, (0,0) actions
+    env_cfgs = jax.vmap(
+        lambda x: EnvConfig.new()._replace(debug_foundation_border_checks=True)
+    )(jnp.arange(n_envs))  # Default: (0,2) agents, (0,0) actions
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)
@@ -144,6 +265,11 @@ def main():
                     action = current_action_type.do()
                 elif event.key == K_RETURN:
                     action = current_action_type.do_nothing()
+                elif event.key == K_r:
+                    rng, _rng = jax.random.split(rng)
+                    _rng = _rng[None]
+                    timestep = env.reset(env_cfgs, _rng)
+                    print("Manual reset: sampled a fresh map.")
 
                 if action is not None:
                     print("Action: ", action)
@@ -239,6 +365,7 @@ def main():
             timestep.info,
             generate_gif=False,
         )
+        draw_foundation_axis_overlay(env, timestep)
 
 
 if __name__ == "__main__":

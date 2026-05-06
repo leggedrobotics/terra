@@ -85,14 +85,23 @@ def _convert_all_imgs_to_terra(
     print("max size: ", max_size)
     # try:
 
-    filename_start = sorted(os.listdir(img_folder))[0].split("_")[0]
+    def _image_index(filename):
+        try:
+            return (0, int(filename.split(".png")[0].split("_")[1]))
+        except (IndexError, ValueError):
+            return (1, filename)
 
-    for i, fn in tqdm(enumerate(os.listdir(img_folder))):
+    image_filenames = sorted(
+        [fn for fn in os.listdir(img_folder) if fn.endswith(".png")],
+        key=_image_index,
+    )
+
+    for i, fn in tqdm(enumerate(image_filenames)):
         if i >= n_imgs:
             break
 
         n = int(fn.split(".png")[0].split("_")[1])
-        filename = filename_start + f"_{n}.png"
+        filename = fn
         file_path = img_folder / filename
 
         occupancy_path = occupancy_folder / filename
@@ -212,8 +221,13 @@ def _convert_all_imgs_to_terra(
             destination_folder_actions = destination_folder / "actions"
             destination_folder_actions.mkdir(parents=True, exist_ok=True)
             np.save(destination_folder_actions / f"img_{i + 1}", actions_terra)
-    if copy_metadata:
-        utils.copy_and_increment_filenames(str(metadata_folder), str(destination_folder_metadata))
+        if copy_metadata:
+            source_metadata_path = metadata_folder / f"{filename.split('.png')[0]}.json"
+            destination_metadata_path = destination_folder_metadata / f"trench_{i + 1}.json"
+            with open(source_metadata_path) as json_file:
+                metadata = json.load(json_file)
+            with open(destination_metadata_path, "w") as json_file:
+                json.dump(metadata, json_file)
 
     # Distance maps are required by the reward system (see README "Distance maps").
     # Produce them here so every standalone generator emits a fully-ready Terra
