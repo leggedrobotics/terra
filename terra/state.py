@@ -1373,60 +1373,6 @@ class State(NamedTuple):
                 allowed_on_border,
             ).reshape(-1)
 
-            debug_border_checks = jnp.bool_(
-                getattr(self.env_cfg, "debug_foundation_border_checks", False)
-            )
-
-            def _print_border_checks():
-                active_or_inf = jnp.where(active_segments, angle_diffs, jnp.float32(1e9))
-                nearest_diff_idx = jnp.argmin(active_or_inf)
-                active_dist_or_inf = jnp.where(active_segments, line_dists, jnp.float32(1e9))
-                nearest_dist_idx = jnp.argmin(active_dist_or_inf)
-                allowed_tiles = jnp.sum(
-                    jnp.logical_and(
-                        border_mask.reshape(-1),
-                        allowed_mask,
-                    ).astype(jnp.int32)
-                )
-                jax.debug.print(
-                    (
-                        "[foundation-border] touched={} edges={} allowed_edges={} "
-                        "allowed_tiles={}"
-                    ),
-                    touched_any,
-                    jnp.sum(active_segments.astype(jnp.int32)),
-                    jnp.sum(allowed_segments.astype(jnp.int32)),
-                    allowed_tiles,
-                )
-                jax.debug.print(
-                    (
-                        "[foundation-border] best_align edge={} diff={:.1f}/{:.1f} "
-                        "aligned={} allowed={}"
-                    ),
-                    nearest_diff_idx,
-                    angle_diffs[nearest_diff_idx] * (180.0 / jnp.pi),
-                    tol_values[nearest_diff_idx] * (180.0 / jnp.pi),
-                    alignments[nearest_diff_idx],
-                    allowed_segments[nearest_diff_idx],
-                )
-                jax.debug.print(
-                    (
-                        "[foundation-border] best_prox edge={} dist={:.2f}/{:.2f} "
-                        "base=({:.0f},{:.0f})"
-                    ),
-                    nearest_dist_idx,
-                    line_dists[nearest_dist_idx],
-                    proximity_thr_tiles,
-                    jnp.squeeze(current_pos[0]),
-                    jnp.squeeze(current_pos[1]),
-                )
-                return jnp.int32(0)
-
-            jax.lax.cond(
-                debug_border_checks,
-                _print_border_checks,
-                lambda: jnp.int32(0),
-            )
             return allowed_mask
 
         dig_target = (self.world.target_map.map < 0).astype(jnp.float32)
