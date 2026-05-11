@@ -55,12 +55,16 @@ class GridWorld(NamedTuple):
     # Dummies for wrappers
     static_traversability_base: GridMap = GridMap.dummy_map()
     traversability_mask: GridMap = GridMap.dummy_map()
+    reachability_mask: GridMap = GridMap.dummy_map()
     local_map_target_pos: GridMap = GridMap.dummy_map()
     local_map_target_neg: GridMap = GridMap.dummy_map()
     local_map_action_pos: GridMap = GridMap.dummy_map()
     local_map_action_neg: GridMap = GridMap.dummy_map()
     local_map_dumpability: GridMap = GridMap.dummy_map()
     local_map_obstacles: GridMap = GridMap.dummy_map()
+    local_map_border_workspace: GridMap = GridMap.dummy_map()
+    local_map_edge_alignment_error: GridMap = GridMap.dummy_map()
+    local_map_border_diggable: GridMap = GridMap.dummy_map()
 
     # Additional maps for second agent with "_2" suffix
     traversability_mask_2: GridMap = GridMap.dummy_map()
@@ -111,6 +115,7 @@ class GridWorld(NamedTuple):
         dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
         interaction_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
+        reachability_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=IntLowDim))
         relocation_distance_map = jnp.array(relocation_distance_map_override, dtype=jnp.float32) if relocation_distance_map_override is not None else jnp.zeros_like(target_map.map, dtype=jnp.float32)
         
         world = cls(
@@ -126,6 +131,7 @@ class GridWorld(NamedTuple):
             dumpability_mask_init=dumpability_mask_init_gm,
             last_dig_mask=last_dig_mask,
             interaction_mask=interaction_mask,
+            reachability_mask=reachability_mask,
             relocation_distance_map=relocation_distance_map,
         )
 

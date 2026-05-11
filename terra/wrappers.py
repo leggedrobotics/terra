@@ -14,7 +14,73 @@ from terra.settings import IntLowDim
 
 class TraversabilityMaskWrapper:
     @staticmethod
-    def wrap(state: State) -> State:
+    def _downsample_or_factor2(mask: Array) -> Array:
+        h, w = mask.shape
+        h2 = h // 2
+        w2 = w // 2
+        trimmed = mask[: 2 * h2, : 2 * w2]
+        return trimmed.reshape(h2, 2, w2, 2).any(axis=(1, 3))
+
+    @staticmethod
+    def _upsample_nearest_factor2(mask: Array, out_h: int, out_w: int) -> Array:
+        up = jnp.repeat(jnp.repeat(mask, 2, axis=0), 2, axis=1)
+        return up[:out_h, :out_w]
+
+    @staticmethod
+    def _inflate_blocked(blocked: Array, radius: int) -> Array:
+        radius = jnp.maximum(jnp.int32(radius), 0)
+
+        def _dilate_once(x):
+            p = jnp.pad(x, 1, mode="constant", constant_values=False)
+            return (
+                p[1:-1, 1:-1]
+                | p[:-2, 1:-1]
+                | p[2:, 1:-1]
+                | p[1:-1, :-2]
+                | p[1:-1, 2:]
+                | p[:-2, :-2]
+                | p[:-2, 2:]
+                | p[2:, :-2]
+                | p[2:, 2:]
+            )
+
+        def _body(_, x):
+            return _dilate_once(x)
+
+        return jax.lax.fori_loop(0, radius, _body, blocked)
+
+    @staticmethod
+    def _build_reachability_mask(passable: Array, start_mask: Array) -> Array:
+        start = jnp.logical_and(passable, start_mask)
+        frontier = start
+        visited = start
+        max_steps = passable.shape[0] * passable.shape[1]
+
+        def _expand(n):
+            p = jnp.pad(n, 1, mode="constant", constant_values=False)
+            return (
+                p[:-2, 1:-1]
+                | p[2:, 1:-1]
+                | p[1:-1, :-2]
+                | p[1:-1, 2:]
+            )
+
+        def _step(carry):
+            step_i, fr, vis = carry
+            nbr = _expand(fr)
+            new_fr = jnp.logical_and(jnp.logical_and(nbr, passable), jnp.logical_not(vis))
+            vis2 = jnp.logical_or(vis, new_fr)
+            return (step_i + 1, new_fr, vis2)
+
+        def _cond(carry):
+            step_i, fr, _ = carry
+            return jnp.logical_and(step_i < max_steps, jnp.any(fr))
+
+        _, _, visited = jax.lax.while_loop(_cond, _step, (jnp.int32(0), frontier, visited))
+        return visited.astype(IntLowDim)
+
+    @staticmethod
+    def wrap(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
         """
         Encodes the traversability mask in GridWorld.
 
@@ -137,12 +203,68 @@ class TraversabilityMaskWrapper:
         static_base = state.world.static_traversability_base.map
         tm = jnp.where(static_base == 1, static_base, traversability_mask)
 
+        # Optional global reachability channel (from current agent footprint),
+        # with inflated blocked-space to account for excavator clearance.
+        def _compute_reachability():
+            current_idx = state.agent.current_agent
+            cur = jax.lax.switch(
+                current_idx,
+                [
+                    lambda: state.agent.agent_states[0],
+                    lambda: state.agent.agent_states[1],
+                    lambda: state.agent.agent_states[2],
+                    lambda: state.agent.agent_states[3],
+                ],
+            )
+            cur_corners = state._get_agent_corners(
+                cur.pos_base,
+                cur.angle_base,
+                state.env_cfg.agent.width,
+                state.env_cfg.agent.height,
+            )
+            current_agent_mask = compute_polygon_mask(cur_corners, map_width, map_height)
+            blocked = tm == 1
+            ds = jnp.int32(getattr(state.env_cfg, "reachability_downsample_factor", 1))
+
+            def _full_res():
+                inflated = TraversabilityMaskWrapper._inflate_blocked(
+                    blocked, getattr(state.env_cfg, "reachability_inflation_tiles", 3)
+                )
+                passable = jnp.logical_not(inflated)
+                return TraversabilityMaskWrapper._build_reachability_mask(passable, current_agent_mask)
+
+            def _downsampled():
+                blocked_ds = TraversabilityMaskWrapper._downsample_or_factor2(blocked)
+                start_ds = TraversabilityMaskWrapper._downsample_or_factor2(current_agent_mask)
+                passable_ds = jnp.logical_not(blocked_ds)
+                reach_ds = TraversabilityMaskWrapper._build_reachability_mask(passable_ds, start_ds).astype(jnp.bool_)
+                reach_up = TraversabilityMaskWrapper._upsample_nearest_factor2(
+                    reach_ds, map_width, map_height
+                )
+                return reach_up.astype(IntLowDim)
+
+            use_ds2 = ds == 2
+            return jax.lax.cond(use_ds2, _downsampled, _full_res)
+
+        should_update_reachability = jnp.logical_and(
+            jnp.bool_(getattr(state.env_cfg, "enable_reachability_obs", False)),
+            update_reachability,
+        )
+        reachability_mask = jax.lax.cond(
+            should_update_reachability,
+            _compute_reachability,
+            lambda: state.world.reachability_mask.map.astype(IntLowDim),
+        )
+
         return state._replace(
             # increase number of steps as well
             # env_steps=state.env_steps + 1,
             world=state.world._replace(
             traversability_mask=state.world.traversability_mask._replace(
                 map=tm.astype(IntLowDim)
+            ),
+            reachability_mask=state.world.reachability_mask._replace(
+                map=reachability_mask.astype(IntLowDim)
             ),
             interaction_mask=state.world.interaction_mask._replace(
                 map=interaction_mask.astype(jnp.bool_)
@@ -370,6 +492,42 @@ class LocalMapWrapper:
         local_map_obstacles = LocalMapWrapper._wrap_with_masks(
             state, obstacle_obs_mask, local_cartesian_masks, current_arm_angle
         )
+        border_mask = state._get_foundation_border_mask().astype(jnp.float32)
+        local_map_border_workspace = LocalMapWrapper._wrap_with_masks(
+            state, border_mask, local_cartesian_masks, current_arm_angle
+        )
+
+        dig_target = (state.world.target_map.map < 0).astype(jnp.float32)
+        kernel_dx = jnp.array([[-1.0, 0.0, 1.0]], dtype=jnp.float32)
+        kernel_dy = jnp.array([[-1.0], [0.0], [1.0]], dtype=jnp.float32)
+        grad_x = jax.scipy.signal.convolve2d(
+            dig_target, kernel_dx, mode="same", boundary="fill", fillvalue=0
+        )
+        grad_y = jax.scipy.signal.convolve2d(
+            dig_target, kernel_dy, mode="same", boundary="fill", fillvalue=0
+        )
+        normal_angle = jnp.arctan2(grad_y, grad_x)
+        edge_angle = (normal_angle + (jnp.pi / 2.0) + jnp.pi) % (2.0 * jnp.pi) - jnp.pi
+        arm_angle = jnp.squeeze(state._get_arm_angle_rad())
+        angle_diff = jnp.abs((edge_angle - arm_angle + jnp.pi) % (2.0 * jnp.pi) - jnp.pi)
+        angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
+        edge_alignment_error_map = angle_diff * border_mask
+        local_map_edge_alignment_error = LocalMapWrapper._wrap_with_masks(
+            state, edge_alignment_error_map, local_cartesian_masks, current_arm_angle
+        )
+
+        workspace_mask = local_cartesian_masks[current_arm_angle].reshape(
+            state.world.height, state.world.width
+        )
+        border_allowed_mask = state._get_foundation_border_alignment_mask(
+            workspace_mask.reshape(-1)
+        ).reshape(state.world.height, state.world.width)
+        border_diggable_map = jnp.logical_and(border_mask > 0, border_allowed_mask).astype(
+            jnp.float32
+        )
+        local_map_border_diggable = LocalMapWrapper._wrap_with_masks(
+            state, border_diggable_map, local_cartesian_masks, current_arm_angle
+        )
 
         state = state._replace(
             world=state.world._replace(
@@ -390,6 +548,15 @@ class LocalMapWrapper:
                 ),
                 local_map_obstacles=state.world.local_map_obstacles._replace(
                     map=local_map_obstacles
+                ),
+                local_map_border_workspace=state.world.local_map_border_workspace._replace(
+                    map=local_map_border_workspace
+                ),
+                local_map_edge_alignment_error=state.world.local_map_edge_alignment_error._replace(
+                    map=local_map_edge_alignment_error
+                ),
+                local_map_border_diggable=state.world.local_map_border_diggable._replace(
+                    map=local_map_border_diggable
                 ),
             )
         )

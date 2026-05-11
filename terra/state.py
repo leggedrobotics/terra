@@ -1430,7 +1430,7 @@ class State(NamedTuple):
         Returns:
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
-        dig_portion_radius = self.env_cfg.agent.move_tiles
+        dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
         tile_size = self.env_cfg.tile_size
 
         max_agent_dim = jnp.max(
@@ -2846,8 +2846,32 @@ class State(NamedTuple):
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
         )
-        
-        return dig_reward + dig_on_dump_penalty + dig_wrong_reward
+
+        # Edge-specific shaping: reward correctly dug tiles that belong to the
+        # inner foundation border band (if present). This is disabled by default
+        # via rewards.dig_edge_bonus = 0.0 to keep backward compatibility.
+        old_action = self.world.action_map.map
+        new_action = new_state.world.action_map.map
+        target = self.world.target_map.map
+        border_mask = self._get_foundation_border_mask()
+
+        newly_dug_required = jnp.logical_and(
+            jnp.logical_and(target < 0, old_action >= 0),
+            new_action < 0,
+        )
+        edge_dug_count = jnp.sum(
+            jnp.logical_and(newly_dug_required, border_mask).astype(jnp.float32)
+        )
+        enforce_edge_alignment = jnp.bool_(
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+        )
+        edge_bonus = jax.lax.cond(
+            enforce_edge_alignment,
+            lambda: edge_dug_count * self.env_cfg.rewards.dig_edge_bonus,
+            lambda: jnp.float32(0.0),
+        )
+
+        return dig_reward + dig_on_dump_penalty + dig_wrong_reward + edge_bonus
 
     def _handle_rewards_do(
         self, new_state: "State", action: TrackedActionType
@@ -3557,7 +3581,7 @@ class State(NamedTuple):
             - dig_mask: (N, ) Array of bools, where True means dig here
         """
         # Use same radius as excavator
-        dig_portion_radius = self.env_cfg.agent.move_tiles  # Same as excavator
+        dig_portion_radius = self.env_cfg.agent.dig_radius_tiles  # Same as excavator workspace radius
         tile_size = self.env_cfg.tile_size
 
         max_agent_dim = jnp.max(
@@ -3798,7 +3822,7 @@ class State(NamedTuple):
                 )
 
                 # Bonus for being within excavator working range (reduced to prevent monopolization)
-                dig_portion_radius = self.env_cfg.agent.move_tiles
+                dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
                 tile_size = self.env_cfg.tile_size
                 max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
                 min_distance_from_agent = tile_size * max_agent_dim

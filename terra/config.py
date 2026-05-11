@@ -55,9 +55,8 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 6  #6 number of tiles of progress for every move action
-    #  Note: move_tiles is also used as radius of excavation
-    #       (we dig as much as move_tiles in the radial distance)
+    move_tiles: int = 5  # number of tiles of progress for every move action
+    dig_radius_tiles: int = 6  # radial excavation/workspace reach in tiles
 
     dig_depth: int = 1  # how much every dig action digs
 
@@ -83,6 +82,7 @@ class Rewards(NamedTuple):
     dump_wrong: float  # given if loaded stayed the same or tried to dump in non-dumpable tile
 
     dig_correct: float  # dig where the target map is negative, and not more than required
+    dig_edge_bonus: float  # bonus per correctly dug border tile in foundation targets
     dump_correct: float  # dump where the target map is positive
 
     # Skid steer specific rewards
@@ -109,6 +109,7 @@ class Rewards(NamedTuple):
             dig_wrong=-0.25,
             dump_wrong=-1.0,
             dig_correct=0.6,  
+            dig_edge_bonus=1.0,
             dump_correct=1.0,
 
             # Skid steer specific rewards
@@ -136,6 +137,7 @@ class Rewards(NamedTuple):
             dig_wrong=-0.3,
             dump_wrong=-0.3,
             dig_correct=0.0,
+            dig_edge_bonus=0.0,
             dump_correct=0.0,
             # Skid steer specific rewards (more sparse)
             skid_move=0.0,  # Remove positive movement reward to discourage random movement
@@ -201,12 +203,15 @@ class EnvConfig(NamedTuple):
     transport_relocate_mult: float = 1.5  # Multiplier for transport (truck/skidsteer) relocation rewards
 
     # Foundation border digging alignment constraints (env-enforced)
-    enforce_foundation_border_alignment: bool = True
+    enforce_foundation_border_alignment: bool = False
     foundation_border_width_tiles: int = 2
     foundation_border_proximity_tiles: float = 3.5
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
     foundation_border_diag_tolerance_rad: float = 0.436  # ~25deg
     debug_foundation_border_checks: bool = False
+    enable_reachability_obs: bool = True
+    reachability_inflation_tiles: int = 3 # not used if downsample factor != 1
+    reachability_downsample_factor: int = 2
 
     @classmethod
     def new(cls):

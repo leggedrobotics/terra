@@ -8,6 +8,7 @@ import numpy as np
 from jax import Array
 
 from terra.actions import Action
+from terra.actions import TrackedActionType
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
@@ -135,8 +136,8 @@ class TerraEnv(NamedTuple):
         )
 
     @staticmethod
-    def wrap_state(state: State) -> State:
-        state = TraversabilityMaskWrapper.wrap(state)
+    def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
+        state = TraversabilityMaskWrapper.wrap(state, update_reachability=update_reachability)
         state = LocalMapWrapper.wrap(state)
         return state
 
@@ -220,7 +221,12 @@ class TerraEnv(NamedTuple):
     ) -> TimeStep:
         new_state = state._step(action)
         reward, reward_components = state._get_reward(new_state, action)
-        new_state = self.wrap_state(new_state)
+        # Recompute reachability only for effective DO actions that changed terrain.
+        # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
+        is_do = action.action[0] == TrackedActionType.DO
+        terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
+        update_reachability = jnp.logical_and(is_do, terrain_changed)
+        new_state = self.wrap_state(new_state, update_reachability=update_reachability)
         obs = self._state_to_obs_dict(new_state)
         #print agent agentstate_2
         # jax.debug.print(
@@ -345,6 +351,9 @@ class TerraEnv(NamedTuple):
             "local_map_target_pos": state.world.local_map_target_pos.map,
             "local_map_dumpability": state.world.local_map_dumpability.map,
             "local_map_obstacles": state.world.local_map_obstacles.map,
+            "local_map_border_workspace": state.world.local_map_border_workspace.map,
+            "local_map_edge_alignment_error": state.world.local_map_edge_alignment_error.map,
+            "local_map_border_diggable": state.world.local_map_border_diggable.map,
             # "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
             # "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
             # "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
@@ -352,6 +361,7 @@ class TerraEnv(NamedTuple):
             # "local_map_dumpability_2": state.world.local_map_dumpability_2.map,
             # "local_map_obstacles_2": state.world.local_map_obstacles_2.map,
             "traversability_mask": state.world.traversability_mask.map,
+            "reachability_mask": state.world.reachability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
             "agent_width": state.agent.width,
