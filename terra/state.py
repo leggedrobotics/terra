@@ -14,6 +14,7 @@ from terra.actions import WheeledActionType
 from terra.agent import Agent
 from terra.agent import AgentState
 from terra.config import AgentConfig
+from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -206,37 +207,53 @@ class State(NamedTuple):
         TrackedAction type --> 0
         WheeledAction type --> 1
         """
+        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
+        is_wheeled = current_action_type == 1
+
+        def _move_forward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_forward_wheeled,
+                self._handle_move_forward,
+            )
+
+        def _move_backward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_backward_wheeled,
+                self._handle_move_backward,
+            )
+
+        def _turn_left():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_left,
+                self._handle_clock,
+            )
+
+        def _turn_right():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_right,
+                self._handle_anticlock,
+            )
+
         handlers_list = [
-            # Tracked
-            self._handle_move_forward,
-            self._handle_move_backward,
-            self._handle_clock,
-            self._handle_anticlock,
-            self._handle_cabin_clock,
-            self._handle_cabin_anticlock,
-            self._handle_do,
-            self._do_nothing,
-            # Wheeled
-            self._handle_move_forward_wheeled,
-            self._handle_move_backward_wheeled,
-            self._handle_turn_wheels_left,
-            self._handle_turn_wheels_right,
+            _move_forward,
+            _move_backward,
+            _turn_left,
+            _turn_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
             self._do_nothing,
         ]
-        # Route by the current agent's movement mechanism (action_type), not the incoming action.type
-        # 0 = tracked handlers block, 1 = wheeled handlers block
-        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
-        cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
-        offset_idx = (cumulative_len @ jax.nn.one_hot(current_action_type, 2)).astype(IntLowDim)
 
         action_idx = jnp.squeeze(action.action)
         state = jax.lax.cond(
-            jnp.logical_or(action_idx == -1, action_idx == 7),
+            action_idx == -1,
             self._do_nothing,
-            lambda: jax.lax.switch(offset_idx + action_idx, handlers_list),
+            lambda: jax.lax.switch(action_idx, handlers_list),
         )
         state = jax.lax.cond(
             turn, 
@@ -2070,7 +2087,7 @@ class State(NamedTuple):
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
         flat_action_map = self.world.action_map.map.reshape(-1)
-        dig_mask_cone = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        dig_mask_cone = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
         # Prefer boolean any over integer sum for compile-time efficiency
         has_dumped_dirt_in_cone = jnp.any((self.world.action_map.map > 0) & dig_mask_cone)
         ambiguity_mask_dig_movesoil = jax.lax.cond(
@@ -3115,15 +3132,15 @@ class State(NamedTuple):
     def _get_reward(self, new_state: "State", action_handler: Action):
         action = action_handler.action
 
-        reward = 0.0
+        reward = jnp.float32(0.0)
         # Components for W&B logging - generalized to MAX_AGENTS per-agent rewards
         MAX_AGENTS = 4
         components = {
             "agent_rewards": jnp.zeros((MAX_AGENTS,), dtype=jnp.float32),
-            "terminal": 0.0,
-            "trench": 0.0,
-            "existence": 0.0,
-            "num_agents": self.agent.num_agents.astype(jnp.int32),
+            "terminal": jnp.float32(0.0),
+            "trench": jnp.float32(0.0),
+            "existence": jnp.float32(0.0),
+            "num_agents": jnp.asarray(self.agent.num_agents, dtype=jnp.int32),
             "agent_active": self.agent.agent_active.astype(jnp.int32),
         }
 
@@ -3142,6 +3159,7 @@ class State(NamedTuple):
         reward_functions = [get_excavator_rewards, get_truck_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
+        agent_reward = jnp.asarray(agent_reward, dtype=jnp.float32)
         
         reward += agent_reward
         
@@ -3427,119 +3445,92 @@ class State(NamedTuple):
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 
-    def _get_action_mask_tracked(self):
-        # forward
-        new_state = self._handle_move_forward()
-        bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+    def _get_do_action_valid(
+        self,
+        raw_cone: Array,
+        legal_dig: Array,
+    ) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        is_loaded = cur.loaded[0] > 0
+
+        blocked_by_obstacle = jnp.any(raw_cone & (self.world.padding_mask.map == 1))
+        can_dig = jnp.any(legal_dig) & jnp.logical_not(blocked_by_obstacle)
+
+        # Keep DO masking conservative. Dump/transfer profitability and edge
+        # productivity are contextual and expensive; the policy should learn
+        # them from observations/rewards. Mask only the cheap impossible cases:
+        # empty trucks cannot DO, unloaded excavators need at least one legal dig.
+        excavator_do = jnp.where(is_loaded, jnp.bool_(True), can_dig)
+        truck_do = is_loaded
+        return jnp.where(
+            is_skid_steer,
+            jnp.bool_(True),
+            jnp.where(is_truck, truck_do, excavator_do),
         )
 
-        # backward
-        new_state = self._handle_move_backward()
-        bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+    def _get_tracked_base_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        is_loaded = cur.loaded[0] > 0
+        return jnp.logical_or(
+            jnp.logical_or(is_skid_steer, is_truck),
+            jnp.logical_not(is_loaded),
         )
 
-        # clock
-        new_state = self._handle_clock()
-        bool_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
-        )
+    def _get_wheeled_base_move_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.loaded[0] == 0
 
-        # anticlock
-        new_state = self._handle_anticlock()
-        bool_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
-        )
+    def _get_cabin_rotation_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        return jnp.logical_not(jnp.logical_or(is_skid_steer, is_truck))
 
-        # cabin clock
-        new_state = self._handle_cabin_clock()
-        bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
+    def _get_wheel_turn_left_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.wheel_angle[0] < self.env_cfg.agent.max_wheel_angle
 
-        # cabin clock
-        new_state = self._handle_cabin_anticlock()
-        bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
+    def _get_wheel_turn_right_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.wheel_angle[0] > -self.env_cfg.agent.max_wheel_angle
 
-        # do
-        new_state = self._handle_do()
-        bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
-        )
+    def _get_action_mask_tracked(self, do_valid: Array):
+        cabin_valid = self._get_cabin_rotation_valid()
+        base_valid = self._get_tracked_base_valid()
 
         action_mask = jnp.array(
             [
-                bool_forward,
-                bool_backward,
-                bool_clock,
-                bool_anticlock,
-                bool_cabin_clock,
-                bool_cabin_anticlock,
-                bool_do,
+                base_valid,
+                base_valid,
+                base_valid,
+                base_valid,
+                cabin_valid,
+                cabin_valid,
+                do_valid,
+                jnp.bool_(True),
             ],
             dtype=jnp.bool_,
         )
         return action_mask
 
-    def _get_action_mask_wheeled(self):
-        # forward
-        new_state = self._handle_move_forward()
-        bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
-        )
-
-        # backward
-        new_state = self._handle_move_backward()
-        bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
-        )
-
-        # turn wheels left
-        new_state = self._handle_turn_wheels_left()
-        bool_turn_wheels_left = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
-        )
-
-        # turn wheels right
-        new_state = self._handle_turn_wheels_right()
-        bool_turn_wheels_right = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
-        )
-
-        # cabin clock
-        new_state = self._handle_cabin_clock()
-        bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
-
-        # cabin anticlock
-        new_state = self._handle_cabin_anticlock()
-        bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
-
-        # do
-        new_state = self._handle_do()
-        bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
-        )
+    def _get_action_mask_wheeled(self, do_valid: Array):
+        cabin_valid = self._get_cabin_rotation_valid()
+        base_move_valid = self._get_wheeled_base_move_valid()
 
         action_mask = jnp.array(
             [
-                bool_forward,
-                bool_backward,
-                bool_turn_wheels_left,
-                bool_turn_wheels_right,
-                bool_cabin_clock,
-                bool_cabin_anticlock,
-                bool_do,
+                base_move_valid,
+                base_move_valid,
+                self._get_wheel_turn_left_valid(),
+                self._get_wheel_turn_right_valid(),
+                cabin_valid,
+                cabin_valid,
+                do_valid,
+                jnp.bool_(True),
             ],
             dtype=jnp.bool_,
         )
@@ -3547,11 +3538,16 @@ class State(NamedTuple):
 
     # Removed specialized masks; we apply agent-type cabin masking after movement mask
 
-    def _get_action_mask(self, dummy_action: Action):
+    def _get_action_mask(self, dummy_action: Action, do_valid: Array):
         """
-        Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
+        Return a coarse primitive-action availability mask.
+
+        This masks only cheap, guaranteed no-op cases from agent type, action
+        type, load state, and steering limits. Collision, bounds, and
+        reward-productivity checks stay in the environment transition/reward.
         """
         num_actions = dummy_action.get_num_actions()
+        assert num_actions == 8, "Terra action masking assumes the 8-action primitive space"
         
         # Check action type from the current agent state (not agent type)
         current_action_type = self._get_current_agent_state().action_type[0]
@@ -3559,10 +3555,10 @@ class State(NamedTuple):
         
         # Use JAX switch instead of if statements for JIT compatibility
         def get_tracked_mask():
-            return self._get_action_mask_tracked()
+            return self._get_action_mask_tracked(do_valid=do_valid)
         
         def get_wheeled_mask():
-            return self._get_action_mask_wheeled()
+            return self._get_action_mask_wheeled(do_valid=do_valid)
         
         # skidsteer handled by generic cabin disable stage
         
@@ -3590,16 +3586,87 @@ class State(NamedTuple):
         )
 
         action_mask = action_mask[:num_actions]
+        action_mask = action_mask.at[TrackedActionType.DO_NOTHING].set(True)
         return action_mask
 
+    def _get_edge_affordance_features(
+        self,
+        action_mask: Array,
+        raw_cone: Array,
+        legal_dig: Array,
+    ) -> Array:
+        """
+        Low-dimensional diagnostics for the hard foundation-edge dig rule.
+        Values are normalized counts/booleans so they can be consumed directly by
+        the policy and critic without changing map-channel encoders.
+        """
+        border_mask = self._get_foundation_border_mask()
+        remaining_dig = jnp.logical_and(
+            self.world.target_map.map < 0,
+            self.world.action_map.map >= 0,
+        )
+
+        map_area = jnp.maximum(jnp.float32(self.world.width * self.world.height), 1.0)
+        cone_area = jnp.maximum(jnp.sum(raw_cone.astype(jnp.float32)), 1.0)
+        remaining_edge = jnp.logical_and(remaining_dig, border_mask)
+        remaining_core = jnp.logical_and(remaining_dig, jnp.logical_not(border_mask))
+        legal_remaining = jnp.logical_and(legal_dig, remaining_dig)
+        raw_edge_in_cone = jnp.logical_and(raw_cone, remaining_edge)
+        legal_edge_in_cone = jnp.logical_and(legal_dig, raw_edge_in_cone)
+        blocked_edge_in_cone = jnp.logical_and(
+            raw_edge_in_cone,
+            jnp.logical_not(legal_dig),
+        )
+
+        completion = self._calculate_completion_percentage(
+            self.world.action_map.map,
+            self.world.target_map.map,
+        )
+        remaining_edge_count = jnp.sum(remaining_edge.astype(jnp.float32))
+        remaining_core_count = jnp.sum(remaining_core.astype(jnp.float32))
+        remaining_total = jnp.maximum(remaining_edge_count + remaining_core_count, 1.0)
+        remaining_edge_share = remaining_edge_count / remaining_total
+
+        return jnp.array(
+            [
+                action_mask[TrackedActionType.DO].astype(jnp.float32),
+                jnp.sum(action_mask.astype(jnp.float32)) / jnp.float32(action_mask.shape[0]),
+                remaining_edge_count / map_area,
+                remaining_core_count / map_area,
+                jnp.sum(raw_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(legal_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(blocked_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(legal_remaining.astype(jnp.float32)) / cone_area,
+                remaining_edge_share,
+                jnp.asarray(completion, dtype=jnp.float32),
+            ],
+            dtype=jnp.float32,
+        )
+
+    def _get_action_mask_and_edge_features(self, dummy_action: Action) -> tuple[Array, Array]:
+        raw_cone = (
+            self._build_dig_dump_cone()
+            .reshape(self.world.action_map.map.shape)
+            .astype(jnp.bool_)
+        )
+        legal_dig = self._mask_out_wrong_dig_tiles(raw_cone.reshape(-1)).reshape(
+            self.world.action_map.map.shape
+        )
+        do_valid = self._get_do_action_valid(raw_cone, legal_dig)
+        action_mask = self._get_action_mask(dummy_action, do_valid=do_valid)
+        edge_features = self._get_edge_affordance_features(
+            action_mask=action_mask,
+            raw_cone=raw_cone,
+            legal_dig=legal_dig,
+        )
+        return action_mask, edge_features
+
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
-        # Keep infos cheap: target_tiles is already materialized by the wrapper as
-        # interaction_mask, and action_mask is currently informational only.
         target_tiles_mask = self.world.interaction_mask.map.reshape(-1)
+        action_mask, edge_features = self._get_action_mask_and_edge_features(dummy_action)
         infos = {
-            "action_mask": jnp.zeros(
-                (dummy_action.get_num_actions(),), dtype=jnp.bool_
-            ),
+            "action_mask": action_mask,
+            "edge_features": edge_features,
             "target_tiles": target_tiles_mask,
             "task_done": task_done,
         }

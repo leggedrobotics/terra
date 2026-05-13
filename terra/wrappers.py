@@ -314,15 +314,12 @@ class LocalMapWrapper:
         
         agent_state = get_agent_state(agent_idx)
         
-        current_pos_idx = state._get_current_pos_vector_idx(
-            pos_base=agent_state.pos_base,
-            map_height=state.env_cfg.maps.edge_length_px,
-        )
         map_global_coords = state._map_to_flattened_global_coords(
             state.world.width, state.world.height, state.env_cfg.tile_size
         )
-        current_pos = state._get_current_pos_from_flattened_map(
-            map_global_coords, current_pos_idx
+        current_pos = (
+            agent_state.pos_base.astype(jnp.float32) * state.env_cfg.tile_size
+            + state.env_cfg.tile_size / 2
         )
 
         # Get the cumsum of the action height map in cyl coords, for every of [r, theta] portion of local space
