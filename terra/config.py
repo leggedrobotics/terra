@@ -109,7 +109,7 @@ class Rewards(NamedTuple):
             dig_wrong=-0.25,
             dump_wrong=-1.0,
             dig_correct=0.6,  
-            dig_edge_bonus=1.0,
+            dig_edge_bonus=0.8,
             dump_correct=1.0,
 
             # Skid steer specific rewards
@@ -209,7 +209,7 @@ class EnvConfig(NamedTuple):
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
     foundation_border_diag_tolerance_rad: float = 0.436  # ~25deg
     debug_foundation_border_checks: bool = False
-    enable_reachability_obs: bool = True
+    enable_reachability_obs: bool = False
     reachability_inflation_tiles: int = 3 # not used if downsample factor != 1
     reachability_downsample_factor: int = 2
 
@@ -232,7 +232,7 @@ class CurriculumGlobalConfig(NamedTuple):
     levels = [
 
         {
-            "maps_path": "foundations_real_ring", 
+            "maps_path": "foundations_rectangles_real_ring", 
             "max_steps_in_episode": 200,
             "rewards_type": RewardsType.DENSE,
             "apply_trench_rewards": False,

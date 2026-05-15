@@ -191,9 +191,9 @@ def main():
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(0, 1)))(jnp.arange(n_envs))  # Excavator+Tracked, Truck+Wheeled
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 2), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, SkidSteer+Wheeled
     # env_cfgs = jax.vmap(lambda x: EnvConfig(agent_types=(0, 1), action_types=(1, 1)))(jnp.arange(n_envs))  # Excavator+Wheeled, Truck+Wheeled
-    env_cfgs = jax.vmap(
-        lambda x: EnvConfig.new()._replace(debug_foundation_border_checks=True)
-    )(jnp.arange(n_envs))  # Default: (0,2) agents, (0,0) actions
+    env_cfgs = jax.vmap(lambda x: EnvConfig.new())(
+        jnp.arange(n_envs)
+    )  # Default: (0,2) agents, (0,0) actions
     rng, _rng = jax.random.split(rng)
     _rng = _rng[None]
     timestep = env.reset(env_cfgs, _rng)

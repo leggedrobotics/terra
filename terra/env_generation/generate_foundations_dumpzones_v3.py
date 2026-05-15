@@ -24,6 +24,9 @@ from terra.env_generation.convert_to_terra import (
 )
 import terra.env_generation.convert_to_terra as convert_to_terra
 from terra.env_generation.utils import _get_img_mask, color_dict
+from terra.env_generation.foundation_border_metadata import (
+    build_foundation_border_metadata,
+)
 
 # Define package directory at module level
 PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -429,6 +432,7 @@ def create_foundations_hybrid_standalone(
             
             # Create a mask for foundation buildings (non-neutral areas)
             foundation_mask = np.all(img_terra_pad != color_dict["neutral"], axis=-1) & np.all(img_terra_pad != color_dict["digging"], axis=-1)
+            dig_mask = np.all(img_terra_pad == color_dict["digging"], axis=-1)
             
             # Create exactly 1 dump zone with no overlaps
             img_terra_pad, dump_cumulative_mask = create_single_dump_zone(
@@ -492,6 +496,7 @@ def create_foundations_hybrid_standalone(
             # Modify metadata to include curriculum level information
             metadata_with_curriculum = metadata.copy()
             metadata_with_curriculum["curriculum_level"] = curriculum_level
+            metadata_with_curriculum.update(build_foundation_border_metadata(dig_mask))
 
             with open(
                 Path(curriculum_level, "metadata", f"trench_{n}.json"), "w"

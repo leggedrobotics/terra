@@ -1208,16 +1208,34 @@ class State(NamedTuple):
             getattr(self.env_cfg, "foundation_border_width_tiles", 2)
         )
         border_width = jnp.maximum(border_width, 0)
-        kernel = jnp.ones((3, 3), dtype=jnp.float32)
-
         def _erode_once(mask: Array) -> Array:
+            # Support both [H, W] and batched [B, H, W] masks.
+            # Use reduce_window instead of convolve2d to avoid rank-mismatch issues
+            # in traced/batched XLA paths.
             mask_f = mask.astype(jnp.float32)
-            all_neighbors_inside = (
-                jax.scipy.signal.convolve2d(
-                    mask_f, kernel, mode="same", boundary="fill", fillvalue=0
+            if mask.ndim == 2:
+                neigh_sum = jax.lax.reduce_window(
+                    mask_f,
+                    jnp.float32(0.0),
+                    jax.lax.add,
+                    window_dimensions=(3, 3),
+                    window_strides=(1, 1),
+                    padding="SAME",
                 )
-                == 9.0
-            )
+            elif mask.ndim == 3:
+                neigh_sum = jax.lax.reduce_window(
+                    mask_f,
+                    jnp.float32(0.0),
+                    jax.lax.add,
+                    window_dimensions=(1, 3, 3),
+                    window_strides=(1, 1, 1),
+                    padding="SAME",
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported dig_target rank {mask.ndim}; expected 2D or 3D."
+                )
+            all_neighbors_inside = neigh_sum == 9.0
             return jnp.logical_and(mask, all_neighbors_inside)
 
         def _erode_step(_, mask):
@@ -1231,7 +1249,20 @@ class State(NamedTuple):
         Border tiles must be dug with arm aligned to edge direction.
         Uses stricter tolerance for horizontal/vertical edges, looser for diagonal edges.
         """
-        border_mask = self._get_foundation_border_mask()
+        border_mask_full = self._get_foundation_border_mask()
+        target_map_full = self.world.target_map.map
+        # Border-alignment checks are geometric and 2D; if maps are batched
+        # ([B,H,W]), use the first spatial slice consistently.
+        border_mask = (
+            border_mask_full[0]
+            if border_mask_full.ndim == 3
+            else border_mask_full
+        )
+        target_map_2d = (
+            target_map_full[0]
+            if target_map_full.ndim == 3
+            else target_map_full
+        )
         border_any = jnp.any(border_mask)
         arm_angle = jnp.squeeze(self._get_arm_angle_rad())
         max_border_axes = self.world.foundation_border_axes.shape[0]
@@ -1246,7 +1277,7 @@ class State(NamedTuple):
             # current workspace cone. Each border tile is checked against its own
             # nearest touched side, which lets corner workspaces dig multiple
             # correctly aligned/proximal edges at once.
-            rows, cols = self.world.target_map.map.shape
+            rows, cols = target_map_2d.shape
             rr = jnp.repeat(jnp.arange(rows)[:, None], cols, axis=1).astype(jnp.float32)
             cc = jnp.repeat(jnp.arange(cols)[None, :], rows, axis=0).astype(jnp.float32)
             workspace_mask = workspace_mask_flat.reshape(border_mask.shape)
@@ -1305,7 +1336,7 @@ class State(NamedTuple):
             )
 
             def _check_active_segment(i, carry):
-                allowed_segments, alignments, line_dists, line_dists_direct, angle_diffs, tol_values = carry
+                allowed_segments, alignments, line_dists, angle_diffs, tol_values = carry
                 abc = self.world.foundation_border_axes[i]
                 edge_angle = jnp.arctan2(abc[0], abc[1])
 
@@ -1324,18 +1355,12 @@ class State(NamedTuple):
                 line_dist = jnp.abs(
                     abc[0] * current_pos[1] + abc[1] * current_pos[0] + abc[2]
                 ) / denom
-                line_dist_direct = jnp.abs(
-                    abc[0] * current_pos[0] + abc[1] * current_pos[1] + abc[2]
-                ) / denom
                 close = line_dist <= proximity_thr_tiles
                 allowed = jnp.logical_and(active_segments[i], jnp.logical_and(aligned, close))
                 return (
                     allowed_segments.at[i].set(allowed),
                     alignments.at[i].set(jnp.logical_and(active_segments[i], aligned)),
                     line_dists.at[i].set(jnp.where(active_segments[i], line_dist, jnp.float32(1e9))),
-                    line_dists_direct.at[i].set(
-                        jnp.where(active_segments[i], line_dist_direct, jnp.float32(1e9))
-                    ),
                     angle_diffs.at[i].set(jnp.where(active_segments[i], diff, jnp.float32(1e9))),
                     tol_values.at[i].set(jnp.where(active_segments[i], tol, jnp.float32(0.0))),
                 )
@@ -1343,14 +1368,12 @@ class State(NamedTuple):
             allowed_segments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
             alignments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
             line_dists = jnp.full((max_border_axes,), jnp.float32(1e9))
-            line_dists_direct = jnp.full((max_border_axes,), jnp.float32(1e9))
             angle_diffs = jnp.full((max_border_axes,), jnp.float32(1e9))
             tol_values = jnp.zeros((max_border_axes,), dtype=jnp.float32)
             (
                 allowed_segments,
                 alignments,
                 line_dists,
-                line_dists_direct,
                 angle_diffs,
                 tol_values,
             ) = jax.lax.fori_loop(
@@ -1361,7 +1384,6 @@ class State(NamedTuple):
                     allowed_segments,
                     alignments,
                     line_dists,
-                    line_dists_direct,
                     angle_diffs,
                     tol_values,
                 ),
@@ -1375,7 +1397,7 @@ class State(NamedTuple):
 
             return allowed_mask
 
-        dig_target = (self.world.target_map.map < 0).astype(jnp.float32)
+        dig_target = (target_map_2d < 0).astype(jnp.float32)
         kernel_dx = jnp.array([[-1.0, 0.0, 1.0]], dtype=jnp.float32)
         kernel_dy = jnp.array([[-1.0], [0.0], [1.0]], dtype=jnp.float32)
         grad_x = jax.scipy.signal.convolve2d(
@@ -1670,6 +1692,30 @@ class State(NamedTuple):
         # This ensures soil mechanics don't affect obstacles or non-dumpable areas
         return jnp.logical_and(expanded, validity_mask)
 
+    @staticmethod
+    def _dilate_mask(mask: Array, kernel_size: int = 3) -> Array:
+        """Dilate a 2D mask or a batched [B,H,W] mask with a square window."""
+        mask_f = mask.astype(jnp.float32)
+        if mask.ndim == 2:
+            window_dimensions = (kernel_size, kernel_size)
+            window_strides = (1, 1)
+        elif mask.ndim == 3:
+            window_dimensions = (1, kernel_size, kernel_size)
+            window_strides = (1, 1, 1)
+        else:
+            raise ValueError(f"Unsupported mask rank {mask.ndim}; expected 2D or 3D.")
+        return (
+            jax.lax.reduce_window(
+                mask_f,
+                jnp.float32(0.0),
+                jax.lax.add,
+                window_dimensions=window_dimensions,
+                window_strides=window_strides,
+                padding="SAME",
+            )
+            > 0
+        )
+
     def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
         # Defensive: skip soil mechanics if not 2D
         if action_map.ndim != 2:
@@ -1718,15 +1764,8 @@ class State(NamedTuple):
             base_allowed = jnp.logical_or(
                 self.world.dumpability_mask.map == 0,
                 self.world.target_map.map > 0,
-            ).astype(jnp.float32)
-            kernel = jnp.ones((3, 3), dtype=jnp.float32)
-            dilated = jax.scipy.signal.correlate2d(
-                base_allowed,
-                kernel,
-                mode="same",
-                boundary="fill",
-                fillvalue=0.0,
-            ) > 0
+            )
+            dilated = self._dilate_mask(base_allowed, kernel_size=3)
             return dilated
         
         def _free_roaming_mask():
@@ -2099,15 +2138,7 @@ class State(NamedTuple):
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         new_dumpability_mask = self.world.dumpability_mask_init.map
-        action_mask = (action_map < 0).astype(jnp.float16)
-        kernel = jnp.ones((5, 5), dtype=jnp.float16)
-        action_mask_contoured = jax.scipy.signal.convolve2d(
-            action_mask,
-            kernel,
-            mode="same",
-            boundary="fill",
-            fillvalue=0,
-        )
+        action_mask_contoured = self._dilate_mask(action_map < 0, kernel_size=5)
         return new_dumpability_mask * (action_mask_contoured == 0)
 
     def _handle_dig(self) -> "State":
@@ -2246,12 +2277,15 @@ class State(NamedTuple):
 
         def _attempt_transfer():
             map_shape = self.world.action_map.map.shape
-            dump_mask_2d = dump_mask.reshape(map_shape)
+            dump_mask_map = dump_mask.reshape(map_shape)
+            # Keep transfer geometry strictly 2D for position indexing.
+            dump_mask_2d = (
+                dump_mask_map[0]
+                if dump_mask_map.ndim == 3
+                else dump_mask_map
+            )
             # Tolerance: allow transfer if truck base is within a 1-tile dilation of the cone
-            kernel_3x3 = jnp.ones((3, 3), dtype=jnp.float32)
-            dump_mask_2d_dilated = jax.scipy.signal.correlate2d(
-                dump_mask_2d.astype(jnp.float32), kernel_3x3, mode='same', boundary='fill', fillvalue=0.0
-            ) > 0
+            dump_mask_2d_dilated = self._dilate_mask(dump_mask_2d, kernel_size=3)
 
             # Vectorized candidate detection
             pos_x = jnp.array([
@@ -2867,7 +2901,7 @@ class State(NamedTuple):
         )
         edge_bonus = jax.lax.cond(
             enforce_edge_alignment,
-            lambda: edge_dug_count * self.env_cfg.rewards.dig_edge_bonus,
+            lambda: self.env_cfg.rewards.dig_edge_bonus,  #edge_dug_count *
             lambda: jnp.float32(0.0),
         )
 
@@ -3121,6 +3155,14 @@ class State(NamedTuple):
             new_state.world.action_map.map,
             self.world.target_map.map
         )
+        enforce_border_alignment = jnp.bool_(
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+        )
+        gated_completion = jax.lax.cond(
+            enforce_border_alignment,
+            lambda: self._calculate_edge_inner_min_completion(new_state.world.action_map.map),
+            lambda: completion_percentage,
+        )
         done, done_task = self._is_done(
             new_state.world.action_map.map,
             self.world.target_map.map,
@@ -3128,7 +3170,7 @@ class State(NamedTuple):
         
         terminal_r = jax.lax.cond(
             done,
-            lambda: self._calculate_terminal_reward(completion_percentage),
+            lambda: self._calculate_terminal_reward(gated_completion),
             lambda: 0.0,
         )
         # Divide terminal reward by number of active agents to share credit fairly
@@ -3245,14 +3287,7 @@ class State(NamedTuple):
                 # Get designated dump zones from target_map (target_map > 0)
                 designated_dump_zones = target_map > 0
                 # Create 1-tile buffer around dump zones using morphological dilation (3x3 kernel)
-                kernel_3x3 = jnp.ones((3, 3), dtype=jnp.float32)
-                dump_zones_with_buffer = jax.scipy.signal.correlate2d(
-                    designated_dump_zones.astype(jnp.float32),
-                    kernel_3x3,
-                    mode='same',
-                    boundary='fill',
-                    fillvalue=0.0
-                ) > 0
+                dump_zones_with_buffer = self._dilate_mask(designated_dump_zones, kernel_size=3)
                 
                 # Check total dirt in environment
                 total_dirt = jnp.sum(action_map > 0)
@@ -4058,6 +4093,33 @@ class State(NamedTuple):
         )
         
         return completion_percentage
+
+    def _calculate_edge_inner_min_completion(self, action_map: Array) -> Float:
+        """
+        Completion for terminal gating when foundation border alignment is enforced.
+        Computes dump completion separately on edge and inner regions, then returns
+        min(edge_completion, inner_completion).
+        """
+        target_map = self.world.target_map.map
+        dump_target_mask = target_map > 0
+        border_mask = self._get_foundation_border_mask()
+        edge_dump_mask = jnp.logical_and(dump_target_mask, border_mask)
+        inner_dump_mask = jnp.logical_and(dump_target_mask, jnp.logical_not(border_mask))
+
+        def _region_completion(region_mask: Array) -> Float:
+            target_region = jnp.where(region_mask, target_map, 0.0)
+            action_region = jnp.where(region_mask, jnp.maximum(action_map, 0), 0.0)
+            required = jnp.sum(target_region)
+            matched = jnp.sum(jnp.minimum(action_region, target_region))
+            return jax.lax.cond(
+                required > 0,
+                lambda: matched / jnp.maximum(required, 1e-6),
+                lambda: jnp.float32(1.0),
+            )
+
+        edge_completion = _region_completion(edge_dump_mask)
+        inner_completion = _region_completion(inner_dump_mask)
+        return jnp.minimum(edge_completion, inner_completion)
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
         """
