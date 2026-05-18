@@ -12,6 +12,8 @@ from terra.actions import TrackedActionType
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
+from terra.state import METRIC_COMPONENT_KEYS
+from terra.state import REWARD_COMPONENT_KEYS
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
@@ -116,10 +118,13 @@ class TerraEnv(NamedTuple):
         dummy_info = {
             "action_mask": observations["action_mask"],
             "edge_features": observations["edge_features"],
+            "episode_progress": observations["episode_progress"],
+            "final_observation": observations,
             "target_tiles": jnp.zeros(
                 (state.world.width * state.world.height,), dtype=jnp.bool_
             ),
             "task_done": jnp.zeros((), dtype=jnp.bool_),
+            "timeout_done": jnp.zeros((), dtype=jnp.bool_),
             "reward_components": self._zero_reward_components(state),
         }
 
@@ -134,14 +139,16 @@ class TerraEnv(NamedTuple):
 
     @staticmethod
     def _zero_reward_components(state: State) -> dict[str, Array]:
-        return {
+        components = {
+            key: jnp.float32(0.0)
+            for key in REWARD_COMPONENT_KEYS + METRIC_COMPONENT_KEYS
+        }
+        components.update({
             "agent_rewards": jnp.zeros((4,), dtype=jnp.float32),
-            "terminal": jnp.float32(0.0),
-            "trench": jnp.float32(0.0),
-            "existence": jnp.float32(0.0),
             "agent_active": state.agent.agent_active.astype(jnp.int32),
             "num_agents": jnp.asarray(state.agent.num_agents, dtype=jnp.int32),
-        }
+        })
+        return components
 
     @staticmethod
     def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
@@ -236,15 +243,19 @@ class TerraEnv(NamedTuple):
             update_reachability=update_reachability,
         )
         obs = self._state_to_obs_dict(new_state)
-        done, task_done = state._is_done(
+        done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )
+        timeout_done = jnp.logical_and(done, jnp.logical_not(task_done))
         infos = {
             "action_mask": obs["action_mask"],
             "edge_features": obs["edge_features"],
+            "episode_progress": obs["episode_progress"],
+            "final_observation": obs,
             "target_tiles": new_state.world.interaction_mask.map.reshape(-1),
             "task_done": task_done,
+            "timeout_done": timeout_done,
             "reward_components": reward_components,
         }
         return TimeStep(
@@ -292,6 +303,7 @@ class TerraEnv(NamedTuple):
                 **ts.info,
                 "action_mask": o_reset["action_mask"],
                 "edge_features": o_reset["edge_features"],
+                "episode_progress": o_reset["episode_progress"],
                 "target_tiles": s_reset.world.interaction_mask.map.reshape(-1),
             }
             return ts._replace(state=s_reset, observation=o_reset, info=infos)
@@ -343,6 +355,16 @@ class TerraEnv(NamedTuple):
             BatchConfig().action_type.do_nothing()
         )
 
+        episode_progress = jnp.clip(
+            jnp.asarray(state.env_steps, dtype=jnp.float32)
+            / jnp.maximum(
+                jnp.asarray(state.env_cfg.max_steps_in_episode, dtype=jnp.float32),
+                1.0,
+            ),
+            0.0,
+            1.0,
+        )
+
         return {
             # New multi-agent observation tensors
             "agent_states": agents_feat_ordered,            # [MAX_AGENTS, feat]
@@ -374,6 +396,7 @@ class TerraEnv(NamedTuple):
             "interaction_mask": state.world.interaction_mask.map,
             "action_mask": action_mask,
             "edge_features": edge_features,
+            "episode_progress": episode_progress.reshape(()),
         }
 
 
@@ -649,6 +672,7 @@ class TerraEnvBatch:
                         **item.info,
                         "action_mask": obs_reset["action_mask"],
                         "edge_features": obs_reset["edge_features"],
+                        "episode_progress": obs_reset["episode_progress"],
                         "target_tiles": state_reset.world.interaction_mask.map.reshape(-1),
                     }
                     return item._replace(
