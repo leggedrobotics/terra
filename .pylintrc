@@ -1,0 +1,55 @@
+[MESSAGES CONTROL]
+disable=
+    missing-docstring,
+    too-few-public-methods,
+    fixme,
+    broad-except,
+    too-many-instance-attributes,
+    too-many-arguments,
+    raise-missing-from,
+    no-self-use,
+    arguments-renamed
+    iterating-dictionary
+    max-public-method=20
+
+
+[REPORTS]
+output-format=colorized
+files-output=no
+reports=no
+evaluation=10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)
+
+
+[MISCELLANEOUS]
+notes=FIXME,TODO
+
+
+[FORMAT]
+max-line-length=120
+max-module-lines=1500
+
+
+[SIMILARITIES]
+min-similarity-lines=6
+ignore-comments=yes
+ignore-docstrings=yes
+
+
+[ELIF]
+max-nested-blocks=6
+
+
+[DESIGN]
+max-complexity=10
+max-args=12
+ignored-argument-names=_.*
+max-locals=25
+max-parents=15
+max-attributes=10
+min-public-methods=0
+max-public-methods=15
+max-bool-expr=5
+
+
+[EXCEPTIONS]
+overgeneral-exceptions=Exception
