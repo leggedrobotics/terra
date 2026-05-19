@@ -1502,6 +1502,9 @@ class State(NamedTuple):
         proximity_thr_tiles = jnp.float32(
             getattr(self.env_cfg, "foundation_border_proximity_tiles", 1.5)
         )
+        corner_thr_tiles = jnp.float32(
+            getattr(self.env_cfg, "foundation_corner_relaxation_tiles", 2.5)
+        )
 
         def _metadata_alignment_mask():
             # Identify all polygon sides represented by border tiles touched by the
@@ -1620,7 +1623,37 @@ class State(NamedTuple):
                 ),
             )
 
-            allowed_on_border = jnp.logical_and(touched_any, allowed_segments[best_idx])
+            nearby_segment_count = jnp.zeros((rows, cols), dtype=jnp.int32)
+            nearby_allowed_segment = jnp.zeros((rows, cols), dtype=jnp.bool_)
+
+            def _collect_nearby_corner_segment(i, carry):
+                counts, allowed_any = carry
+                abc = self.world.foundation_border_axes[i]
+                valid = i < border_type
+                denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                d = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
+                nearby = jnp.logical_and(valid, d <= corner_thr_tiles)
+                counts = counts + nearby.astype(jnp.int32)
+                allowed_any = jnp.logical_or(
+                    allowed_any,
+                    jnp.logical_and(nearby, allowed_segments[i]),
+                )
+                return counts, allowed_any
+
+            nearby_segment_count, nearby_allowed_segment = jax.lax.fori_loop(
+                0,
+                max_border_axes,
+                _collect_nearby_corner_segment,
+                (nearby_segment_count, nearby_allowed_segment),
+            )
+            corner_like = nearby_segment_count >= 2
+            allowed_on_border = jnp.logical_and(
+                touched_any,
+                jnp.logical_or(
+                    allowed_segments[best_idx],
+                    jnp.logical_and(corner_like, nearby_allowed_segment),
+                ),
+            )
             allowed_mask = jnp.logical_or(
                 jnp.logical_not(border_mask),
                 allowed_on_border,
@@ -3203,8 +3236,8 @@ class State(NamedTuple):
             getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
         )
         edge_bonus = jax.lax.cond(
-            enforce_edge_alignment,
-            lambda: self.env_cfg.rewards.dig_edge_bonus,  #edge_dug_count *
+            jnp.logical_and(enforce_edge_alignment, edge_dug_count > 0),
+            lambda: jnp.float32(self.env_cfg.rewards.dig_edge_bonus),
             lambda: jnp.float32(0.0),
         )
 
@@ -3508,6 +3541,57 @@ class State(NamedTuple):
             lambda: self._calculate_edge_inner_min_completion(new_state.world.action_map.map),
             lambda: completion_percentage,
         )
+        target_map = self.world.target_map.map
+        action_map = new_state.world.action_map.map
+        old_action_map = self.world.action_map.map
+        dig_mask = target_map < 0
+        edge_mask = self._get_foundation_border_mask()
+        inner_mask = jnp.logical_and(dig_mask, jnp.logical_not(edge_mask))
+
+        def _dig_completion(action_map_: Array, region_mask: Array) -> Float:
+            required = jnp.where(region_mask, -target_map, 0.0)
+            completed = jnp.where(
+                region_mask,
+                jnp.clip(-action_map_, a_min=0.0, a_max=required),
+                0.0,
+            )
+            required_sum = jnp.sum(required)
+            completed_sum = jnp.sum(completed)
+            return jax.lax.cond(
+                required_sum > 0,
+                lambda: completed_sum / jnp.maximum(required_sum, 1e-6),
+                lambda: jnp.float32(1.0),
+            )
+
+        old_edge_completion = _dig_completion(old_action_map, edge_mask)
+        old_inner_completion = _dig_completion(old_action_map, inner_mask)
+        components["dig_completion_edge"] = _dig_completion(action_map, edge_mask)
+        components["dig_completion_inner"] = _dig_completion(action_map, inner_mask)
+        components["dig_completion_total"] = _dig_completion(action_map, dig_mask)
+        components["dig_completion_min_edge_inner"] = jnp.minimum(
+            components["dig_completion_edge"],
+            components["dig_completion_inner"],
+        )
+        old_balanced_completion = jnp.minimum(old_edge_completion, old_inner_completion)
+        balanced_completion_progress = jnp.maximum(
+            components["dig_completion_min_edge_inner"] - old_balanced_completion,
+            jnp.float32(0.0),
+        )
+        balanced_completion_r = jax.lax.cond(
+            enforce_border_alignment,
+            lambda: (
+                jnp.float32(getattr(self.env_cfg, "balanced_completion_reward", 0.0))
+                * balanced_completion_progress
+            ),
+            lambda: jnp.float32(0.0),
+        )
+        reward += balanced_completion_r
+        components["remaining_edge_dig_tiles"] = jnp.sum(
+            jnp.logical_and(edge_mask, action_map > target_map).astype(jnp.float32)
+        )
+        components["remaining_inner_dig_tiles"] = jnp.sum(
+            jnp.logical_and(inner_mask, action_map > target_map).astype(jnp.float32)
+        )
         done, done_task = self._is_done(
             new_state.world.action_map.map,
             self.world.target_map.map,
@@ -3575,6 +3659,12 @@ class State(NamedTuple):
             "existence": components["existence"] / normalizer,
             "move_meters": components["move_meters"],
             "macro_move_count": components["macro_move_count"],
+            "dig_completion_edge": components["dig_completion_edge"],
+            "dig_completion_inner": components["dig_completion_inner"],
+            "dig_completion_total": components["dig_completion_total"],
+            "dig_completion_min_edge_inner": components["dig_completion_min_edge_inner"],
+            "remaining_edge_dig_tiles": components["remaining_edge_dig_tiles"],
+            "remaining_inner_dig_tiles": components["remaining_inner_dig_tiles"],
             "agent_active": components["agent_active"],
             "num_agents": components["num_agents"],
         }
