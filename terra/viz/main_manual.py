@@ -230,7 +230,10 @@ def main():
             return WheeledAction()
     
     def repeat_action(action, n_times=n_envs):
-        return action.new(action.action[None].repeat(n_times, 0))
+        return action.new(
+            action.action[None].repeat(n_times, 0),
+            target_pose=action.target_pose[None].repeat(n_times, 0),
+        )
 
     # Trigger the JIT compilation
     current_action_type = get_current_action_type()
