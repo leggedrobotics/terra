@@ -2882,8 +2882,8 @@ class State(NamedTuple):
         )
 
         # Edge-specific shaping: reward correctly dug tiles that belong to the
-        # inner foundation border band (if present). This is disabled by default
-        # via rewards.dig_edge_bonus = 0.0 to keep backward compatibility.
+        # inner foundation border band. Failed/no-op DO attempts must not receive
+        # this bonus; otherwise the policy can profit from invalid dig actions.
         old_action = self.world.action_map.map
         new_action = new_state.world.action_map.map
         target = self.world.target_map.map
@@ -2901,7 +2901,7 @@ class State(NamedTuple):
         )
         edge_bonus = jax.lax.cond(
             enforce_edge_alignment,
-            lambda: self.env_cfg.rewards.dig_edge_bonus,  #edge_dug_count *
+            lambda: edge_dug_count * self.env_cfg.rewards.dig_edge_bonus,
             lambda: jnp.float32(0.0),
         )
 
