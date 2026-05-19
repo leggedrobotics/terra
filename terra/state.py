@@ -1518,22 +1518,30 @@ class State(NamedTuple):
             workspace_border_mask = jnp.logical_and(border_mask, workspace_mask)
 
             min_dist = jnp.full((rows, cols), 1e9, dtype=jnp.float32)
+            second_dist = jnp.full((rows, cols), 1e9, dtype=jnp.float32)
             best_idx = jnp.zeros((rows, cols), dtype=jnp.int32)
+            second_idx = jnp.zeros((rows, cols), dtype=jnp.int32)
 
             def _update_nearest_segment(i, carry):
-                md, bi = carry
+                md, sd, bi, si = carry
                 abc = self.world.foundation_border_axes[i]
                 valid = i < border_type
                 denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
                 d = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
                 d = jnp.where(valid, d, 1e9)
                 better = d < md
+                second_better = jnp.logical_and(d < sd, jnp.logical_not(better))
+                sd = jnp.where(better, md, jnp.where(second_better, d, sd))
+                si = jnp.where(better, bi, jnp.where(second_better, jnp.int32(i), si))
                 md = jnp.where(better, d, md)
                 bi = jnp.where(better, jnp.int32(i), bi)
-                return md, bi
+                return md, sd, bi, si
 
-            min_dist, best_idx = jax.lax.fori_loop(
-                0, max_border_axes, _update_nearest_segment, (min_dist, best_idx)
+            min_dist, second_dist, best_idx, second_idx = jax.lax.fori_loop(
+                0,
+                max_border_axes,
+                _update_nearest_segment,
+                (min_dist, second_dist, best_idx, second_idx),
             )
 
             active_segments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
@@ -1623,35 +1631,29 @@ class State(NamedTuple):
                 ),
             )
 
-            nearby_segment_count = jnp.zeros((rows, cols), dtype=jnp.int32)
-            nearby_allowed_segment = jnp.zeros((rows, cols), dtype=jnp.bool_)
+            nearest_allowed = jnp.zeros((rows, cols), dtype=jnp.bool_)
+            second_allowed = jnp.zeros((rows, cols), dtype=jnp.bool_)
 
-            def _collect_nearby_corner_segment(i, carry):
-                counts, allowed_any = carry
-                abc = self.world.foundation_border_axes[i]
-                valid = i < border_type
-                denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
-                d = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
-                nearby = jnp.logical_and(valid, d <= corner_thr_tiles)
-                counts = counts + nearby.astype(jnp.int32)
-                allowed_any = jnp.logical_or(
-                    allowed_any,
-                    jnp.logical_and(nearby, allowed_segments[i]),
-                )
-                return counts, allowed_any
+            def _collect_allowed_tile_segment(i, carry):
+                nearest, second = carry
+                allowed_i = allowed_segments[i]
+                nearest = jnp.logical_or(nearest, jnp.logical_and(best_idx == i, allowed_i))
+                second = jnp.logical_or(second, jnp.logical_and(second_idx == i, allowed_i))
+                return nearest, second
 
-            nearby_segment_count, nearby_allowed_segment = jax.lax.fori_loop(
+            nearest_allowed, second_allowed = jax.lax.fori_loop(
                 0,
                 max_border_axes,
-                _collect_nearby_corner_segment,
-                (nearby_segment_count, nearby_allowed_segment),
+                _collect_allowed_tile_segment,
+                (nearest_allowed, second_allowed),
             )
-            corner_like = nearby_segment_count >= 2
+
+            corner_like = second_dist <= corner_thr_tiles
             allowed_on_border = jnp.logical_and(
                 touched_any,
                 jnp.logical_or(
-                    allowed_segments[best_idx],
-                    jnp.logical_and(corner_like, nearby_allowed_segment),
+                    nearest_allowed,
+                    jnp.logical_and(corner_like, second_allowed),
                 ),
             )
             allowed_mask = jnp.logical_or(
