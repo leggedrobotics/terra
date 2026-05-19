@@ -203,7 +203,7 @@ class EnvConfig(NamedTuple):
     transport_relocate_mult: float = 1.5  # Multiplier for transport (truck/skidsteer) relocation rewards
 
     # Foundation border digging alignment constraints (env-enforced)
-    enforce_foundation_border_alignment: bool = False
+    enforce_foundation_border_alignment: bool = True
     foundation_border_width_tiles: int = 2
     foundation_border_proximity_tiles: float = 3.5
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
