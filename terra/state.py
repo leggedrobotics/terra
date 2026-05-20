@@ -1415,8 +1415,10 @@ class State(NamedTuple):
                 aligned = diff <= tol
 
                 denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                # Border metadata stores line coefficients as A*x + B*y + C,
+                # and agent positions are [x, y].
                 line_dist = jnp.abs(
-                    abc[0] * current_pos[1] + abc[1] * current_pos[0] + abc[2]
+                    abc[0] * current_pos[0] + abc[1] * current_pos[1] + abc[2]
                 ) / denom
                 close = line_dist <= proximity_thr_tiles
                 allowed = jnp.logical_and(active_segments[i], jnp.logical_and(aligned, close))
