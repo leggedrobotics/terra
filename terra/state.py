@@ -14,6 +14,7 @@ from terra.actions import WheeledActionType
 from terra.agent import Agent
 from terra.agent import AgentState
 from terra.config import AgentConfig
+from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -43,6 +44,52 @@ DUMP_BONUS_MULT = jnp.float32(0.5)
 EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.2)
 EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(1.5)  
 TRANSPORT_RELOCATE_MULT = jnp.float32(1.5)
+
+REWARD_COMPONENT_KEYS = (
+    "move",
+    "collision_move",
+    "collision_turn",
+    "move_while_loaded",
+    "move_with_turned_wheels",
+    "wheel_turn",
+    "base_turn",
+    "cabin_turn",
+    "dig_success",
+    "dig_wrong",
+    "dig_on_dump_penalty",
+    "dig_edge_bonus",
+    "dump_success",
+    "dump_wrong",
+    "dump_progress",
+    "dump_bonus",
+    "terminal",
+    "existence",
+    "trench",
+    "trench_proximity",
+    "trench_alignment",
+    "skid_move",
+    "skid_dump_wrong",
+    "truck_load_success",
+    "truck_empty_proximity",
+    "truck_loaded_proximity",
+)
+
+METRIC_COMPONENT_KEYS = (
+    "do_attempt",
+    "dig_success_event",
+    "dump_success_event",
+    "failed_do",
+    "collision",
+    "noop",
+    "loaded",
+    "terrain_changed",
+    "loaded_at_timeout",
+    "completion",
+    "remaining_dig_volume",
+    "remaining_dump_volume",
+    "edge_completion",
+    "core_completion",
+)
 
 
 class State(NamedTuple):
@@ -206,37 +253,53 @@ class State(NamedTuple):
         TrackedAction type --> 0
         WheeledAction type --> 1
         """
+        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
+        is_wheeled = current_action_type == 1
+
+        def _move_forward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_forward_wheeled,
+                self._handle_move_forward,
+            )
+
+        def _move_backward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_backward_wheeled,
+                self._handle_move_backward,
+            )
+
+        def _turn_left():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_left,
+                self._handle_clock,
+            )
+
+        def _turn_right():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_right,
+                self._handle_anticlock,
+            )
+
         handlers_list = [
-            # Tracked
-            self._handle_move_forward,
-            self._handle_move_backward,
-            self._handle_clock,
-            self._handle_anticlock,
-            self._handle_cabin_clock,
-            self._handle_cabin_anticlock,
-            self._handle_do,
-            self._do_nothing,
-            # Wheeled
-            self._handle_move_forward_wheeled,
-            self._handle_move_backward_wheeled,
-            self._handle_turn_wheels_left,
-            self._handle_turn_wheels_right,
+            _move_forward,
+            _move_backward,
+            _turn_left,
+            _turn_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
             self._do_nothing,
         ]
-        # Route by the current agent's movement mechanism (action_type), not the incoming action.type
-        # 0 = tracked handlers block, 1 = wheeled handlers block
-        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
-        cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
-        offset_idx = (cumulative_len @ jax.nn.one_hot(current_action_type, 2)).astype(IntLowDim)
 
         action_idx = jnp.squeeze(action.action)
         state = jax.lax.cond(
-            jnp.logical_or(action_idx == -1, action_idx == 7),
+            action_idx == -1,
             self._do_nothing,
-            lambda: jax.lax.switch(offset_idx + action_idx, handlers_list),
+            lambda: jax.lax.switch(action_idx, handlers_list),
         )
         state = jax.lax.cond(
             turn, 
@@ -1267,7 +1330,9 @@ class State(NamedTuple):
         arm_angle = jnp.squeeze(self._get_arm_angle_rad())
         max_border_axes = self.world.foundation_border_axes.shape[0]
         border_type = jnp.int32(self.world.foundation_border_type)
-        current_pos = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        agent_row_col = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        agent_row = agent_row_col[0]
+        agent_col = agent_row_col[1]
         proximity_thr_tiles = jnp.float32(
             getattr(self.env_cfg, "foundation_border_proximity_tiles", 1.5)
         )
@@ -1352,8 +1417,10 @@ class State(NamedTuple):
                 aligned = diff <= tol
 
                 denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                # Border metadata stores A*x + B*y + C with x=col, y=row.
+                # Agent pos_base follows map indexing order: [row, col].
                 line_dist = jnp.abs(
-                    abc[0] * current_pos[1] + abc[1] * current_pos[0] + abc[2]
+                    abc[0] * agent_col + abc[1] * agent_row + abc[2]
                 ) / denom
                 close = line_dist <= proximity_thr_tiles
                 allowed = jnp.logical_and(active_segments[i], jnp.logical_and(aligned, close))
@@ -2070,7 +2137,7 @@ class State(NamedTuple):
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
         flat_action_map = self.world.action_map.map.reshape(-1)
-        dig_mask_cone = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        dig_mask_cone = dig_mask.reshape(self.world.action_map.map.shape).astype(jnp.bool_)
         # Prefer boolean any over integer sum for compile-time efficiency
         has_dumped_dirt_in_cone = jnp.any((self.world.action_map.map > 0) & dig_mask_cone)
         ambiguity_mask_dig_movesoil = jax.lax.cond(
@@ -3046,86 +3113,60 @@ class State(NamedTuple):
         )
         return reward
 
-    def _get_trench_specific_rewards(self, action: ActionType) -> Float:
-        def _get_trench_reward():
-            cur = self._get_current_agent_state()
-            agent_pos = cur.pos_base
-            trench_axes = self.world.trench_axes
-            trench_type = self.world.trench_type
+    def _get_trench_specific_reward_parts(self) -> tuple[Float, Float]:
+        cur = self._get_current_agent_state()
+        agent_pos = cur.pos_base
+        trench_axes = self.world.trench_axes
+        trench_type = self.world.trench_type
 
-            # Find the closest trench for both distance and alignment calculations
-            def find_closest_trench_idx(i, state):
-                dist, best_idx = state
-                curr_dist = get_distance_point_to_line(agent_pos, trench_axes[i])
-                new_best_idx = jax.lax.cond(curr_dist < dist, lambda: i, lambda: best_idx)
-                new_dist = jnp.minimum(dist, curr_dist)
-                return (new_dist, new_best_idx)
+        def find_closest_trench_idx(i, state):
+            dist, best_idx = state
+            curr_dist = get_distance_point_to_line(agent_pos, trench_axes[i])
+            new_best_idx = jax.lax.cond(curr_dist < dist, lambda: i, lambda: best_idx)
+            new_dist = jnp.minimum(dist, curr_dist)
+            return (new_dist, new_best_idx)
 
-            d_tiles, closest_idx = jax.lax.fori_loop(
-                0, trench_type,
-                find_closest_trench_idx,
-                (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0))
-            )
+        d_tiles, closest_idx = jax.lax.fori_loop(
+            0,
+            trench_type,
+            find_closest_trench_idx,
+            (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0)),
+        )
+        d_meters = d_tiles * self.env_cfg.tile_size
+        proximity_reward = d_meters * self.env_cfg.distance_coefficient
 
-            # 1. Distance (centering) reward - closest trench axis.
-            # Remove the large deadzone used previously, so being even slightly off-center
-            # consistently gets penalized (distance_coefficient is negative by default).
-            d_meters = d_tiles * self.env_cfg.tile_size
-            proximity_scale = jnp.float32(1.0)  # slightly stronger off-center penalty
-            proximity_reward = d_meters * self.env_cfg.distance_coefficient * proximity_scale
+        closest_trench = trench_axes[closest_idx]
+        trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
+        trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
+        agent_angle = self._get_arm_angle_rad()
 
-            # 2. Alignment reward - only for closest trench
-            # Get trench line equation [a, b, c] for ax + by = c
-            closest_trench = trench_axes[closest_idx]
+        angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
+        angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
+        angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
+        alignment_score = 2.0 * angle_diff / jnp.pi
+        alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
+        return (
+            jnp.asarray(jnp.squeeze(proximity_reward), dtype=jnp.float32),
+            jnp.asarray(jnp.squeeze(alignment_reward), dtype=jnp.float32),
+        )
 
-            # Get trench direction vector [-b, a]
-            trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
-            trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
-
-            # Get the excavator's absolute cabin/arm angle in radians.
-            # This aligns the trench reward with the actual dig workspace direction.
-            agent_angle = self._get_arm_angle_rad()
-
-            # Previous base-alignment version kept commented for easy revert:
-            # # Get agent angle in radians
-            # agent_angle = self._get_base_angle_rad()
-
-            # Calculate angular difference (normalized between 0 and pi/2)
-            angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
-            angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
-            angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
-
-            # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
-            alignment_score = 2.0 * angle_diff / jnp.pi
-
-            # Apply alignment reward - lower when aligned with trench
-            # Previous behavior aligned the chassis/base with the trench.
-            # Active behavior aligns the absolute cabin/arm direction instead.
-            alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
-
-            # Final calculation: distance + base alignment only
-            total_reward = proximity_reward + alignment_reward
-            # Explicitly ensure the final result is scalar before returning
-            return jnp.squeeze(total_reward)
-
-        # Calculate trench reward for the current agent
-        # Agent type check is now handled in the main reward function
-        return _get_trench_reward()
+    def _get_trench_specific_rewards(self) -> Float:
+        proximity_reward, alignment_reward = self._get_trench_specific_reward_parts()
+        return proximity_reward + alignment_reward
 
     def _get_reward(self, new_state: "State", action_handler: Action):
         action = action_handler.action
 
-        reward = 0.0
+        reward = jnp.float32(0.0)
         # Components for W&B logging - generalized to MAX_AGENTS per-agent rewards
         MAX_AGENTS = 4
-        components = {
+        components = {key: jnp.float32(0.0) for key in REWARD_COMPONENT_KEYS}
+        components.update({key: jnp.float32(0.0) for key in METRIC_COMPONENT_KEYS})
+        components.update({
             "agent_rewards": jnp.zeros((MAX_AGENTS,), dtype=jnp.float32),
-            "terminal": 0.0,
-            "trench": 0.0,
-            "existence": 0.0,
-            "num_agents": self.agent.num_agents.astype(jnp.int32),
+            "num_agents": jnp.asarray(self.agent.num_agents, dtype=jnp.int32),
             "agent_active": self.agent.agent_active.astype(jnp.int32),
-        }
+        })
 
         # Action-dependent - route to appropriate reward function based on agent type
         current_agent_type = self._get_current_agent_state().agent_type[0]
@@ -3142,6 +3183,7 @@ class State(NamedTuple):
         reward_functions = [get_excavator_rewards, get_truck_rewards, get_skidsteer_rewards]
         clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
         agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
+        agent_reward = jnp.asarray(agent_reward, dtype=jnp.float32)
         
         reward += agent_reward
         
@@ -3150,26 +3192,318 @@ class State(NamedTuple):
             return vec.at[self.agent.current_agent].set(agent_reward.astype(jnp.float32))
         components["agent_rewards"] = set_idx(components["agent_rewards"])
 
+        cur = self._get_current_agent_state()
+        prev_new = new_state._get_prev_agent_state()
+        action_id = action[0]
+        is_move = (action_id == TrackedActionType.FORWARD) | (
+            action_id == TrackedActionType.BACKWARD
+        )
+        is_turn = (action_id == TrackedActionType.CLOCK) | (
+            action_id == TrackedActionType.ANTICLOCK
+        )
+        is_cabin = (action_id == TrackedActionType.CABIN_CLOCK) | (
+            action_id == TrackedActionType.CABIN_ANTICLOCK
+        )
+        is_do = action_id == TrackedActionType.DO
+        is_do_nothing = action_id == TrackedActionType.DO_NOTHING
+        is_wheeled = cur.action_type[0] == 1
+        is_skidsteer = current_agent_type == 2
+        is_truck = current_agent_type == 1
+        is_loaded = cur.loaded[0] > 0
+        loaded_decreased = prev_new.loaded[0] < cur.loaded[0]
+        loaded_increased = prev_new.loaded[0] > cur.loaded[0]
+        loaded_unchanged = jnp.allclose(cur.loaded, prev_new.loaded)
+        moved = self._check_agent_moved_on_move_action(self, new_state)
+        turned = self._check_agent_turn_on_turn_action(self, new_state)
+        wheel_turned = ~jnp.allclose(cur.wheel_angle, prev_new.wheel_angle)
+        terrain_changed = jnp.any(
+            new_state.world.action_map.map != self.world.action_map.map
+        )
+
+        skid_collision = jnp.logical_and(~moved, ~loaded_increased)
+        components["move"] = jnp.where(
+            jnp.logical_and(is_move, ~is_skidsteer),
+            self.env_cfg.rewards.move,
+            0.0,
+        )
+        components["skid_move"] = jnp.where(
+            jnp.logical_and(jnp.logical_and(is_move, is_skidsteer), ~skid_collision),
+            self.env_cfg.rewards.skid_move,
+            0.0,
+        )
+        components["collision_move"] = jnp.where(
+            jnp.logical_and(
+                is_move,
+                jnp.where(is_skidsteer, skid_collision, ~moved),
+            ),
+            self.env_cfg.rewards.collision_move,
+            0.0,
+        )
+        components["move_while_loaded"] = jnp.where(
+            jnp.logical_and(is_move, is_loaded),
+            self.env_cfg.rewards.move_while_loaded,
+            0.0,
+        )
+        components["move_with_turned_wheels"] = jnp.where(
+            jnp.logical_and(is_move, jnp.any(cur.wheel_angle != 0)),
+            self.env_cfg.rewards.move_with_turned_wheels,
+            0.0,
+        )
+        components["collision_turn"] = jnp.where(
+            jnp.logical_and(jnp.logical_and(is_turn, ~is_wheeled), ~turned),
+            self.env_cfg.rewards.collision_turn,
+            0.0,
+        )
+        components["base_turn"] = jnp.where(
+            jnp.logical_and(is_turn, ~is_wheeled),
+            self.env_cfg.rewards.base_turn,
+            0.0,
+        )
+        components["wheel_turn"] = jnp.where(
+            jnp.logical_and(is_turn, is_wheeled),
+            self.env_cfg.rewards.wheel_turn
+            + jnp.where(wheel_turned, 0.0, self.env_cfg.rewards.wheel_turn),
+            0.0,
+        )
+        components["cabin_turn"] = jnp.where(
+            is_cabin,
+            self.env_cfg.rewards.cabin_turn,
+            0.0,
+        )
+
+        action_map_dig_regress = self._get_action_map_dump_regress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        dig_on_dump_penalty = jnp.where(
+            action_map_dig_regress > 0,
+            -1.2 * action_map_dig_regress * self.env_cfg.rewards.dump_correct,
+            0.0,
+        )
+        old_action = self.world.action_map.map
+        new_action = new_state.world.action_map.map
+        target = self.world.target_map.map
+        border_mask = self._get_foundation_border_mask()
+        newly_dug_required = jnp.logical_and(
+            jnp.logical_and(target < 0, old_action >= 0),
+            new_action < 0,
+        )
+        edge_dug_count = jnp.sum(
+            jnp.logical_and(newly_dug_required, border_mask).astype(jnp.float32)
+        )
+        edge_bonus = jnp.where(
+            jnp.bool_(getattr(self.env_cfg, "enforce_foundation_border_alignment", True)),
+            edge_dug_count * self.env_cfg.rewards.dig_edge_bonus,
+            0.0,
+        )
+        dig_reward_path = jnp.logical_or(
+            jnp.logical_and(is_do, ~is_loaded),
+            jnp.logical_and(
+                jnp.logical_and(is_skidsteer, action_id == TrackedActionType.FORWARD),
+                loaded_increased,
+            ),
+        )
+        components["dig_success"] = jnp.where(
+            jnp.logical_and(dig_reward_path, loaded_increased),
+            1.0,
+            0.0,
+        )
+        components["dig_wrong"] = jnp.where(
+            jnp.logical_and(dig_reward_path, loaded_unchanged),
+            self.env_cfg.rewards.dig_wrong,
+            0.0,
+        )
+        components["dig_on_dump_penalty"] = jnp.where(
+            dig_reward_path,
+            dig_on_dump_penalty,
+            0.0,
+        )
+        components["dig_edge_bonus"] = jnp.where(
+            dig_reward_path,
+            edge_bonus,
+            0.0,
+        )
+
+        dump_reward_path = jnp.logical_or(
+            jnp.logical_and(is_do, is_loaded),
+            jnp.logical_and(
+                jnp.logical_and(is_skidsteer, action_id == TrackedActionType.BACKWARD),
+                loaded_decreased,
+            ),
+        )
+        dump_progress_units = self._get_action_map_dump_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        dump_bonus_proxy = (
+            jnp.maximum(dump_progress_units, 0.0)
+            * self.env_cfg.rewards.dump_correct
+            * jnp.float32(getattr(self.env_cfg, "dump_bonus_mult", DUMP_BONUS_MULT))
+        )
+        components["dump_success"] = jnp.where(
+            jnp.logical_and(dump_reward_path, ~loaded_unchanged),
+            agent_reward,
+            0.0,
+        )
+        components["dump_wrong"] = jnp.where(
+            jnp.logical_and(dump_reward_path, loaded_unchanged),
+            agent_reward,
+            0.0,
+        )
+        components["dump_progress"] = jnp.where(
+            jnp.logical_and(dump_reward_path, ~loaded_unchanged),
+            dump_progress_units * self.env_cfg.rewards.dump_correct,
+            0.0,
+        )
+        components["dump_bonus"] = jnp.where(
+            jnp.logical_and(dump_reward_path, ~loaded_unchanged),
+            dump_bonus_proxy,
+            0.0,
+        )
+        components["skid_dump_wrong"] = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(is_skidsteer, is_do),
+                jnp.logical_and(is_loaded, ~loaded_decreased),
+            ),
+            self.env_cfg.rewards.skid_dump_wrong,
+            0.0,
+        )
+
+        components["truck_load_success"] = jnp.where(
+            jnp.logical_and(is_truck, loaded_increased),
+            2.0,
+            0.0,
+        )
+        components["truck_empty_proximity"] = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(is_truck, ~is_loaded),
+                jnp.logical_and(is_move, moved),
+            ),
+            agent_reward - components["move"] - components["collision_move"],
+            0.0,
+        )
+        components["truck_loaded_proximity"] = jnp.where(
+            jnp.logical_and(
+                jnp.logical_and(is_truck, is_loaded),
+                jnp.logical_and(is_move, moved),
+            ),
+            agent_reward - components["move"] - components["collision_move"],
+            0.0,
+        )
+
+        components["do_attempt"] = is_do.astype(jnp.float32)
+        components["dig_success_event"] = jnp.logical_and(
+            dig_reward_path,
+            loaded_increased,
+        ).astype(jnp.float32)
+        components["dump_success_event"] = jnp.logical_and(
+            dump_reward_path,
+            loaded_decreased,
+        ).astype(jnp.float32)
+        components["failed_do"] = jnp.logical_and(
+            is_do,
+            jnp.logical_and(~terrain_changed, loaded_unchanged),
+        ).astype(jnp.float32)
+        components["collision"] = jnp.logical_or(
+            jnp.logical_and(is_move, ~moved),
+            jnp.logical_and(jnp.logical_and(is_turn, ~is_wheeled), ~turned),
+        ).astype(jnp.float32)
+        agent_changed = (
+            jnp.any(cur.pos_base != prev_new.pos_base)
+            | jnp.any(cur.angle_base != prev_new.angle_base)
+            | jnp.any(cur.angle_cabin != prev_new.angle_cabin)
+            | jnp.any(cur.wheel_angle != prev_new.wheel_angle)
+            | jnp.any(cur.loaded != prev_new.loaded)
+        )
+        components["noop"] = jnp.logical_or(
+            is_do_nothing,
+            jnp.logical_and(~agent_changed, ~terrain_changed),
+        ).astype(jnp.float32)
+        components["loaded"] = is_loaded.astype(jnp.float32)
+        components["terrain_changed"] = terrain_changed.astype(jnp.float32)
+
         # Terminal reward based on completion percentage
         completion_percentage = self._calculate_completion_percentage(
             new_state.world.action_map.map,
-            self.world.target_map.map
+            new_state.world.target_map.map
         )
         enforce_border_alignment = jnp.bool_(
             getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
         )
         gated_completion = jax.lax.cond(
             enforce_border_alignment,
-            lambda: self._calculate_edge_inner_min_completion(new_state.world.action_map.map),
+            lambda: self._calculate_edge_inner_min_completion(
+                new_state.world.action_map.map
+            ),
             lambda: completion_percentage,
         )
-        done, done_task = self._is_done(
+        done, task_done = new_state._is_done(
             new_state.world.action_map.map,
-            self.world.target_map.map,
+            new_state.world.target_map.map,
         )
+        dig_target_mask = new_state.world.target_map.map < 0
+        dump_target_mask = new_state.world.target_map.map > 0
+        remaining_dig_volume = jnp.sum(
+            jnp.where(
+                dig_target_mask,
+                jnp.maximum(
+                    new_state.world.action_map.map - new_state.world.target_map.map,
+                    0,
+                ),
+                0,
+            ).astype(jnp.float32)
+        )
+        remaining_dump_volume = jnp.sum(
+            jnp.where(
+                dump_target_mask,
+                jnp.maximum(
+                    new_state.world.target_map.map - new_state.world.action_map.map,
+                    0,
+                ),
+                0,
+            ).astype(jnp.float32)
+        )
+        border_required = jnp.logical_and(
+            dig_target_mask,
+            self._get_foundation_border_mask(),
+        )
+        core_required = jnp.logical_and(dig_target_mask, ~border_required)
+        dug_enough = new_state.world.action_map.map <= new_state.world.target_map.map
+        edge_count = jnp.sum(border_required.astype(jnp.float32))
+        core_count = jnp.sum(core_required.astype(jnp.float32))
+        components["completion"] = completion_percentage
+        components["remaining_dig_volume"] = remaining_dig_volume
+        components["remaining_dump_volume"] = remaining_dump_volume
+        components["edge_completion"] = jnp.sum(
+            jnp.logical_and(border_required, dug_enough).astype(jnp.float32)
+        ) / jnp.maximum(edge_count, 1.0)
+        components["core_completion"] = jnp.sum(
+            jnp.logical_and(core_required, dug_enough).astype(jnp.float32)
+        ) / jnp.maximum(core_count, 1.0)
+        loaded_per_agent = jnp.array([
+            new_state.agent.agent_states[0].loaded[0],
+            new_state.agent.agent_states[1].loaded[0],
+            new_state.agent.agent_states[2].loaded[0],
+            new_state.agent.agent_states[3].loaded[0],
+        ])
+        any_active_loaded = jnp.any(
+            jnp.logical_and(
+                new_state.agent.agent_active.astype(jnp.bool_),
+                loaded_per_agent > 0,
+            )
+        )
+        components["loaded_at_timeout"] = jnp.logical_and(
+            jnp.logical_and(done, ~task_done),
+            any_active_loaded,
+        ).astype(jnp.float32)
         
+        # Time-limit truncations should not receive the success terminal bonus.
+        # Dense progress rewards already shape partial work; this bonus is only
+        # for true task completion.
         terminal_r = jax.lax.cond(
-            done,
+            task_done,
             lambda: self._calculate_terminal_reward(gated_completion),
             lambda: 0.0,
         )
@@ -3200,18 +3534,29 @@ class State(NamedTuple):
         is_excavator = current_agent_type == 0
         should_apply_trench = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
         
-        trench_r = jax.lax.cond(
+        trench_proximity_r, trench_alignment_r = jax.lax.cond(
             should_apply_trench,
-            lambda: self._get_trench_specific_rewards(action),
-            lambda: 0.0,
+            self._get_trench_specific_reward_parts,
+            lambda: (jnp.float32(0.0), jnp.float32(0.0)),
         )
+        trench_r = trench_proximity_r + trench_alignment_r
         reward += trench_r
         
         # Only log trench reward when it's an excavator's turn to avoid noise in plots
         components["trench"] = jax.lax.cond(
             is_excavator,
             lambda: trench_r,
-            lambda: jnp.nan,  # Use NaN for skidsteer turns so they don't appear in plots
+            lambda: jnp.nan,
+        )
+        components["trench_proximity"] = jax.lax.cond(
+            is_excavator,
+            lambda: trench_proximity_r,
+            lambda: jnp.nan,
+        )
+        components["trench_alignment"] = jax.lax.cond(
+            is_excavator,
+            lambda: trench_alignment_r,
+            lambda: jnp.nan,
         )
 
         # Existence
@@ -3222,15 +3567,19 @@ class State(NamedTuple):
         # Constant scaling factor
         normalizer = self.env_cfg.rewards.normalizer
         reward = reward / normalizer
-        # Normalize only reward-bearing components; keep masks/counts as integers
-        components = {
+        # Normalize only reward-bearing components; keep counters/progress in native units.
+        normalized_components = {
+            key: components[key] / normalizer for key in REWARD_COMPONENT_KEYS
+        }
+        normalized_components.update({
+            key: components[key] for key in METRIC_COMPONENT_KEYS
+        })
+        normalized_components.update({
             "agent_rewards": components["agent_rewards"] / normalizer,
-            "terminal": components["terminal"] / normalizer,
-            "trench": components["trench"] / normalizer,
-            "existence": components["existence"] / normalizer,
             "agent_active": components["agent_active"],
             "num_agents": components["num_agents"],
-        }
+        })
+        components = normalized_components
 
         return reward, components
 
@@ -3427,119 +3776,92 @@ class State(NamedTuple):
         done_steps = self.env_steps >= self.env_cfg.max_steps_in_episode
         return jnp.logical_or(done_task, done_steps), done_task
 
-    def _get_action_mask_tracked(self):
-        # forward
-        new_state = self._handle_move_forward()
-        bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+    def _get_do_action_valid(
+        self,
+        raw_cone: Array,
+        legal_dig: Array,
+    ) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        is_loaded = cur.loaded[0] > 0
+
+        blocked_by_obstacle = jnp.any(raw_cone & (self.world.padding_mask.map == 1))
+        can_dig = jnp.any(legal_dig) & jnp.logical_not(blocked_by_obstacle)
+
+        # Keep DO masking conservative. Dump/transfer profitability and edge
+        # productivity are contextual and expensive; the policy should learn
+        # them from observations/rewards. Mask only the cheap impossible cases:
+        # empty trucks cannot DO, unloaded excavators need at least one legal dig.
+        excavator_do = jnp.where(is_loaded, jnp.bool_(True), can_dig)
+        truck_do = is_loaded
+        return jnp.where(
+            is_skid_steer,
+            jnp.bool_(True),
+            jnp.where(is_truck, truck_do, excavator_do),
         )
 
-        # backward
-        new_state = self._handle_move_backward()
-        bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+    def _get_tracked_base_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        is_loaded = cur.loaded[0] > 0
+        return jnp.logical_or(
+            jnp.logical_or(is_skid_steer, is_truck),
+            jnp.logical_not(is_loaded),
         )
 
-        # clock
-        new_state = self._handle_clock()
-        bool_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
-        )
+    def _get_wheeled_base_move_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.loaded[0] == 0
 
-        # anticlock
-        new_state = self._handle_anticlock()
-        bool_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
-        )
+    def _get_cabin_rotation_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        is_skid_steer = cur.agent_type[0] == 2
+        is_truck = cur.agent_type[0] == 1
+        return jnp.logical_not(jnp.logical_or(is_skid_steer, is_truck))
 
-        # cabin clock
-        new_state = self._handle_cabin_clock()
-        bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
+    def _get_wheel_turn_left_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.wheel_angle[0] < self.env_cfg.agent.max_wheel_angle
 
-        # cabin clock
-        new_state = self._handle_cabin_anticlock()
-        bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
+    def _get_wheel_turn_right_valid(self) -> Array:
+        cur = self._get_current_agent_state()
+        return cur.wheel_angle[0] > -self.env_cfg.agent.max_wheel_angle
 
-        # do
-        new_state = self._handle_do()
-        bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
-        )
+    def _get_action_mask_tracked(self, do_valid: Array):
+        cabin_valid = self._get_cabin_rotation_valid()
+        base_valid = self._get_tracked_base_valid()
 
         action_mask = jnp.array(
             [
-                bool_forward,
-                bool_backward,
-                bool_clock,
-                bool_anticlock,
-                bool_cabin_clock,
-                bool_cabin_anticlock,
-                bool_do,
+                base_valid,
+                base_valid,
+                base_valid,
+                base_valid,
+                cabin_valid,
+                cabin_valid,
+                do_valid,
+                jnp.bool_(True),
             ],
             dtype=jnp.bool_,
         )
         return action_mask
 
-    def _get_action_mask_wheeled(self):
-        # forward
-        new_state = self._handle_move_forward()
-        bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
-        )
-
-        # backward
-        new_state = self._handle_move_backward()
-        bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
-        )
-
-        # turn wheels left
-        new_state = self._handle_turn_wheels_left()
-        bool_turn_wheels_left = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
-        )
-
-        # turn wheels right
-        new_state = self._handle_turn_wheels_right()
-        bool_turn_wheels_right = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
-        )
-
-        # cabin clock
-        new_state = self._handle_cabin_clock()
-        bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
-
-        # cabin anticlock
-        new_state = self._handle_cabin_anticlock()
-        bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
-            == self._get_current_agent_state().angle_cabin
-        )
-
-        # do
-        new_state = self._handle_do()
-        bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
-        )
+    def _get_action_mask_wheeled(self, do_valid: Array):
+        cabin_valid = self._get_cabin_rotation_valid()
+        base_move_valid = self._get_wheeled_base_move_valid()
 
         action_mask = jnp.array(
             [
-                bool_forward,
-                bool_backward,
-                bool_turn_wheels_left,
-                bool_turn_wheels_right,
-                bool_cabin_clock,
-                bool_cabin_anticlock,
-                bool_do,
+                base_move_valid,
+                base_move_valid,
+                self._get_wheel_turn_left_valid(),
+                self._get_wheel_turn_right_valid(),
+                cabin_valid,
+                cabin_valid,
+                do_valid,
+                jnp.bool_(True),
             ],
             dtype=jnp.bool_,
         )
@@ -3547,11 +3869,16 @@ class State(NamedTuple):
 
     # Removed specialized masks; we apply agent-type cabin masking after movement mask
 
-    def _get_action_mask(self, dummy_action: Action):
+    def _get_action_mask(self, dummy_action: Action, do_valid: Array):
         """
-        Returns a 1D array of bools, where 1 is allowed action, and 0 is not allowed.
+        Return a coarse primitive-action availability mask.
+
+        This masks only cheap, guaranteed no-op cases from agent type, action
+        type, load state, and steering limits. Collision, bounds, and
+        reward-productivity checks stay in the environment transition/reward.
         """
         num_actions = dummy_action.get_num_actions()
+        assert num_actions == 8, "Terra action masking assumes the 8-action primitive space"
         
         # Check action type from the current agent state (not agent type)
         current_action_type = self._get_current_agent_state().action_type[0]
@@ -3559,10 +3886,10 @@ class State(NamedTuple):
         
         # Use JAX switch instead of if statements for JIT compatibility
         def get_tracked_mask():
-            return self._get_action_mask_tracked()
+            return self._get_action_mask_tracked(do_valid=do_valid)
         
         def get_wheeled_mask():
-            return self._get_action_mask_wheeled()
+            return self._get_action_mask_wheeled(do_valid=do_valid)
         
         # skidsteer handled by generic cabin disable stage
         
@@ -3590,16 +3917,87 @@ class State(NamedTuple):
         )
 
         action_mask = action_mask[:num_actions]
+        action_mask = action_mask.at[TrackedActionType.DO_NOTHING].set(True)
         return action_mask
 
+    def _get_edge_affordance_features(
+        self,
+        action_mask: Array,
+        raw_cone: Array,
+        legal_dig: Array,
+    ) -> Array:
+        """
+        Low-dimensional diagnostics for the hard foundation-edge dig rule.
+        Values are normalized counts/booleans so they can be consumed directly by
+        the policy and critic without changing map-channel encoders.
+        """
+        border_mask = self._get_foundation_border_mask()
+        remaining_dig = jnp.logical_and(
+            self.world.target_map.map < 0,
+            self.world.action_map.map >= 0,
+        )
+
+        map_area = jnp.maximum(jnp.float32(self.world.width * self.world.height), 1.0)
+        cone_area = jnp.maximum(jnp.sum(raw_cone.astype(jnp.float32)), 1.0)
+        remaining_edge = jnp.logical_and(remaining_dig, border_mask)
+        remaining_core = jnp.logical_and(remaining_dig, jnp.logical_not(border_mask))
+        legal_remaining = jnp.logical_and(legal_dig, remaining_dig)
+        raw_edge_in_cone = jnp.logical_and(raw_cone, remaining_edge)
+        legal_edge_in_cone = jnp.logical_and(legal_dig, raw_edge_in_cone)
+        blocked_edge_in_cone = jnp.logical_and(
+            raw_edge_in_cone,
+            jnp.logical_not(legal_dig),
+        )
+
+        completion = self._calculate_completion_percentage(
+            self.world.action_map.map,
+            self.world.target_map.map,
+        )
+        remaining_edge_count = jnp.sum(remaining_edge.astype(jnp.float32))
+        remaining_core_count = jnp.sum(remaining_core.astype(jnp.float32))
+        remaining_total = jnp.maximum(remaining_edge_count + remaining_core_count, 1.0)
+        remaining_edge_share = remaining_edge_count / remaining_total
+
+        return jnp.array(
+            [
+                action_mask[TrackedActionType.DO].astype(jnp.float32),
+                jnp.sum(action_mask.astype(jnp.float32)) / jnp.float32(action_mask.shape[0]),
+                remaining_edge_count / map_area,
+                remaining_core_count / map_area,
+                jnp.sum(raw_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(legal_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(blocked_edge_in_cone.astype(jnp.float32)) / cone_area,
+                jnp.sum(legal_remaining.astype(jnp.float32)) / cone_area,
+                remaining_edge_share,
+                jnp.asarray(completion, dtype=jnp.float32),
+            ],
+            dtype=jnp.float32,
+        )
+
+    def _get_action_mask_and_edge_features(self, dummy_action: Action) -> tuple[Array, Array]:
+        raw_cone = (
+            self._build_dig_dump_cone()
+            .reshape(self.world.action_map.map.shape)
+            .astype(jnp.bool_)
+        )
+        legal_dig = self._mask_out_wrong_dig_tiles(raw_cone.reshape(-1)).reshape(
+            self.world.action_map.map.shape
+        )
+        do_valid = self._get_do_action_valid(raw_cone, legal_dig)
+        action_mask = self._get_action_mask(dummy_action, do_valid=do_valid)
+        edge_features = self._get_edge_affordance_features(
+            action_mask=action_mask,
+            raw_cone=raw_cone,
+            legal_dig=legal_dig,
+        )
+        return action_mask, edge_features
+
     def _get_infos(self, dummy_action: Action, task_done: bool) -> dict[str, Any]:
-        # Keep infos cheap: target_tiles is already materialized by the wrapper as
-        # interaction_mask, and action_mask is currently informational only.
         target_tiles_mask = self.world.interaction_mask.map.reshape(-1)
+        action_mask, edge_features = self._get_action_mask_and_edge_features(dummy_action)
         infos = {
-            "action_mask": jnp.zeros(
-                (dummy_action.get_num_actions(),), dtype=jnp.bool_
-            ),
+            "action_mask": action_mask,
+            "edge_features": edge_features,
             "target_tiles": target_tiles_mask,
             "task_done": task_done,
         }

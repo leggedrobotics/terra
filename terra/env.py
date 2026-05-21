@@ -12,6 +12,8 @@ from terra.actions import TrackedActionType
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
+from terra.state import METRIC_COMPONENT_KEYS
+from terra.state import REWARD_COMPONENT_KEYS
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
@@ -92,7 +94,7 @@ class TerraEnv(NamedTuple):
         action_map: Array,
         distance_map: Array,
         env_cfg: EnvConfig,
-    ) -> tuple[State, dict[str, Array]]:
+    ) -> TimeStep:
         """
         Resets the environment using values from config files, and a seed.
         """
@@ -113,17 +115,17 @@ class TerraEnv(NamedTuple):
         state = self.wrap_state(state)
 
         observations = self._state_to_obs_dict(state)
-        dummy_action = BatchConfig().action_type.do_nothing()
         dummy_info = {
-            # Keep the reset info pytree structure aligned with step() without
-            # simulating a full action mask / cone union during initialization.
-            "action_mask": jnp.zeros(
-                (dummy_action.get_num_actions(),), dtype=jnp.bool_
-            ),
+            "action_mask": observations["action_mask"],
+            "edge_features": observations["edge_features"],
+            "episode_progress": observations["episode_progress"],
+            "final_observation": observations,
             "target_tiles": jnp.zeros(
                 (state.world.width * state.world.height,), dtype=jnp.bool_
             ),
             "task_done": jnp.zeros((), dtype=jnp.bool_),
+            "timeout_done": jnp.zeros((), dtype=jnp.bool_),
+            "reward_components": self._zero_reward_components(state),
         }
 
         return TimeStep(
@@ -136,8 +138,24 @@ class TerraEnv(NamedTuple):
         )
 
     @staticmethod
+    def _zero_reward_components(state: State) -> dict[str, Array]:
+        components = {
+            key: jnp.float32(0.0)
+            for key in REWARD_COMPONENT_KEYS + METRIC_COMPONENT_KEYS
+        }
+        components.update({
+            "agent_rewards": jnp.zeros((4,), dtype=jnp.float32),
+            "agent_active": state.agent.agent_active.astype(jnp.int32),
+            "num_agents": jnp.asarray(state.agent.num_agents, dtype=jnp.int32),
+        })
+        return components
+
+    @staticmethod
     def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
-        state = TraversabilityMaskWrapper.wrap(state, update_reachability=update_reachability)
+        state = TraversabilityMaskWrapper.wrap(
+            state,
+            update_reachability=update_reachability,
+        )
         state = LocalMapWrapper.wrap(state)
         return state
 
@@ -204,6 +222,52 @@ class TerraEnv(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
+    def step_no_reset(
+        self,
+        state: State,
+        action: Action,
+        env_cfg: EnvConfig,
+    ) -> TimeStep:
+        """Step one environment and leave reset handling to the caller."""
+        new_state = state._step(action)
+        reward, reward_components = state._get_reward(new_state, action)
+        # Recompute reachability only for effective DO actions that changed terrain.
+        # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
+        is_do = action.action[0] == TrackedActionType.DO
+        terrain_changed = jnp.any(
+            new_state.world.action_map.map != state.world.action_map.map
+        )
+        update_reachability = jnp.logical_and(is_do, terrain_changed)
+        new_state = self.wrap_state(
+            new_state,
+            update_reachability=update_reachability,
+        )
+        obs = self._state_to_obs_dict(new_state)
+        done, task_done = new_state._is_done(
+            new_state.world.action_map.map,
+            new_state.world.target_map.map,
+        )
+        timeout_done = jnp.logical_and(done, jnp.logical_not(task_done))
+        infos = {
+            "action_mask": obs["action_mask"],
+            "edge_features": obs["edge_features"],
+            "episode_progress": obs["episode_progress"],
+            "final_observation": obs,
+            "target_tiles": new_state.world.interaction_mask.map.reshape(-1),
+            "task_done": task_done,
+            "timeout_done": timeout_done,
+            "reward_components": reward_components,
+        }
+        return TimeStep(
+            state=new_state,
+            observation=obs,
+            reward=reward,
+            done=done,
+            info=infos,
+            env_cfg=env_cfg,
+        )
+
+    @partial(jax.jit, static_argnums=(0,))
     def step(
         self,
         state: State,
@@ -219,50 +283,11 @@ class TerraEnv(NamedTuple):
         distance_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
-        new_state = state._step(action)
-        reward, reward_components = state._get_reward(new_state, action)
-        # Recompute reachability only for effective DO actions that changed terrain.
-        # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
-        is_do = action.action[0] == TrackedActionType.DO
-        terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
-        update_reachability = jnp.logical_and(is_do, terrain_changed)
-        new_state = self.wrap_state(new_state, update_reachability=update_reachability)
-        obs = self._state_to_obs_dict(new_state)
-        #print agent agentstate_2
-        # jax.debug.print(
-        #     "agent_state_2: {agent_state_2}",
-        #     agent_state_2=new_state.agent.agent_state_2,
-        # )
+        timestep = self.step_no_reset(state, action, env_cfg)
 
-        #print local maps of agent 1 and agent 2
-        # jax.debug.print(
-        #     "Agent 1 - local_map_action_neg: {local_map_action_neg}, local_map_action_pos: {local_map_action_pos}\n "
-        #     "local_map_target_neg: {local_map_target_neg}, local_map_target_pos: {local_map_target_pos},\n "
-        #     "local_map_dumpability: {local_map_dumpability}, local_map_obstacles: {local_map_obstacles} \n "
-        #     "Agent 2 - local_map_action_neg: {local_map_action_neg_2}, local_map_action_pos: {local_map_action_pos_2},\n "
-        #     "local_map_target_neg: {local_map_target_neg_2}, local_map_target_pos: {local_map_target_pos_2},\n "
-        #     "local_map_dumpability: {local_map_dumpability_2}, local_map_obstacles: {local_map_obstacles_2}\n",
-        #     local_map_action_neg=new_state.world.local_map_action_neg.map,
-        #     local_map_action_pos=new_state.world.local_map_action_pos.map,
-        #     local_map_target_neg=new_state.world.local_map_target_neg.map,
-        #     local_map_target_pos=new_state.world.local_map_target_pos.map,
-        #     local_map_dumpability=new_state.world.local_map_dumpability.map,
-        #     local_map_obstacles=new_state.world.local_map_obstacles.map,
-        #     local_map_action_neg_2=new_state.world.local_map_action_neg_2.map,
-        #     local_map_action_pos_2=new_state.world.local_map_action_pos_2.map,
-        #     local_map_target_neg_2=new_state.world.local_map_target_neg_2.map,
-        #     local_map_target_pos_2=new_state.world.local_map_target_pos_2.map,
-        #     local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
-        #     local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
-        # )
-        done, task_done = state._is_done(
-            new_state.world.action_map.map,
-            new_state.world.target_map.map,
-        )
-
-        def _reset_branch(s, o, cfg):
+        def _reset_branch(ts):
             s_reset, o_reset = self._reset_existent(
-                s,
+                ts.state,
                 target_map,
                 padding_mask,
                 trench_axes,
@@ -272,36 +297,22 @@ class TerraEnv(NamedTuple):
                 dumpability_mask_init,
                 action_map,
                 distance_map,
-                cfg,
+                ts.env_cfg,
             )
-            return s_reset, o_reset, cfg
+            infos = {
+                **ts.info,
+                "action_mask": o_reset["action_mask"],
+                "edge_features": o_reset["edge_features"],
+                "episode_progress": o_reset["episode_progress"],
+                "target_tiles": s_reset.world.interaction_mask.map.reshape(-1),
+            }
+            return ts._replace(state=s_reset, observation=o_reset, info=infos)
 
-        def _nominal_branch(s, o, cfg):
-            return s, o, cfg
-
-        new_state, obs, env_cfg = jax.lax.cond(
-            done,
+        return jax.lax.cond(
+            timestep.done,
             _reset_branch,
-            _nominal_branch,
-            new_state,
-            obs,
-            env_cfg,
-        )
-
-        infos = new_state._get_infos(action, task_done)
-        # Attach reward components for logging
-        try:
-            if isinstance(infos, dict):
-                infos = {**infos, "reward_components": reward_components}
-        except Exception:
-            pass
-        return TimeStep(
-            state=new_state,
-            observation=obs,
-            reward=reward,
-            done=done,
-            info=infos,
-            env_cfg=env_cfg,   # now the right, possibly flipped `apply_trench_rewards`
+            lambda ts: ts,
+            timestep,
         )
 
     @staticmethod
@@ -340,6 +351,20 @@ class TerraEnv(NamedTuple):
         num_agents = state.agent.num_agents
 
         # Note: not all of those fields are used by the network for training!
+        action_mask, edge_features = state._get_action_mask_and_edge_features(
+            BatchConfig().action_type.do_nothing()
+        )
+
+        episode_progress = jnp.clip(
+            jnp.asarray(state.env_steps, dtype=jnp.float32)
+            / jnp.maximum(
+                jnp.asarray(state.env_cfg.max_steps_in_episode, dtype=jnp.float32),
+                1.0,
+            ),
+            0.0,
+            1.0,
+        )
+
         return {
             # New multi-agent observation tensors
             "agent_states": agents_feat_ordered,            # [MAX_AGENTS, feat]
@@ -369,6 +394,9 @@ class TerraEnv(NamedTuple):
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
             "interaction_mask": state.world.interaction_mask.map,
+            "action_mask": action_mask,
+            "edge_features": edge_features,
+            "episode_progress": episode_progress.reshape(()),
         }
 
 
@@ -540,7 +568,7 @@ class TerraEnvBatch:
         dumpability_mask_init: Array,
         action_maps: Array,
         distance_maps: Array,
-    ) -> State:
+    ) -> TimeStep:
         timestep = jax.vmap(self.terra_env.reset)(
             rng_key,
             target_maps,
@@ -556,7 +584,7 @@ class TerraEnvBatch:
         )
         return timestep
 
-    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
+    def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> TimeStep:
         self._validate_foundation_border_metadata_requirements(env_cfgs)
         (
             env_cfgs,
@@ -590,34 +618,92 @@ class TerraEnvBatch:
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
-        # Update env_cfgs based on the curriculum, and get the new maps
+    ) -> TimeStep:
+        # Update curriculum state from the previous timestep. Reset maps are only
+        # needed when the current step ends at least one environment.
         timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
-        (
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            foundation_border_axes,
-            foundation_border_type,
-            dumpability_mask_init,
-            action_maps,
-            distance_maps,
-            maps_buffer_keys,
-        ) = self._get_map(maps_buffer_keys, timestep.env_cfg)
-        # Step the environment
-        timestep = jax.vmap(self.terra_env.step)(
+        timestep_no_reset = jax.vmap(self.terra_env.step_no_reset)(
             timestep.state,
             actions,
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            foundation_border_axes,
-            foundation_border_type,
-            dumpability_mask_init,
-            action_maps,
-            distance_maps,
             timestep.env_cfg,
         )
-        return timestep
+
+        def _reset_done_envs(ts: TimeStep) -> TimeStep:
+            (
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+                _,
+            ) = self._get_map(maps_buffer_keys, ts.env_cfg)
+
+            def _reset_one(
+                ts_one,
+                target_map,
+                padding_mask,
+                trench_axis,
+                trench_kind,
+                foundation_border_axis,
+                foundation_border_kind,
+                dumpability_mask,
+                action_map,
+                distance_map,
+            ):
+                def _reset_branch(item):
+                    state_reset, obs_reset = self.terra_env._reset_existent(
+                        item.state,
+                        target_map,
+                        padding_mask,
+                        trench_axis,
+                        trench_kind,
+                        foundation_border_axis,
+                        foundation_border_kind,
+                        dumpability_mask,
+                        action_map,
+                        distance_map,
+                        item.env_cfg,
+                    )
+                    infos = {
+                        **item.info,
+                        "action_mask": obs_reset["action_mask"],
+                        "edge_features": obs_reset["edge_features"],
+                        "episode_progress": obs_reset["episode_progress"],
+                        "target_tiles": state_reset.world.interaction_mask.map.reshape(-1),
+                    }
+                    return item._replace(
+                        state=state_reset,
+                        observation=obs_reset,
+                        info=infos,
+                    )
+
+                return jax.lax.cond(
+                    ts_one.done,
+                    _reset_branch,
+                    lambda item: item,
+                    ts_one,
+                )
+
+            return jax.vmap(_reset_one)(
+                ts,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+            )
+
+        return jax.lax.cond(
+            jnp.any(timestep_no_reset.done),
+            _reset_done_envs,
+            lambda ts: ts,
+            timestep_no_reset,
+        )
