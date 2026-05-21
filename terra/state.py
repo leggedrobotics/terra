@@ -1330,7 +1330,9 @@ class State(NamedTuple):
         arm_angle = jnp.squeeze(self._get_arm_angle_rad())
         max_border_axes = self.world.foundation_border_axes.shape[0]
         border_type = jnp.int32(self.world.foundation_border_type)
-        current_pos = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        agent_row_col = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        agent_row = agent_row_col[0]
+        agent_col = agent_row_col[1]
         proximity_thr_tiles = jnp.float32(
             getattr(self.env_cfg, "foundation_border_proximity_tiles", 1.5)
         )
@@ -1415,8 +1417,10 @@ class State(NamedTuple):
                 aligned = diff <= tol
 
                 denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                # Border metadata stores A*x + B*y + C with x=col, y=row.
+                # Agent pos_base follows map indexing order: [row, col].
                 line_dist = jnp.abs(
-                    abc[0] * current_pos[1] + abc[1] * current_pos[0] + abc[2]
+                    abc[0] * agent_col + abc[1] * agent_row + abc[2]
                 ) / denom
                 close = line_dist <= proximity_thr_tiles
                 allowed = jnp.logical_and(active_segments[i], jnp.logical_and(aligned, close))
