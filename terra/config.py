@@ -208,6 +208,7 @@ class EnvConfig(NamedTuple):
     foundation_border_proximity_tiles: float = 3.5
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
     foundation_border_diag_tolerance_rad: float = 0.436  # ~25deg
+    foundation_corner_relaxation_tiles: float = 2.5
     debug_foundation_border_checks: bool = False
     enable_reachability_obs: bool = False
     reachability_inflation_tiles: int = 3 # not used if downsample factor != 1

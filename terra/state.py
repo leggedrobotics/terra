@@ -1231,9 +1231,18 @@ class State(NamedTuple):
                     window_strides=(1, 1, 1),
                     padding="SAME",
                 )
+            elif mask.ndim == 4:
+                neigh_sum = jax.lax.reduce_window(
+                    mask_f,
+                    jnp.float32(0.0),
+                    jax.lax.add,
+                    window_dimensions=(1, 1, 3, 3),
+                    window_strides=(1, 1, 1, 1),
+                    padding="SAME",
+                )
             else:
                 raise ValueError(
-                    f"Unsupported dig_target rank {mask.ndim}; expected 2D or 3D."
+                    f"Unsupported dig_target rank {mask.ndim}; expected 2D, 3D, or 4D."
                 )
             all_neighbors_inside = neigh_sum == 9.0
             return jnp.logical_and(mask, all_neighbors_inside)
@@ -1253,80 +1262,49 @@ class State(NamedTuple):
         target_map_full = self.world.target_map.map
         # Border-alignment checks are geometric and 2D; if maps are batched
         # ([B,H,W]), use the first spatial slice consistently.
-        border_mask = (
-            border_mask_full[0]
-            if border_mask_full.ndim == 3
-            else border_mask_full
-        )
-        target_map_2d = (
-            target_map_full[0]
-            if target_map_full.ndim == 3
-            else target_map_full
-        )
+        if border_mask_full.ndim == 4:
+            border_mask = border_mask_full[0, 0]
+        elif border_mask_full.ndim == 3:
+            border_mask = border_mask_full[0]
+        else:
+            border_mask = border_mask_full
+        if target_map_full.ndim == 4:
+            target_map_2d = target_map_full[0, 0]
+        elif target_map_full.ndim == 3:
+            target_map_2d = target_map_full[0]
+        else:
+            target_map_2d = target_map_full
+        border_axes_full = self.world.foundation_border_axes
+        if border_axes_full.ndim == 4:
+            border_axes = border_axes_full[0, 0]
+        elif border_axes_full.ndim == 3:
+            border_axes = border_axes_full[0]
+        else:
+            border_axes = border_axes_full
         border_any = jnp.any(border_mask)
-        arm_angle = jnp.squeeze(self._get_arm_angle_rad())
-        max_border_axes = self.world.foundation_border_axes.shape[0]
-        border_type = jnp.int32(self.world.foundation_border_type)
-        current_pos = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        arm_angle = jnp.ravel(self._get_arm_angle_rad())[0]
+        max_border_axes = border_axes.shape[0]
+        border_type = jnp.int32(jnp.ravel(jnp.asarray(self.world.foundation_border_type))[0])
+        current_pos = jnp.reshape(
+            self._get_current_agent_state().pos_base.astype(jnp.float32),
+            (-1, 2),
+        )[0]
         proximity_thr_tiles = jnp.float32(
             getattr(self.env_cfg, "foundation_border_proximity_tiles", 1.5)
         )
+        corner_thr_tiles = jnp.float32(
+            getattr(self.env_cfg, "foundation_corner_relaxation_tiles", 2.5)
+        )
 
         def _metadata_alignment_mask():
-            # Identify all polygon sides represented by border tiles touched by the
-            # current workspace cone. Each border tile is checked against its own
-            # nearest touched side, which lets corner workspaces dig multiple
-            # correctly aligned/proximal edges at once.
+            # Accumulate allowed border tiles per metadata axis. This avoids dynamic
+            # nearest-segment indexing in XLA and lets corner tiles be accepted by
+            # either adjacent side orientation.
             rows, cols = target_map_2d.shape
             rr = jnp.repeat(jnp.arange(rows)[:, None], cols, axis=1).astype(jnp.float32)
             cc = jnp.repeat(jnp.arange(cols)[None, :], rows, axis=0).astype(jnp.float32)
             workspace_mask = workspace_mask_flat.reshape(border_mask.shape)
             workspace_border_mask = jnp.logical_and(border_mask, workspace_mask)
-
-            min_dist = jnp.full((rows, cols), 1e9, dtype=jnp.float32)
-            best_idx = jnp.zeros((rows, cols), dtype=jnp.int32)
-
-            def _update_nearest_segment(i, carry):
-                md, bi = carry
-                abc = self.world.foundation_border_axes[i]
-                valid = i < border_type
-                denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
-                d = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
-                d = jnp.where(valid, d, 1e9)
-                better = d < md
-                md = jnp.where(better, d, md)
-                bi = jnp.where(better, jnp.int32(i), bi)
-                return md, bi
-
-            min_dist, best_idx = jax.lax.fori_loop(
-                0, max_border_axes, _update_nearest_segment, (min_dist, best_idx)
-            )
-
-            active_segments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
-            active_counts = jnp.zeros((max_border_axes,), dtype=jnp.int32)
-            active_mean_dists = jnp.full((max_border_axes,), jnp.float32(1e9))
-
-            def _collect_touched_segment(i, carry):
-                active, counts, mean_dists = carry
-                segment_tiles = jnp.logical_and(workspace_border_mask, best_idx == i)
-                count = jnp.sum(segment_tiles.astype(jnp.int32))
-                total_dist = jnp.sum(jnp.where(segment_tiles, min_dist, 0.0))
-                mean_dist = total_dist / jnp.maximum(count.astype(jnp.float32), 1.0)
-                valid = jnp.logical_and(i < border_type, count > 0)
-                return (
-                    active.at[i].set(valid),
-                    counts.at[i].set(jnp.where(valid, count, jnp.int32(0))),
-                    mean_dists.at[i].set(jnp.where(valid, mean_dist, jnp.float32(1e9))),
-                )
-
-            active_segments, active_counts, active_mean_dists = jax.lax.fori_loop(
-                0,
-                max_border_axes,
-                _collect_touched_segment,
-                (active_segments, active_counts, active_mean_dists),
-            )
-
-            touched_any = jnp.any(active_segments)
 
             hv_tol = jnp.float32(
                 getattr(self.env_cfg, "foundation_border_hv_tolerance_rad", 0.17)
@@ -1335,9 +1313,19 @@ class State(NamedTuple):
                 getattr(self.env_cfg, "foundation_border_diag_tolerance_rad", 0.52)
             )
 
-            def _check_active_segment(i, carry):
-                allowed_segments, alignments, line_dists, angle_diffs, tol_values = carry
-                abc = self.world.foundation_border_axes[i]
+            allowed_on_border = jnp.zeros((rows, cols), dtype=jnp.bool_)
+
+            def _accumulate_axis(i, allowed):
+                abc = border_axes[i]
+                valid = jnp.int32(i) < border_type
+                denom = jnp.sqrt(abc[0] * abc[0] + abc[1] * abc[1]) + 1e-6
+                tile_line_dist = jnp.abs(abc[0] * cc + abc[1] * rr + abc[2]) / denom
+                segment_tiles = jnp.logical_and(
+                    workspace_border_mask,
+                    tile_line_dist <= corner_thr_tiles,
+                )
+                touched = jnp.any(segment_tiles)
+
                 edge_angle = jnp.arctan2(abc[0], abc[1])
 
                 abs_a = jnp.abs(abc[0])
@@ -1356,40 +1344,25 @@ class State(NamedTuple):
                     abc[0] * current_pos[1] + abc[1] * current_pos[0] + abc[2]
                 ) / denom
                 close = line_dist <= proximity_thr_tiles
-                allowed = jnp.logical_and(active_segments[i], jnp.logical_and(aligned, close))
-                return (
-                    allowed_segments.at[i].set(allowed),
-                    alignments.at[i].set(jnp.logical_and(active_segments[i], aligned)),
-                    line_dists.at[i].set(jnp.where(active_segments[i], line_dist, jnp.float32(1e9))),
-                    angle_diffs.at[i].set(jnp.where(active_segments[i], diff, jnp.float32(1e9))),
-                    tol_values.at[i].set(jnp.where(active_segments[i], tol, jnp.float32(0.0))),
+                allowed_segment = jnp.logical_and(
+                    valid,
+                    jnp.logical_and(touched, jnp.logical_and(aligned, close)),
+                )
+                return jnp.logical_or(
+                    allowed,
+                    jnp.logical_and(
+                        border_mask,
+                        jnp.logical_and(tile_line_dist <= corner_thr_tiles, allowed_segment),
+                    ),
                 )
 
-            allowed_segments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
-            alignments = jnp.zeros((max_border_axes,), dtype=jnp.bool_)
-            line_dists = jnp.full((max_border_axes,), jnp.float32(1e9))
-            angle_diffs = jnp.full((max_border_axes,), jnp.float32(1e9))
-            tol_values = jnp.zeros((max_border_axes,), dtype=jnp.float32)
-            (
-                allowed_segments,
-                alignments,
-                line_dists,
-                angle_diffs,
-                tol_values,
-            ) = jax.lax.fori_loop(
+            allowed_on_border = jax.lax.fori_loop(
                 0,
                 max_border_axes,
-                _check_active_segment,
-                (
-                    allowed_segments,
-                    alignments,
-                    line_dists,
-                    angle_diffs,
-                    tol_values,
-                ),
+                _accumulate_axis,
+                allowed_on_border,
             )
 
-            allowed_on_border = jnp.logical_and(touched_any, allowed_segments[best_idx])
             allowed_mask = jnp.logical_or(
                 jnp.logical_not(border_mask),
                 allowed_on_border,
@@ -1397,47 +1370,14 @@ class State(NamedTuple):
 
             return allowed_mask
 
-        dig_target = (target_map_2d < 0).astype(jnp.float32)
-        kernel_dx = jnp.array([[-1.0, 0.0, 1.0]], dtype=jnp.float32)
-        kernel_dy = jnp.array([[-1.0], [0.0], [1.0]], dtype=jnp.float32)
-        grad_x = jax.scipy.signal.convolve2d(
-            dig_target, kernel_dx, mode="same", boundary="fill", fillvalue=0
-        )
-        grad_y = jax.scipy.signal.convolve2d(
-            dig_target, kernel_dy, mode="same", boundary="fill", fillvalue=0
-        )
+        def _allow_all_mask():
+            return jnp.ones_like(border_mask, dtype=jnp.bool_).reshape(-1)
 
-        normal_angle = jnp.arctan2(grad_y, grad_x)
-        edge_angle = wrap_angle_rad(normal_angle + (jnp.pi / 2.0))
-
-        # Classify edge orientation from normal vector.
-        abs_gx = jnp.abs(grad_x)
-        abs_gy = jnp.abs(grad_y)
-        is_vertical_edge = abs_gx > (2.0 * abs_gy)    # tangent ~ y-axis
-        is_horizontal_edge = abs_gy > (2.0 * abs_gx)  # tangent ~ x-axis
-        is_hv_edge = jnp.logical_or(is_vertical_edge, is_horizontal_edge)
-
-        hv_tol = jnp.float32(
-            getattr(self.env_cfg, "foundation_border_hv_tolerance_rad", 0.17)
-        )
-        diag_tol = jnp.float32(
-            getattr(self.env_cfg, "foundation_border_diag_tolerance_rad", 0.52)
-        )
-        tol_map = jnp.where(is_hv_edge, hv_tol, diag_tol)
-
-        angle_diff = jnp.abs(wrap_angle_rad(edge_angle - arm_angle))
-        angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)  # axis alignment (0 or pi)
-        aligned = angle_diff <= tol_map
-
-        has_metadata = jnp.logical_and(border_type > 0, jnp.any(self.world.foundation_border_axes[:, 0] > -96.0))
+        has_metadata = jnp.logical_and(border_type > 0, jnp.any(border_axes[:, 0] > -96.0))
         return jax.lax.cond(
-            border_any,
-            lambda: jax.lax.cond(
-                has_metadata,
-                _metadata_alignment_mask,
-                lambda: jnp.logical_or(jnp.logical_not(border_mask), aligned).reshape(-1),
-            ),
-            lambda: jnp.ones_like(border_mask, dtype=jnp.bool_).reshape(-1),
+            jnp.logical_and(border_any, has_metadata),
+            _metadata_alignment_mask,
+            _allow_all_mask,
         )
 
 
@@ -2900,8 +2840,8 @@ class State(NamedTuple):
             getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
         )
         edge_bonus = jax.lax.cond(
-            enforce_edge_alignment,
-            lambda: edge_dug_count * self.env_cfg.rewards.dig_edge_bonus,
+            jnp.logical_and(enforce_edge_alignment, edge_dug_count > 0),
+            lambda: jnp.float32(self.env_cfg.rewards.dig_edge_bonus),
             lambda: jnp.float32(0.0),
         )
 
@@ -3158,10 +3098,48 @@ class State(NamedTuple):
         enforce_border_alignment = jnp.bool_(
             getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
         )
+        target_map = self.world.target_map.map
+        action_map = new_state.world.action_map.map
+        dig_mask = target_map < 0
+        edge_mask = self._get_foundation_border_mask()
+        inner_mask = jnp.logical_and(dig_mask, jnp.logical_not(edge_mask))
+
+        def _dig_completion(action_map_: Array, region_mask: Array) -> Float:
+            required = jnp.where(region_mask, -target_map, 0.0)
+            completed = jnp.where(
+                region_mask,
+                jnp.clip(-action_map_, a_min=0.0, a_max=required),
+                0.0,
+            )
+            required_sum = jnp.sum(required)
+            completed_sum = jnp.sum(completed)
+            return jax.lax.cond(
+                required_sum > 0,
+                lambda: completed_sum / jnp.maximum(required_sum, 1e-6),
+                lambda: jnp.float32(1.0),
+            )
+
+        components["dig_completion_edge"] = _dig_completion(action_map, edge_mask)
+        components["dig_completion_inner"] = _dig_completion(action_map, inner_mask)
+        components["dig_completion_total"] = _dig_completion(action_map, dig_mask)
+        components["dig_completion_min_edge_inner"] = jnp.minimum(
+            components["dig_completion_edge"],
+            components["dig_completion_inner"],
+        )
+        weighted_edge_completion = (
+            jnp.float32(0.7) * components["dig_completion_total"]
+            + jnp.float32(0.3) * components["dig_completion_edge"]
+        )
         gated_completion = jax.lax.cond(
             enforce_border_alignment,
-            lambda: self._calculate_edge_inner_min_completion(new_state.world.action_map.map),
+            lambda: weighted_edge_completion,
             lambda: completion_percentage,
+        )
+        components["remaining_edge_dig_tiles"] = jnp.sum(
+            jnp.logical_and(edge_mask, action_map > target_map).astype(jnp.float32)
+        )
+        components["remaining_inner_dig_tiles"] = jnp.sum(
+            jnp.logical_and(inner_mask, action_map > target_map).astype(jnp.float32)
         )
         done, done_task = self._is_done(
             new_state.world.action_map.map,
@@ -3228,6 +3206,12 @@ class State(NamedTuple):
             "terminal": components["terminal"] / normalizer,
             "trench": components["trench"] / normalizer,
             "existence": components["existence"] / normalizer,
+            "dig_completion_edge": components["dig_completion_edge"],
+            "dig_completion_inner": components["dig_completion_inner"],
+            "dig_completion_total": components["dig_completion_total"],
+            "dig_completion_min_edge_inner": components["dig_completion_min_edge_inner"],
+            "remaining_edge_dig_tiles": components["remaining_edge_dig_tiles"],
+            "remaining_inner_dig_tiles": components["remaining_inner_dig_tiles"],
             "agent_active": components["agent_active"],
             "num_agents": components["num_agents"],
         }
@@ -4093,33 +4077,6 @@ class State(NamedTuple):
         )
         
         return completion_percentage
-
-    def _calculate_edge_inner_min_completion(self, action_map: Array) -> Float:
-        """
-        Completion for terminal gating when foundation border alignment is enforced.
-        Computes dump completion separately on edge and inner regions, then returns
-        min(edge_completion, inner_completion).
-        """
-        target_map = self.world.target_map.map
-        dump_target_mask = target_map > 0
-        border_mask = self._get_foundation_border_mask()
-        edge_dump_mask = jnp.logical_and(dump_target_mask, border_mask)
-        inner_dump_mask = jnp.logical_and(dump_target_mask, jnp.logical_not(border_mask))
-
-        def _region_completion(region_mask: Array) -> Float:
-            target_region = jnp.where(region_mask, target_map, 0.0)
-            action_region = jnp.where(region_mask, jnp.maximum(action_map, 0), 0.0)
-            required = jnp.sum(target_region)
-            matched = jnp.sum(jnp.minimum(action_region, target_region))
-            return jax.lax.cond(
-                required > 0,
-                lambda: matched / jnp.maximum(required, 1e-6),
-                lambda: jnp.float32(1.0),
-            )
-
-        edge_completion = _region_completion(edge_dump_mask)
-        inner_completion = _region_completion(inner_dump_mask)
-        return jnp.minimum(edge_completion, inner_completion)
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
         """

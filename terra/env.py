@@ -124,6 +124,7 @@ class TerraEnv(NamedTuple):
                 (state.world.width * state.world.height,), dtype=jnp.bool_
             ),
             "task_done": jnp.zeros((), dtype=jnp.bool_),
+            "reward_components": self._zero_reward_components(state),
         }
 
         return TimeStep(
@@ -134,6 +135,24 @@ class TerraEnv(NamedTuple):
             info=dummy_info,
             env_cfg=env_cfg,
         )
+
+    @staticmethod
+    def _zero_reward_components(state: State) -> dict[str, Array]:
+        zero = jnp.float32(0.0)
+        return {
+            "agent_rewards": jnp.zeros((4,), dtype=jnp.float32),
+            "agent_active": state.agent.agent_active.astype(jnp.int32),
+            "num_agents": jnp.asarray(state.agent.num_agents, dtype=jnp.int32),
+            "terminal": zero,
+            "trench": zero,
+            "existence": zero,
+            "dig_completion_edge": zero,
+            "dig_completion_inner": zero,
+            "dig_completion_total": zero,
+            "dig_completion_min_edge_inner": zero,
+            "remaining_edge_dig_tiles": zero,
+            "remaining_inner_dig_tiles": zero,
+        }
 
     @staticmethod
     def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
