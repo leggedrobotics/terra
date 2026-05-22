@@ -3128,6 +3128,35 @@ class State(NamedTuple):
             components["dig_completion_edge"],
             components["dig_completion_inner"],
         )
+        dump_zone_mask = target_map > 0
+        action_map_dirt = jnp.where(action_map > 0, action_map, 0.0)
+        correct_dump_dirt = jnp.where(
+            jnp.logical_and(action_map > 0, dump_zone_mask),
+            action_map,
+            0.0,
+        )
+        action_map_dirt_sum = jnp.sum(action_map_dirt)
+        correct_dump_dirt_sum = jnp.sum(correct_dump_dirt)
+        has_dump_requirements = jnp.any(dump_zone_mask)
+        components["dump_completion_action_map"] = jax.lax.cond(
+            has_dump_requirements,
+            lambda: jax.lax.cond(
+                action_map_dirt_sum > 0,
+                lambda: correct_dump_dirt_sum / jnp.maximum(action_map_dirt_sum, 1e-6),
+                lambda: jnp.float32(0.0),
+            ),
+            lambda: jnp.float32(1.0),
+        )
+        required_dig_volume = jnp.sum(jnp.where(dig_mask, -target_map, 0.0))
+        components["total_dig_dump_completion"] = jax.lax.cond(
+            required_dig_volume > 0,
+            lambda: jnp.clip(
+                correct_dump_dirt_sum / jnp.maximum(required_dig_volume, 1e-6),
+                a_min=0.0,
+                a_max=1.0,
+            ),
+            lambda: components["dump_completion_action_map"],
+        )
         weighted_edge_completion = (
             jnp.float32(0.5) * completion_percentage
             + jnp.float32(0.25) * components["dig_completion_inner"]
@@ -3213,6 +3242,8 @@ class State(NamedTuple):
             "dig_completion_inner": components["dig_completion_inner"],
             "dig_completion_total": components["dig_completion_total"],
             "dig_completion_min_edge_inner": components["dig_completion_min_edge_inner"],
+            "dump_completion_action_map": components["dump_completion_action_map"],
+            "total_dig_dump_completion": components["total_dig_dump_completion"],
             "remaining_edge_dig_tiles": components["remaining_edge_dig_tiles"],
             "remaining_inner_dig_tiles": components["remaining_inner_dig_tiles"],
             "agent_active": components["agent_active"],

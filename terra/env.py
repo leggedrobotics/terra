@@ -150,6 +150,8 @@ class TerraEnv(NamedTuple):
             "dig_completion_inner": zero,
             "dig_completion_total": zero,
             "dig_completion_min_edge_inner": zero,
+            "dump_completion_action_map": zero,
+            "total_dig_dump_completion": zero,
             "remaining_edge_dig_tiles": zero,
             "remaining_inner_dig_tiles": zero,
         }
