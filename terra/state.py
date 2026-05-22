@@ -3129,8 +3129,9 @@ class State(NamedTuple):
             components["dig_completion_inner"],
         )
         weighted_edge_completion = (
-            jnp.float32(0.7) * completion_percentage
-            + jnp.float32(0.3) * components["dig_completion_edge"]
+            jnp.float32(0.5) * completion_percentage
+            + jnp.float32(0.25) * components["dig_completion_inner"]
+            + jnp.float32(0.25) * components["dig_completion_edge"]
         )
         gated_completion = jax.lax.cond(
             enforce_border_alignment,

@@ -53,7 +53,7 @@ dependencies:
     - fiona==1.9.6
     - flake8==7.0.0
     - flatbuffers==24.3.7
-    - flax==0.8.2
+    - flax==0.10.2
     - fonttools==4.50.0
     - fsspec==2024.3.0
     - gast==0.5.4
