@@ -498,17 +498,12 @@ class LocalMapWrapper:
         )
 
         dig_target = (state.world.target_map.map < 0).astype(jnp.float32)
-        kernel_dx = jnp.array([[-1.0, 0.0, 1.0]], dtype=jnp.float32)
-        kernel_dy = jnp.array([[-1.0], [0.0], [1.0]], dtype=jnp.float32)
-        grad_x = jax.scipy.signal.convolve2d(
-            dig_target, kernel_dx, mode="same", boundary="fill", fillvalue=0
-        )
-        grad_y = jax.scipy.signal.convolve2d(
-            dig_target, kernel_dy, mode="same", boundary="fill", fillvalue=0
-        )
+        padded_dig_target = jnp.pad(dig_target, ((1, 1), (1, 1)), mode="constant")
+        grad_x = padded_dig_target[1:-1, 2:] - padded_dig_target[1:-1, :-2]
+        grad_y = padded_dig_target[2:, 1:-1] - padded_dig_target[:-2, 1:-1]
         normal_angle = jnp.arctan2(grad_y, grad_x)
         edge_angle = (normal_angle + (jnp.pi / 2.0) + jnp.pi) % (2.0 * jnp.pi) - jnp.pi
-        arm_angle = jnp.squeeze(state._get_arm_angle_rad())
+        arm_angle = jnp.ravel(state._get_arm_angle_rad())[0]
         angle_diff = jnp.abs((edge_angle - arm_angle + jnp.pi) % (2.0 * jnp.pi) - jnp.pi)
         angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
         edge_alignment_error_map = angle_diff * border_mask

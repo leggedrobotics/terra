@@ -2219,11 +2219,12 @@ class State(NamedTuple):
             map_shape = self.world.action_map.map.shape
             dump_mask_map = dump_mask.reshape(map_shape)
             # Keep transfer geometry strictly 2D for position indexing.
-            dump_mask_2d = (
-                dump_mask_map[0]
-                if dump_mask_map.ndim == 3
-                else dump_mask_map
-            )
+            if dump_mask_map.ndim == 4:
+                dump_mask_2d = dump_mask_map[0, 0]
+            elif dump_mask_map.ndim == 3:
+                dump_mask_2d = dump_mask_map[0]
+            else:
+                dump_mask_2d = dump_mask_map
             # Tolerance: allow transfer if truck base is within a 1-tile dilation of the cone
             dump_mask_2d_dilated = self._dilate_mask(dump_mask_2d, kernel_size=3)
 
@@ -2242,7 +2243,8 @@ class State(NamedTuple):
             ]).astype(jnp.int32)
             pos_x = jnp.clip(pos_x, 0, self.world.width - 1)
             pos_y = jnp.clip(pos_y, 0, self.world.height - 1)
-            base_in = dump_mask_2d_dilated[pos_x, pos_y]
+            flat_idx = pos_x * dump_mask_2d_dilated.shape[1] + pos_y
+            base_in = dump_mask_2d_dilated.reshape(-1)[flat_idx]
 
             current_idx = self.agent.current_agent
             active = self.agent.agent_active.astype(jnp.bool_)
@@ -3127,7 +3129,7 @@ class State(NamedTuple):
             components["dig_completion_inner"],
         )
         weighted_edge_completion = (
-            jnp.float32(0.7) * components["dig_completion_total"]
+            jnp.float32(0.7) * completion_percentage
             + jnp.float32(0.3) * components["dig_completion_edge"]
         )
         gated_completion = jax.lax.cond(
@@ -3306,22 +3308,18 @@ class State(NamedTuple):
                 _do_expensive_check
             )
 
-        def _check_cooperative_task_done():
+        def _check_dig_and_dump_task_done():
             """
-            For cooperative tasks (excavator + skidsteer):
-            - Excavator digs: check if all dig requirements are met (target_map < 0)
-            - Skidsteer moves dirt: check if all dirt is in dump zones (target_map > 0)
+            For maps with both excavation and dump requirements:
+            - All dig requirements must be met (target_map < 0)
+            - All positive dirt must be in dump zones (target_map > 0)
             - Both agents must be unloaded
             """
-            # Both dig and dump must be complete for cooperative tasks
+            # Both dig and dump must be complete for dig+dump tasks.
             done_dig = _check_done_dig()
             done_dump = _check_done_dump()
-            
-            # For cooperative tasks, we require BOTH conditions to be met
-            # This ensures the excavator has finished digging AND the skidsteer has moved all dirt
-            cooperative_complete = jnp.logical_and(done_dig, done_dump)
-            
-            # Additional check: ensure all active agents are unloaded for cooperative completion
+
+            # Ensure all active agents are unloaded for completion.
             # This prevents premature termination when any agent still has dirt
             loaded_per_agent_dyn = jnp.array([
                 self.agent.agent_states[0].loaded[0],
@@ -3331,43 +3329,28 @@ class State(NamedTuple):
             ])
             active_dyn = self.agent.agent_active.astype(jnp.bool_)
             all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
-            cooperative_complete = jnp.logical_and(cooperative_complete, all_unloaded_dyn)
-            
-            return cooperative_complete
+
+            return jnp.logical_and(jnp.logical_and(done_dig, done_dump), all_unloaded_dyn)
 
         # Check if this is a relocation task:
         # Relocation tasks have dump zones (target_map > 0) but no dig requirements (no target_map < 0)
-        # AND at least one skidsteer agent is available (agent_type == 2)
         has_dump_requirements = jnp.any(target_map > 0)
         has_dig_requirements = jnp.any(target_map < 0)
-        
-        # Check if there are skidsteer or truck agents available (type 2 or 1) among active agents
-        # Check for any active skidsteer or truck agents without dynamic tuple indexing
-        agent_types = jnp.array([
-            self.agent.agent_states[0].agent_type[0],
-            self.agent.agent_states[1].agent_type[0],
-            self.agent.agent_states[2].agent_type[0],
-            self.agent.agent_states[3].agent_type[0]
-        ])
-        has_skidsteer_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 2))
-        has_truck_agent = jnp.any(jnp.logical_and(self.agent.agent_active, agent_types == 1))
-        has_transport_agent = jnp.logical_or(has_skidsteer_agent, has_truck_agent)
-        
+
         # Relocation tasks do not require a transport agent; excavator alone could relocate
         is_relocation_task = jnp.logical_and(
             has_dump_requirements,
             jnp.logical_not(has_dig_requirements)
         )
-        # Only use cooperative logic if transport agents are available
-        is_cooperative_task = jnp.logical_and(
-            jnp.logical_and(has_dig_requirements, has_dump_requirements),
-            has_transport_agent
-        )
+        # Any dig+dump map requires both excavation and dump-zone completion,
+        # even with a single excavator.
+        is_dig_and_dump_task = jnp.logical_and(has_dig_requirements, has_dump_requirements)
 
         # Choose termination logic based on task type
         def _traditional_task_logic():
             # Traditional logic for tasks with specific target map requirements
-            # Only check digging requirements - dump requirements are handled by relocation/cooperative logic
+            # Only check digging requirements; dump requirements are handled by
+            # relocation or dig+dump logic above.
             done_dig = jax.lax.cond(
                 jnp.all(target_map >= 0),  # No dig requirements
                 lambda: True,
@@ -3386,8 +3369,8 @@ class State(NamedTuple):
             is_relocation_task,
             _relocation_task_logic,
             lambda: jax.lax.cond(
-                is_cooperative_task,
-                _check_cooperative_task_done,
+                is_dig_and_dump_task,
+                _check_dig_and_dump_task_done,
                 _traditional_task_logic
             )
         )
