@@ -1602,31 +1602,27 @@ class State(NamedTuple):
         Expand the mask to include all valid neighbors (3x3 kernel).
         Only includes neighbors that are valid for dumping (not obstacles, is dumpable).
         """
-        H, W = mask.shape
+        # Defensive rank handling:
+        # Runtime traces can occasionally provide singleton-batched masks ([1,H,W]).
+        # Keep expansion logic robust to both 2D and 3D inputs to avoid XLA rank
+        # mismatches from 2D-only correlation kernels.
         padding_mask = self.world.padding_mask.map
         dumpability_mask = self.world.dumpability_mask.map
+        if mask.ndim == 3 and mask.shape[0] == 1:
+            mask = mask[0]
+        if padding_mask.ndim == 3 and padding_mask.shape[0] == 1:
+            padding_mask = padding_mask[0]
+        if dumpability_mask.ndim == 3 and dumpability_mask.shape[0] == 1:
+            dumpability_mask = dumpability_mask[0]
         
         # Create validity mask - tiles where dirt can be placed
         validity_mask = jnp.logical_and(
             padding_mask == 0,  # Not an obstacle
             dumpability_mask == 1  # Is dumpable
         )
-        
-        # Use convolution to expand the mask to include neighbors
-        # Create a 3x3 kernel that includes center and all 8 neighbors
-        kernel = jnp.ones((3, 3), dtype=jnp.float32)
-        
-        # Convert mask to float for convolution
-        mask_float = mask.astype(jnp.float32)
-        
-        # Apply 2D convolution to expand the mask
-        # This is JAX-compatible and vectorized
-        expanded_float = jax.scipy.signal.correlate2d(
-            mask_float, kernel, mode='same', boundary='fill', fillvalue=0.0
-        )
-        
-        # Convert back to boolean - any neighbor (including self) was affected
-        expanded = expanded_float > 0
+
+        # Use rank-safe dilation helper (supports 2D and [B,H,W]).
+        expanded = self._dilate_mask(mask.astype(jnp.bool_), kernel_size=3)
         
         # CRITICAL: Only include valid tiles in the expanded mask
         # This ensures soil mechanics don't affect obstacles or non-dumpable areas
@@ -3157,10 +3153,10 @@ class State(NamedTuple):
             ),
             lambda: components["dump_completion_action_map"],
         )
+        # Transport maps: episodic reward tracks relocation + border edges (dig via dense step rewards).
         weighted_edge_completion = (
-            jnp.float32(0.5) * completion_percentage
-            + jnp.float32(0.25) * components["dig_completion_inner"]
-            + jnp.float32(0.25) * components["dig_completion_edge"]
+            jnp.float32(0.6) * completion_percentage
+            + jnp.float32(0.4) * components["dig_completion_edge"]
         )
         gated_completion = jax.lax.cond(
             enforce_border_alignment,
@@ -3178,11 +3174,22 @@ class State(NamedTuple):
             self.world.target_map.map,
         )
         
-        terminal_r = jax.lax.cond(
-            done,
+        # Full terminal reward only for true task success; timeout gets a small
+        # graded terminal signal so partially better episodes still receive
+        # learning signal without overshadowing true completion.
+        success_terminal_r = jax.lax.cond(
+            done_task,
             lambda: self._calculate_terminal_reward(gated_completion),
             lambda: 0.0,
         )
+        timeout_terminal_r = jax.lax.cond(
+            jnp.logical_and(done, jnp.logical_not(done_task)),
+            lambda: self.env_cfg.rewards.terminal
+            * jnp.float32(0.1)
+            * (jnp.clip(gated_completion, a_min=0.0, a_max=1.0) ** jnp.float32(2.0)),
+            lambda: 0.0,
+        )
+        terminal_r = success_terminal_r + timeout_terminal_r
         # Divide terminal reward by number of active agents to share credit fairly
         active_count_f32 = jnp.sum(self.agent.agent_active.astype(jnp.float32))
         denom = jnp.maximum(active_count_f32, jnp.float32(1.0))
@@ -4024,7 +4031,9 @@ class State(NamedTuple):
         Uses threshold + exponential scaling to discourage low effort and encourage high completion.
         """
         base_reward = self.env_cfg.rewards.terminal
-        min_threshold = 0.50 #0.45 # 30% minimum completion required
+        min_threshold = jnp.float32(
+            getattr(self.env_cfg, "terminal_completion_min_threshold", 0.6)
+        )
         
         # No reward for very poor performance
         def _no_reward():

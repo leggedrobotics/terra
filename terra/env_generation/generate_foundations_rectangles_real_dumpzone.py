@@ -6,9 +6,11 @@ with one rectangular dump zone placed near a randomly chosen map border, using
 the same placement style as `generate_foundations_dumpzones_v3.py`.
 
 For each map:
-  1. A simple rectangle foundation is sampled with different side lengths.
+  1. A simple rectangle foundation is sampled with different side lengths,
+     placed at least `foundation_border_offset` pixels from the map border.
   2. A rectangular dump zone is sampled with independent width/height.
-  3. The dump zone is placed near one map border with a border offset.
+  3. The dump zone is placed near one map border with a random inset from
+     `dump_border_offset` up to `dump_border_offset_max`.
   4. Candidates overlapping the foundation or small obstacles are rejected.
 
 Everything else (small obstacles, output folder conventions) follows
@@ -186,15 +188,25 @@ def _save_image_with_polygon_overlay(img, metadata, save_folder, i):
     cv2.imwrite(str(overlay_folder / f"trench_{i}.png"), overlay)
 
 
+def _sample_border_inset(border_offset_min, border_offset_max, max_allowed):
+    """Sample how far a dump zone sits inward from the chosen map border."""
+    hi = min(border_offset_max, max_allowed)
+    lo = border_offset_min
+    if hi < lo:
+        hi = lo
+    return random.randint(lo, hi)
+
+
 def create_rectangular_dump_zone_at_border(
     img_terra_pad,
     allowed_mask,
     dig_mask,
-    dump_width_min=13,
-    dump_width_max=18,
-    dump_height_min=13,
-    dump_height_max=18,
-    border_offset=3,
+    dump_width_min=14,
+    dump_width_max=23,
+    dump_height_min=14,
+    dump_height_max=23,
+    border_offset_min=3,
+    border_offset_max=16,
     max_attempts=200,
 ):
     """
@@ -202,17 +214,21 @@ def create_rectangular_dump_zone_at_border(
 
     This follows the dump-zone placement style from
     `generate_foundations_dumpzones_v3.py`: choose one of the four borders,
-    place the zone with a fixed border offset, and reject overlaps. Width and
-    height are sampled independently so the zone may be rectangular.
+    place the zone with a random inset from the border (between
+    `border_offset_min` and `border_offset_max`), and reject overlaps. Width
+    and height are sampled independently so the zone may be rectangular.
 
     Args:
         img_terra_pad: HxWx3 color map (mutated: dumping color is written).
         allowed_mask: HxW bool where dumping is permitted.
         dig_mask: HxW bool of foundation / dig cells.
+        border_offset_min: Minimum pixels between dump zone and map edge.
+        border_offset_max: Maximum inset from the chosen border (random per map).
     Returns:
         (img_terra_pad, dump_mask, dump_metadata). Raises if no dumpable
         placement is found.
     """
+    border_offset_max = max(border_offset_min, border_offset_max)
     if not np.any(dig_mask):
         raise RuntimeError("No foundation cells found; cannot place a dump zone.")
 
@@ -241,18 +257,18 @@ def create_rectangular_dump_zone_at_border(
         (
             "fallback_size_minus_3",
             "anywhere",
-            9,
-            12,
-            9,
-            12,
+            11,
+            15,
+            11,
+            15,
         ),
         (
             "fallback_size_8_10",
             "anywhere",
-            8,
-            10,
-            8,
-            10,
+            9,
+            12,
+            9,
+            12,
         ),
     )
     attempted_ranges = []
@@ -268,32 +284,61 @@ def create_rectangular_dump_zone_at_border(
         for _ in range(max_attempts):
             dump_width = random.randint(width_min, width_max)
             dump_height = random.randint(height_min, height_max)
-            if dump_width * dump_height >= foundation_area:
-                continue
+            # Temporarily disabled: allow larger dump zones, including zones whose
+            # area is equal to or larger than the foundation area.
+            # if dump_width * dump_height >= foundation_area:
+            #     continue
             if (
-                dump_width > w - 2 * border_offset
-                or dump_height > h - 2 * border_offset
+                dump_width > w - 2 * border_offset_min
+                or dump_height > h - 2 * border_offset_min
             ):
                 continue
 
+            map_margin = border_offset_min
+
             if placement_mode == "anywhere":
                 side = "anywhere"
-                x = random.randint(border_offset, w - dump_width - border_offset)
-                y = random.randint(border_offset, h - dump_height - border_offset)
+                x = random.randint(map_margin, w - dump_width - map_margin)
+                y = random.randint(map_margin, h - dump_height - map_margin)
+                border_inset = None
             else:
                 side = random.choice(sides)
                 if side == "top":
-                    x = random.randint(border_offset, w - dump_width - border_offset)
-                    y = border_offset
+                    max_inset = h - dump_height - map_margin
+                    if max_inset < border_offset_min:
+                        continue
+                    border_inset = _sample_border_inset(
+                        border_offset_min, border_offset_max, max_inset
+                    )
+                    x = random.randint(map_margin, w - dump_width - map_margin)
+                    y = border_inset
                 elif side == "bottom":
-                    x = random.randint(border_offset, w - dump_width - border_offset)
-                    y = h - dump_height - border_offset
+                    max_inset = h - dump_height - map_margin
+                    if max_inset < border_offset_min:
+                        continue
+                    border_inset = _sample_border_inset(
+                        border_offset_min, border_offset_max, max_inset
+                    )
+                    x = random.randint(map_margin, w - dump_width - map_margin)
+                    y = h - dump_height - border_inset
                 elif side == "left":
-                    x = border_offset
-                    y = random.randint(border_offset, h - dump_height - border_offset)
+                    max_inset = w - dump_width - map_margin
+                    if max_inset < border_offset_min:
+                        continue
+                    border_inset = _sample_border_inset(
+                        border_offset_min, border_offset_max, max_inset
+                    )
+                    x = border_inset
+                    y = random.randint(map_margin, h - dump_height - map_margin)
                 else:
-                    x = w - dump_width - border_offset
-                    y = random.randint(border_offset, h - dump_height - border_offset)
+                    max_inset = w - dump_width - map_margin
+                    if max_inset < border_offset_min:
+                        continue
+                    border_inset = _sample_border_inset(
+                        border_offset_min, border_offset_max, max_inset
+                    )
+                    x = w - dump_width - border_inset
+                    y = random.randint(map_margin, h - dump_height - map_margin)
 
             if not np.all(allowed_mask[y : y + dump_height, x : x + dump_width]):
                 continue
@@ -309,7 +354,11 @@ def create_rectangular_dump_zone_at_border(
                     "height": int(dump_height),
                     "side": side,
                     "placement_mode": placement_mode,
-                    "border_offset": int(border_offset),
+                    "border_offset_min": int(border_offset_min),
+                    "border_offset_max": int(border_offset_max),
+                    "border_inset": (
+                        None if border_inset is None else int(border_inset)
+                    ),
                     "placement_pass": pass_name,
                     "area": int(dump_width * dump_height),
                     "foundation_area": foundation_area,
@@ -325,8 +374,9 @@ def create_rectangular_dump_zone_at_border(
     raise RuntimeError(
         "Failed to place a rectangular border dump zone after "
         f"{max_attempts} attempts for each placement pass: {attempted_ranges}. "
-        f"Map size={w}x{h}, border_offset={border_offset}, "
-        f"foundation_area={foundation_area}. Try a smaller border offset, "
+        f"Map size={w}x{h}, border_offset_min={border_offset_min}, "
+        f"border_offset_max={border_offset_max}, "
+        f"foundation_area={foundation_area}. Try smaller border offsets, "
         "fewer obstacles, or larger foundation rectangles."
     )
 
@@ -345,9 +395,9 @@ def _create_rectangular_foundation_terra_pad(
     rectangle_min_side,
     rectangle_max_side,
     expansion_factor=1,
-    placement_margin=1,
+    placement_margin=6,
 ):
-    placement_margin = max(1, placement_margin)
+    placement_margin = max(1, int(placement_margin))
     max_side_that_fits = max_size - 2 * placement_margin
     rectangle_max_side = min(rectangle_max_side, max_side_that_fits)
     if rectangle_max_side < rectangle_min_side:
@@ -373,6 +423,7 @@ def _create_rectangular_foundation_terra_pad(
             "y": y0 * expansion_factor,
             "width": width * expansion_factor,
             "height": height * expansion_factor,
+            "border_offset": placement_margin * expansion_factor,
         }
     }
     return convert_terra_pad_to_color(img_terra_pad, color_dict), metadata
@@ -393,11 +444,13 @@ def create_foundations_rectangles_dumpzone_standalone(
     copy_metadata=True,
     has_dumpability=False,
     center_padding=True,
-    dump_width_min=13,
-    dump_width_max=18,
-    dump_height_min=13,
-    dump_height_max=18,
+    dump_width_min=14,
+    dump_width_max=20,
+    dump_height_min=14,
+    dump_height_max=20,
     dump_border_offset=3,
+    dump_border_offset_max=16,
+    foundation_border_offset=8,
     rectangle_min_side=12,
     rectangle_max_side=24,
 ):
@@ -421,7 +474,7 @@ def create_foundations_rectangles_dumpzone_standalone(
                 rectangle_min_side=rectangle_min_side,
                 rectangle_max_side=rectangle_max_side,
                 expansion_factor=expansion_factor,
-                placement_margin=1,
+                placement_margin=foundation_border_offset,
             )
 
             # Start from a neutral background so only the border rectangle
@@ -457,7 +510,8 @@ def create_foundations_rectangles_dumpzone_standalone(
                 dump_width_max=dump_width_max,
                 dump_height_min=dump_height_min,
                 dump_height_max=dump_height_max,
-                border_offset=dump_border_offset,
+                border_offset_min=dump_border_offset,
+                border_offset_max=dump_border_offset_max,
             )
 
             cumulative_mask = dig_mask | dump_mask | obstacle_mask | nondump_mask
@@ -484,11 +538,13 @@ def create_foundations_rectangles_dumpzone_standalone(
 def generate_foundations_rectangles_dumpzone_standalone(
     config_path="config/env_generation_config.yaml",
     generate_terra_format=True,
-    dump_width_min=13,
-    dump_width_max=18,
-    dump_height_min=13,
-    dump_height_max=18,
+    dump_width_min=14,
+    dump_width_max=20,
+    dump_height_min=14,
+    dump_height_max=20,
     dump_border_offset=3,
+    dump_border_offset_max=16,
+    foundation_border_offset=8,
     rectangle_min_side=None,
     rectangle_max_side=None,
 ):
@@ -523,7 +579,8 @@ def generate_foundations_rectangles_dumpzone_standalone(
         f"max_side: {rectangle_max_side}, map_size: {map_size}, "
         f"dump_size: {dump_width_min}-{dump_width_max} x "
         f"{dump_height_min}-{dump_height_max}, "
-        f"dump_border_offset: {dump_border_offset}"
+        f"dump_border_offset: {dump_border_offset}-{dump_border_offset_max}, "
+        f"foundation_border_offset: {foundation_border_offset}"
     )
 
     create_foundations_rectangles_dumpzone_standalone(
@@ -534,6 +591,8 @@ def generate_foundations_rectangles_dumpzone_standalone(
         dump_height_min=dump_height_min,
         dump_height_max=dump_height_max,
         dump_border_offset=dump_border_offset,
+        dump_border_offset_max=dump_border_offset_max,
+        foundation_border_offset=foundation_border_offset,
         rectangle_min_side=rectangle_min_side,
         rectangle_max_side=rectangle_max_side,
     )
@@ -595,25 +654,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dump-width-min",
         type=int,
-        default=13,
+        default=14,
         help="Minimum dump-zone rectangle width.",
     )
     parser.add_argument(
         "--dump-width-max",
         type=int,
-        default=18,
+        default=20,
         help="Maximum dump-zone rectangle width.",
     )
     parser.add_argument(
         "--dump-height-min",
         type=int,
-        default=13,
+        default=14,
         help="Minimum dump-zone rectangle height.",
     )
     parser.add_argument(
         "--dump-height-max",
         type=int,
-        default=18,
+        default=20,
         help="Maximum dump-zone rectangle height.",
     )
     parser.add_argument(
@@ -621,6 +680,21 @@ if __name__ == "__main__":
         type=int,
         default=3,
         help="Minimum distance between the dump zone and the map border.",
+    )
+    parser.add_argument(
+        "--dump-border-offset-max",
+        type=int,
+        default=16,
+        help=(
+            "Maximum random inset from the chosen border when placing the dump "
+            "zone (>= --dump-border-offset)."
+        ),
+    )
+    parser.add_argument(
+        "--foundation-border-offset",
+        type=int,
+        default=8,
+        help="Minimum distance between the foundation rectangle and the map border.",
     )
     parser.add_argument(
         "--rectangle-min-side",
@@ -647,6 +721,10 @@ if __name__ == "__main__":
         dump_height_min=args.dump_height_min,
         dump_height_max=args.dump_height_max,
         dump_border_offset=args.dump_border_offset,
+        dump_border_offset_max=max(
+            args.dump_border_offset, args.dump_border_offset_max
+        ),
+        foundation_border_offset=args.foundation_border_offset,
         rectangle_min_side=args.rectangle_min_side,
         rectangle_max_side=args.rectangle_max_side,
     )

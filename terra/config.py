@@ -56,7 +56,7 @@ class AgentConfig(NamedTuple):
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
     move_tiles: int = 5  # number of tiles of progress for every move action
-    dig_radius_tiles: int = 6  # radial excavation/workspace reach in tiles
+    dig_radius_tiles: int = 5  #(7.03m) # radial excavation/workspace reach in tiles
 
     dig_depth: int = 1  # how much every dig action digs
 
@@ -102,14 +102,14 @@ class Rewards(NamedTuple):
             move_while_loaded=-0.0,  
             move=-0.1,  
             move_with_turned_wheels=-0.1,  
-            collision_turn=-0.1, 
-            base_turn=-0.1,  
-            cabin_turn=-0.05,
-            wheel_turn=-0.05,  
-            dig_wrong=-0.25,
+            collision_turn=-0.05, #-0.1
+            base_turn=-0.05, #-0.1
+            cabin_turn=-0.02, #-0.05
+            wheel_turn=-0.02, #-0.05
+            dig_wrong=-0.12, #-0.25
             dump_wrong=-1.0,
             dig_correct=0.6,  
-            dig_edge_bonus=0.8,
+            dig_edge_bonus=1.3,
             dump_correct=1.0,
 
             # Skid steer specific rewards

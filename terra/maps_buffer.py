@@ -294,7 +294,7 @@ def load_single_map(map_path: str) -> Array:
     )
 
 
-def load_maps_from_disk(folder_path: str) -> Array:
+def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False) -> Array:
     # Set the max number of branches the trench has
     max_trench_type = 3
     max_foundation_border_type = 64
@@ -375,9 +375,10 @@ def load_maps_from_disk(folder_path: str) -> Array:
             dist_map = np.zeros_like(map, dtype=np.float32)
         distances.append(dist_map.astype(np.float32))
 
-        try:
-            # Metadata needs to be loaded only for trenches (A, B, C coefficients)
-            with open(f"{folder_path}/metadata/trench_{i}.json") as f:
+        # Metadata needs to be loaded only for trenches (A, B, C coefficients)
+        metadata_path = Path(folder_path) / "metadata" / f"trench_{i}.json"
+        if metadata_path.exists():
+            with open(metadata_path) as f:
                 metadata = json.load(f)
             trench_ax = metadata.get("axes_ABC", [])
             if len(trench_ax) > 0:
@@ -389,13 +390,7 @@ def load_maps_from_disk(folder_path: str) -> Array:
 
             # Fill in with dummies the remaining metadata to reach the standard shape
             while len(trench_ax) < max_trench_type:
-                trench_ax.append(
-                    [
-                        -97,
-                        -97,
-                        -97,
-                    ]
-                )
+                trench_ax.append([-97, -97, -97])
 
             trench_axes.append(trench_ax)
             foundation_ax = metadata.get("foundation_border_axes_ABC", [])
@@ -412,9 +407,18 @@ def load_maps_from_disk(folder_path: str) -> Array:
             foundation_border_axes.append(foundation_ax)
             foundation_border_types.append(foundation_border_type)
             n_loaded_metadata += 1
-        except:
+        else:
+            # Missing metadata for this map.
+            if require_trench_metadata:
+                # If the curriculum/level requires trench metadata (e.g. trench rewards),
+                # raise immediately so the user can provide the metadata.
+                raise RuntimeError(
+                    f"Missing trench metadata file {metadata_path} but trench metadata is required for this level."
+                )
+            # Otherwise use defaults and continue. If some metadata were loaded
+            # earlier this is allowed (we treat missing as defaults).
             if n_loaded_metadata > 0:
-                raise (RuntimeError("Imported some trench metadata, but one failed."))
+                print(f"Warning: missing metadata file {metadata_path}; using defaults for img_{i}.")
             trench_axes.append([[-97, -97, -97] for _ in range(max_trench_type)])
             foundation_border_axes.append(
                 [[-97, -97, -97] for _ in range(max_foundation_border_type)]
@@ -605,7 +609,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         foundation_border_types = []
         actions_from_disk = []
         distances_from_disk = []
-        for folder_path in folder_paths:
+        for idx, folder_path in enumerate(folder_paths):
             (
                 maps,
                 occupancies,
@@ -616,7 +620,12 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
                 dumpability_masks_init,
                 actions,
                 distances,
-            ) = load_maps_from_disk(folder_path)
+            ) = load_maps_from_disk(
+                folder_path,
+                require_trench_metadata=batch_cfg.curriculum_global.levels[idx].get(
+                    "apply_trench_rewards", False
+                ),
+            )
             maps_from_disk.append(maps)
             occupancies_from_disk.append(occupancies)
             dumpability_masks_init_from_disk.append(dumpability_masks_init)
