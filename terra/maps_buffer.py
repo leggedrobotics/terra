@@ -26,7 +26,7 @@ class MapsBuffer(NamedTuple):
     padding_mask: Array  # [map_type, n_maps, W, H]
     dumpability_masks_init: Array  # [map_type, n_maps, W, H]
     trench_axes: Array  # [map_type, n_maps, n_axes_per_map, 3] -- (A, B, C) coefficients for trench axes (-97 if not a trench)
-    trench_types: Array  # type of trench (number of branches), or -1 if not a trench
+    trench_types: Array  # [map_type, n_maps], number of trench axes, or -1 if unavailable
     foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
     foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
     action_maps: Array  # [map_type, n_maps, W, H]
@@ -76,7 +76,7 @@ class MapsBuffer(NamedTuple):
         map = self.maps[curriculum_level, idx]
         padding_mask = self.padding_mask[curriculum_level, idx]
         trench_axes = self.trench_axes[curriculum_level, idx]
-        trench_type = self.trench_types[curriculum_level]
+        trench_type = self.trench_types[curriculum_level, idx]
         foundation_border_axes = self.foundation_border_axes[curriculum_level, idx]
         foundation_border_type = self.foundation_border_types[curriculum_level, idx]
         # make sure is int 32
@@ -158,6 +158,21 @@ def actions_sanity_check(map: Array) -> None:
         raise RuntimeError("Loaded actions map is not valid.")
 
 
+def _ensure_spatial_2d(array: Array, source: str) -> Array:
+    """Normalize singleton-channel maps and reject true non-2D spatial data."""
+    array = np.asarray(array)
+    if array.ndim == 2:
+        return array
+    if array.ndim == 3 and 1 in (array.shape[0], array.shape[-1]):
+        squeezed = np.squeeze(array)
+        if squeezed.ndim == 2:
+            return squeezed
+    raise RuntimeError(
+        f"Loaded map array from {source} has shape {array.shape}; expected a 2D "
+        "grid or a singleton-channel 3D grid."
+    )
+
+
 def metadata_sanity_check(metadata: dict[str, Any]) -> None:
     valid = True
     k = metadata.keys()
@@ -219,23 +234,25 @@ def load_single_map(map_path: str) -> Array:
         metadata_file = map_path / "metadata.json"
 
     # Load map
-    image = np.load(image_file)
+    image = _ensure_spatial_2d(np.load(image_file), str(image_file))
     map_sanity_check(image)
 
     # Load occupancy
-    occupancy = np.load(occupancy_file)
+    occupancy = _ensure_spatial_2d(np.load(occupancy_file), str(occupancy_file))
     occupancy_sanity_check(occupancy)
 
     # Load dumpability mask
-    dumpability_mask_init = np.load(dumpability_file)
+    dumpability_mask_init = _ensure_spatial_2d(
+        np.load(dumpability_file), str(dumpability_file)
+    )
     dumpability_sanity_check(dumpability_mask_init)
 
     # Load distance map
-    distance_map_init = np.load(distance_file)
+    distance_map_init = _ensure_spatial_2d(np.load(distance_file), str(distance_file))
 
     # Check if actions map exists
     if actions_file.exists():
-        actions_map = np.load(actions_file)
+        actions_map = _ensure_spatial_2d(np.load(actions_file), str(actions_file))
         actions_sanity_check(actions_map)
     else:
         actions_map = np.zeros_like(image, dtype=IntMap)
@@ -276,6 +293,7 @@ def load_single_map(map_path: str) -> Array:
     maps = jnp.array([image], dtype=IntMap)
     occupancies = jnp.array([occupancy], dtype=IntMap)
     trench_axes = jnp.array([trench_axes])
+    trench_types = jnp.array([trench_type], dtype=jnp.int32)
     foundation_border_axes = jnp.array([foundation_border_axes])
     dumpability_masks_init = jnp.array([dumpability_mask_init], dtype=jnp.bool_)
     actions = jnp.array([actions_map], dtype=IntMap)
@@ -285,7 +303,7 @@ def load_single_map(map_path: str) -> Array:
         maps,
         occupancies,
         trench_axes,
-        trench_type,
+        trench_types,
         foundation_border_axes,
         foundation_border_type,
         dumpability_masks_init,
@@ -306,12 +324,12 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
     occupancies = []
     dumpability_masks_init = []
     trench_axes = []
+    trench_types = []
     foundation_border_axes = []
     foundation_border_types = []
     actions = []
     distances = []
     n_loaded_metadata = 0
-    trench_type = -1
     # Check if the actions folder exists (only for relocations)
     actions_folder = Path(folder_path) / "actions"
     has_actions = actions_folder.exists()
@@ -341,18 +359,24 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
         )
 
     for i in tqdm(selected_indices, desc="Data Loader"):
-        map = np.load(f"{folder_path}/images/img_{i}.npy")
+        image_path = Path(folder_path) / "images" / f"img_{i}.npy"
+        map = _ensure_spatial_2d(np.load(image_path), str(image_path))
         map_sanity_check(map)
-        occupancy = np.load(f"{folder_path}/occupancy/img_{i}.npy")
+        occupancy_path = Path(folder_path) / "occupancy" / f"img_{i}.npy"
+        occupancy = _ensure_spatial_2d(np.load(occupancy_path), str(occupancy_path))
         occupancy_sanity_check(occupancy)
-        dumpability_mask_init = np.load(f"{folder_path}/dumpability/img_{i}.npy")
+        dumpability_path = Path(folder_path) / "dumpability" / f"img_{i}.npy"
+        dumpability_mask_init = _ensure_spatial_2d(
+            np.load(dumpability_path), str(dumpability_path)
+        )
         dumpability_sanity_check(dumpability_mask_init)
         maps.append(map)
         occupancies.append(occupancy)
         dumpability_masks_init.append(dumpability_mask_init)
         # Generate an actions map if present, otherwise initialize an empty one
         if has_actions:
-            actions_map = np.load(actions_folder / f"img_{i}.npy")
+            actions_path = actions_folder / f"img_{i}.npy"
+            actions_map = _ensure_spatial_2d(np.load(actions_path), str(actions_path))
             actions_sanity_check(actions_map)
             actions.append(actions_map)
         else:
@@ -362,7 +386,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
         distance_file = Path(folder_path) / "distance" / f"img_{i}.npy"
         if distance_file.exists():
             try:
-                dist_map = np.load(distance_file)
+                dist_map = _ensure_spatial_2d(np.load(distance_file), str(distance_file))
                 if dist_map.shape != map.shape:
                     print(f"Warning: distance map shape mismatch for {distance_file}, expected {map.shape}, got {dist_map.shape}; filling zeros.")
                     dist_map = np.zeros_like(map, dtype=np.float32)
@@ -381,6 +405,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
             with open(metadata_path) as f:
                 metadata = json.load(f)
             trench_ax = metadata.get("axes_ABC", [])
+            trench_type = -1
             if len(trench_ax) > 0:
                 metadata_sanity_check(trench_ax[0])
                 trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
@@ -393,6 +418,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
                 trench_ax.append([-97, -97, -97])
 
             trench_axes.append(trench_ax)
+            trench_types.append(trench_type)
             foundation_ax = metadata.get("foundation_border_axes_ABC", [])
             foundation_border_type = -1
             if len(foundation_ax) > 0:
@@ -420,6 +446,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
             if n_loaded_metadata > 0:
                 print(f"Warning: missing metadata file {metadata_path}; using defaults for img_{i}.")
             trench_axes.append([[-97, -97, -97] for _ in range(max_trench_type)])
+            trench_types.append(-1)
             foundation_border_axes.append(
                 [[-97, -97, -97] for _ in range(max_foundation_border_type)]
             )
@@ -440,6 +467,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
                 3,
             )
         )
+        trench_types = -1 * jnp.ones((loaded_count,), dtype=jnp.int32)
         foundation_border_axes = -97.0 * jnp.ones(
             (
                 loaded_count,
@@ -453,7 +481,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
         jnp.array(maps, dtype=IntMap),
         jnp.array(occupancies, dtype=IntMap),
         jnp.array(trench_axes),
-        trench_type,
+        jnp.array(trench_types, dtype=jnp.int32),
         jnp.array(foundation_border_axes),
         jnp.array(foundation_border_types, dtype=jnp.int32),
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
@@ -614,7 +642,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
                 maps,
                 occupancies,
                 trench_axes,
-                trench_type,
+                trench_types_for_level,
                 foundation_border_axes,
                 foundation_border_type,
                 dumpability_masks_init,
@@ -630,7 +658,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             occupancies_from_disk.append(occupancies)
             dumpability_masks_init_from_disk.append(dumpability_masks_init)
             trench_axes_list.append(trench_axes)
-            trench_types.append(trench_type)
+            trench_types.append(trench_types_for_level)
             foundation_border_axes_list.append(foundation_border_axes)
             foundation_border_types.append(foundation_border_type)
             actions_from_disk.append(actions)
@@ -688,6 +716,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             (-1, *dumpability_masks_init_from_disk.shape[2:])
         )
         trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
+        trench_types = trench_types.reshape((-1,))
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (-1, *foundation_border_axes_list.shape[2:])
         )
@@ -705,6 +734,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             rng, dumpability_masks_init_from_disk, axis=0
         )
         trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
+        trench_types = jax.random.permutation(rng, trench_types, axis=0)
         foundation_border_axes_list = jax.random.permutation(
             rng, foundation_border_axes_list, axis=0
         )
@@ -728,6 +758,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         trench_axes_list = trench_axes_list.reshape(
             (d0, d1, *trench_axes_list.shape[1:])
         )
+        trench_types = trench_types.reshape((d0, d1))
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (d0, d1, *foundation_border_axes_list.shape[1:])
         )

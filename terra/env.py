@@ -325,6 +325,40 @@ class TerraEnv(NamedTuple):
             env_cfg=env_cfg,   # now the right, possibly flipped `apply_trench_rewards`
         )
 
+    @partial(jax.jit, static_argnums=(0,))
+    def step_no_reset(
+        self,
+        state: State,
+        action: Action,
+        env_cfg: EnvConfig,
+    ) -> TimeStep:
+        """Step once and return the terminal state instead of auto-resetting on done."""
+        new_state = state._step(action)
+        reward, reward_components = state._get_reward(new_state, action)
+        is_do = action.action[0] == TrackedActionType.DO
+        terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
+        update_reachability = jnp.logical_and(is_do, terrain_changed)
+        new_state = self.wrap_state(new_state, update_reachability=update_reachability)
+        obs = self._state_to_obs_dict(new_state)
+        done, task_done = state._is_done(
+            new_state.world.action_map.map,
+            new_state.world.target_map.map,
+        )
+        infos = new_state._get_infos(action, task_done)
+        try:
+            if isinstance(infos, dict):
+                infos = {**infos, "reward_components": reward_components}
+        except Exception:
+            pass
+        return TimeStep(
+            state=new_state,
+            observation=obs,
+            reward=reward,
+            done=done,
+            info=infos,
+            env_cfg=env_cfg,
+        )
+
     @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
         """
@@ -642,3 +676,18 @@ class TerraEnvBatch:
             timestep.env_cfg,
         )
         return timestep
+
+    @partial(jax.jit, static_argnums=(0,))
+    def step_no_reset(
+        self,
+        timestep: TimeStep,
+        actions: Action,
+        maps_buffer_keys: jax.random.PRNGKey,
+    ) -> TimeStep:
+        """Step without replacing done environments with freshly reset states."""
+        timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
+        return jax.vmap(self.terra_env.step_no_reset)(
+            timestep.state,
+            actions,
+            timestep.env_cfg,
+        )

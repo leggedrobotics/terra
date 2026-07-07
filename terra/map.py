@@ -7,6 +7,20 @@ from terra.map_generator import GridMap
 from terra.settings import IntLowDim
 
 
+def _as_2d_map(x: Array) -> Array:
+    x = jnp.asarray(x)
+    return jnp.reshape(x, (-1,) + x.shape[-2:])[0]
+
+
+def _as_axes_table(x: Array) -> Array:
+    x = jnp.asarray(x)
+    return jnp.reshape(x, (-1, x.shape[-2], x.shape[-1]))[0]
+
+
+def _as_scalar_int(x: Array) -> Array:
+    return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
+
+
 class GridWorld(NamedTuple):
     """
     Here we define the encoding of the maps.
@@ -107,6 +121,17 @@ class GridWorld(NamedTuple):
         action_map: Array,
         relocation_distance_map_override: Array | None = None,
     ) -> "GridWorld":
+        target_map = _as_2d_map(target_map)
+        padding_mask = _as_2d_map(padding_mask)
+        dumpability_mask_init = _as_2d_map(dumpability_mask_init)
+        action_map = _as_2d_map(action_map)
+        trench_axes = _as_axes_table(trench_axes)
+        trench_type = _as_scalar_int(trench_type)
+        foundation_border_axes = _as_axes_table(foundation_border_axes)
+        foundation_border_type = _as_scalar_int(foundation_border_type)
+        if relocation_distance_map_override is not None:
+            relocation_distance_map_override = _as_2d_map(relocation_distance_map_override)
+
         action_map = GridMap.new(IntLowDim(action_map))
         target_map = GridMap.new(IntLowDim(target_map))
         padding_mask = GridMap.new(IntLowDim(padding_mask))

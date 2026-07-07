@@ -12,6 +12,14 @@ from terra.utils import get_arm_angle_int
 from terra.settings import IntLowDim
 
 
+def _as_2d_map(x: Array) -> Array:
+    return jnp.reshape(x, (-1,) + x.shape[-2:])[0]
+
+
+def _as_scalar_index(x: Array) -> Array:
+    return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
+
+
 class TraversabilityMaskWrapper:
     @staticmethod
     def _downsample_or_factor2(mask: Array) -> Array:
@@ -353,6 +361,7 @@ class LocalMapWrapper:
             state.env_cfg.agent.angles_base,
             state.env_cfg.agent.angles_cabin,
         )
+        current_arm_angle = _as_scalar_index(current_arm_angle)
         return local_cartesian_masks, current_arm_angle
 
     @staticmethod
@@ -466,12 +475,14 @@ class LocalMapWrapper:
             state, current_agent_idx
         )
 
-        target_map_pos = jnp.clip(state.world.target_map.map, a_min=0)
-        target_map_neg = jnp.clip(state.world.target_map.map, a_max=0)
-        action_map_pos = jnp.clip(state.world.action_map.map, a_min=0)
-        action_map_neg = jnp.clip(state.world.action_map.map, a_max=0)
+        target_map = _as_2d_map(state.world.target_map.map)
+        action_map = _as_2d_map(state.world.action_map.map)
+        target_map_pos = jnp.clip(target_map, a_min=0)
+        target_map_neg = jnp.clip(target_map, a_max=0)
+        action_map_pos = jnp.clip(action_map, a_min=0)
+        action_map_neg = jnp.clip(action_map, a_max=0)
         obstacle_obs_mask = LocalMapWrapper._obstacle_boundary_mask(
-            state.world.padding_mask.map
+            _as_2d_map(state.world.padding_mask.map)
         )
 
         local_map_target_pos = LocalMapWrapper._wrap_with_masks(
@@ -487,7 +498,7 @@ class LocalMapWrapper:
             state, action_map_neg, local_cartesian_masks, current_arm_angle
         )
         local_map_dumpability = LocalMapWrapper._wrap_with_masks(
-            state, state.world.dumpability_mask.map, local_cartesian_masks, current_arm_angle
+            state, _as_2d_map(state.world.dumpability_mask.map), local_cartesian_masks, current_arm_angle
         )
         local_map_obstacles = LocalMapWrapper._wrap_with_masks(
             state, obstacle_obs_mask, local_cartesian_masks, current_arm_angle
@@ -497,7 +508,7 @@ class LocalMapWrapper:
             state, border_mask, local_cartesian_masks, current_arm_angle
         )
 
-        dig_target = (state.world.target_map.map < 0).astype(jnp.float32)
+        dig_target = (target_map < 0).astype(jnp.float32)
         padded_dig_target = jnp.pad(dig_target, ((1, 1), (1, 1)), mode="constant")
         grad_x = padded_dig_target[1:-1, 2:] - padded_dig_target[1:-1, :-2]
         grad_y = padded_dig_target[2:, 1:-1] - padded_dig_target[:-2, 1:-1]

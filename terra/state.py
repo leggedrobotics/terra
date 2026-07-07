@@ -37,6 +37,24 @@ SCALE_MIN = jnp.float32(2.0)
 SCALE_MAX = jnp.float32(5.0)
 
 
+def _as_2d_map(x: Array) -> Array:
+    """Return the first map over any leading batch axes, preserving trailing H,W."""
+    return jnp.reshape(x, (-1,) + x.shape[-2:])[0]
+
+
+def _flat_2d_map(x: Array) -> Array:
+    return _as_2d_map(x).reshape(-1)
+
+
+def _as_axes_table(x: Array) -> Array:
+    """Return the first [n_axes, 3] table over any leading batch axes."""
+    return jnp.reshape(x, (-1, x.shape[-2], x.shape[-1]))[0]
+
+
+def _as_scalar_int(x: Array) -> Array:
+    return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
+
+
 # Legacy constants (kept for backwards compatibility, but prefer env_cfg values)
 # These are used as fallbacks if env_cfg doesn't have the fields
 DUMP_BONUS_MULT = jnp.float32(0.5)
@@ -77,7 +95,6 @@ class State(NamedTuple):
     agent: Agent
 
     env_steps: int
-
 
 
     @classmethod
@@ -703,7 +720,8 @@ class State(NamedTuple):
             auto_load_mask = new_state._mask_out_wrong_dig_tiles_skidsteer(auto_load_mask)
             
             # Calculate how much dirt is available to load from workspace
-            current_flattened_action_map = new_state.world.action_map.map.reshape(-1)
+            action_map_2d = _as_2d_map(new_state.world.action_map.map)
+            current_flattened_action_map = action_map_2d.reshape(-1)
             # Convert to int32 to prevent overflow in dot product
             available_dirt = jnp.int32(current_flattened_action_map) @ jnp.int32(auto_load_mask)
             
@@ -720,10 +738,10 @@ class State(NamedTuple):
                     current_flattened_action_map  # Keep other tiles unchanged
                 )
                 
-                new_map_2d = new_flattened_action_map.reshape(new_state.world.action_map.map.shape)
+                new_map_2d = new_flattened_action_map.reshape(action_map_2d.shape)
                 
                 # Apply soil mechanics (conserves dirt - only redistributes)
-                auto_load_mask_2d = auto_load_mask.reshape(new_state.world.action_map.map.shape)
+                auto_load_mask_2d = auto_load_mask.reshape(action_map_2d.shape)
                 final_map = new_state._apply_local_soil_mechanics(new_map_2d, auto_load_mask_2d)
                 final_map = final_map.astype(new_state.world.action_map.map.dtype)
                 
@@ -855,7 +873,7 @@ class State(NamedTuple):
             
             def _apply_dump_zone_restriction():
                 # For skid steer: restrict to only dump zones (target_map > 0)
-                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+                dump_zone_mask = _flat_2d_map(self.world.target_map.map > 0)
                 return dump_mask * dump_zone_mask
             
             def _no_dump_zone_restriction():
@@ -885,16 +903,17 @@ class State(NamedTuple):
                     even_volume_per_tile = (
                         cur2.loaded - remaining_volume
                     ) / dump_volume
-                    flattened_action_map = self.world.action_map.map.reshape(-1)
+                    target_map_2d = _as_2d_map(self.world.target_map.map)
+                    flattened_action_map = _flat_2d_map(self.world.action_map.map)
                     predicted_map_flat = self._apply_dump_mask(
                         flattened_action_map,
                         dump_mask,
                         even_volume_per_tile,
                         remaining_volume,
-                        self.world.target_map.map,
+                        target_map_2d,
                         use_condensed_dump=True,
                     )
-                    predicted_map = predicted_map_flat.reshape(self.world.target_map.map.shape)
+                    predicted_map = predicted_map_flat.reshape(target_map_2d.shape)
                     return self._compute_relocation_potential(predicted_map)
                 
                 predicted_potential = _predict_potential()
@@ -1203,47 +1222,30 @@ class State(NamedTuple):
 
     def _get_foundation_border_mask(self) -> Array:
         """Returns a boolean mask for the inside border band of dig target tiles."""
-        dig_target = self.world.target_map.map < 0
+        dig_target_full = self.world.target_map.map < 0
+        # This geometry is always per-map 2D. In some traced paths XLA can see
+        # leading env/device axes here, so strip them from trailing H,W dims
+        # before doing spatial indexing/window ops.
+        dig_target = jnp.reshape(
+            dig_target_full,
+            (-1,) + dig_target_full.shape[-2:],
+        )[0]
         border_width = jnp.int32(
             getattr(self.env_cfg, "foundation_border_width_tiles", 2)
         )
         border_width = jnp.maximum(border_width, 0)
         def _erode_once(mask: Array) -> Array:
-            # Support both [H, W] and batched [B, H, W] masks.
-            # Use reduce_window instead of convolve2d to avoid rank-mismatch issues
-            # in traced/batched XLA paths.
+            # Use reduce_window instead of convolve2d to avoid rank-mismatch
+            # issues in traced XLA paths.
             mask_f = mask.astype(jnp.float32)
-            if mask.ndim == 2:
-                neigh_sum = jax.lax.reduce_window(
-                    mask_f,
-                    jnp.float32(0.0),
-                    jax.lax.add,
-                    window_dimensions=(3, 3),
-                    window_strides=(1, 1),
-                    padding="SAME",
-                )
-            elif mask.ndim == 3:
-                neigh_sum = jax.lax.reduce_window(
-                    mask_f,
-                    jnp.float32(0.0),
-                    jax.lax.add,
-                    window_dimensions=(1, 3, 3),
-                    window_strides=(1, 1, 1),
-                    padding="SAME",
-                )
-            elif mask.ndim == 4:
-                neigh_sum = jax.lax.reduce_window(
-                    mask_f,
-                    jnp.float32(0.0),
-                    jax.lax.add,
-                    window_dimensions=(1, 1, 3, 3),
-                    window_strides=(1, 1, 1, 1),
-                    padding="SAME",
-                )
-            else:
-                raise ValueError(
-                    f"Unsupported dig_target rank {mask.ndim}; expected 2D, 3D, or 4D."
-                )
+            neigh_sum = jax.lax.reduce_window(
+                mask_f,
+                jnp.float32(0.0),
+                jax.lax.add,
+                window_dimensions=(3, 3),
+                window_strides=(1, 1),
+                padding="SAME",
+            )
             all_neighbors_inside = neigh_sum == 9.0
             return jnp.logical_and(mask, all_neighbors_inside)
 
@@ -1258,29 +1260,18 @@ class State(NamedTuple):
         Border tiles must be dug with arm aligned to edge direction.
         Uses stricter tolerance for horizontal/vertical edges, looser for diagonal edges.
         """
-        border_mask_full = self._get_foundation_border_mask()
-        target_map_full = self.world.target_map.map
-        # Border-alignment checks are geometric and 2D; if maps are batched
-        # ([B,H,W]), use the first spatial slice consistently.
-        if border_mask_full.ndim == 4:
-            border_mask = border_mask_full[0, 0]
-        elif border_mask_full.ndim == 3:
-            border_mask = border_mask_full[0]
-        else:
-            border_mask = border_mask_full
-        if target_map_full.ndim == 4:
-            target_map_2d = target_map_full[0, 0]
-        elif target_map_full.ndim == 3:
-            target_map_2d = target_map_full[0]
-        else:
-            target_map_2d = target_map_full
-        border_axes_full = self.world.foundation_border_axes
-        if border_axes_full.ndim == 4:
-            border_axes = border_axes_full[0, 0]
-        elif border_axes_full.ndim == 3:
-            border_axes = border_axes_full[0]
-        else:
-            border_axes = border_axes_full
+        def _first_2d_map(x: Array) -> Array:
+            return jnp.reshape(x, (-1,) + x.shape[-2:])[0]
+
+        def _first_axes_table(x: Array) -> Array:
+            return jnp.reshape(x, (-1, x.shape[-2], x.shape[-1]))[0]
+
+        # Border-alignment checks are geometric and 2D. Canonicalize from
+        # trailing dimensions so eval/training traces cannot accidentally leave
+        # a leading batch axis on border_axes and index [B, N, 3] as [N, 3].
+        border_mask = _first_2d_map(self._get_foundation_border_mask())
+        target_map_2d = _first_2d_map(self.world.target_map.map)
+        border_axes = _first_axes_table(self.world.foundation_border_axes)
         border_any = jnp.any(border_mask)
         arm_angle = jnp.ravel(self._get_arm_angle_rad())[0]
         max_border_axes = border_axes.shape[0]
@@ -1303,7 +1294,7 @@ class State(NamedTuple):
             rows, cols = target_map_2d.shape
             rr = jnp.repeat(jnp.arange(rows)[:, None], cols, axis=1).astype(jnp.float32)
             cc = jnp.repeat(jnp.arange(cols)[None, :], rows, axis=0).astype(jnp.float32)
-            workspace_mask = workspace_mask_flat.reshape(border_mask.shape)
+            workspace_mask = jnp.reshape(workspace_mask_flat, (-1, rows, cols))[0]
             workspace_border_mask = jnp.logical_and(border_mask, workspace_mask)
 
             hv_tol = jnp.float32(
@@ -1491,8 +1482,9 @@ class State(NamedTuple):
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
         #Optionally apply soil mechanics using the global flag
-        map_2d = new_flattened_map.reshape(self.world.action_map.map.shape)
-        dig_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+        map_shape = self.world.action_map.map.shape[-2:]
+        map_2d = new_flattened_map.reshape(map_shape)
+        dig_mask_2d = dig_mask.reshape(map_shape)
         return self._apply_local_soil_mechanics(map_2d, dig_mask_2d).reshape(-1)
 
     def _apply_dump_mask(
@@ -1517,12 +1509,15 @@ class State(NamedTuple):
         Returns:
             - new_flattened_map: (N, ) Array flattened new height map
         """
-        map_2d_shape = self.world.action_map.map.shape
-        dump_mask_2d = dump_mask.reshape(map_2d_shape)
+        map_shape = self.world.action_map.map.shape
+        map_2d_shape = map_shape[-2:]
+        dump_mask_2d = jnp.reshape(dump_mask, (-1,) + map_2d_shape)[0]
+        flattened_map_2d = jnp.reshape(flattened_map, (-1,) + map_2d_shape)[0]
+        target_map_2d = jnp.reshape(target_map, (-1,) + map_2d_shape)[0]
 
         def _apply_simple_dump():
             # Original logic
-            target_map_dump_mask = jnp.clip(target_map.reshape(-1), a_min=0) * dump_mask
+            target_map_dump_mask = jnp.clip(target_map_2d.reshape(-1), a_min=0) * dump_mask
             target_dump_volume = target_map_dump_mask.sum()
             dump_mask_final, dump_volume = jax.lax.cond(
                 target_dump_volume > 0,
@@ -1546,8 +1541,8 @@ class State(NamedTuple):
 
             simple_result = (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
             # Optionally apply soil mechanics using the global flag
-            map_2d = simple_result.reshape(self.world.action_map.map.shape)
-            mask_2d = dump_mask_final.reshape(self.world.action_map.map.shape)
+            map_2d = jnp.reshape(simple_result, (-1,) + map_2d_shape)[0]
+            mask_2d = jnp.reshape(dump_mask_final, (-1,) + map_2d_shape)[0]
             return self._apply_local_soil_mechanics(map_2d, mask_2d).reshape(-1)
 
         def _apply_concentrated_dump():
@@ -1587,7 +1582,7 @@ class State(NamedTuple):
             )
             bonus_mask_flat = bonus_indices <= remaining_concentrated_volume
             bonus_volume_2d = bonus_mask_flat.reshape(map_2d_shape).astype(IntMap)
-            new_map_2d = flattened_map.reshape(map_2d_shape).astype(IntMap) + volume_per_tile_2d + bonus_volume_2d
+            new_map_2d = flattened_map_2d.astype(IntMap) + volume_per_tile_2d + bonus_volume_2d
             final_map_2d = self._apply_local_soil_mechanics(new_map_2d, final_concentrated_mask_2d)
             return final_map_2d.flatten()
 
@@ -1949,8 +1944,9 @@ class State(NamedTuple):
         Returns True when the current workspace overlaps static obstacles.
         This is used to env-enforce "no dig/dump through obstacles".
         """
-        workspace_mask = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
-        obstacle_mask = self.world.padding_mask.map == 1
+        map_shape = self.world.action_map.map.shape[-2:]
+        workspace_mask = self._build_dig_dump_cone().reshape(map_shape)
+        obstacle_mask = _as_2d_map(self.world.padding_mask.map) == 1
         return jnp.any(jnp.logical_and(workspace_mask, obstacle_mask))
     
 
@@ -1961,18 +1957,18 @@ class State(NamedTuple):
         Takes the dump mask and turns into False the elements that correspond to
         a dug tile.
         """
-        digged_mask_action_map = self.world.action_map.map < 0
-        return dump_mask * (~digged_mask_action_map).reshape(-1)
+        digged_mask_action_map = _flat_2d_map(self.world.action_map.map < 0)
+        return dump_mask * (~digged_mask_action_map)
 
     def _exclude_dumpability_mask_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """Applies dumpability mask to the dump mask"""
-        return dump_mask * self.world.dumpability_mask.map.reshape(-1)
+        return dump_mask * _flat_2d_map(self.world.dumpability_mask.map)
 
     def _exclude_traversability_mask_tiles_from_dump_mask(
         self, dump_mask: Array
     ) -> Array:
         """Applies traversability mask to the dump mask"""
-        return dump_mask * (self.world.traversability_mask.map == 0).reshape(-1)
+        return dump_mask * _flat_2d_map(self.world.traversability_mask.map == 0)
 
     def _exclude_just_moved_tiles_from_dump_mask(self, dump_mask: Array) -> Array:
         """
@@ -1981,10 +1977,13 @@ class State(NamedTuple):
         Also, removes the possibility of moving the tiles within the same workspace,
         even if not all tiles are occupied.
         """
-        cone_mask_2d = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        map_shape = self.world.action_map.map.shape[-2:]
+        cone_mask_2d = self._build_dig_dump_cone().reshape(map_shape)
         # Use boolean logic and any() to avoid large integer reductions on flattened arrays
         cond_has_overlap = jnp.any(
-            self.world.last_dig_mask.map & (self.world.action_map.map > 0) & cone_mask_2d
+            _as_2d_map(self.world.last_dig_mask.map)
+            & (_as_2d_map(self.world.action_map.map) > 0)
+            & cone_mask_2d
         )
         dig_map_mask = jax.lax.cond(
             cond_has_overlap,
@@ -1994,6 +1993,42 @@ class State(NamedTuple):
 
         return dump_mask * dig_map_mask
 
+    def _dump_cone_lacks_free_space(self, dump_mask: Array) -> Array:
+        min_free_fraction = jnp.float32(
+            getattr(self.env_cfg, "foundation_dump_min_free_fraction", 0.0)
+        )
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
+        is_loaded = cur.loaded[0] > 0
+        foundation_border_type = jnp.int32(
+            jnp.ravel(jnp.asarray(self.world.foundation_border_type))[0]
+        )
+        has_foundation_metadata = foundation_border_type > 0
+
+        map_shape = self.world.action_map.map.shape[-2:]
+        raw_cone = self._build_dig_dump_cone().reshape(map_shape).astype(jnp.bool_)
+        free_cone = jnp.reshape(dump_mask, (-1,) + map_shape)[0].astype(jnp.bool_)
+        cone_count = jnp.sum(raw_cone.astype(jnp.float32))
+        free_count = jnp.sum(jnp.logical_and(raw_cone, free_cone).astype(jnp.float32))
+        free_fraction = free_count / jnp.maximum(cone_count, jnp.float32(1.0))
+
+        return jnp.logical_and(
+            min_free_fraction > 0.0,
+            jnp.logical_and(
+                is_excavator,
+                jnp.logical_and(
+                    is_loaded,
+                    jnp.logical_and(
+                        has_foundation_metadata,
+                        jnp.logical_and(
+                            cone_count > 0.0,
+                            free_fraction <= min_free_fraction,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
     def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
         """
         Takes the dig mask and turns into False the elements that do not correspond to
@@ -2001,14 +2036,16 @@ class State(NamedTuple):
         Also masks out the tiles that are digged as much as the target map requires.
         For excavators: also excludes the last dig area to prevent dump-load cycles.
         """
-        dig_mask_target_map = self.world.target_map.map < 0
-        dig_mask_action_map = self.world.action_map.map > 0
+        target_map_2d = _as_2d_map(self.world.target_map.map)
+        action_map_2d = _as_2d_map(self.world.action_map.map)
+        dig_mask_target_map = target_map_2d < 0
+        dig_mask_action_map = action_map_2d > 0
         dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
 
-        flat_action_map = self.world.action_map.map.reshape(-1)
-        dig_mask_cone = self._build_dig_dump_cone().reshape(self.world.action_map.map.shape)
+        flat_action_map = action_map_2d.reshape(-1)
+        dig_mask_cone = self._build_dig_dump_cone().reshape(action_map_2d.shape)
         # Prefer boolean any over integer sum for compile-time efficiency
-        has_dumped_dirt_in_cone = jnp.any((self.world.action_map.map > 0) & dig_mask_cone)
+        has_dumped_dirt_in_cone = jnp.any((action_map_2d > 0) & dig_mask_cone)
         ambiguity_mask_dig_movesoil = jax.lax.cond(
             has_dumped_dirt_in_cone,
             lambda: (flat_action_map > 0),
@@ -2017,7 +2054,7 @@ class State(NamedTuple):
 
         # respect max dig limit
         max_dig_limit_mask = (
-            self.world.action_map.map > -self.env_cfg.agent.dig_depth
+            action_map_2d > -self.env_cfg.agent.dig_depth
         ).reshape(-1)
 
         # For excavators: exclude last dig area to prevent dump-load cycles
@@ -2025,7 +2062,7 @@ class State(NamedTuple):
         
         def _exclude_last_dig_area():
             # Exclude the last dig/dump area from digging for excavators to prevent dump-load cycles
-            return ~self.world.last_dig_mask.map.reshape(-1)
+            return ~_flat_2d_map(self.world.last_dig_mask.map)
         
         def _no_dig_exclusion():
             # No exclusion for skidsteers
@@ -2061,19 +2098,31 @@ class State(NamedTuple):
         Now allows loading from dump zones (target_map > 0) but with penalty.
         """
         # Allow lifting from any dirt (action_map != 0) - both natural and dumped
-        dig_mask_action_map = self.world.action_map.map != 0
+        action_map_2d = _as_2d_map(self.world.action_map.map)
+        dig_mask_action_map = action_map_2d != 0
         
         # Respect max dig limit
         max_dig_limit_mask = (
-            self.world.action_map.map > -self.env_cfg.agent.dig_depth
+            action_map_2d > -self.env_cfg.agent.dig_depth
         ).reshape(-1)
         
         # Combine all masks (no dump zone exclusion)
         combined_mask = dig_mask & dig_mask_action_map.reshape(-1) & max_dig_limit_mask
         return combined_mask
 
+    @staticmethod
+    def _mask_out_single_tile_digs(dig_mask: Array) -> Array:
+        """Reject dig footprints that would affect only one tile."""
+        dig_mask = dig_mask.astype(jnp.bool_)
+        dig_tile_count = jnp.sum(dig_mask.astype(jnp.int32))
+        return jnp.where(
+            dig_tile_count <= 1,
+            jnp.zeros_like(dig_mask, dtype=jnp.bool_),
+            dig_mask,
+        )
+
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
-        new_dumpability_mask = self.world.dumpability_mask_init.map
+        new_dumpability_mask = _as_2d_map(self.world.dumpability_mask_init.map)
         action_mask_contoured = self._dilate_mask(action_map < 0, kernel_size=5)
         return new_dumpability_mask * (action_mask_contoured == 0)
 
@@ -2084,7 +2133,9 @@ class State(NamedTuple):
         def _dig_when_clear():
             dig_mask = self._build_dig_dump_cone()
             dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-            flattened_action_map = self.world.action_map.map.reshape(-1)
+            dig_mask = self._mask_out_single_tile_digs(dig_mask)
+            action_map_2d = _as_2d_map(self.world.action_map.map)
+            flattened_action_map = action_map_2d.reshape(-1)
             selected_tiles_sum = flattened_action_map @ dig_mask
             moving_dumped_dirt = selected_tiles_sum > 0
             # if moving dumped dirt, move it all at once
@@ -2101,11 +2152,11 @@ class State(NamedTuple):
                     fam, dig_mask, moving_dumped_dirt
                 )
                 new_map_global_coords = new_map_global_coords.reshape(
-                    self.world.action_map.map.shape
+                    action_map_2d.shape
                 )
 
                 # Now apply soil mechanics using the saved cone mask (always enabled)
-                cone_mask_2d = dig_mask.reshape(self.world.action_map.map.shape)
+                cone_mask_2d = dig_mask.reshape(action_map_2d.shape)
                 final_map = self._apply_local_soil_mechanics(new_map_global_coords, cone_mask_2d)
 
                 # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
@@ -2120,7 +2171,7 @@ class State(NamedTuple):
 
                 def _update_last_dig_mask():
                     return self.world.last_dig_mask._replace(
-                        map=jnp.bool_(dig_mask.reshape(self.world.action_map.map.shape))
+                        map=jnp.bool_(dig_mask.reshape(action_map_2d.shape))
                     )
 
                 def _keep_last_dig_mask():
@@ -2139,12 +2190,14 @@ class State(NamedTuple):
                 started_loading = jnp.logical_and(cur2.loaded[0] == 0, actual_volume_loaded > 0)
 
                 def _compute_artificial_source_potential():
-                    old_map_2d = self.world.action_map.map
-                    new_map_2d = final_map
+                    old_map_2d = _as_2d_map(self.world.action_map.map)
+                    new_map_2d = _as_2d_map(final_map)
                     delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
-                    non_dump_mask = (self.world.target_map.map <= 0)
+                    non_dump_mask = _as_2d_map(self.world.target_map.map) <= 0
                     return jnp.sum(
-                        delta_removed * self.world.relocation_distance_map * non_dump_mask
+                        delta_removed
+                        * _as_2d_map(self.world.relocation_distance_map)
+                        * non_dump_mask
                     )
 
                 artificial_source_potential = jax.lax.cond(
@@ -2319,7 +2372,7 @@ class State(NamedTuple):
             is_truck = cur.agent_type[0] == 1
 
             def _apply_dump_zone_restriction():
-                dump_zone_mask = (self.world.target_map.map > 0).reshape(-1)
+                dump_zone_mask = _flat_2d_map(self.world.target_map.map > 0)
                 return dump_mask * dump_zone_mask
 
             def _no_dump_zone_restriction():
@@ -2334,6 +2387,12 @@ class State(NamedTuple):
             dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
             dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
             dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
+            lacks_free_space = self._dump_cone_lacks_free_space(dump_mask)
+            dump_mask = jax.lax.cond(
+                lacks_free_space,
+                lambda: jnp.zeros_like(dump_mask, dtype=dump_mask.dtype),
+                lambda: dump_mask,
+            )
             dump_volume = dump_mask.sum()
 
             def _apply_dump():
@@ -2341,17 +2400,18 @@ class State(NamedTuple):
                 remaining_volume = curd.loaded % dump_volume
                 even_volume_per_tile = (curd.loaded - remaining_volume) / dump_volume
 
-                flattened_action_map = self.world.action_map.map.reshape(-1)
+                target_map_2d = _as_2d_map(self.world.target_map.map)
+                flattened_action_map = _flat_2d_map(self.world.action_map.map)
                 new_map_global_coords = self._apply_dump_mask(
                     flattened_action_map,
                     dump_mask,
                     even_volume_per_tile,
                     remaining_volume,
-                    self.world.target_map.map,
+                    target_map_2d,
                     use_condensed_dump=True,
                 )
                 new_map_global_coords = new_map_global_coords.reshape(
-                    self.world.target_map.map.shape
+                    target_map_2d.shape
                 )
 
                 # Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
@@ -2988,8 +3048,13 @@ class State(NamedTuple):
         def _get_trench_reward():
             cur = self._get_current_agent_state()
             agent_pos = cur.pos_base
-            trench_axes = self.world.trench_axes
-            trench_type = self.world.trench_type
+            trench_axes = _as_axes_table(self.world.trench_axes)
+            max_trench_axes = trench_axes.shape[0]
+            trench_type = jnp.clip(
+                _as_scalar_int(self.world.trench_type),
+                0,
+                max_trench_axes,
+            )
 
             # Find the closest trench for both distance and alignment calculations
             def find_closest_trench_idx(i, state):
@@ -2999,52 +3064,59 @@ class State(NamedTuple):
                 new_dist = jnp.minimum(dist, curr_dist)
                 return (new_dist, new_best_idx)
 
-            d_tiles, closest_idx = jax.lax.fori_loop(
-                0, trench_type,
-                find_closest_trench_idx,
-                (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0))
+            def _compute_for_metadata():
+                d_tiles, closest_idx = jax.lax.fori_loop(
+                    0, trench_type,
+                    find_closest_trench_idx,
+                    (jnp.array(9999.0, dtype=jnp.float32), jnp.array(0)),
+                )
+
+                # 1. Distance (centering) reward - closest trench axis.
+                # Remove the large deadzone used previously, so being even slightly off-center
+                # consistently gets penalized (distance_coefficient is negative by default).
+                d_meters = d_tiles * self.env_cfg.tile_size
+                proximity_scale = jnp.float32(1.0)  # slightly stronger off-center penalty
+                proximity_reward = d_meters * self.env_cfg.distance_coefficient * proximity_scale
+
+                # 2. Alignment reward - only for closest trench
+                # Get trench line equation [a, b, c] for ax + by = c
+                closest_trench = trench_axes[closest_idx]
+
+                # Get trench direction vector [-b, a]
+                trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
+                trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
+
+                # Get the excavator's absolute cabin/arm angle in radians.
+                # This aligns the trench reward with the actual dig workspace direction.
+                agent_angle = jnp.ravel(self._get_arm_angle_rad())[0]
+
+                # Previous base-alignment version kept commented for easy revert:
+                # # Get agent angle in radians
+                # agent_angle = self._get_base_angle_rad()
+
+                # Calculate angular difference (normalized between 0 and pi/2)
+                angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
+                angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
+                angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
+
+                # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
+                alignment_score = 2.0 * angle_diff / jnp.pi
+
+                # Apply alignment reward - lower when aligned with trench
+                # Previous behavior aligned the chassis/base with the trench.
+                # Active behavior aligns the absolute cabin/arm direction instead.
+                alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
+
+                # Final calculation: distance + base alignment only
+                total_reward = proximity_reward + alignment_reward
+                # Explicitly ensure the final result is scalar before returning
+                return jnp.ravel(total_reward)[0]
+
+            return jax.lax.cond(
+                trench_type > 0,
+                _compute_for_metadata,
+                lambda: jnp.float32(0.0),
             )
-
-            # 1. Distance (centering) reward - closest trench axis.
-            # Remove the large deadzone used previously, so being even slightly off-center
-            # consistently gets penalized (distance_coefficient is negative by default).
-            d_meters = d_tiles * self.env_cfg.tile_size
-            proximity_scale = jnp.float32(1.0)  # slightly stronger off-center penalty
-            proximity_reward = d_meters * self.env_cfg.distance_coefficient * proximity_scale
-
-            # 2. Alignment reward - only for closest trench
-            # Get trench line equation [a, b, c] for ax + by = c
-            closest_trench = trench_axes[closest_idx]
-
-            # Get trench direction vector [-b, a]
-            trench_direction = jnp.array([-closest_trench[1], closest_trench[0]])
-            trench_angle = jnp.arctan2(trench_direction[1], trench_direction[0])
-
-            # Get the excavator's absolute cabin/arm angle in radians.
-            # This aligns the trench reward with the actual dig workspace direction.
-            agent_angle = self._get_arm_angle_rad()
-
-            # Previous base-alignment version kept commented for easy revert:
-            # # Get agent angle in radians
-            # agent_angle = self._get_base_angle_rad()
-
-            # Calculate angular difference (normalized between 0 and pi/2)
-            angle_diff = jnp.abs(wrap_angle_rad(trench_angle - agent_angle))
-            angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
-            angle_diff = jnp.minimum(angle_diff, jnp.pi / 2)
-
-            # Calculate alignment score (0 = perfectly aligned, 1 = perpendicular)
-            alignment_score = 2.0 * angle_diff / jnp.pi
-
-            # Apply alignment reward - lower when aligned with trench
-            # Previous behavior aligned the chassis/base with the trench.
-            # Active behavior aligns the absolute cabin/arm direction instead.
-            alignment_reward = alignment_score * self.env_cfg.alignment_coefficient
-
-            # Final calculation: distance + base alignment only
-            total_reward = proximity_reward + alignment_reward
-            # Explicitly ensure the final result is scalar before returning
-            return jnp.squeeze(total_reward)
 
         # Calculate trench reward for the current agent
         # Agent type check is now handled in the main reward function
@@ -3089,15 +3161,15 @@ class State(NamedTuple):
         components["agent_rewards"] = set_idx(components["agent_rewards"])
 
         # Terminal reward based on completion percentage
+        target_map = _as_2d_map(self.world.target_map.map)
+        action_map = _as_2d_map(new_state.world.action_map.map)
         completion_percentage = self._calculate_completion_percentage(
-            new_state.world.action_map.map,
-            self.world.target_map.map
+            action_map,
+            target_map,
         )
         enforce_border_alignment = jnp.bool_(
             getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
         )
-        target_map = self.world.target_map.map
-        action_map = new_state.world.action_map.map
         dig_mask = target_map < 0
         edge_mask = self._get_foundation_border_mask()
         inner_mask = jnp.logical_and(dig_mask, jnp.logical_not(edge_mask))
@@ -3170,8 +3242,8 @@ class State(NamedTuple):
             jnp.logical_and(inner_mask, action_map > target_map).astype(jnp.float32)
         )
         done, done_task = self._is_done(
-            new_state.world.action_map.map,
-            self.world.target_map.map,
+            action_map,
+            target_map,
         )
         
         # Full terminal reward only for true task success; timeout gets a small
@@ -3268,6 +3340,8 @@ class State(NamedTuple):
 
         On top of that, all agents should not be loaded.
         """
+        action_map = _as_2d_map(action_map)
+        target_map = _as_2d_map(target_map)
 
         def _check_done_dump():
             # For dump completion: check if all dirt is in designated dump zones OR 1-pixel buffer around them
@@ -3989,7 +4063,7 @@ class State(NamedTuple):
         return jnp.logical_or(has_skid, has_truck)
 
     def _min_distance_to_dump_zone(self, pos_base: Array) -> Float:
-        dump_mask = self.world.target_map.map > 0
+        dump_mask = _as_2d_map(self.world.target_map.map) > 0
         def _calc_distance():
             yy, xx = jnp.indices(dump_mask.shape)
             yy = yy.astype(jnp.float32)
@@ -4107,10 +4181,12 @@ class State(NamedTuple):
         Relocation potential: sum over non-dump tiles of positive dirt times distance to nearest dump zone.
         Uses cached world.relocation_distance_map (float32, normalized).
         """
-        dist_map = self.world.relocation_distance_map
+        target_map = _as_2d_map(self.world.target_map.map)
+        action_map = _as_2d_map(action_map)
+        dist_map = _as_2d_map(self.world.relocation_distance_map)
         return jnp.sum(
             jnp.where(
-                self.world.target_map.map <= 0,
+                target_map <= 0,
                 jnp.clip(action_map, a_min=0) * dist_map,
                 0,
             )

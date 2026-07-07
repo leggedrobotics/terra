@@ -55,7 +55,7 @@ class AgentConfig(NamedTuple):
     max_wheel_angle: int = ImmutableAgentConfig().max_wheel_angle
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
-    move_tiles: int = 5  # number of tiles of progress for every move action
+    move_tiles: int = 4  # number of tiles of progress for every move action
     dig_radius_tiles: int = 5  #(7.03m) # radial excavation/workspace reach in tiles
 
     dig_depth: int = 1  # how much every dig action digs
@@ -209,6 +209,9 @@ class EnvConfig(NamedTuple):
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
     foundation_border_diag_tolerance_rad: float = 0.436  # ~25deg
     foundation_corner_relaxation_tiles: float = 2.5
+    # 0.0 disables the gate. Values in (0, 1] block excavator dumps unless
+    # more than this fraction of raw cone tiles remain dumpable after filter (higher = more restrictive)
+    foundation_dump_min_free_fraction: float = 0.0
     debug_foundation_border_checks: bool = False
     enable_reachability_obs: bool = False
     reachability_inflation_tiles: int = 3 # not used if downsample factor != 1
