@@ -203,7 +203,7 @@ class EnvConfig(NamedTuple):
     transport_relocate_mult: float = 1.5  # Multiplier for transport (truck/skidsteer) relocation rewards
 
     # Foundation border digging alignment constraints (env-enforced)
-    enforce_foundation_border_alignment: bool = True
+    enforce_foundation_border_alignment: bool = False # set in configs
     foundation_border_width_tiles: int = 2
     foundation_border_proximity_tiles: float = 3.5
     foundation_border_hv_tolerance_rad: float = 0.436  # ~25deg
@@ -211,7 +211,7 @@ class EnvConfig(NamedTuple):
     foundation_corner_relaxation_tiles: float = 2.5
     # 0.0 disables the gate. Values in (0, 1] block excavator dumps unless
     # more than this fraction of raw cone tiles remain dumpable after filter (higher = more restrictive)
-    foundation_dump_min_free_fraction: float = 0.0
+    foundation_dump_min_free_fraction: float = 0.25
     debug_foundation_border_checks: bool = False
     enable_reachability_obs: bool = False
     reachability_inflation_tiles: int = 3 # not used if downsample factor != 1

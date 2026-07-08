@@ -2074,7 +2074,7 @@ class State(NamedTuple):
             _no_dig_exclusion
         )
         enforce_border_alignment = jnp.bool_(
-            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
         )
         border_alignment_mask = jax.lax.cond(
             enforce_border_alignment,
@@ -2895,7 +2895,7 @@ class State(NamedTuple):
             jnp.logical_and(newly_dug_required, border_mask).astype(jnp.float32)
         )
         enforce_edge_alignment = jnp.bool_(
-            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
         )
         edge_bonus = jax.lax.cond(
             jnp.logical_and(enforce_edge_alignment, edge_dug_count > 0),
@@ -3168,7 +3168,7 @@ class State(NamedTuple):
             target_map,
         )
         enforce_border_alignment = jnp.bool_(
-            getattr(self.env_cfg, "enforce_foundation_border_alignment", True)
+            getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
         )
         dig_mask = target_map < 0
         edge_mask = self._get_foundation_border_mask()

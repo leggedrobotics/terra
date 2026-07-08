@@ -40,6 +40,7 @@ from terra.env_generation.utils import color_dict
 
 PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 name_string = "foundations_rectangles_real_dumpzone"
+DEFAULT_RECTANGLE_MAX_SIDE = 22
 
 
 def _to_abc_from_points(p1, p2):
@@ -452,7 +453,7 @@ def create_foundations_rectangles_dumpzone_standalone(
     dump_border_offset_max=16,
     foundation_border_offset=8,
     rectangle_min_side=12,
-    rectangle_max_side=24,
+    rectangle_max_side=DEFAULT_RECTANGLE_MAX_SIDE,
 ):
     save_folder = os.path.join(PACKAGE_DIR, "data", "terra", name_string)
     _ = (all_dumpable, copy_metadata, has_dumpability, center_padding)
@@ -570,7 +571,7 @@ def generate_foundations_rectangles_dumpzone_standalone(
     )
     rectangle_max_side = rectangle_max_side or foundations_config.get(
         "rectangle_max_side",
-        24,
+        DEFAULT_RECTANGLE_MAX_SIDE,
     )
 
     print("Generating FOUNDATIONS RECTANGLES REAL DUMPZONE maps...")
@@ -706,7 +707,7 @@ if __name__ == "__main__":
         "--rectangle-max-side",
         type=int,
         default=None,
-        help="Maximum rectangle foundation side length. Defaults to foundations.max_size.",
+        help=f"Maximum rectangle foundation side length. Defaults to {DEFAULT_RECTANGLE_MAX_SIDE}.",
     )
 
     args = parser.parse_args()
