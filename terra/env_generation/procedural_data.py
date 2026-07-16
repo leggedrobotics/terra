@@ -200,6 +200,12 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
             if rect_height_rows <= 0 or rect_width_cols <= 0:
                 continue # Skip this edge if it cannot be placed
 
+            if (
+                rect_height_rows != ideal_rect_height_rows
+                or rect_width_cols != ideal_rect_width_cols
+            ):
+                continue # Skip clipped legs; they violate the configured trench dimensions.
+
             # Recalculate axis points for the *actual* (clipped) rectangle
             if new_edge_is_horizontal:
                 final_axis_row = rect_origin_row + (rect_height_rows - 1) / 2.0
@@ -254,7 +260,7 @@ def generate_edges(img, edges_range, sizes_small, sizes_long, color_dict):
             'rect_width_cols': final_rect_width
         })
 
-    if not generated_edge_details and n_edges > 0 : # All edges failed to be placed
+    if len(generated_edge_details) < n_edges:
         return None, None, None
 
     # Margin check (same as original)

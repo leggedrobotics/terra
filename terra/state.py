@@ -3225,15 +3225,49 @@ class State(NamedTuple):
             ),
             lambda: components["dump_completion_action_map"],
         )
+        edge_dig_mask = jnp.logical_and(edge_mask, dig_mask)
+        edge_required_volume = jnp.sum(jnp.where(edge_dig_mask, -target_map, 0.0))
+        inner_required_volume = jnp.sum(jnp.where(inner_mask, -target_map, 0.0))
+        has_edge_inner_split = jnp.logical_and(
+            enforce_border_alignment,
+            jnp.logical_and(
+                edge_required_volume > 0,
+                inner_required_volume > 0,
+            ),
+        )
+        dig_dump_completion_with_edges = (
+            jnp.float32(0.5) * components["total_dig_dump_completion"]
+            + jnp.float32(0.25) * components["dig_completion_inner"]
+            + jnp.float32(0.25) * components["dig_completion_edge"]
+        )
+        dig_dump_completion_no_edges = (
+            jnp.float32(0.6) * components["total_dig_dump_completion"]
+            + jnp.float32(0.4) * components["dig_completion_total"]
+        )
+        dig_dump_completion = jax.lax.cond(
+            has_edge_inner_split,
+            lambda: dig_dump_completion_with_edges,
+            lambda: dig_dump_completion_no_edges,
+        )
+
         # Transport maps: episodic reward tracks relocation + border edges (dig via dense step rewards).
         weighted_edge_completion = (
             jnp.float32(0.6) * completion_percentage
             + jnp.float32(0.4) * components["dig_completion_edge"]
         )
-        gated_completion = jax.lax.cond(
+        default_gated_completion = jax.lax.cond(
             enforce_border_alignment,
             lambda: weighted_edge_completion,
             lambda: completion_percentage,
+        )
+        is_dig_dump_task = jnp.logical_and(
+            has_dump_requirements,
+            required_dig_volume > 0,
+        )
+        gated_completion = jax.lax.cond(
+            is_dig_dump_task,
+            lambda: dig_dump_completion,
+            lambda: default_gated_completion,
         )
         components["remaining_edge_dig_tiles"] = jnp.sum(
             jnp.logical_and(edge_mask, action_map > target_map).astype(jnp.float32)
@@ -3241,7 +3275,7 @@ class State(NamedTuple):
         components["remaining_inner_dig_tiles"] = jnp.sum(
             jnp.logical_and(inner_mask, action_map > target_map).astype(jnp.float32)
         )
-        done, done_task = self._is_done(
+        done, done_task = new_state._is_done(
             action_map,
             target_map,
         )
@@ -3347,13 +3381,24 @@ class State(NamedTuple):
             # For dump completion: check if all dirt is in designated dump zones OR 1-pixel buffer around them
             # This allows for more lenient termination while keeping rewards precise
             designated_dump_zones = target_map > 0
-            
-            # Expand dump zones by 1 pixel using the existing soil mechanics function
-            expanded_dump_zones = self._expand_mask_for_soil_mechanics(designated_dump_zones)
-            
+
+            # Completion should use the static target dump zone, not the current
+            # dynamic dumpability mask. Dumpability can shrink around dug
+            # foundation tiles during the episode; using it here would make
+            # already valid target dump cells retroactively fail termination.
+            expanded_dump_zones = self._dilate_mask(designated_dump_zones, kernel_size=3)
+            obstacle_mask = _as_2d_map(self.world.padding_mask.map) == 1
+            allowed_dump_zones = jnp.logical_and(
+                expanded_dump_zones,
+                jnp.logical_not(obstacle_mask),
+            )
+
             # Check if there's any dirt outside expanded dump zones
-            dirt_outside_expanded = jnp.logical_and(action_map > 0, jnp.logical_not(expanded_dump_zones))
-            
+            dirt_outside_expanded = jnp.logical_and(
+                action_map > 0,
+                jnp.logical_not(allowed_dump_zones),
+            )
+
             # Task complete if NO dirt exists outside expanded dump zones
             done_dump = jnp.logical_not(jnp.any(dirt_outside_expanded))
             return done_dump

@@ -5,36 +5,37 @@ sizes: [64]
 trenches:
   difficulty_levels: ["single", "double"] #["single", "double", "double_diagonal", "triple", "triple_diagonal"]
   trenches_per_level: [[1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
+  trench_width_tiles: 2
   trench_dims:  # Updated section
     single:
-      min_ratio: [0.04, 0.05]
+      min_ratio: [0.04, 0.109375]
       max_ratio: [0.2, 0.3]
       diagonal: False
     double:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.04, 0.109375]
       max_ratio: [0.25, 0.5]
       diagonal: False
     double_diagonal:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.04, 0.109375]
       max_ratio: [0.25, 0.5]
       diagonal: True
     triple:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.06, 0.109375]
       max_ratio: [0.25, 0.5]
       diagonal: False
     triple_diagonal:
-      min_ratio: [0.06, 0.08]
+      min_ratio: [0.06, 0.109375]
       max_ratio: [0.25, 0.5]
       diagonal: True
   img_edge_min: 64
   img_edge_max: 64
   # obstacles
-  n_obs_min: 1
+  n_obs_min: 0
   n_obs_max: 3
   size_obstacle_min: 5
   size_obstacle_max: 9
   # dumping constraints
-  n_nodump_min: 1
+  n_nodump_min: 0
   n_nodump_max: 3
   size_nodump_min: 8
   size_nodump_max: 12

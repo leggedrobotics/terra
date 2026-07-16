@@ -276,7 +276,7 @@ class TerraEnv(NamedTuple):
         #     local_map_dumpability_2=new_state.world.local_map_dumpability_2.map,
         #     local_map_obstacles_2=new_state.world.local_map_obstacles_2.map,
         # )
-        done, task_done = state._is_done(
+        done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )
@@ -340,7 +340,7 @@ class TerraEnv(NamedTuple):
         update_reachability = jnp.logical_and(is_do, terrain_changed)
         new_state = self.wrap_state(new_state, update_reachability=update_reachability)
         obs = self._state_to_obs_dict(new_state)
-        done, task_done = state._is_done(
+        done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )

@@ -196,15 +196,23 @@ def create_procedural_trenches(config):
             max(1, int(trench_dims_max_ratio[0] * trenches_config["img_edge_min"])),
             max(1, int(trench_dims_max_ratio[1] * trenches_config["img_edge_max"])),
         )
+        trench_width_tiles = trenches_config.get("trench_width_tiles")
+        if trench_width_tiles is not None:
+            trench_width_tiles = max(1, int(trench_width_tiles))
+            trench_dims_min = (trench_width_tiles, trench_dims_min[1])
+            trench_dims_max = (trench_width_tiles, trench_dims_max[1])
 
         diagonal = trench_dims_config["diagonal"]
+
+        sizes_small = (trench_dims_min[0], trench_dims_max[0])
+        sizes_long = (trench_dims_min[1], trench_dims_max[1])
 
         generate_trenches_v2(
             n_imgs,
             trenches_config["img_edge_min"],
             trenches_config["img_edge_max"],
-            trench_dims_min,
-            trench_dims_max,
+            sizes_small,
+            sizes_long,
             n_trenches,  # Fixed to correctly pass the tuple/list
             resolution,
             save_folder,
@@ -270,16 +278,24 @@ def create_procedural_trenches_with_dumpzones(config):
             max(1, int(trench_dims_max_ratio[0] * trenches_config["img_edge_min"])),
             max(1, int(trench_dims_max_ratio[1] * trenches_config["img_edge_max"])),
         )
+        trench_width_tiles = trenches_config.get("trench_width_tiles")
+        if trench_width_tiles is not None:
+            trench_width_tiles = max(1, int(trench_width_tiles))
+            trench_dims_min = (trench_width_tiles, trench_dims_min[1])
+            trench_dims_max = (trench_width_tiles, trench_dims_max[1])
 
         diagonal = trench_dims_config["diagonal"]
 
         # Generate trenches with dump zones
+        sizes_small = (trench_dims_min[0], trench_dims_max[0])
+        sizes_long = (trench_dims_min[1], trench_dims_max[1])
+
         generate_trenches_with_dumpzones(
             n_imgs,
             trenches_config["img_edge_min"],
             trenches_config["img_edge_max"],
-            trench_dims_min,
-            trench_dims_max,
+            sizes_small,
+            sizes_long,
             n_trenches,
             resolution,
             save_folder,
@@ -584,6 +600,4 @@ def create_foundations(config,
             save_or_display_image(img_terra_pad, occ, dmp, metadata, curriculum_level, n)
 
         print("Foundations created successfully.")
-
-
 
