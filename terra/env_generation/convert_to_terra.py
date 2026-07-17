@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 
 import cv2
@@ -297,13 +298,16 @@ def generate_trenches_terra(dataset_folder, size, n_imgs, expansion_factor, all_
     print("Converting trenches...")
     trenches_name = "trenches"
     trenches_path = Path(dataset_folder) / trenches_name
-    levels = [d.name for d in trenches_path.iterdir() if d.is_dir()]
+    standard_levels = {"single", "double", "double_diagonal", "triple", "triple_diagonal"}
+    levels = sorted(d.name for d in trenches_path.iterdir() if d.is_dir() and d.name in standard_levels)
     for level in levels:
         img_folder = trenches_path / level / "images"
         metadata_folder = trenches_path / level / "metadata"
         occupancy_folder = trenches_path / level / "occupancy"
         dumpability_folder = trenches_path / level / "dumpability"
         destination_folder = Path(dataset_folder) / "train" / trenches_name / level
+        if destination_folder.exists():
+            shutil.rmtree(destination_folder)
         destination_folder.mkdir(parents=True, exist_ok=True)
         _convert_all_imgs_to_terra(
             img_folder,
@@ -631,6 +635,8 @@ def generate_trenches_dumpzone_terra(dataset_folder, size, n_imgs):
         destination_folder = Path(dataset_folder) / "train" / "trenches" / subdir.name
         
         # Create destination directory
+        if destination_folder.exists():
+            shutil.rmtree(destination_folder)
         destination_folder.mkdir(parents=True, exist_ok=True)
         print(f"    Created destination directory: {destination_folder}")
         

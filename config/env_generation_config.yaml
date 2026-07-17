@@ -3,7 +3,7 @@ n_imgs: 600 # it has to be the same else we can't stack images together
 sizes: [64]
 
 trenches:
-  difficulty_levels: ["single", "double"] #["single", "double", "double_diagonal", "triple", "triple_diagonal"]
+  difficulty_levels: ["single", "double", "double_diagonal", "triple", "triple_diagonal"]
   trenches_per_level: [[1, 1], [2, 2], [2, 2], [3, 3], [3, 3]]
   trench_width_tiles: 2
   trench_dims:  # Updated section

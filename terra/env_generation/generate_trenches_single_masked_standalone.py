@@ -118,7 +118,7 @@ def main():
 
     # Parameters
     img_edge_min = img_edge_max = 64
-    sizes_small = (max(1, int(0.04 * img_edge_min)), max(1, int(0.05 * img_edge_min)))
+    sizes_small = (2, 2)
     sizes_long = (max(1, int(0.2 * img_edge_min)), max(1, int(0.3 * img_edge_min)))
     n_edges = (1, 1)
     n_obs_min, n_obs_max = 0, 2

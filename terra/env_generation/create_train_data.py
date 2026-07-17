@@ -1,4 +1,5 @@
 import os
+import shutil
 import yaml
 import json
 import math
@@ -181,6 +182,8 @@ def create_procedural_trenches(config):
     for level, n_trenches in zip(difficulty_levels, corrected_trenches_per_level):
         #save_folder = os.path.join("data/terra", "trenches", level)
         save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "trenches", level)
+        if os.path.exists(save_folder):
+            shutil.rmtree(save_folder)
         os.makedirs(save_folder, exist_ok=True)
 
         # Updated to use new configuration structure
@@ -263,6 +266,8 @@ def create_procedural_trenches_with_dumpzones(config):
     for level, n_trenches in zip(difficulty_levels, corrected_trenches_per_level):
         # Create new folder for trenches with dump zones
         save_folder = os.path.join(PACKAGE_DIR, "data", "terra", "trenches", f"{level}_dumpzone")
+        if os.path.exists(save_folder):
+            shutil.rmtree(save_folder)
         os.makedirs(save_folder, exist_ok=True)
 
         # Updated to use new configuration structure
@@ -600,4 +605,3 @@ def create_foundations(config,
             save_or_display_image(img_terra_pad, occ, dmp, metadata, curriculum_level, n)
 
         print("Foundations created successfully.")
-

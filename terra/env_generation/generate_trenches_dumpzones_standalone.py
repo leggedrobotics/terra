@@ -51,16 +51,12 @@ def main():
     # 1) Generate trenches with dump zones
     if not args.no_generate:
         print("Creating procedural trenches with dump zones...")
-        # Compute trench dimension ranges from default single-trenches ratios
+        # Keep trench width fixed at 2 tiles; preserve the existing length range.
         img_edge_min_val = 64
         img_edge_max_val = 64
-        min_ratio_w, min_ratio_h = 0.04, 0.05
         max_ratio_w, max_ratio_h = 0.20, 0.30
 
-        sizes_small = (
-            max(1, int(min_ratio_w * img_edge_min_val)),
-            max(1, int(min_ratio_h * img_edge_max_val)),
-        )
+        sizes_small = (2, 2)
         sizes_long = (
             max(1, int(max_ratio_w * img_edge_min_val)),
             max(1, int(max_ratio_h * img_edge_max_val)),
@@ -132,5 +128,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

@@ -258,7 +258,7 @@ def create_trenches_separated_standalone(
                                     min_dirt_tiles=10,
                                     max_dirt_tiles=20,
                                     n_separated_trenches=2,
-                                    trench_sizes_small=(2, 3),  # (min_small, max_small) - matches original script
+                                    trench_sizes_small=(2, 2),  # Fixed width: (min_small, max_small)
                                     trench_sizes_long=(12, 19), # (min_long, max_long) - matches original script
                                     trench_min_separation_px=23,
                                     no_dump_zones=False):
