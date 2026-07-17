@@ -223,37 +223,53 @@ class State(NamedTuple):
         TrackedAction type --> 0
         WheeledAction type --> 1
         """
+        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
+        is_wheeled = current_action_type == 1
+
+        def _move_forward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_forward_wheeled,
+                self._handle_move_forward,
+            )
+
+        def _move_backward():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_move_backward_wheeled,
+                self._handle_move_backward,
+            )
+
+        def _turn_left():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_left,
+                self._handle_clock,
+            )
+
+        def _turn_right():
+            return jax.lax.cond(
+                is_wheeled,
+                self._handle_turn_wheels_right,
+                self._handle_anticlock,
+            )
+
         handlers_list = [
-            # Tracked
-            self._handle_move_forward,
-            self._handle_move_backward,
-            self._handle_clock,
-            self._handle_anticlock,
-            self._handle_cabin_clock,
-            self._handle_cabin_anticlock,
-            self._handle_do,
-            self._do_nothing,
-            # Wheeled
-            self._handle_move_forward_wheeled,
-            self._handle_move_backward_wheeled,
-            self._handle_turn_wheels_left,
-            self._handle_turn_wheels_right,
+            _move_forward,
+            _move_backward,
+            _turn_left,
+            _turn_right,
             self._handle_cabin_clock,
             self._handle_cabin_anticlock,
             self._handle_do,
             self._do_nothing,
         ]
-        # Route by the current agent's movement mechanism (action_type), not the incoming action.type
-        # 0 = tracked handlers block, 1 = wheeled handlers block
-        current_action_type = jnp.squeeze(self._get_current_agent_state().action_type)
-        cumulative_len = jnp.array([0, 8], dtype=IntLowDim)
-        offset_idx = (cumulative_len @ jax.nn.one_hot(current_action_type, 2)).astype(IntLowDim)
 
         action_idx = jnp.squeeze(action.action)
         state = jax.lax.cond(
             jnp.logical_or(action_idx == -1, action_idx == 7),
             self._do_nothing,
-            lambda: jax.lax.switch(offset_idx + action_idx, handlers_list),
+            lambda: jax.lax.switch(action_idx, handlers_list),
         )
         state = jax.lax.cond(
             turn, 
@@ -3163,7 +3179,7 @@ class State(NamedTuple):
         # Terminal reward based on completion percentage
         target_map = _as_2d_map(self.world.target_map.map)
         action_map = _as_2d_map(new_state.world.action_map.map)
-        completion_percentage = self._calculate_completion_percentage(
+        completion_percentage = new_state._calculate_completion_percentage(
             action_map,
             target_map,
         )

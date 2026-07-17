@@ -640,12 +640,13 @@ class TerraEnvBatch:
         )
 
     @partial(jax.jit, static_argnums=(0,))
-    def step(
+    def step_unconditional_reset_candidates(
         self,
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
-    ) -> tuple[State, tuple[dict, Array, Array, dict]]:
+    ) -> TimeStep:
+        """Reference path that samples reset maps on every environment step."""
         # Update env_cfgs based on the curriculum, and get the new maps
         timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
         (
@@ -676,6 +677,104 @@ class TerraEnvBatch:
             timestep.env_cfg,
         )
         return timestep
+
+    @partial(jax.jit, static_argnums=(0,))
+    def step(
+        self,
+        timestep: TimeStep,
+        actions: Action,
+        maps_buffer_keys: jax.random.PRNGKey,
+    ) -> TimeStep:
+        """Step the batch and sample reset maps only when an episode ends."""
+        timestep = self.curriculum_manager.update_cfgs(timestep, maps_buffer_keys)
+        timestep = jax.vmap(self.terra_env.step_no_reset)(
+            timestep.state,
+            actions,
+            timestep.env_cfg,
+        )
+
+        def _reset_done_envs(ts: TimeStep) -> TimeStep:
+            (
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+                _,
+            ) = self._get_map(maps_buffer_keys, ts.env_cfg)
+
+            def _reset_one(
+                ts_one,
+                action_one,
+                target_map,
+                padding_mask,
+                trench_axis,
+                trench_kind,
+                foundation_border_axis,
+                foundation_border_kind,
+                dumpability_mask,
+                action_map,
+                distance_map,
+            ):
+                def _reset_branch(item):
+                    state_reset, obs_reset = self.terra_env._reset_existent(
+                        item.state,
+                        target_map,
+                        padding_mask,
+                        trench_axis,
+                        trench_kind,
+                        foundation_border_axis,
+                        foundation_border_kind,
+                        dumpability_mask,
+                        action_map,
+                        distance_map,
+                        item.env_cfg,
+                    )
+                    infos = state_reset._get_infos(
+                        action_one,
+                        item.info["task_done"],
+                    )
+                    infos = {
+                        **infos,
+                        "reward_components": item.info["reward_components"],
+                    }
+                    return item._replace(
+                        state=state_reset,
+                        observation=obs_reset,
+                        info=infos,
+                    )
+
+                return jax.lax.cond(
+                    ts_one.done,
+                    _reset_branch,
+                    lambda item: item,
+                    ts_one,
+                )
+
+            return jax.vmap(_reset_one)(
+                ts,
+                actions,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+            )
+
+        return jax.lax.cond(
+            jnp.any(timestep.done),
+            _reset_done_envs,
+            lambda ts: ts,
+            timestep,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def step_no_reset(
