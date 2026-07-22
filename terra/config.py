@@ -22,7 +22,7 @@ class ImmutableMapsConfig(NamedTuple):
     This defines the proportion between the map and the agent.
     """
 
-    edge_length_m: float = 44.0  # map edge length in meters 44  , 66 for 96x96 maps
+    edge_length_m: float = 36.5714285714  # 64 tiles at 0.5714285714 m/tile
     edge_length_px: int = 0  # updated in the code
 
 
@@ -56,7 +56,7 @@ class AgentConfig(NamedTuple):
     wheel_step: float = ImmutableAgentConfig().wheel_step
 
     move_tiles: int = 5  # number of tiles of progress for every move action
-    dig_radius_tiles: int = 5  #(7.03m) # radial excavation/workspace reach in tiles
+    dig_radius_tiles: int = 5  # radial excavation/workspace reach in tiles, 6.5 m at 64x64 default
 
     dig_depth: int = 1  # how much every dig action digs
 

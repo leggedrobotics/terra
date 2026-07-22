@@ -36,6 +36,9 @@ AVG_TARGET_TILES = jnp.float32(170.0)
 SCALE_MIN = jnp.float32(2.0)
 SCALE_MAX = jnp.float32(5.0)
 
+# Code-only experiment switch for cleaning small one-sided inner workspace teeth.
+CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
+
 
 def _as_2d_map(x: Array) -> Array:
     """Return the first map over any leading batch axes, preserving trailing H,W."""
@@ -1475,7 +1478,38 @@ class State(NamedTuple):
             jnp.bool_
         )
         dig_dump_mask = dig_dump_mask_cyl * dig_dump_mask_cart
-        return dig_dump_mask
+        return self._clean_excavator_workspace_inner_teeth(
+            dig_dump_mask, map_cyl_coords
+        )
+
+    def _clean_excavator_workspace_inner_teeth(
+        self, dig_dump_mask: Array, map_cyl_coords: Array
+    ) -> Array:
+        if not CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH:
+            return dig_dump_mask
+
+        map_shape = self.world.action_map.map.shape[-2:]
+        mask_2d = dig_dump_mask.reshape(map_shape).astype(jnp.bool_)
+        radius_2d = map_cyl_coords[0].reshape(map_shape)
+
+        tile_size = self.env_cfg.tile_size
+        max_agent_dim = jnp.max(
+            jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
+        )
+        r_min = 0.5 + tile_size * max_agent_dim
+        inner_band = radius_2d < r_min + tile_size
+
+        padded = jnp.pad(mask_2d.astype(jnp.int32), ((1, 1), (1, 1)))
+        neighbor_count_4 = (
+            padded[:-2, 1:-1]
+            + padded[2:, 1:-1]
+            + padded[1:-1, :-2]
+            + padded[1:-1, 2:]
+        )
+        remove = jnp.logical_and(
+            jnp.logical_and(mask_2d, inner_band), neighbor_count_4 <= 1
+        )
+        return jnp.logical_and(mask_2d, jnp.logical_not(remove)).reshape(-1)
 
     def _apply_dig_mask(
         self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
