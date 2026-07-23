@@ -88,6 +88,31 @@ For structured training progression:
    - Run the curriculum generator
    - The resulting data follows a progression suitable for staged training
 
+### Partial-Completion Reset Data
+
+`tools/generate_partial_completion_dataset.py` converts an existing
+Terra-format excavation dataset into mass-conserving partial reset states. It
+marks coherent target patches as already excavated and places the corresponding
+volume in compact multi-height piles inside or near the final dump zone. This
+is stochastic state construction, not an excavation planner.
+
+Example:
+
+```bash
+python tools/generate_partial_completion_dataset.py \
+  --input /path/to/full_dataset \
+  --output /path/to/partial_dataset \
+  --completion-fractions 0.25,0.50,0.75,0.90 \
+  --mode-weights in_zone=1.0 \
+  --seed 0
+```
+
+The command never overwrites an existing output directory and publishes the
+dataset atomically only after every generated state passes mass, pile,
+staged-workspace-load, spawn, and static access checks. See
+[`PARTIAL_COMPLETION_RESETS.md`](PARTIAL_COMPLETION_RESETS.md) for the approved
+algorithm and validation contract.
+
 ### Data Format Conversion
 
 All generated data undergoes format conversion for training:

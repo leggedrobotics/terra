@@ -23,6 +23,7 @@ from terra.utils import apply_rot_transl
 from terra.utils import compute_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
+from terra.settings import INTLOWDIM_MAX
 from terra.utils import get_distance_point_to_line, get_min_distance_point_to_lines
 from terra.utils import increase_angle_circular
 from terra.settings import IntLowDim
@@ -2188,7 +2189,12 @@ class State(NamedTuple):
             dig_mask = self._mask_out_single_tile_digs(dig_mask)
             action_map_2d = _as_2d_map(self.world.action_map.map)
             flattened_action_map = action_map_2d.reshape(-1)
-            selected_tiles_sum = flattened_action_map @ dig_mask
+            # The map is int8, but a workspace may contain more than 127 units.
+            # Sum in int32 so an oversized pile is rejected instead of wrapping.
+            selected_tiles_sum = (
+                flattened_action_map.astype(jnp.int32)
+                @ dig_mask.astype(jnp.int32)
+            )
             moving_dumped_dirt = selected_tiles_sum > 0
             # if moving dumped dirt, move it all at once
             # Ensure both branches return the same dtype (int32)
@@ -2291,8 +2297,12 @@ class State(NamedTuple):
                     )
                 )
 
-            s = jax.lax.cond(
+            load_fits_bucket = jnp.logical_and(
                 dig_volume > 0,
+                dig_volume <= jnp.int32(INTLOWDIM_MAX),
+            )
+            s = jax.lax.cond(
+                load_fits_bucket,
                 lambda v, fam: _apply_dig(v, fam),
                 lambda v, fam: self._do_nothing(),
                 dig_volume,
