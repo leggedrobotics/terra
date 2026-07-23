@@ -224,6 +224,67 @@ class FakeBatch:
         )
 
 
+class OutcomeTerraEnv(FakeTerraEnv):
+    @staticmethod
+    def step_no_reset(state, action, env_cfg):
+        next_state = FakeEnvState(state.value + action + 1)
+        done = jnp.abs(action) == 1
+        task_done = action == 1
+        info = {
+            **next_state._get_infos(action, task_done),
+            "reward_components": {
+                "terminal": task_done.astype(jnp.float32)
+            },
+        }
+        return TimeStep(
+            state=next_state,
+            observation={"value": next_state.value},
+            reward=next_state.value.astype(jnp.float32),
+            done=done,
+            info=info,
+            env_cfg=env_cfg,
+        )
+
+
+class LevelCurriculum:
+    @staticmethod
+    def update_cfgs(timestep, keys):
+        del keys
+        success = timestep.done & timestep.info["task_done"]
+        failure = timestep.done & ~timestep.info["task_done"]
+        level = jnp.clip(
+            timestep.env_cfg
+            + success.astype(jnp.int32)
+            - failure.astype(jnp.int32),
+            0,
+            2,
+        )
+        return timestep._replace(env_cfg=level)
+
+
+class LevelBatch(FakeBatch):
+    terra_env = OutcomeTerraEnv()
+    curriculum_manager = LevelCurriculum()
+
+    @staticmethod
+    def _get_map(keys, env_cfg):
+        del keys
+        target = jnp.asarray(env_cfg, dtype=jnp.int32) + 100
+        zeros = jnp.zeros_like(target)
+        return (
+            target,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            zeros,
+            jnp.zeros((env_cfg.shape[0], 2), dtype=jnp.uint32),
+        )
+
+
 class StepOptimizationTest(unittest.TestCase):
     def test_dispatch_matches_sixteen_branch_reference(self):
         for action_type in (0, 1):
@@ -273,6 +334,43 @@ class StepOptimizationTest(unittest.TestCase):
                 np.testing.assert_array_equal(
                     np.asarray(actual_leaf), np.asarray(expected_leaf)
                 )
+
+    def test_terminal_level_change_selects_immediate_replacement_map(self):
+        batch = LevelBatch()
+        keys = jax.random.split(jax.random.PRNGKey(0), 1)
+
+        def timestep(level):
+            return TimeStep(
+                state=FakeEnvState(jnp.array([10], dtype=jnp.int32)),
+                observation={"value": jnp.array([10], dtype=jnp.int32)},
+                reward=jnp.zeros((1,), dtype=jnp.float32),
+                done=jnp.zeros((1,), dtype=jnp.bool_),
+                info={
+                    "task_done": jnp.zeros((1,), dtype=jnp.bool_),
+                    "reward_components": {
+                        "terminal": jnp.zeros((1,), dtype=jnp.float32)
+                    },
+                },
+                env_cfg=jnp.array([level], dtype=jnp.int32),
+            )
+
+        promoted = TerraEnvBatch.step(
+            batch,
+            timestep(0),
+            jnp.array([1], dtype=jnp.int32),
+            keys,
+        )
+        self.assertEqual(int(promoted.env_cfg[0]), 1)
+        self.assertEqual(int(promoted.state.value[0]), 101)
+
+        demoted = TerraEnvBatch.step(
+            batch,
+            timestep(1),
+            jnp.array([-1], dtype=jnp.int32),
+            keys,
+        )
+        self.assertEqual(int(demoted.env_cfg[0]), 0)
+        self.assertEqual(int(demoted.state.value[0]), 100)
 
 
 if __name__ == "__main__":

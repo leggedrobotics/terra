@@ -401,21 +401,38 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
 
-        # Load distance map (optional). Warn if missing and fill zeros so shapes match
+        # Dense-reward distance maps are part of the map contract. A missing,
+        # malformed, or silently zero-filled field changes the reward while
+        # pretending to preserve the map treatment, so fail at the loader
+        # boundary.
         distance_file = Path(folder_path) / "distance" / f"img_{i}.npy"
-        if distance_file.exists():
-            try:
-                dist_map = _ensure_spatial_2d(np.load(distance_file), str(distance_file))
-                if dist_map.shape != map.shape:
-                    print(f"Warning: distance map shape mismatch for {distance_file}, expected {map.shape}, got {dist_map.shape}; filling zeros.")
-                    dist_map = np.zeros_like(map, dtype=np.float32)
-                found_any_distance = True
-            except Exception as e:
-                print(f"Warning: failed to load distance map {distance_file}: {e}; filling zeros.")
-                dist_map = np.zeros_like(map, dtype=np.float32)
-        else:
-            print(f"Warning: missing distance map {distance_file}, filling zeros.")
-            dist_map = np.zeros_like(map, dtype=np.float32)
+        if not distance_file.exists():
+            raise RuntimeError(f"Missing required distance map: {distance_file}")
+        dist_map = _ensure_spatial_2d(
+            np.load(distance_file), str(distance_file)
+        )
+        if dist_map.shape != map.shape:
+            raise RuntimeError(
+                f"Distance map shape mismatch for {distance_file}: "
+                f"expected {map.shape}, got {dist_map.shape}."
+            )
+        if not np.issubdtype(dist_map.dtype, np.floating):
+            raise RuntimeError(
+                f"Distance map must use a floating dtype: {distance_file} "
+                f"has {dist_map.dtype}."
+            )
+        if not np.all(np.isfinite(dist_map)):
+            raise RuntimeError(
+                f"Distance map contains non-finite values: {distance_file}"
+            )
+        minimum = float(np.min(dist_map))
+        maximum = float(np.max(dist_map))
+        if minimum < 0.0 or maximum > 1.0:
+            raise RuntimeError(
+                f"Distance map must be normalized to [0, 1]: {distance_file} "
+                f"has min={minimum}, max={maximum}."
+            )
+        found_any_distance = True
         distances.append(dist_map.astype(np.float32))
 
         # Metadata needs to be loaded only for trenches (A, B, C coefficients)
