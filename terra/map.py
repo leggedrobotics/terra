@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 from jax import Array
 
@@ -19,6 +20,31 @@ def _as_axes_table(x: Array) -> Array:
 
 def _as_scalar_int(x: Array) -> Array:
     return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
+
+
+def compute_dynamic_dumpability(
+    dumpability_mask_init: Array,
+    action_map: Array,
+    kernel_size: int = 5,
+) -> Array:
+    """Apply Terra's hole-clearance rule to a static dumpability mask."""
+    if kernel_size <= 0 or kernel_size % 2 == 0:
+        raise ValueError("kernel_size must be a positive odd integer.")
+
+    static_mask = _as_2d_map(dumpability_mask_init).astype(jnp.bool_)
+    holes = (_as_2d_map(action_map) < 0).astype(jnp.float32)
+    dilated_holes = (
+        jax.lax.reduce_window(
+            holes,
+            jnp.float32(0.0),
+            jax.lax.add,
+            window_dimensions=(kernel_size, kernel_size),
+            window_strides=(1, 1),
+            padding="SAME",
+        )
+        > 0
+    )
+    return jnp.logical_and(static_mask, jnp.logical_not(dilated_holes))
 
 
 class GridWorld(NamedTuple):
@@ -132,12 +158,16 @@ class GridWorld(NamedTuple):
         if relocation_distance_map_override is not None:
             relocation_distance_map_override = _as_2d_map(relocation_distance_map_override)
 
+        dynamic_dumpability = compute_dynamic_dumpability(
+            dumpability_mask_init,
+            action_map,
+        )
         action_map = GridMap.new(IntLowDim(action_map))
         target_map = GridMap.new(IntLowDim(target_map))
         padding_mask = GridMap.new(IntLowDim(padding_mask))
         static_traversability_base = GridMap.new((padding_mask.map == 1).astype(IntLowDim))
         dumpability_mask_init_gm = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
-        dumpability_mask = GridMap.new(dumpability_mask_init.astype(jnp.bool_))
+        dumpability_mask = GridMap.new(dynamic_dumpability)
         last_dig_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
         interaction_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=jnp.bool_))
         reachability_mask = GridMap.new(jnp.zeros_like(target_map.map, dtype=IntLowDim))

@@ -9,7 +9,7 @@ from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import compute_polygon_mask
 from terra.utils import get_arm_angle_int
-from terra.settings import IntLowDim
+from terra.settings import IntLowDim, IntMap
 
 
 def _as_2d_map(x: Array) -> Array:
@@ -379,7 +379,7 @@ class LocalMapWrapper:
             local_cyl_height_map, -current_arm_angle, axis=0
         )
 
-        return local_cyl_height_map.astype(IntLowDim)
+        return local_cyl_height_map.astype(IntMap)
 
     @staticmethod
     def _wrap(state: State, map_to_wrap: Array, agent_idx: int = 0) -> Array:

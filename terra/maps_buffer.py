@@ -152,10 +152,29 @@ def dumpability_sanity_check(map: Array) -> None:
     if not valid:
         raise RuntimeError("Loaded dumpability mask is not valid.")
 
+
 def actions_sanity_check(map: Array) -> None:
-    valid = np.all((map == 0) | (map == 1) | (map == -1))
-    if not valid:
-        raise RuntimeError("Loaded actions map is not valid.")
+    array = np.asarray(map)
+    dtype = array.dtype
+    if array.size == 0:
+        raise RuntimeError(
+            f"Loaded actions map must not be empty; got dtype={dtype}, shape={array.shape}."
+        )
+    if not np.issubdtype(dtype, np.integer):
+        raise RuntimeError(
+            "Loaded actions map must use an integer dtype; "
+            f"got dtype={dtype}, min={array.min()}, max={array.max()}."
+        )
+
+    minimum = int(array.min())
+    maximum = int(array.max())
+    int_low_dim_max = int(np.iinfo(np.int8).max)
+    if minimum < -1 or maximum > int_low_dim_max:
+        raise RuntimeError(
+            "Loaded actions map values must fit Terra's signed action-map "
+            f"range [-1, {int_low_dim_max}]; got dtype={dtype}, "
+            f"min={minimum}, max={maximum}."
+        )
 
 
 def _ensure_spatial_2d(array: Array, source: str) -> Array:

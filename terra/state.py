@@ -15,6 +15,7 @@ from terra.agent import Agent
 from terra.agent import AgentState
 from terra.config import AgentConfig
 from terra.config import EnvConfig
+from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
@@ -2172,9 +2173,10 @@ class State(NamedTuple):
         )
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
-        new_dumpability_mask = _as_2d_map(self.world.dumpability_mask_init.map)
-        action_mask_contoured = self._dilate_mask(action_map < 0, kernel_size=5)
-        return new_dumpability_mask * (action_mask_contoured == 0)
+        return compute_dynamic_dumpability(
+            self.world.dumpability_mask_init.map,
+            action_map,
+        )
 
     def _handle_dig(self) -> "State":
         def _blocked_by_obstacle():
