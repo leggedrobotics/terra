@@ -1,11 +1,25 @@
 # Terra Training Design
 
-- Status: accepted experiment contract; first paired seed authorized
+- Status: first paired screen complete; neither arm qualified
 - Version: `training_design_v4`
-- Date: 2026-07-23
+- Date: 2026-07-24 post-screen status update
 - First target: one 64 x 64 tracked-excavator policy for foundations and
   trenches
 - Production training authorized by this document: no
+
+The original v4 sections below are retained as the preregistered experiment
+contract. The completed result, critical review, corrected decisions, and
+dependency-ordered backlog are in
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md). That companion plan supersedes the
+original execution order for new work; it does not rewrite the historical
+treatment after seeing the result.
+
+Post-screen result:
+
+- flat peaked at M0 `24/64`, M1 `7/64`, and M2 `1/64`, then regressed to
+  M0 `11/64`;
+- staged peaked at M0 `13/64`, M1 `2/64`, and M2 `0/64`; and
+- neither arm passed a family, cell, retention, or joint mastery gate.
 
 ## 1. Decision
 
@@ -335,6 +349,12 @@ This symmetric `3/3` controller keeps environments near their competence
 frontier. The M2 terminal directory restores the earlier-family mixture. This
 replaces E8's sticky `20/80/random` defaults for this experiment.
 
+> Post-screen correction (2026-07-24): the competence-frontier interpretation
+> is rejected. The controller is a per-environment streak-based exposure
+> heuristic over randomly sampled identities. Its final occupancy promoted
+> most environments to M1 while fixed held-out M1 remained unsolved. It is not
+> the selected curriculum; see `TRAINING_TASKS.md`.
+
 Before using this controller, fix the current terminal/reset ordering so the
 terminal outcome updates the level **before** the replacement map is sampled.
 Add deterministic tests showing that:
@@ -465,6 +485,10 @@ At each addition:
 - stop rather than silently relaxing capacity, horizon, or success thresholds;
   and
 - keep rejected or unproven families in a named challenge bank.
+
+> Post-screen correction (2026-07-24): `20-30%` is an untested rehearsal
+> hypothesis, not a default. Future mixture weights are selected by the
+> retention fork and global promotion-bank experiment in `TRAINING_TASKS.md`.
 
 "Arbitrary" in the final objective means broad procedural coverage inside a
 declared feasible support. It does not mean sampling maps that violate dump
