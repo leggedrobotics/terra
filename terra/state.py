@@ -41,6 +41,9 @@ SCALE_MAX = jnp.float32(5.0)
 # Code-only experiment switch for cleaning small one-sided inner workspace teeth.
 CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 
+# Future-policy reward/completion semantics introduced by C1/C1a.
+CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
+
 
 def _as_2d_map(x: Array) -> Array:
     """Return the first map over any leading batch axes, preserving trailing H,W."""
@@ -913,49 +916,13 @@ class State(NamedTuple):
             dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
             
             has_valid_dump_tiles = jnp.any(dump_mask)
-            
-            # Check if dump would be regressive (increase potential) - same logic as _handle_dump
-            dump_volume = dump_mask.sum()
-            
-            # Skip potential check if no dump volume - can't increase potential if not dumping
-            def _check_potential_increase():
-                def _predict_potential():
-                    remaining_volume = cur2.loaded % dump_volume
-                    even_volume_per_tile = (
-                        cur2.loaded - remaining_volume
-                    ) / dump_volume
-                    target_map_2d = _as_2d_map(self.world.target_map.map)
-                    flattened_action_map = _flat_2d_map(self.world.action_map.map)
-                    predicted_map_flat = self._apply_dump_mask(
-                        flattened_action_map,
-                        dump_mask,
-                        even_volume_per_tile,
-                        remaining_volume,
-                        target_map_2d,
-                        use_condensed_dump=True,
-                    )
-                    predicted_map = predicted_map_flat.reshape(target_map_2d.shape)
-                    return self._compute_relocation_potential(predicted_map)
-                
-                predicted_potential = _predict_potential()
-                
-                # Use same potential gating logic as in _handle_dump
-                current_potential = self._compute_relocation_potential(self.world.action_map.map)
-                baseline_before = cur2.carry_baseline_potential
-                after_lift = cur2.carry_potential_after_lift
-                baseline_eff = baseline_before + (current_potential - after_lift)
-                return predicted_potential > baseline_eff
-            
-            would_increase_potential = jax.lax.cond(
-                dump_volume > 0,
-                _check_potential_increase,
-                lambda: jnp.bool_(False)  # No dump volume = can't increase potential
-            )
-            
-            # Block movement if skid steer is loaded, shovel down, but no valid dump tiles OR dump would be regressive
+
+            # Block movement only when the implicit reverse dump has no
+            # physically valid destination. Reward potential never vetoes an
+            # otherwise valid transition.
             should_block_movement = jnp.logical_and(
                 jnp.logical_and(is_skid_steer, is_loaded),
-                jnp.logical_and(shovel_down, jnp.logical_or(jnp.logical_not(has_valid_dump_tiles), would_increase_potential))
+                jnp.logical_and(shovel_down, jnp.logical_not(has_valid_dump_tiles)),
             )
             
             # If movement should be blocked, return current state
@@ -1543,108 +1510,89 @@ class State(NamedTuple):
         self,
         flattened_map: Array,
         dump_mask: Array,
-        even_volume_per_tile: IntLowDim,
-        remaining_volume: IntLowDim,
-        target_map: Array,
-        use_condensed_dump: bool = True
+        loaded_volume: Array,
+        containment_mask: Array,
     ) -> Array:
-        """
-        TODO: delta_dig_remaining now is added with a naive approach - should be added
-            either to the closest tiles or randomly
-
-        Args:
-            - flattened_map: (N, ) Array flattened height map
-            - dump_mask: (N, ) Array of where to dump bools
-            - even_volume_per_tile: IntLowDim, volume to add to each of the tiles in the mask (per tile)
-            - remaining_volume: IntLowDim, remaining volume to add to some of the tiles in the mask (total)
-            - use_condensed_dump: If True, use concentrated dump with soil collapse; else use original logic.
-        Returns:
-            - new_flattened_map: (N, ) Array flattened new height map
-        """
+        """Deposit one complete load and relax soil only inside ``containment_mask``."""
         map_shape = self.world.action_map.map.shape
         map_2d_shape = map_shape[-2:]
-        dump_mask_2d = jnp.reshape(dump_mask, (-1,) + map_2d_shape)[0]
-        flattened_map_2d = jnp.reshape(flattened_map, (-1,) + map_2d_shape)[0]
-        target_map_2d = jnp.reshape(target_map, (-1,) + map_2d_shape)[0]
+        dump_mask_2d = jnp.reshape(dump_mask, map_2d_shape).astype(jnp.bool_)
+        containment_mask_2d = jnp.reshape(
+            containment_mask, map_2d_shape
+        ).astype(jnp.bool_)
+        flattened_map_2d = jnp.reshape(
+            flattened_map, map_2d_shape
+        ).astype(IntMap)
+        loaded_volume = jnp.ravel(jnp.asarray(loaded_volume, dtype=jnp.int32))[0]
 
-        def _apply_simple_dump():
-            # Original logic
-            target_map_dump_mask = jnp.clip(target_map_2d.reshape(-1), a_min=0) * dump_mask
-            target_dump_volume = target_map_dump_mask.sum()
-            dump_mask_final, dump_volume = jax.lax.cond(
-                target_dump_volume > 0,
-                lambda: (IntMap(target_map_dump_mask), target_dump_volume),
-                lambda: (IntMap(dump_mask), dump_mask.sum()),
-            )
-
-            cur = self._get_current_agent_state()
-            loaded_volume = cur.loaded
-            remaining_volume_final = loaded_volume % dump_volume
-            even_volume_per_tile_final = (loaded_volume - remaining_volume_final) / dump_volume
-
-            delta_dig = self.env_cfg.agent.dig_depth * dump_mask_final * even_volume_per_tile_final
-            delta_dig_remaining = jnp.zeros_like(delta_dig, dtype=IntMap)
-
-            delta_dig_remaining = jnp.where(
-                jnp.logical_and(jnp.cumsum(dump_mask_final) <= remaining_volume_final, dump_mask_final),
-                1,
-                delta_dig_remaining,
-            )
-
-            simple_result = (flattened_map + delta_dig + delta_dig_remaining).astype(IntMap)
-            # Optionally apply soil mechanics using the global flag
-            map_2d = jnp.reshape(simple_result, (-1,) + map_2d_shape)[0]
-            mask_2d = jnp.reshape(dump_mask_final, (-1,) + map_2d_shape)[0]
-            return self._apply_local_soil_mechanics(map_2d, mask_2d).reshape(-1)
-
-        def _apply_concentrated_dump():
-            y_coords, x_coords = jnp.meshgrid(jnp.arange(map_2d_shape[0]), jnp.arange(map_2d_shape[1]), indexing='ij')
-            centroid_y = jnp.sum(y_coords * dump_mask_2d) / jnp.maximum(jnp.sum(dump_mask_2d), 1)
-            centroid_x = jnp.sum(x_coords * dump_mask_2d) / jnp.maximum(jnp.sum(dump_mask_2d), 1)
-            distance_from_center = jnp.sqrt((y_coords - centroid_y)**2 + (x_coords - centroid_x)**2)
-            concentrated_mask_2d = jnp.logical_and(
-                dump_mask_2d,
-                distance_from_center <= 2.0
-            )
-            # Fallback to closest tile if no tiles are within 2.0 units from the centroid
-            def _fallback_to_closest_tile():
-                distances_in_mask = jnp.where(dump_mask_2d, distance_from_center, jnp.inf)
-                min_dist_idx_flat = jnp.argmin(distances_in_mask)
-                y_closest, x_closest = jnp.unravel_index(min_dist_idx_flat, map_2d_shape)
-                new_distance_from_center = jnp.sqrt((y_coords - y_closest)**2 + (x_coords - x_closest)**2)
-                return jnp.logical_and(
-                    dump_mask_2d,
-                    new_distance_from_center <= 2.0
-                )
-            final_concentrated_mask_2d = jax.lax.cond(
-                jnp.any(concentrated_mask_2d),
-                lambda: concentrated_mask_2d,
-                _fallback_to_closest_tile
-            )
-            total_volume_to_dump = even_volume_per_tile * jnp.sum(dump_mask) + remaining_volume
-            concentrated_tiles_count = jnp.maximum(jnp.sum(final_concentrated_mask_2d), 1)
-            even_volume_per_concentrated_tile = total_volume_to_dump // concentrated_tiles_count
-            remaining_concentrated_volume = total_volume_to_dump % concentrated_tiles_count
-            volume_per_tile_2d = (even_volume_per_concentrated_tile * final_concentrated_mask_2d).astype(IntMap)
-            concentrated_mask_flat = final_concentrated_mask_2d.flatten()
-            bonus_indices = jnp.where(
-                concentrated_mask_flat, 
-                jnp.cumsum(concentrated_mask_flat.astype(jnp.int32)), 
-                concentrated_mask_flat.size + 1
-            )
-            bonus_mask_flat = bonus_indices <= remaining_concentrated_volume
-            bonus_volume_2d = bonus_mask_flat.reshape(map_2d_shape).astype(IntMap)
-            new_map_2d = flattened_map_2d.astype(IntMap) + volume_per_tile_2d + bonus_volume_2d
-            final_map_2d = self._apply_local_soil_mechanics(new_map_2d, final_concentrated_mask_2d)
-            return final_map_2d.flatten()
-
-        return jax.lax.cond(
-            use_condensed_dump,
-            _apply_concentrated_dump,
-            _apply_simple_dump
+        y_coords, x_coords = jnp.meshgrid(
+            jnp.arange(map_2d_shape[0]),
+            jnp.arange(map_2d_shape[1]),
+            indexing="ij",
+        )
+        dump_tile_count = jnp.maximum(jnp.sum(dump_mask_2d), 1)
+        centroid_y = jnp.sum(y_coords * dump_mask_2d) / dump_tile_count
+        centroid_x = jnp.sum(x_coords * dump_mask_2d) / dump_tile_count
+        distance_from_center = jnp.sqrt(
+            (y_coords - centroid_y) ** 2 + (x_coords - centroid_x) ** 2
+        )
+        concentrated_mask = jnp.logical_and(
+            dump_mask_2d,
+            distance_from_center <= 2.0,
         )
 
-    def _expand_mask_for_soil_mechanics(self, mask: Array) -> Array:
+        def _fallback_to_closest_tile():
+            distances_in_mask = jnp.where(
+                dump_mask_2d, distance_from_center, jnp.inf
+            )
+            closest_flat = jnp.argmin(distances_in_mask)
+            closest_y, closest_x = jnp.unravel_index(
+                closest_flat, map_2d_shape
+            )
+            distance_from_closest = jnp.sqrt(
+                (y_coords - closest_y) ** 2 + (x_coords - closest_x) ** 2
+            )
+            return jnp.logical_and(
+                dump_mask_2d,
+                distance_from_closest <= 2.0,
+            )
+
+        concentrated_mask = jax.lax.cond(
+            jnp.any(concentrated_mask),
+            lambda: concentrated_mask,
+            _fallback_to_closest_tile,
+        )
+        concentrated_count = jnp.maximum(jnp.sum(concentrated_mask), 1)
+        even_volume = loaded_volume // concentrated_count
+        remainder = loaded_volume % concentrated_count
+        volume_per_tile = (
+            even_volume * concentrated_mask.astype(jnp.int32)
+        ).astype(IntMap)
+        concentrated_flat = concentrated_mask.reshape(-1)
+        in_mask_indices = jnp.where(
+            concentrated_flat,
+            jnp.cumsum(concentrated_flat.astype(jnp.int32)),
+            concentrated_flat.size + 1,
+        )
+        remainder_mask = (in_mask_indices <= remainder).reshape(
+            map_2d_shape
+        )
+        deposited_map = (
+            flattened_map_2d
+            + volume_per_tile
+            + remainder_mask.astype(IntMap)
+        )
+        return self._apply_local_soil_mechanics(
+            deposited_map,
+            concentrated_mask,
+            containment_mask=containment_mask_2d,
+        ).reshape(-1)
+
+    def _expand_mask_for_soil_mechanics(
+        self,
+        mask: Array,
+        containment_mask: Array | None = None,
+    ) -> Array:
         """
         Expand the mask to include all valid neighbors (3x3 kernel).
         Only includes neighbors that are valid for dumping (not obstacles, is dumpable).
@@ -1671,9 +1619,11 @@ class State(NamedTuple):
         # Use rank-safe dilation helper (supports 2D and [B,H,W]).
         expanded = self._dilate_mask(mask.astype(jnp.bool_), kernel_size=3)
         
-        # CRITICAL: Only include valid tiles in the expanded mask
-        # This ensures soil mechanics don't affect obstacles or non-dumpable areas
-        return jnp.logical_and(expanded, validity_mask)
+        expanded_valid = jnp.logical_and(expanded, validity_mask)
+        if containment_mask is None:
+            return expanded_valid
+        containment_mask = _as_2d_map(containment_mask).astype(jnp.bool_)
+        return jnp.logical_and(expanded_valid, containment_mask)
 
     @staticmethod
     def _dilate_mask(mask: Array, kernel_size: int = 3) -> Array:
@@ -1699,14 +1649,22 @@ class State(NamedTuple):
             > 0
         )
 
-    def _apply_local_soil_mechanics(self, action_map: Array, affected_mask: Array) -> Array:
+    def _apply_local_soil_mechanics(
+        self,
+        action_map: Array,
+        affected_mask: Array,
+        containment_mask: Array | None = None,
+    ) -> Array:
         # Defensive: skip soil mechanics if not 2D
         if action_map.ndim != 2:
             return action_map
         def collapse_body(map_2d, mask):
             # Expand the mask inside for consistency with single-agent style
             mask = mask.astype(jnp.bool_)
-            mask = self._expand_mask_for_soil_mechanics(mask)
+            mask = self._expand_mask_for_soil_mechanics(
+                mask,
+                containment_mask=containment_mask,
+            )
             n_iters = 3  # Number of collapse iterations
             def collapse_step(i, map_2d):
                 """One iteration of soil collapse - move dirt between neighbors."""
@@ -2044,6 +2002,14 @@ class State(NamedTuple):
         )
 
         return dump_mask * dig_map_mask
+
+    def _accepted_dump_mask(self, target_map: Array | None = None) -> Array:
+        """Return the one visible dump region accepted by the task contract."""
+        if target_map is None:
+            target_map = self.world.target_map.map
+        target_map = _as_2d_map(target_map)
+        obstacle_mask = _as_2d_map(self.world.padding_mask.map) == 1
+        return jnp.logical_and(target_map > 0, jnp.logical_not(obstacle_mask))
 
     def _dump_cone_lacks_free_space(self, dump_mask: Array) -> Array:
         min_free_fraction = jnp.float32(
@@ -2423,114 +2389,128 @@ class State(NamedTuple):
         return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt_transfer, lambda: self)
 
     def _handle_dump(self) -> "State":
-        def _blocked_by_obstacle():
-            return self
+        """Deposit a complete load without using reward potential as an action veto."""
+        map_shape = self.world.action_map.map.shape[-2:]
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
+        is_transport = jnp.logical_or(
+            cur.agent_type[0] == 1,
+            cur.agent_type[0] == 2,
+        )
 
-        def _dump_when_clear():
-            dump_mask = self._build_dig_dump_cone()
-            # Only restrict dumping to dump zones for skid steer and truck agents
-            cur = self._get_current_agent_state()
-            is_skid_steer = cur.agent_type[0] == 2
-            is_truck = cur.agent_type[0] == 1
+        physical_mask = self._build_dig_dump_cone().astype(jnp.bool_)
+        physical_mask = self._exclude_dig_tiles_from_dump_mask(physical_mask)
+        physical_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(
+            physical_mask
+        )
+        physical_mask = self._exclude_traversability_mask_tiles_from_dump_mask(
+            physical_mask
+        )
+        physical_mask = self._exclude_just_moved_tiles_from_dump_mask(
+            physical_mask
+        )
+        physical_mask = jnp.logical_and(
+            physical_mask,
+            _flat_2d_map(self.world.padding_mask.map == 0),
+        )
+        physical_mask = jax.lax.cond(
+            self._dump_cone_lacks_free_space(physical_mask),
+            lambda: jnp.zeros_like(physical_mask, dtype=jnp.bool_),
+            lambda: physical_mask.astype(jnp.bool_),
+        )
 
-            def _apply_dump_zone_restriction():
-                dump_zone_mask = _flat_2d_map(self.world.target_map.map > 0)
-                return dump_mask * dump_zone_mask
+        accepted_mask = self._accepted_dump_mask()
+        accepted_flat = accepted_mask.reshape(-1)
+        legal_reachable = jnp.logical_and(physical_mask, accepted_flat)
+        wrong_reachable = jnp.logical_and(
+            physical_mask,
+            jnp.logical_not(accepted_flat),
+        )
+        has_legal_reachable = jnp.any(legal_reachable)
 
-            def _no_dump_zone_restriction():
-                return dump_mask
+        excavator_dump_mask = jax.lax.cond(
+            has_legal_reachable,
+            lambda: legal_reachable,
+            lambda: wrong_reachable,
+        )
+        dump_mask = jax.lax.cond(
+            is_transport,
+            lambda: legal_reachable,
+            lambda: excavator_dump_mask,
+        )
+        containment_mask = jax.lax.cond(
+            has_legal_reachable,
+            lambda: accepted_mask,
+            lambda: jnp.logical_not(accepted_mask),
+        )
 
-            dump_mask = jax.lax.cond(
-                jnp.logical_or(is_skid_steer, is_truck),
-                _apply_dump_zone_restriction,
-                _no_dump_zone_restriction,
+        def _apply_dump():
+            loaded_volume = cur.loaded[0].astype(jnp.int32)
+            old_map = _as_2d_map(self.world.action_map.map).astype(jnp.int32)
+            new_map = self._apply_dump_mask(
+                old_map.reshape(-1),
+                dump_mask,
+                loaded_volume,
+                containment_mask,
+            ).reshape(map_shape).astype(jnp.int32)
+            map_delta = new_map - old_map
+
+            represented_complete_load = (
+                jnp.sum(map_delta.astype(jnp.int32)) == loaded_volume
             )
-            dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
-            dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
-            dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
-            dump_mask = self._exclude_just_moved_tiles_from_dump_mask(dump_mask)
-            lacks_free_space = self._dump_cone_lacks_free_space(dump_mask)
-            dump_mask = jax.lax.cond(
-                lacks_free_space,
-                lambda: jnp.zeros_like(dump_mask, dtype=dump_mask.dtype),
-                lambda: dump_mask,
+            stayed_contained = jnp.all(
+                jnp.where(containment_mask, 0, map_delta) == 0
             )
-            dump_volume = dump_mask.sum()
+            fits_storage = jnp.logical_and(
+                jnp.min(new_map) >= jnp.iinfo(IntLowDim).min,
+                jnp.max(new_map) <= jnp.iinfo(IntLowDim).max,
+            )
+            valid_transition = jnp.logical_and(
+                loaded_volume > 0,
+                jnp.logical_and(
+                    represented_complete_load,
+                    jnp.logical_and(stayed_contained, fits_storage),
+                ),
+            )
 
-            def _apply_dump():
-                curd = self._get_current_agent_state()
-                remaining_volume = curd.loaded % dump_volume
-                even_volume_per_tile = (curd.loaded - remaining_volume) / dump_volume
-
-                target_map_2d = _as_2d_map(self.world.target_map.map)
-                flattened_action_map = _flat_2d_map(self.world.action_map.map)
-                new_map_global_coords = self._apply_dump_mask(
-                    flattened_action_map,
-                    dump_mask,
-                    even_volume_per_tile,
-                    remaining_volume,
-                    target_map_2d,
-                    use_condensed_dump=True,
-                )
-                new_map_global_coords = new_map_global_coords.reshape(
-                    target_map_2d.shape
-                )
-
-                # Reset last_dig_mask after a successful dump like single-agent (allow re-lift next time)
-                is_excavator = self._get_current_agent_state().agent_type[0] != 2
-
-                def _clear_last_dig_mask():
-                    return self.world.last_dig_mask._replace(
-                        map=jnp.zeros_like(self.world.last_dig_mask.map, dtype=jnp.bool_)
-                    )
-
-                def _keep_last_dig_mask():
-                    return self.world.last_dig_mask
-
+            def _commit_dump():
                 new_last_dig_mask = jax.lax.cond(
-                    is_excavator, _clear_last_dig_mask, _keep_last_dig_mask
-                )
-                current_potential = self._compute_relocation_potential(self.world.action_map.map)
-                predicted_potential = self._compute_relocation_potential(new_map_global_coords)
-                curb = self._get_current_agent_state()
-                baseline_before = curb.carry_baseline_potential
-                after_lift = curb.carry_potential_after_lift
-                baseline_eff = baseline_before + (current_potential - after_lift)
-                would_increase_potential = predicted_potential > baseline_eff
-
-                def _prevent_regressive_dump():
-                    return self
-
-                def _allow_progressive_dump():
-                    updated_state = self._replace(
-                        world=self.world._replace(
-                            action_map=self.world.action_map._replace(
-                                map=IntLowDim(new_map_global_coords)
-                            ),
-                            last_dig_mask=new_last_dig_mask,
-                        ),
-                        agent=self.agent._replace(
-                            moving_dumped_dirt=jnp.bool_(False),
-                        ),
-                    )
-                    return updated_state._set_current_agent_state(
-                        updated_state._get_current_agent_state()._replace(
-                            loaded=jnp.full((1,), fill_value=0, dtype=IntLowDim)
+                    is_excavator,
+                    lambda: self.world.last_dig_mask._replace(
+                        map=jnp.zeros_like(
+                            self.world.last_dig_mask.map,
+                            dtype=jnp.bool_,
                         )
+                    ),
+                    lambda: self.world.last_dig_mask,
+                )
+                updated_state = self._replace(
+                    world=self.world._replace(
+                        action_map=self.world.action_map._replace(
+                            map=new_map.astype(IntLowDim)
+                        ),
+                        last_dig_mask=new_last_dig_mask,
+                    ),
+                    agent=self.agent._replace(
+                        moving_dumped_dirt=jnp.bool_(False),
+                    ),
+                )
+                return updated_state._set_current_agent_state(
+                    updated_state._get_current_agent_state()._replace(
+                        loaded=jnp.zeros((1,), dtype=IntLowDim)
                     )
-
-                return jax.lax.cond(
-                    would_increase_potential,
-                    _prevent_regressive_dump,
-                    _allow_progressive_dump,
                 )
 
-            return jax.lax.cond(dump_volume > 0, _apply_dump, self._do_nothing)
+            return jax.lax.cond(
+                valid_transition,
+                _commit_dump,
+                self._do_nothing,
+            )
 
         return jax.lax.cond(
-            self._workspace_intersects_obstacle(),
-            _blocked_by_obstacle,
-            _dump_when_clear,
+            jnp.any(dump_mask),
+            _apply_dump,
+            self._do_nothing,
         )
 
 
@@ -3222,115 +3202,53 @@ class State(NamedTuple):
             return vec.at[self.agent.current_agent].set(agent_reward.astype(jnp.float32))
         components["agent_rewards"] = set_idx(components["agent_rewards"])
 
-        # Terminal reward based on completion percentage
+        # The corrected dense contract has one task-completion source for
+        # termination, terminal reward, logging, and fixed evaluation.
         target_map = _as_2d_map(self.world.target_map.map)
         action_map = _as_2d_map(new_state.world.action_map.map)
-        completion_percentage = new_state._calculate_completion_percentage(
+        task_completion = new_state._get_task_completion(
             action_map,
             target_map,
         )
-        enforce_border_alignment = jnp.bool_(
-            getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
-        )
+        completion_percentage = task_completion["absolute_completion"]
         dig_mask = target_map < 0
         edge_mask = self._get_foundation_border_mask()
         inner_mask = jnp.logical_and(dig_mask, jnp.logical_not(edge_mask))
 
-        def _dig_completion(action_map_: Array, region_mask: Array) -> Float:
-            required = jnp.where(region_mask, -target_map, 0.0)
-            completed = jnp.where(
-                region_mask,
-                jnp.clip(-action_map_, a_min=0.0, a_max=required),
-                0.0,
-            )
-            required_sum = jnp.sum(required)
-            completed_sum = jnp.sum(completed)
-            return jax.lax.cond(
-                required_sum > 0,
-                lambda: completed_sum / jnp.maximum(required_sum, 1e-6),
-                lambda: jnp.float32(1.0),
-            )
-
-        components["dig_completion_edge"] = _dig_completion(action_map, edge_mask)
-        components["dig_completion_inner"] = _dig_completion(action_map, inner_mask)
-        components["dig_completion_total"] = _dig_completion(action_map, dig_mask)
+        components["dig_completion_edge"] = task_completion[
+            "dig_completion_edge"
+        ]
+        components["dig_completion_inner"] = task_completion[
+            "dig_completion_inner"
+        ]
+        components["dig_completion_total"] = task_completion[
+            "dig_completion_total"
+        ]
         components["dig_completion_min_edge_inner"] = jnp.minimum(
             components["dig_completion_edge"],
             components["dig_completion_inner"],
         )
-        dump_zone_mask = target_map > 0
-        action_map_dirt = jnp.where(action_map > 0, action_map, 0.0)
-        correct_dump_dirt = jnp.where(
-            jnp.logical_and(action_map > 0, dump_zone_mask),
-            action_map,
-            0.0,
-        )
-        action_map_dirt_sum = jnp.sum(action_map_dirt)
-        correct_dump_dirt_sum = jnp.sum(correct_dump_dirt)
-        has_dump_requirements = jnp.any(dump_zone_mask)
-        components["dump_completion_action_map"] = jax.lax.cond(
-            has_dump_requirements,
-            lambda: jax.lax.cond(
-                action_map_dirt_sum > 0,
-                lambda: correct_dump_dirt_sum / jnp.maximum(action_map_dirt_sum, 1e-6),
-                lambda: jnp.float32(0.0),
-            ),
-            lambda: jnp.float32(1.0),
-        )
-        required_dig_volume = jnp.sum(jnp.where(dig_mask, -target_map, 0.0))
-        components["total_dig_dump_completion"] = jax.lax.cond(
-            required_dig_volume > 0,
-            lambda: jnp.clip(
-                correct_dump_dirt_sum / jnp.maximum(required_dig_volume, 1e-6),
-                a_min=0.0,
-                a_max=1.0,
-            ),
-            lambda: components["dump_completion_action_map"],
-        )
-        edge_dig_mask = jnp.logical_and(edge_mask, dig_mask)
-        edge_required_volume = jnp.sum(jnp.where(edge_dig_mask, -target_map, 0.0))
-        inner_required_volume = jnp.sum(jnp.where(inner_mask, -target_map, 0.0))
-        has_edge_inner_split = jnp.logical_and(
-            enforce_border_alignment,
-            jnp.logical_and(
-                edge_required_volume > 0,
-                inner_required_volume > 0,
-            ),
-        )
-        dig_dump_completion_with_edges = (
-            jnp.float32(0.5) * components["total_dig_dump_completion"]
-            + jnp.float32(0.25) * components["dig_completion_inner"]
-            + jnp.float32(0.25) * components["dig_completion_edge"]
-        )
-        dig_dump_completion_no_edges = (
-            jnp.float32(0.6) * components["total_dig_dump_completion"]
-            + jnp.float32(0.4) * components["dig_completion_total"]
-        )
-        dig_dump_completion = jax.lax.cond(
-            has_edge_inner_split,
-            lambda: dig_dump_completion_with_edges,
-            lambda: dig_dump_completion_no_edges,
-        )
-
-        # Transport maps: episodic reward tracks relocation + border edges (dig via dense step rewards).
-        weighted_edge_completion = (
-            jnp.float32(0.6) * completion_percentage
-            + jnp.float32(0.4) * components["dig_completion_edge"]
-        )
-        default_gated_completion = jax.lax.cond(
-            enforce_border_alignment,
-            lambda: weighted_edge_completion,
-            lambda: completion_percentage,
-        )
-        is_dig_dump_task = jnp.logical_and(
-            has_dump_requirements,
-            required_dig_volume > 0,
-        )
-        gated_completion = jax.lax.cond(
-            is_dig_dump_task,
-            lambda: dig_dump_completion,
-            lambda: default_gated_completion,
-        )
+        components["dump_completion_action_map"] = task_completion[
+            "dump_purity"
+        ]
+        components["total_dig_dump_completion"] = task_completion[
+            "dump_volume_completion"
+        ]
+        components["absolute_completion"] = completion_percentage
+        components["unloaded_completion"] = task_completion[
+            "unloaded_completion"
+        ]
+        components["task_present"] = task_completion["task_present"]
+        components["dump_mask_integrity"] = task_completion[
+            "dump_mask_integrity"
+        ]
+        components["accepted_dump_volume"] = task_completion[
+            "accepted_dump_volume"
+        ]
+        components["illegal_dump_volume"] = task_completion[
+            "illegal_dump_volume"
+        ]
+        gated_completion = completion_percentage
         components["remaining_edge_dig_tiles"] = jnp.sum(
             jnp.logical_and(edge_mask, action_map > target_map).astype(jnp.float32)
         )
@@ -3419,6 +3337,12 @@ class State(NamedTuple):
             "dig_completion_min_edge_inner": components["dig_completion_min_edge_inner"],
             "dump_completion_action_map": components["dump_completion_action_map"],
             "total_dig_dump_completion": components["total_dig_dump_completion"],
+            "absolute_completion": components["absolute_completion"],
+            "unloaded_completion": components["unloaded_completion"],
+            "task_present": components["task_present"],
+            "dump_mask_integrity": components["dump_mask_integrity"],
+            "accepted_dump_volume": components["accepted_dump_volume"],
+            "illegal_dump_volume": components["illegal_dump_volume"],
             "remaining_edge_dig_tiles": components["remaining_edge_dig_tiles"],
             "remaining_inner_dig_tiles": components["remaining_inner_dig_tiles"],
             "agent_active": components["agent_active"],
@@ -3427,185 +3351,168 @@ class State(NamedTuple):
 
         return reward, components
 
-    def _is_done_task(self, action_map: Array, target_map: Array):
-        """
-        Checks if the task is complete based on the type of task:
-        1. Traditional tasks: target map requirements must be met
-        2. Relocation tasks: all dirt must be in dump zones (no dirt in neutral areas)
-        3. Cooperative tasks: excavator digs, skidsteer moves dirt - both must be complete
-
-        On top of that, all agents should not be loaded.
-        """
+    def _get_task_completion(
+        self,
+        action_map: Array,
+        target_map: Array,
+    ) -> dict[str, Array]:
+        """Compute every prerequisite for ``exact_visible_dump_v1`` once."""
         action_map = _as_2d_map(action_map)
         target_map = _as_2d_map(target_map)
-
-        def _check_done_dump():
-            # For dump completion: check if all dirt is in designated dump zones OR 1-pixel buffer around them
-            # This allows for more lenient termination while keeping rewards precise
-            designated_dump_zones = target_map > 0
-
-            # Completion should use the static target dump zone, not the current
-            # dynamic dumpability mask. Dumpability can shrink around dug
-            # foundation tiles during the episode; using it here would make
-            # already valid target dump cells retroactively fail termination.
-            expanded_dump_zones = self._dilate_mask(designated_dump_zones, kernel_size=3)
-            obstacle_mask = _as_2d_map(self.world.padding_mask.map) == 1
-            allowed_dump_zones = jnp.logical_and(
-                expanded_dump_zones,
-                jnp.logical_not(obstacle_mask),
-            )
-
-            # Check if there's any dirt outside expanded dump zones
-            dirt_outside_expanded = jnp.logical_and(
-                action_map > 0,
-                jnp.logical_not(allowed_dump_zones),
-            )
-
-            # Task complete if NO dirt exists outside expanded dump zones
-            done_dump = jnp.logical_not(jnp.any(dirt_outside_expanded))
-            return done_dump
-
-        def _check_done_dig():
-            # For dig completion: action_map must be <= target_map for all target_map < 0
-            # (since target_map < 0 means "dig to this depth" and action_map < 0 means "dug to this depth")
-            dig_requirements = jnp.where(target_map < 0, target_map, 0)
-            actual_digs = jnp.where(target_map < 0, action_map, 0)
-            done_dig = jnp.all(actual_digs <= dig_requirements)
-            return done_dig
-
-        def _check_relocation_done():
-            """
-            For relocation tasks: Check if all dirt is in designated dump zones (target_map > 0).
-            Optimized version that early exits and avoids full map operations.
-            """
-            # Early exit: if any active agent is loaded, task cannot be complete
-            loaded_per_agent_dyn = jnp.array([
-                self.agent.agent_states[0].loaded[0],
-                self.agent.agent_states[1].loaded[0],
-                self.agent.agent_states[2].loaded[0],
-                self.agent.agent_states[3].loaded[0]
-            ])
-            active_dyn = self.agent.agent_active.astype(jnp.bool_)
-            agents_loaded = jnp.any(jnp.logical_and(active_dyn, loaded_per_agent_dyn > 0))
-            
-            def _do_expensive_check():
-                # Only do expensive operations when agents are unloaded
-                # Get designated dump zones from target_map (target_map > 0)
-                designated_dump_zones = target_map > 0
-                # Create 1-tile buffer around dump zones using morphological dilation (3x3 kernel)
-                dump_zones_with_buffer = self._dilate_mask(designated_dump_zones, kernel_size=3)
-                
-                # Check total dirt in environment
-                total_dirt = jnp.sum(action_map > 0)
-                
-                # If there's no dirt at all, something is wrong - don't terminate
-                # (Relocation tasks should always have dirt to move)
-                def _check_dirt_distribution():
-                    # Find dirt locations outside the buffered dump zones
-                    dirt_outside_buffered = jnp.logical_and(action_map > 0, jnp.logical_not(dump_zones_with_buffer))
-                    
-                    # Task complete if NO dirt exists outside buffered dump zones
-                    return jnp.logical_not(jnp.any(dirt_outside_buffered))
-                
-                def _no_dirt_case():
-                    # If no dirt exists, don't terminate (likely environment initialization issue)
-                    return False
-                
-                # Only check dirt distribution if there's actually dirt in the environment
-                return jax.lax.cond(
-                    total_dirt > 0,
-                    _check_dirt_distribution,
-                    _no_dirt_case
-                )
-            
-            def _early_exit():
-                return False  # Task not complete if agents still loaded
-            
-            # Only do expensive check if agents are unloaded
-            return jax.lax.cond(
-                agents_loaded,
-                _early_exit,
-                _do_expensive_check
-            )
-
-        def _check_dig_and_dump_task_done():
-            """
-            For maps with both excavation and dump requirements:
-            - All dig requirements must be met (target_map < 0)
-            - All positive dirt must be in dump zones (target_map > 0)
-            - Both agents must be unloaded
-            """
-            # Both dig and dump must be complete for dig+dump tasks.
-            done_dig = _check_done_dig()
-            done_dump = _check_done_dump()
-
-            # Ensure all active agents are unloaded for completion.
-            # This prevents premature termination when any agent still has dirt
-            loaded_per_agent_dyn = jnp.array([
-                self.agent.agent_states[0].loaded[0],
-                self.agent.agent_states[1].loaded[0],
-                self.agent.agent_states[2].loaded[0],
-                self.agent.agent_states[3].loaded[0]
-            ])
-            active_dyn = self.agent.agent_active.astype(jnp.bool_)
-            all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
-
-            return jnp.logical_and(jnp.logical_and(done_dig, done_dump), all_unloaded_dyn)
-
-        # Check if this is a relocation task:
-        # Relocation tasks have dump zones (target_map > 0) but no dig requirements (no target_map < 0)
-        has_dump_requirements = jnp.any(target_map > 0)
-        has_dig_requirements = jnp.any(target_map < 0)
-
-        # Relocation tasks do not require a transport agent; excavator alone could relocate
-        is_relocation_task = jnp.logical_and(
+        obstacle_mask = _as_2d_map(self.world.padding_mask.map) == 1
+        accepted_dump_mask = self._accepted_dump_mask(target_map)
+        declared_dump_mask = target_map > 0
+        dig_mask = target_map < 0
+        has_dump_requirements = jnp.any(declared_dump_mask)
+        has_dig_requirements = jnp.any(dig_mask)
+        task_present = jnp.logical_or(
             has_dump_requirements,
-            jnp.logical_not(has_dig_requirements)
-        )
-        # Any dig+dump map requires both excavation and dump-zone completion,
-        # even with a single excavator.
-        is_dig_and_dump_task = jnp.logical_and(has_dig_requirements, has_dump_requirements)
+            has_dig_requirements,
+        ).astype(jnp.float32)
 
-        # Choose termination logic based on task type
-        def _traditional_task_logic():
-            # Traditional logic for tasks with specific target map requirements
-            # Only check digging requirements; dump requirements are handled by
-            # relocation or dig+dump logic above.
-            done_dig = jax.lax.cond(
-                jnp.all(target_map >= 0),  # No dig requirements
-                lambda: True,
-                _check_done_dig,
+        def _dig_completion(region_mask: Array) -> Float:
+            required = jnp.where(region_mask, -target_map, 0).astype(jnp.float32)
+            completed = jnp.where(
+                region_mask,
+                jnp.clip(
+                    -action_map.astype(jnp.float32),
+                    a_min=0.0,
+                    a_max=required,
+                ),
+                0.0,
             )
-            
-            # Traditional tasks are complete when digging requirements are met
-            return done_dig
+            required_volume = jnp.sum(required)
+            return jax.lax.cond(
+                required_volume > 0,
+                lambda: jnp.sum(completed)
+                / jnp.maximum(required_volume, jnp.float32(1e-6)),
+                lambda: jnp.float32(1.0),
+            )
 
-        def _relocation_task_logic():
-            # New logic for relocation tasks - check if all dirt is in dump zones
-            return _check_relocation_done()
+        edge_mask = jnp.logical_and(
+            self._get_foundation_border_mask(),
+            dig_mask,
+        )
+        inner_mask = jnp.logical_and(dig_mask, jnp.logical_not(edge_mask))
+        dig_completion_total = _dig_completion(dig_mask)
+        dig_completion_edge = _dig_completion(edge_mask)
+        dig_completion_inner = _dig_completion(inner_mask)
+        enforce_edge = jnp.bool_(
+            getattr(
+                self.env_cfg,
+                "enforce_foundation_border_alignment",
+                False,
+            )
+        )
+        edge_applicable = jnp.logical_and(enforce_edge, jnp.any(edge_mask))
+        edge_requirement = jnp.where(
+            edge_applicable,
+            dig_completion_edge,
+            jnp.float32(1.0),
+        )
+        dig_requirement = jnp.where(
+            has_dig_requirements,
+            dig_completion_total,
+            jnp.float32(1.0),
+        )
 
-        # Select appropriate task completion logic
-        task_requirements_met = jax.lax.cond(
-            is_relocation_task,
-            _relocation_task_logic,
+        positive_soil = jnp.clip(
+            action_map.astype(jnp.float32),
+            a_min=0.0,
+        )
+        accepted_dump_volume = jnp.sum(
+            jnp.where(accepted_dump_mask, positive_soil, 0.0)
+        )
+        total_positive_volume = jnp.sum(positive_soil)
+        illegal_dump_volume = total_positive_volume - accepted_dump_volume
+        dump_purity = jax.lax.cond(
+            has_dump_requirements,
             lambda: jax.lax.cond(
-                is_dig_and_dump_task,
-                _check_dig_and_dump_task_done,
-                _traditional_task_logic
-            )
+                total_positive_volume > 0,
+                lambda: accepted_dump_volume
+                / jnp.maximum(total_positive_volume, jnp.float32(1e-6)),
+                lambda: jnp.float32(0.0),
+            ),
+            lambda: jnp.float32(1.0),
         )
-        
-        # Task is complete when requirements are met AND all active agents are unloaded
-        loaded_per_agent_dyn = jnp.array([
+        required_dig_volume = jnp.sum(
+            jnp.where(dig_mask, -target_map, 0).astype(jnp.float32)
+        )
+        dump_volume_completion = jax.lax.cond(
+            has_dump_requirements,
+            lambda: jax.lax.cond(
+                has_dig_requirements,
+                lambda: jnp.clip(
+                    accepted_dump_volume
+                    / jnp.maximum(required_dig_volume, jnp.float32(1e-6)),
+                    a_min=0.0,
+                    a_max=1.0,
+                ),
+                lambda: jnp.where(
+                    total_positive_volume > 0,
+                    dump_purity,
+                    jnp.float32(0.0),
+                ),
+            ),
+            lambda: jnp.float32(1.0),
+        )
+
+        loaded_per_agent = jnp.array([
             self.agent.agent_states[0].loaded[0],
             self.agent.agent_states[1].loaded[0],
             self.agent.agent_states[2].loaded[0],
             self.agent.agent_states[3].loaded[0]
         ])
-        active_dyn = self.agent.agent_active.astype(jnp.bool_)
-        all_unloaded_dyn = jnp.all(jnp.logical_or(~active_dyn, loaded_per_agent_dyn == 0))
-        done_task = jnp.logical_and(task_requirements_met, all_unloaded_dyn)
-        return done_task
+        active_agents = self.agent.agent_active.astype(jnp.bool_)
+        unloaded_completion = jnp.all(
+            jnp.logical_or(
+                jnp.logical_not(active_agents),
+                loaded_per_agent == 0,
+            )
+        ).astype(jnp.float32)
+        dump_mask_integrity = jnp.where(
+            has_dump_requirements,
+            jnp.logical_not(
+                jnp.any(jnp.logical_and(declared_dump_mask, obstacle_mask))
+            ).astype(jnp.float32),
+            jnp.float32(1.0),
+        )
+        dump_requirement = jnp.where(
+            has_dump_requirements,
+            jnp.minimum(dump_purity, dump_volume_completion),
+            jnp.float32(1.0),
+        )
+        absolute_completion = jnp.minimum(
+            task_present,
+            jnp.minimum(
+                unloaded_completion,
+                jnp.minimum(
+                    dump_mask_integrity,
+                    jnp.minimum(
+                        edge_requirement,
+                        jnp.minimum(dig_requirement, dump_requirement),
+                    ),
+                ),
+            ),
+        )
+
+        return {
+            "absolute_completion": absolute_completion,
+            "dig_completion_total": dig_completion_total,
+            "dig_completion_edge": dig_completion_edge,
+            "dig_completion_inner": dig_completion_inner,
+            "dump_purity": dump_purity,
+            "dump_volume_completion": dump_volume_completion,
+            "unloaded_completion": unloaded_completion,
+            "task_present": task_present,
+            "dump_mask_integrity": dump_mask_integrity,
+            "accepted_dump_volume": accepted_dump_volume,
+            "illegal_dump_volume": illegal_dump_volume,
+        }
+
+    def _is_done_task(self, action_map: Array, target_map: Array):
+        completion = self._get_task_completion(action_map, target_map)
+        return completion["absolute_completion"] >= jnp.float32(1.0 - 1e-6)
 
     def _is_done(
         self, action_map: Array, target_map: Array
@@ -4239,49 +4146,11 @@ class State(NamedTuple):
         )
 
     def _calculate_completion_percentage(self, action_map: Array, target_map: Array) -> Float:
-        """
-        Calculate completion percentage based on how much dirt is in correct dump zones.
-        Returns a value between 0.0 and 1.0.
-        Now includes undug tiles (target_map == -1) as dirt not relocated.
-        """
-        # Get designated dump zones (target_map > 0)
-        designated_dump_zones = target_map > 0
-        
-        # Get areas that need to be dug (target_map < 0) but haven't been dug yet (action_map >= 0)
-        undug_areas = jnp.logical_and(target_map < 0, action_map >= 0)
-        
-        # Calculate total dirt volume in the environment:
-        # 1. Dirt that has been moved and dumped (action_map > 0)
-        # 2. Undug tiles that still need to be relocated (target_map == -1)
-        moved_dirt = jnp.sum(jnp.where(action_map > 0, action_map, 0))
-        undug_dirt = jnp.sum(jnp.where(undug_areas, 1.0, 0.0))  # Count undug tiles as 1 unit each
-        # Sum dirt currently loaded across all active agents.
-        # Avoid dynamic tuple indexing by statically stacking per-agent loaded values.
-        loaded_per_agent = jnp.array([
-            self.agent.agent_states[0].loaded[0],
-            self.agent.agent_states[1].loaded[0],
-            self.agent.agent_states[2].loaded[0],
-            self.agent.agent_states[3].loaded[0]
-        ])
-        loaded_dirt = jnp.sum(jnp.where(self.agent.agent_active, loaded_per_agent, 0))
-        total_dirt = moved_dirt + undug_dirt + loaded_dirt
-        
-        # Calculate dirt volume in correct dump zones (sum of heights)
-        dirt_in_correct_zones = jnp.sum(jnp.where(
-            jnp.logical_and(action_map > 0, designated_dump_zones),
+        """Compatibility wrapper for the corrected absolute completion."""
+        return self._get_task_completion(
             action_map,
-            0
-        ))
-        
-        # Calculate completion percentage
-        # If no dirt exists, return 0.0 (no completion)
-        completion_percentage = jax.lax.cond(
-            total_dirt > 0,
-            lambda: dirt_in_correct_zones / total_dirt,
-            lambda: 0.0
-        )
-        
-        return completion_percentage
+            target_map,
+        )["absolute_completion"]
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
         """

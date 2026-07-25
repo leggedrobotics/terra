@@ -177,29 +177,29 @@ Task index:
 
 | ID | Priority | Cost class | Depends on | State |
 |---|---|---|---|---|
-| D0 | P0 | documentation | completed evaluators | complete |
-| D1 | P0 | evaluation only | D0 | open |
-| D2 | P0 | evaluation only | D0 | open |
-| C0 | P0 | decision | design review | complete |
-| C1 | P0 | Terra code/tests | C0 | open |
-| C1a | P0 | Terra transition/tests | C0 | open |
-| C2 | P0 | baselines code/test | C1, C1a | open |
-| C3 | P0 | Terra loader/tests | C1, C1a | open |
-| C4 | P0 | evaluator/tests | C1-C3, C1a | open |
-| C5 | P0 | training receipts/tests | C1-C4 | open |
-| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | blocked |
-| F0 | P0 | two scratch bounded PPO probes | C1-C4, C1a | blocked |
-| R0 | P1 | two 500-update historical forks | D1, D2, F0 | blocked |
-| B0 | P1 | generation/validation | F0 | blocked |
-| F1 | P1 | two scratch family specialists | B0, F0, C5 | blocked |
-| G0 | P1 | one scratch small easy generalist | F1 | blocked |
-| S0 | P1 | one grown medium qualification | G0 | blocked |
-| K0 | P2 | global staged map campaign | S0 | blocked |
-| A0 | P3 | one conditional architecture A/B | representation-specific evidence | blocked |
-| W0 | P2 | corrected reward specification | C1, C1a | blocked |
-| W0a | P2 | conditional dense transport A/B | F0 plus transport-specific evidence | blocked |
-| W1-W2 | P2 | dense-to-terminal reward A/B/C | S0 | blocked |
-| PR0 | P3 | reset A/B | selected K0 map sampler | blocked |
+| D0 | P0 | documentation | completed evaluators | [x] complete |
+| D1 | P0 | evaluation only | D0 | [ ] open |
+| D2 | P0 | evaluation only | D0 | [ ] open |
+| C0 | P0 | decision | design review | [x] complete |
+| C1 | P0 | Terra code/tests | C0 | [-] in progress |
+| C1a | P0 | Terra transition/tests | C0 | [-] in progress |
+| C2 | P0 | baselines code/test | C1, C1a | [ ] open |
+| C3 | P0 | Terra loader/tests | C1, C1a | [ ] open |
+| C4 | P0 | evaluator/tests | C1-C3, C1a | [ ] open |
+| C5 | P0 | training receipts/tests | C1-C4 | [ ] open |
+| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
+| F0 | P0 | two scratch bounded PPO probes | C1-C4, C1a | [ ] blocked |
+| R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
+| B0 | P1 | generation/validation | F0 | [ ] blocked |
+| F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
+| G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
+| S0 | P1 | one grown medium qualification | G0 | [ ] blocked |
+| K0 | P2 | global staged map campaign | S0 | [ ] blocked |
+| A0 | P3 | one conditional architecture A/B | representation-specific evidence | [ ] blocked |
+| W0 | P2 | corrected reward specification | C1, C1a | [ ] blocked |
+| W0a | P2 | conditional dense transport A/B | F0 plus transport-specific evidence | [ ] blocked |
+| W1-W2 | P2 | dense-to-terminal reward A/B/C | S0 | [ ] blocked |
+| PR0 | P3 | reset A/B | selected K0 map sampler | [ ] blocked |
 
 ## 5. Phase D — close and diagnose the completed screen
 
@@ -341,6 +341,21 @@ is required before implementation.
 
 ### C1 — Unify termination, completion, reward, and evaluation
 
+Status: in progress.
+
+Verified implementation receipt, 2026-07-25:
+
+- Terra exposes the named `exact_visible_dump_v1` contract and computes dig,
+  exact-dump purity/volume, unloaded, task-present, dump-mask-integrity, and
+  applicable edge components once;
+- termination, terminal reward, reward components, and the compatibility
+  completion accessor use the same minimum-reduced absolute completion;
+- exact-zone, former-buffer, off-zone, relocation-only, combined, partial,
+  loaded, empty-task, obstacle-overlap, edge, terminal-reward, eager, `jit`,
+  and `vmap` tests pass; and
+- C1 remains in progress until C4 records the same named contract in fixed
+  evaluation and proves legacy-checkpoint evaluation labeling.
+
 Implement the smallest pure task-completion path needed by the current dense
 experiment:
 
@@ -382,6 +397,27 @@ Acceptance:
 - legacy checkpoints remain evaluable under a clearly labeled legacy contract.
 
 ### C1a — Make dumping contained, mass-conserving, and non-greedy
+
+Status: in progress.
+
+Verified implementation receipt, 2026-07-25:
+
+- tracked-excavator dumps prefer physically reachable exact-mask cells and
+  otherwise permit an entirely off-zone, recoverable mistake;
+- correctly aimed and wrong dumps constrain local soil relaxation to opposite
+  sides of the accepted-mask boundary;
+- complete-load mass, containment, and `int8` representability are checked
+  before changing world soil or carried load;
+- reward-potential transition vetoes were removed from active dump and
+  implicit reverse-dump paths;
+- obstacles and non-dumpable cells are excluded per tile instead of vetoing an
+  otherwise usable dump workspace; and
+- 16 focused contract tests plus all 39 Terra tests passed,
+  including repeated dump/re-lift, overflow rejection, potential increase,
+  and eager/`jit`/`vmap` agreement.
+
+C1a remains in progress until the exact-mask capacity validator and starter
+cell capacity receipts required below are implemented and tested.
 
 Scope the first implementation to the single tracked-excavator recovery path.
 Do not build a configurable spill framework.

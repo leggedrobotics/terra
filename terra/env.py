@@ -152,6 +152,12 @@ class TerraEnv(NamedTuple):
             "dig_completion_min_edge_inner": zero,
             "dump_completion_action_map": zero,
             "total_dig_dump_completion": zero,
+            "absolute_completion": zero,
+            "unloaded_completion": zero,
+            "task_present": zero,
+            "dump_mask_integrity": zero,
+            "accepted_dump_volume": zero,
+            "illegal_dump_volume": zero,
             "remaining_edge_dig_tiles": zero,
             "remaining_inner_dig_tiles": zero,
         }
