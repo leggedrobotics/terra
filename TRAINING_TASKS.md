@@ -183,7 +183,7 @@ Task index:
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [-] in progress |
 | C1a | P0 | Terra transition/tests | C0 | [-] in progress |
-| C2 | P0 | baselines code/test | C1, C1a | [ ] open |
+| C2 | P0 | baselines code/test | C1, C1a | [x] complete |
 | C3 | P0 | Terra loader/tests | C1, C1a | [ ] open |
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [ ] open |
 | C5 | P0 | training receipts/tests | C1-C4 | [ ] open |
@@ -478,6 +478,19 @@ Physical boundary spill becomes a later named dynamics treatment only after
 the contained contract passes family and retention gates.
 
 ### C2 — Restore the full-reset horizon contract
+
+Status: complete.
+
+Verified implementation receipt, 2026-07-25:
+
+- the initial full-task reset no longer randomizes `env_steps`;
+- the training path asserts that every initial `env_steps` value is zero;
+- the run metrics record the minimum and maximum configured effective
+  horizon, while the direct fixed evaluator rejects any horizon other than
+  450;
+- no `randomize_initial_env_steps` reference remains; and
+- all 42 focused training-utility tests passed on CPU, including zero and
+  nonzero reset fixtures.
 
 For all future full-task training and evaluation:
 

@@ -177,6 +177,125 @@ def actions_sanity_check(map: Array) -> None:
         )
 
 
+def contained_dump_capacity_sanity_check(
+    target_map: Array,
+    occupancy_map: Array,
+    dumpability_map: Array,
+    action_map: Array,
+    *,
+    minimum_single_layer_ratio: float | None = None,
+    maximum_bucket_load: int = int(np.iinfo(np.int8).max),
+) -> dict[str, float | int | bool]:
+    """Validate exact-mask storage for the contained tracked-excavator contract."""
+    target = np.asarray(target_map)
+    occupancy = np.asarray(occupancy_map, dtype=np.bool_)
+    dumpability = np.asarray(dumpability_map, dtype=np.bool_)
+    action = np.asarray(action_map)
+    if not (
+        target.shape
+        == occupancy.shape
+        == dumpability.shape
+        == action.shape
+    ):
+        raise RuntimeError(
+            "Target, occupancy, dumpability, and action maps must have the "
+            "same shape for dump-capacity validation."
+        )
+
+    declared_dump = target > 0
+    if np.any(declared_dump & occupancy):
+        raise RuntimeError("Accepted dump target overlaps an obstacle.")
+    accepted_dump = declared_dump & ~occupancy
+    if np.any(accepted_dump & ~dumpability):
+        raise RuntimeError("Accepted dump target contains non-dumpable cells.")
+
+    accepted_cells = int(accepted_dump.sum())
+    required_dig_volume = int(
+        np.clip(-target.astype(np.int64), a_min=0, a_max=None).sum()
+    )
+    if not np.any(declared_dump):
+        return {
+            "has_dump_requirement": False,
+            "accepted_dump_cells": 0,
+            "required_dig_volume": required_dig_volume,
+            "single_layer_capacity_ratio": 0.0,
+            "representable_remaining_volume": 0,
+            "required_remaining_volume": 0,
+            "maximum_bucket_load": 0,
+            "maximum_single_cell_headroom": 0,
+        }
+
+    positive_soil = np.clip(
+        action.astype(np.int64),
+        a_min=0,
+        a_max=None,
+    )
+    accepted_positive_volume = int(positive_soil[accepted_dump].sum())
+    total_positive_volume = int(positive_soil.sum())
+    eventual_dump_volume = max(required_dig_volume, total_positive_volume)
+
+    if accepted_cells == 0:
+        raise RuntimeError(
+            "Map declares a dump requirement but has no accepted dump cells."
+        )
+
+    if minimum_single_layer_ratio is not None and required_dig_volume <= 0:
+        raise RuntimeError(
+            "A minimum single-layer dump-capacity ratio requires a dig task."
+        )
+    single_layer_ratio = (
+        accepted_cells / required_dig_volume
+        if required_dig_volume > 0
+        else float("inf")
+    )
+    if (
+        minimum_single_layer_ratio is not None
+        and single_layer_ratio + 1e-12 < minimum_single_layer_ratio
+    ):
+        raise RuntimeError(
+            "Exact accepted dump mask fails the single-layer capacity ratio: "
+            f"{single_layer_ratio:.6f} < {minimum_single_layer_ratio:.6f}."
+        )
+
+    int8_max = int(np.iinfo(np.int8).max)
+    accepted_heights = positive_soil[accepted_dump]
+    headroom = int8_max - accepted_heights
+    if np.any(headroom < 0):
+        raise RuntimeError(
+            "Accepted dump target contains soil outside the int8 height range."
+        )
+    representable_remaining_volume = int(headroom.sum())
+    required_remaining_volume = max(
+        eventual_dump_volume - accepted_positive_volume,
+        0,
+    )
+    if representable_remaining_volume < required_remaining_volume:
+        raise RuntimeError(
+            "Exact accepted dump mask cannot represent all remaining soil: "
+            f"{representable_remaining_volume} < {required_remaining_volume}."
+        )
+
+    valid_maximum_bucket = min(maximum_bucket_load, eventual_dump_volume)
+    maximum_single_cell_headroom = int(headroom.max())
+    if maximum_single_cell_headroom < valid_maximum_bucket:
+        raise RuntimeError(
+            "Exact accepted dump mask cannot represent the largest valid "
+            "contained bucket on one reachable cell: "
+            f"{maximum_single_cell_headroom} < {valid_maximum_bucket}."
+        )
+
+    return {
+        "has_dump_requirement": True,
+        "accepted_dump_cells": accepted_cells,
+        "required_dig_volume": required_dig_volume,
+        "single_layer_capacity_ratio": float(single_layer_ratio),
+        "representable_remaining_volume": representable_remaining_volume,
+        "required_remaining_volume": required_remaining_volume,
+        "maximum_bucket_load": valid_maximum_bucket,
+        "maximum_single_cell_headroom": maximum_single_cell_headroom,
+    }
+
+
 def _ensure_spatial_2d(array: Array, source: str) -> Array:
     """Normalize singleton-channel maps and reject true non-2D spatial data."""
     array = np.asarray(array)
@@ -275,6 +394,12 @@ def load_single_map(map_path: str) -> Array:
         actions_sanity_check(actions_map)
     else:
         actions_map = np.zeros_like(image, dtype=IntMap)
+    contained_dump_capacity_sanity_check(
+        image,
+        occupancy,
+        dumpability_mask_init,
+        actions_map,
+    )
 
     # Try to load metadata
     max_trench_type = 3
@@ -400,6 +525,12 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
             actions.append(actions_map)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
+        contained_dump_capacity_sanity_check(
+            map,
+            occupancy,
+            dumpability_mask_init,
+            actions[-1],
+        )
 
         # Dense-reward distance maps are part of the map contract. A missing,
         # malformed, or silently zero-filled field changes the reward while

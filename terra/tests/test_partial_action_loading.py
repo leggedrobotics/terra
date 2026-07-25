@@ -24,6 +24,7 @@ from terra.env_generation.partial_completion import generate_partial_dataset
 from terra.map import GridWorld
 from terra.maps_buffer import MapsBuffer
 from terra.maps_buffer import actions_sanity_check
+from terra.maps_buffer import contained_dump_capacity_sanity_check
 from terra.maps_buffer import load_maps_from_disk
 from terra.state import State
 
@@ -69,6 +70,72 @@ class PartialActionLoadingTest(unittest.TestCase):
             actions_sanity_check(np.array([[-2, 0]], dtype=np.int16))
         with self.assertRaisesRegex(RuntimeError, "max=128"):
             actions_sanity_check(np.array([[0, 128]], dtype=np.int16))
+
+    def test_exact_dump_capacity_requires_visible_usable_headroom(self):
+        target = np.zeros((16, 16), dtype=np.int8)
+        target[2:4, 2:4] = -1
+        target[8:12, 8:12] = 1
+        occupancy = np.zeros_like(target, dtype=np.int8)
+        dumpability = np.ones_like(target, dtype=np.bool_)
+        action = np.zeros_like(target, dtype=np.int8)
+
+        diagnostics = contained_dump_capacity_sanity_check(
+            target,
+            occupancy,
+            dumpability,
+            action,
+            minimum_single_layer_ratio=3.0,
+        )
+        self.assertEqual(diagnostics["accepted_dump_cells"], 16)
+        self.assertEqual(diagnostics["required_dig_volume"], 4)
+        self.assertEqual(diagnostics["single_layer_capacity_ratio"], 4.0)
+        self.assertEqual(diagnostics["maximum_bucket_load"], 4)
+
+        with self.assertRaisesRegex(RuntimeError, "capacity ratio"):
+            contained_dump_capacity_sanity_check(
+                target,
+                occupancy,
+                dumpability,
+                action,
+                minimum_single_layer_ratio=5.0,
+            )
+
+        occupied_target = occupancy.copy()
+        occupied_target[8, 8] = 1
+        with self.assertRaisesRegex(RuntimeError, "overlaps an obstacle"):
+            contained_dump_capacity_sanity_check(
+                target,
+                occupied_target,
+                dumpability,
+                action,
+            )
+
+        non_dumpable_target = dumpability.copy()
+        non_dumpable_target[8, 8] = False
+        with self.assertRaisesRegex(RuntimeError, "non-dumpable"):
+            contained_dump_capacity_sanity_check(
+                target,
+                occupancy,
+                non_dumpable_target,
+                action,
+            )
+
+    def test_exact_dump_capacity_rejects_unplaceable_full_bucket(self):
+        target = np.zeros((16, 16), dtype=np.int8)
+        target[:8, :] = -1
+        target[12, 12] = 1
+        occupancy = np.zeros_like(target, dtype=np.int8)
+        dumpability = np.ones_like(target, dtype=np.bool_)
+        action = np.zeros_like(target, dtype=np.int8)
+        action[12, 12] = 1
+
+        with self.assertRaisesRegex(RuntimeError, "remaining soil"):
+            contained_dump_capacity_sanity_check(
+                target,
+                occupancy,
+                dumpability,
+                action,
+            )
 
     def test_grid_world_recomputes_initial_dynamic_dumpability(self):
         shape = (16, 16)
