@@ -1,6 +1,6 @@
 # Terra Training Tasks
 
-- Status: active recovery backlog; semantics implementation not yet complete
+- Status: active recovery execution; C0-C4 complete; D1/D2 submitted
 - Date: 2026-07-25 ratified-recovery update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -178,8 +178,8 @@ Task index:
 | ID | Priority | Cost class | Depends on | State |
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
-| D1 | P0 | evaluation only | D0 | [ ] open |
-| D2 | P0 | evaluation only | D0 | [ ] open |
+| D1 | P0 | evaluation only | D0 | [ ] running: `8623160` -> `8623162` |
+| D2 | P0 | evaluation only | D0 | [ ] running: `8623160` -> `8623162`, `8623163` |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
 | C1a | P0 | Terra transition/tests | C0 | [x] complete |
@@ -226,6 +226,24 @@ Acceptance:
 
 ### D1 — Audit the dump-mask semantic mismatch
 
+Execution receipt, submitted 2026-07-26:
+
+- observer-only implementation:
+  terra-baselines `d049107` (`audit_historical_curriculum.py`);
+- frozen source copy:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/historical_audit/source`;
+- historical Terra and baseline revisions remain
+  `d37e780480c0fae64a4b9e4ba6638b4499748761` and
+  `2722d832c8381a68d594d8bf8298ba3aec7f4c6a`;
+- preflight job `8623160`;
+- full deterministic job `8623162`, held on
+  `afterok:8623160`; and
+- the deterministic command hard-limits D1 attribution to the three declared
+  checkpoints over development M0-M2: exactly 259,200 maximum transitions.
+
+Do not mark D1 complete until the preflight and deterministic JSON pass their
+integrity checks and the materiality decision is written below.
+
 Hypothesis:
 
 > Buffer-only legal terminations are receiving a different completion and
@@ -268,6 +286,22 @@ Decision:
 Budget: at most 259,200 evaluation transitions and no gradients.
 
 ### D2 — Separate memorization, policy mode, and held-out regression
+
+Execution receipt, submitted 2026-07-26:
+
+- deterministic train/development audit job `8623162`, held on the same
+  preflight;
+- sampled M0 job `8623163`, also held on the preflight;
+- declared sampled seeds `2026072500` through `2026072507`;
+- exact training-identity view:
+  `train/local_M2_terminal`, whose 256 slots must verify as 256 unique source
+  IDs and 256 unique map IDs before evaluation; and
+- checkpoint labels `e8_u20000`, `flat_u1000`, `flat_u4000`,
+  `staged_u1000`, and `staged_u4000`, each guarded by its frozen SHA-256.
+
+Do not mark D2 complete until all 20 deterministic records and 16 sampled
+records pass reset/integrity checks and the three preregistered hypotheses are
+decided from the saved JSON.
 
 Hypotheses:
 
