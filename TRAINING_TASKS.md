@@ -181,14 +181,14 @@ Task index:
 | D1 | P0 | evaluation only | D0 | [ ] open |
 | D2 | P0 | evaluation only | D0 | [ ] open |
 | C0 | P0 | decision | design review | [x] complete |
-| C1 | P0 | Terra code/tests | C0 | [-] in progress |
-| C1a | P0 | Terra transition/tests | C0 | [-] in progress |
+| C1 | P0 | Terra code/tests | C0 | [x] complete |
+| C1a | P0 | Terra transition/tests | C0 | [x] complete |
 | C2 | P0 | baselines code/test | C1, C1a | [x] complete |
 | C3 | P0 | Terra loader/tests | C1, C1a | [x] complete |
-| C4 | P0 | evaluator/tests | C1-C3, C1a | [ ] open |
+| C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [ ] open |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C1-C4, C1a | [ ] blocked |
+| F0 | P0 | two scratch bounded PPO probes | C1-C4, C1a | [ ] open |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -341,7 +341,7 @@ is required before implementation.
 
 ### C1 — Unify termination, completion, reward, and evaluation
 
-Status: in progress.
+Status: complete.
 
 Verified implementation receipt, 2026-07-25:
 
@@ -353,8 +353,10 @@ Verified implementation receipt, 2026-07-25:
 - exact-zone, former-buffer, off-zone, relocation-only, combined, partial,
   loaded, empty-task, obstacle-overlap, edge, terminal-reward, eager, `jit`,
   and `vmap` tests pass; and
-- C1 remains in progress until C4 records the same named contract in fixed
-  evaluation and proves legacy-checkpoint evaluation labeling.
+- the C4 evaluator now records the same named contract, hard-fails any
+  `task_done <=> absolute_completion == 1` disagreement, and labels the
+  imported environment as either corrected or legacy; and
+- all 111 baseline tests and the real corrected-environment C4 smoke pass.
 
 Implement the smallest pure task-completion path needed by the current dense
 experiment:
@@ -398,7 +400,7 @@ Acceptance:
 
 ### C1a — Make dumping contained, mass-conserving, and non-greedy
 
-Status: in progress.
+Status: complete.
 
 Verified implementation receipt, 2026-07-25:
 
@@ -416,9 +418,6 @@ Verified implementation receipt, 2026-07-25:
   including repeated dump/re-lift, overflow rejection, potential increase,
   and eager/`jit`/`vmap` agreement.
 
-C1a remains in progress until the exact-mask capacity validator and starter
-cell capacity receipts required below are implemented and tested.
-
 Capacity-validator receipt, 2026-07-25:
 
 - the loader computes accepted cells from the exact visible mask, rejects
@@ -428,8 +427,12 @@ Capacity-validator receipt, 2026-07-25:
 - the old `terra_training_design_v1_20260724` bank was audited and has minima
   near 2.0x, so it is explicitly ineligible for the new 3x starter contract;
   and
-- C1a therefore remains in progress until the regenerated F0 foundation and
-  trench identities each produce a machine-readable 3x capacity receipt.
+- regenerated F0 receipts now prove 63.0x capacity and one-tile path distance
+  for the all-around foundation, and 9.27x capacity with two-tile p95 path
+  distance for the broad both-side trench. Both are obstacle-free, exact-mask
+  datasets and load successfully through the strict C3 path; the frozen bank,
+  gallery, and validation JSON are under
+  `.artifacts/terra_curriculum_recovery_20260725/f0_starters_v1/`.
 
 Scope the first implementation to the single tracked-excavator recovery path.
 Do not build a configurable spill framework.
@@ -562,12 +565,39 @@ Acceptance:
 
 ### C4 — Complete the fixed evaluator contract
 
+Status: complete.
+
+Verified implementation receipt, 2026-07-25:
+
+- direct policy evaluation can preserve each first terminal state instead of
+  auto-resetting it; inactive environments are frozen for the rest of the
+  batch rollout;
+- exact reset verifies target, initial action, occupancy, initial
+  dumpability, reward distance, trench/foundation metadata, and zero elapsed
+  steps, with aggregate layer hashes in the JSON receipt;
+- deterministic versus sampled mode, manifest provenance and slot weights,
+  verified reset slot, completion components, mass residual, no-effect action
+  count, immutable-map mutation, non-finite state, and termination/slot
+  disagreement are saved per map;
+- any integrity failure blocks `mastery_gate.passed`, while legacy
+  environments remain labeled and cannot earn corrected-contract mastery
+  without the integrity fields;
+- `aggregate_fixed_bank_history.py` requires two adjacent passing
+  checkpoints and evaluates the five-percentage-point family retention rule;
+- focused fixtures prove that one perfect-performing map with a mass error
+  cannot pass and that one checkpoint cannot claim consecutive mastery;
+- all 111 baseline tests pass; and
+- a real one-step foundation rollout with a scratch
+  `resnet_spatial_8x8` model reported supported integrity, slot 0, zero mass
+  residual, no target/obstacle mutation, and no non-finite state.
+
 Keep one direct fixed-bank evaluator and add:
 
 - explicit deterministic or sampled mode in every receipt;
 - map ID, source ID, family, stratum, primary cell, and slot weight;
-- selected slot index carried through reset and terminal info so training
-  outcomes can be joined to manifest provenance;
+- selected slot index verified from the exact reset key and preserved in the
+  fixed evaluator's terminal accumulator so outcomes join to manifest
+  provenance; C5 separately carries provenance through high-volume training;
 - exact verification of target, initial action, occupancy, dumpability,
   distance, and relevant metadata at reset;
 - mass residual;
