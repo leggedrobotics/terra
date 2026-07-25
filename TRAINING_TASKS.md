@@ -194,7 +194,7 @@ Task index:
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] submitted: train `8629884`, `8629885`; eval `8629886`, `8629887` |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] foundation GPU smoke passed; trench pending; train `8629884`, `8629885`; eval `8629886`, `8629887` |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -910,6 +910,26 @@ Submission receipt, 2026-07-26 01:47 CEST:
 Submission is not a passed smoke or a training result. Keep F0 and checklist
 items 7-8 open until the corresponding machine-readable gates exist.
 
+Foundation update-1 GPU smoke receipt, job `8629884`:
+
+- runtime preflight saw exactly four RTX 4090 devices and passed cuDNN and NCCL;
+- the exact 4 x 1,024 x 32 update ran from seed `2026072601`;
+- the FINAL checkpoint reloaded with 92 finite model leaves, 185 finite
+  optimizer leaves, `next_update == 1`, and the complete frozen config;
+- transition mass residual, target mutation, and obstacle mutation are all
+  zero;
+- smoke gate SHA-256:
+  `daa0257ba1e17a195ea8654d9ebbdfbe9344d9b385d8a258990cb3ba0aeb2c36`;
+- FINAL checkpoint SHA-256:
+  `68b5ab8f6de6a5c211a4dbe407a831aa7e993e888237f99ab3d810a708a2d2ba`;
+- update-1 aggregate SHA-256:
+  `a5e8b4ef26fa97f1a2f0f870cfe7fef9b68d9c4c72459d33dbfa7733b9473b33`;
+  and
+- production continued as W&B run `u7hhtnrh`.
+
+This closes the foundation half of checklist item 7. The item remains open
+until the independent trench smoke passes.
+
 Pass gate:
 
 - at least 29/32 successes in two consecutive evaluations;
@@ -1386,6 +1406,7 @@ acceptance evidence in the corresponding section passes.
    preregistered materiality/memorization/policy-mode decisions.
 7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
+   Foundation passed in `8629884`; trench is pending in `8629885`.
 8. [ ] Launch the two scratch F0 fixed-identity probes with
    `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. Submitted as
    train jobs `8629884`/`8629885` with dependent evaluators
