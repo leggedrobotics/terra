@@ -240,7 +240,11 @@ class PartialActionLoadingTest(unittest.TestCase):
                     dumpability_masks,
                     actions,
                     distances,
-                ) = load_maps_from_disk(str(output))
+                ) = load_maps_from_disk(
+                    str(output),
+                    # Partial-reset bank manifests are a separate PR0 gate.
+                    require_exact_contract=False,
+                )
 
             buffer = MapsBuffer.new(
                 maps=maps[None, ...],

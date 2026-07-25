@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from functools import partial
@@ -324,6 +325,259 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
         raise RuntimeError("Loaded metadata is not valid.")
 
 
+EXACT_DATASET_SCHEMA = "terra_exact_map_dataset_v1"
+EXACT_DATASET_MANIFEST = "manifest.jsonl"
+EXACT_DATASET_METADATA = "dataset.json"
+EXACT_DATASET_REQUIRED_ROW_FIELDS = (
+    "slot_index",
+    "map_id",
+    "source_id",
+    "split",
+    "family",
+    "stratum",
+    "primary_cell",
+    "slot_weight",
+    "identity_slot_multiplicity",
+)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_json_lines(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        raise RuntimeError(f"Missing required dataset file: {path}")
+    rows = []
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Invalid JSON in {path} at line {line_number}: {exc}"
+            ) from exc
+        if not isinstance(row, dict):
+            raise RuntimeError(
+                f"Expected an object in {path} at line {line_number}."
+            )
+        rows.append(row)
+    return rows
+
+
+def _indexed_sidecars(directory: Path, prefix: str, suffix: str) -> list[int]:
+    indices = []
+    for path in directory.glob(f"{prefix}*{suffix}"):
+        middle = path.name[len(prefix) : -len(suffix)]
+        if not middle.isdigit():
+            raise RuntimeError(f"Malformed indexed dataset sidecar: {path}")
+        indices.append(int(middle))
+    return sorted(indices)
+
+
+def _validate_source_registry(
+    dataset_directory: Path,
+    metadata: dict[str, Any],
+    manifest_rows: list[dict[str, Any]],
+) -> None:
+    relative_registry = metadata.get("source_registry")
+    expected_sha256 = metadata.get("source_registry_sha256")
+    if not isinstance(relative_registry, str) or not relative_registry:
+        raise RuntimeError(
+            f"{EXACT_DATASET_METADATA} must declare source_registry."
+        )
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise RuntimeError(
+            f"{EXACT_DATASET_METADATA} must declare source_registry_sha256."
+        )
+    registry_path = (dataset_directory / relative_registry).resolve()
+    if not registry_path.is_file():
+        raise RuntimeError(f"Missing required source registry: {registry_path}")
+    actual_sha256 = _sha256_file(registry_path)
+    if actual_sha256 != expected_sha256:
+        raise RuntimeError(
+            "Source registry hash mismatch: "
+            f"expected {expected_sha256}, got {actual_sha256} for {registry_path}."
+        )
+
+    registry_rows = _load_json_lines(registry_path)
+    source_splits: dict[str, set[str]] = {}
+    identities: dict[str, tuple[str, str]] = {}
+    for row in registry_rows:
+        for field in ("map_id", "source_id", "split"):
+            if not isinstance(row.get(field), str) or not row[field]:
+                raise RuntimeError(
+                    f"Source registry row is missing nonempty {field}: {row}"
+                )
+        map_id = row["map_id"]
+        identity = (row["source_id"], row["split"])
+        if map_id in identities and identities[map_id] != identity:
+            raise RuntimeError(
+                f"Source registry assigns conflicting provenance to {map_id}."
+            )
+        identities[map_id] = identity
+        source_splits.setdefault(row["source_id"], set()).add(row["split"])
+
+    overlaps = {
+        source_id: sorted(splits)
+        for source_id, splits in source_splits.items()
+        if len(splits) > 1
+    }
+    if overlaps:
+        example = next(iter(overlaps.items()))
+        raise RuntimeError(
+            "Source IDs are not split-disjoint; "
+            f"example {example[0]} appears in {example[1]}."
+        )
+
+    for row in manifest_rows:
+        identity = identities.get(row["map_id"])
+        expected = (row["source_id"], row["split"])
+        if identity != expected:
+            raise RuntimeError(
+                "Manifest provenance does not match source registry for "
+                f"{row['map_id']}: expected {expected}, got {identity}."
+            )
+
+
+def validate_exact_dataset_contract(
+    folder_path: str | Path,
+    expected_count: int,
+) -> tuple[list[dict[str, Any]], tuple[int, int], float | None]:
+    """Validate one frozen bank before arrays enter JAX construction."""
+    directory = Path(folder_path)
+    metadata_path = directory / EXACT_DATASET_METADATA
+    if not metadata_path.is_file():
+        raise RuntimeError(f"Missing required dataset file: {metadata_path}")
+    try:
+        metadata = json.loads(metadata_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON in {metadata_path}: {exc}") from exc
+    if metadata.get("schema") != EXACT_DATASET_SCHEMA:
+        raise RuntimeError(
+            f"{metadata_path} must use schema {EXACT_DATASET_SCHEMA!r}."
+        )
+    if metadata.get("slot_count") != expected_count:
+        raise RuntimeError(
+            f"Dataset slot count mismatch: DATASET_SIZE={expected_count}, "
+            f"dataset declares {metadata.get('slot_count')}."
+        )
+    shape = metadata.get("shape")
+    if (
+        not isinstance(shape, list)
+        or len(shape) != 2
+        or any(not isinstance(value, int) or value <= 0 for value in shape)
+    ):
+        raise RuntimeError(f"{metadata_path} must declare a positive 2-D shape.")
+    expected_shape = (shape[0], shape[1])
+    for field in ("distance_metric", "distance_normalization"):
+        if not isinstance(metadata.get(field), str) or not metadata[field]:
+            raise RuntimeError(f"{metadata_path} must declare nonempty {field}.")
+    if metadata.get("accepted_dump_contract") != "exact_visible_dump_v1":
+        raise RuntimeError(
+            f"{metadata_path} must declare accepted_dump_contract "
+            "'exact_visible_dump_v1'."
+        )
+
+    minimum_capacity_ratio = metadata.get("minimum_dump_capacity_ratio")
+    if minimum_capacity_ratio is not None:
+        if (
+            not isinstance(minimum_capacity_ratio, (int, float))
+            or not np.isfinite(minimum_capacity_ratio)
+            or minimum_capacity_ratio <= 0
+        ):
+            raise RuntimeError(
+                f"{metadata_path} has invalid minimum_dump_capacity_ratio."
+            )
+        minimum_capacity_ratio = float(minimum_capacity_ratio)
+
+    manifest_path = directory / EXACT_DATASET_MANIFEST
+    rows = _load_json_lines(manifest_path)
+    if len(rows) != expected_count:
+        raise RuntimeError(
+            f"{manifest_path} has {len(rows)} slots, expected {expected_count}."
+        )
+    actual_slots = [row.get("slot_index") for row in rows]
+    expected_slots = list(range(1, expected_count + 1))
+    if actual_slots != expected_slots:
+        raise RuntimeError(
+            f"{manifest_path} must enumerate contiguous ordered slots "
+            f"1..{expected_count}; got {actual_slots[:8]}."
+        )
+    for row in rows:
+        missing = [
+            field
+            for field in EXACT_DATASET_REQUIRED_ROW_FIELDS
+            if field not in row
+        ]
+        if missing:
+            raise RuntimeError(
+                f"Manifest slot {row.get('slot_index')} is missing fields {missing}."
+            )
+        for field in (
+            "map_id",
+            "source_id",
+            "split",
+            "family",
+            "stratum",
+            "primary_cell",
+        ):
+            if not isinstance(row[field], str) or not row[field]:
+                raise RuntimeError(
+                    f"Manifest slot {row['slot_index']} has invalid {field}."
+                )
+        if (
+            not isinstance(row["slot_weight"], (int, float))
+            or not np.isfinite(row["slot_weight"])
+            or row["slot_weight"] <= 0
+        ):
+            raise RuntimeError(
+                f"Manifest slot {row['slot_index']} has invalid slot_weight."
+            )
+
+    multiplicities: dict[str, int] = {}
+    for row in rows:
+        multiplicities[row["map_id"]] = multiplicities.get(row["map_id"], 0) + 1
+    if metadata.get("unique_identity_count") != len(multiplicities):
+        raise RuntimeError(
+            "Unique identity count mismatch: dataset declares "
+            f"{metadata.get('unique_identity_count')}, observed "
+            f"{len(multiplicities)}."
+        )
+    for row in rows:
+        observed = multiplicities[row["map_id"]]
+        if row["identity_slot_multiplicity"] != observed:
+            raise RuntimeError(
+                f"Manifest slot {row['slot_index']} declares multiplicity "
+                f"{row['identity_slot_multiplicity']} for {row['map_id']}, "
+                f"observed {observed}."
+            )
+
+    required_indices = list(range(1, expected_count + 1))
+    sidecars = (
+        ("images", "img_", ".npy"),
+        ("occupancy", "img_", ".npy"),
+        ("dumpability", "img_", ".npy"),
+        ("actions", "img_", ".npy"),
+        ("distance", "img_", ".npy"),
+        ("metadata", "trench_", ".json"),
+    )
+    for subdirectory, prefix, suffix in sidecars:
+        path = directory / subdirectory
+        observed_indices = _indexed_sidecars(path, prefix, suffix)
+        if observed_indices != required_indices:
+            raise RuntimeError(
+                f"Dataset sidecars in {path} must enumerate exactly "
+                f"1..{expected_count}; got {observed_indices[:8]}."
+            )
+
+    _validate_source_registry(directory, metadata, rows)
+    return rows, expected_shape, minimum_capacity_ratio
+
+
 def load_single_map(map_path: str) -> Array:
     """
     Load a single map and its associated files from the specified path.
@@ -456,7 +710,11 @@ def load_single_map(map_path: str) -> Array:
     )
 
 
-def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False) -> Array:
+def load_maps_from_disk(
+    folder_path: str,
+    require_trench_metadata: bool = False,
+    require_exact_contract: bool = True,
+) -> Array:
     # Set the max number of branches the trench has
     max_trench_type = 3
     max_foundation_border_type = 64
@@ -464,6 +722,14 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
     if dataset_size <= 0:
         raise RuntimeError("DATASET_SIZE must be > 0.")
+    expected_shape = None
+    minimum_dump_capacity_ratio = None
+    if require_exact_contract:
+        (
+            _,
+            expected_shape,
+            minimum_dump_capacity_ratio,
+        ) = validate_exact_dataset_contract(folder_path, dataset_size)
     maps = []
     occupancies = []
     dumpability_masks_init = []
@@ -495,25 +761,41 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
     if not available_indices:
         raise RuntimeError(f"Could not parse any numeric indices from {images_dir}/img_*.npy.")
 
-    selected_indices = available_indices[:dataset_size]
-    if len(selected_indices) < dataset_size:
-        print(
-            f"Warning: requested DATASET_SIZE={dataset_size}, but found only "
-            f"{len(selected_indices)} image files in {images_dir}. Using available files."
+    expected_indices = list(range(1, dataset_size + 1))
+    if available_indices != expected_indices:
+        raise RuntimeError(
+            f"{images_dir} must enumerate exactly contiguous indices "
+            f"1..{dataset_size}; got {available_indices[:8]}."
         )
+    selected_indices = expected_indices
 
     for i in tqdm(selected_indices, desc="Data Loader"):
         image_path = Path(folder_path) / "images" / f"img_{i}.npy"
         map = _ensure_spatial_2d(np.load(image_path), str(image_path))
         map_sanity_check(map)
+        if expected_shape is not None and map.shape != expected_shape:
+            raise RuntimeError(
+                f"Target map shape mismatch for {image_path}: "
+                f"expected {expected_shape}, got {map.shape}."
+            )
         occupancy_path = Path(folder_path) / "occupancy" / f"img_{i}.npy"
         occupancy = _ensure_spatial_2d(np.load(occupancy_path), str(occupancy_path))
         occupancy_sanity_check(occupancy)
+        if occupancy.shape != map.shape:
+            raise RuntimeError(
+                f"Occupancy shape mismatch for {occupancy_path}: "
+                f"expected {map.shape}, got {occupancy.shape}."
+            )
         dumpability_path = Path(folder_path) / "dumpability" / f"img_{i}.npy"
         dumpability_mask_init = _ensure_spatial_2d(
             np.load(dumpability_path), str(dumpability_path)
         )
         dumpability_sanity_check(dumpability_mask_init)
+        if dumpability_mask_init.shape != map.shape:
+            raise RuntimeError(
+                f"Dumpability shape mismatch for {dumpability_path}: "
+                f"expected {map.shape}, got {dumpability_mask_init.shape}."
+            )
         maps.append(map)
         occupancies.append(occupancy)
         dumpability_masks_init.append(dumpability_mask_init)
@@ -522,6 +804,11 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
             actions_path = actions_folder / f"img_{i}.npy"
             actions_map = _ensure_spatial_2d(np.load(actions_path), str(actions_path))
             actions_sanity_check(actions_map)
+            if actions_map.shape != map.shape:
+                raise RuntimeError(
+                    f"Actions shape mismatch for {actions_path}: "
+                    f"expected {map.shape}, got {actions_map.shape}."
+                )
             actions.append(actions_map)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
@@ -530,6 +817,7 @@ def load_maps_from_disk(folder_path: str, require_trench_metadata: bool = False)
             occupancy,
             dumpability_mask_init,
             actions[-1],
+            minimum_single_layer_ratio=minimum_dump_capacity_ratio,
         )
 
         # Dense-reward distance maps are part of the map contract. A missing,

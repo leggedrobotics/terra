@@ -184,7 +184,7 @@ Task index:
 | C1 | P0 | Terra code/tests | C0 | [-] in progress |
 | C1a | P0 | Terra transition/tests | C0 | [-] in progress |
 | C2 | P0 | baselines code/test | C1, C1a | [x] complete |
-| C3 | P0 | Terra loader/tests | C1, C1a | [ ] open |
+| C3 | P0 | Terra loader/tests | C1, C1a | [x] complete |
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [ ] open |
 | C5 | P0 | training receipts/tests | C1-C4 | [ ] open |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
@@ -419,6 +419,18 @@ Verified implementation receipt, 2026-07-25:
 C1a remains in progress until the exact-mask capacity validator and starter
 cell capacity receipts required below are implemented and tested.
 
+Capacity-validator receipt, 2026-07-25:
+
+- the loader computes accepted cells from the exact visible mask, rejects
+  target/obstacle and target/non-dumpable overlap, checks the declared
+  single-layer ratio, and verifies total and maximum-bucket `int8` headroom;
+- focused insufficient-area and unplaceable-bucket fixtures pass;
+- the old `terra_training_design_v1_20260724` bank was audited and has minima
+  near 2.0x, so it is explicitly ineligible for the new 3x starter contract;
+  and
+- C1a therefore remains in progress until the regenerated F0 foundation and
+  trench identities each produce a machine-readable 3x capacity receipt.
+
 Scope the first implementation to the single tracked-excavator recovery path.
 Do not build a configurable spill framework.
 
@@ -510,6 +522,26 @@ Acceptance:
 - no hidden countdown randomization remains in a full-reset preset.
 
 ### C3 — Make dataset loading exact and fail loud
+
+Status: complete.
+
+Verified implementation receipt, 2026-07-25:
+
+- future multi-map loading requires the named
+  `terra_exact_map_dataset_v1` contract before constructing JAX arrays;
+- `DATASET_SIZE`, declared slot count, manifest rows, contiguous indices, and
+  all target/action/occupancy/dumpability/distance/metadata sidecars must
+  agree exactly;
+- the contract records unique identities, explicit per-slot weight and
+  identity multiplicity, shape, distance metric/normalization, exact dump
+  contract, and an optional capacity floor;
+- a hashed source registry is verified and rejects a source ID assigned to
+  more than one split;
+- missing sidecars, count/multiplicity mismatches, source overlap, invalid
+  distance data, and a violated capacity floor all have deterministic failure
+  fixtures; and
+- all 44 Terra tests pass. The partial-reset generator uses one explicit
+  legacy-contract test opt-out until its separate PR0 bank gate is active.
 
 Change the current short-dataset warning into an error. Validate before JAX
 compilation:

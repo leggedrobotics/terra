@@ -287,11 +287,14 @@ every cell; do not let the pooled task-family result hide one.
 
 Starting capacity contract:
 
-- M0 bilateral trench targets: at least `2.5x` reachable single-layer soil
-  capacity;
-- M0 one-side trench and large-apron targets: at least `2.0x`;
-- M1 and M2: at least `2.0x`; and
-- foundations with all-around dumping retain all legal non-dig free ground.
+- every F0 starter identity and every later B0 feasibility-panel identity has
+  at least `3x` reachable single-layer soil capacity;
+- the capacity validator additionally proves complete valid bucket loads fit
+  the contained-pile `int8` representation;
+- foundations with all-around dumping retain all legal non-dig free ground;
+  and
+- tighter 2.0x/2.5x capacity variants are later isolated treatments, never
+  silently mixed into the initial geometry or distance curriculum.
 
 Starting distance contract:
 
