@@ -10,9 +10,10 @@
 The original v4 sections below are retained as the preregistered experiment
 contract. The completed result, critical review, corrected decisions, and
 dependency-ordered backlog are in
-[`TRAINING_TASKS.md`](TRAINING_TASKS.md). That companion plan supersedes the
-original execution order for new work; it does not rewrite the historical
-treatment after seeing the result.
+[`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md) and
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md). Those companion documents supersede
+the original map ladder and execution order for new work; they do not rewrite
+the historical treatment after seeing the result.
 
 Post-screen result:
 

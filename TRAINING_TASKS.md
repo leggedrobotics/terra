@@ -1,8 +1,9 @@
 # Terra Training Tasks
 
 - Status: active diagnostic and implementation backlog
-- Date: 2026-07-24
+- Date: 2026-07-25 failure-audit update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+- Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
 - Current policy baseline: E8-compatible `resnet_spatial_8x8_se`
 - Production training authorized by this document: no
 
@@ -141,8 +142,9 @@ Task index:
 | C2 | P0 | baselines code/test | C1 | open |
 | C3 | P0 | Terra loader/tests | C1 | open |
 | C4 | P0 | evaluator/tests | C1-C3 | open |
-| O0 | P1 | deterministic tests | C1-C4 | open |
-| F0 | P0 | two bounded PPO probes | C1-C4, O0 | blocked |
+| C5 | P0 | training receipts/tests | C1-C4 | open |
+| O0 | P1 | deterministic tests | C1-C5 | open |
+| F0 | P0 | two bounded PPO probes | C1-C5, O0 | blocked |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | blocked |
 | B0 | P1 | generation/validation | F0 | blocked |
 | F1 | P1 | two bounded family specialists | B0, F0 | blocked |
@@ -386,6 +388,35 @@ Acceptance:
 - a single-checkpoint result is not labeled two-consecutive mastery; and
 - all gate inputs can be recomputed from the saved JSON.
 
+### C5 — Make reward and termination histories auditable
+
+The completed runs expose a logging defect: scalar reward-component fields are
+taken from the final state of one environment, while terminal completion fields
+cover device 0 and pool successes with timeouts.
+
+Add one globally reduced terminal-episode receipt containing:
+
+- map ID, family, primary cell, stage, and termination reason;
+- exact-target, accepted-mask, buffer-only, and illegal dump volumes;
+- dig, dump, and combined completion;
+- episode return and every reward component summed over the episode;
+- terminal reward before and after normalization;
+- steps, action counts, invalid/no-op actions, and productive workspace cycles;
+- mass and immutable-map integrity fields; and
+- enough raw counts to recompute every W&B rate offline.
+
+Do not log an arbitrary environment element as an aggregate. Preserve
+machine-readable per-episode or histogram receipts and use W&B only for reduced
+totals and bounded rates.
+
+Acceptance:
+
+- global counts agree with a single-device reference fixture;
+- success, timeout, and simultaneous success/timeout are separately labeled;
+- reward-component sums reproduce total episodic return within tolerance;
+- no field silently pools success and timeout; and
+- all fixed-evaluator and training receipt fields use C1's completion source.
+
 ## 7. Phase O — test observation sufficiency before changing the model
 
 ### O0 — Construct paired-state alias tests
@@ -424,7 +455,7 @@ Acceptance:
 
 ### F0 — Overfit one easy foundation and one easy trench
 
-Dependencies: C0-C4 and any required O0 observation correction.
+Dependencies: C0-C5 and any required O0 observation correction.
 
 Select and visually record:
 
@@ -569,11 +600,30 @@ curriculum begins before it passes.
 
 ## 11. Phase B — increase procedural diversity
 
-### B0 — Build larger source-disjoint banks
+### B0 — Rebuild quantitative cells, then expand source-disjoint banks
 
 Dependency: both F0 probes pass.
 
-Use offline procedural generation first; do not add online generation or PLR.
+Do not enlarge the failed M0-M2 bank unchanged. Its all-around and large-apron
+foundation cells differ by roughly an order of magnitude in relative dump
+area, its procedural foundation cells change geometry and dump layout
+together, and its topology/site cells are not a monotonic ladder.
+
+First build small paired feasibility panels that change one axis at a time:
+
+- OSM versus procedural foundation geometry under identical all-around dumping;
+- broad-apron dump distance centered near 2, 4, 6, and 8 tiles under fixed
+  geometry, volume, capacity, and site;
+- straight, two/three end-to-end segment, T, X, and disconnected trench
+  topology under easy side-cast dumping; and
+- site constraints only after the corresponding geometry/dump cell passes.
+
+Use eight unique train and eight source-disjoint development identities per
+candidate cell. Admit a cell to the large bank only after a bounded specialist
+provides a dynamic witness. Remote haul at 12 or more tiles remains a separate
+conditional feasibility track.
+
+Then use offline procedural generation; do not add online generation or PLR.
 
 Initial target:
 
@@ -582,7 +632,8 @@ Initial target:
 - separate fixed promotion, development, and sealed banks with eight maps per
   primary cell each;
 - disjoint generator seeds and source geometry IDs across every split; and
-- unchanged M0-M2 geometry, dump-distance, capacity, and site contracts.
+- frozen quantitative geometry, dump-distance, reachable-capacity, and site
+  contracts for every admitted cell.
 
 For each cell, save:
 
@@ -787,11 +838,12 @@ Do these next, in order:
 1. D1 semantic replay audit.
 2. D2 train/development and deterministic/sampled audit.
 3. Ratify C0's legal dump-mask decision.
-4. Implement and test C1-C4.
+4. Implement and test C1-C5.
 5. Run O0 paired-state alias tests and only the observation fixes they prove.
 6. Run the two F0 fixed-identity probes.
 7. Decide from D1/F0 whether the historical R0 fork is authorized.
-8. Build B0, then decide whether F1 is authorized.
+8. Build the small B0 feasibility panels, expand only passing cells, then
+   decide whether F1 is authorized.
 
 Stop after each decision gate. Do not pre-build later curriculum, reward, or
 architecture machinery while an earlier result can invalidate it.
@@ -802,6 +854,8 @@ The training redesign is ready for a generalist confirmation only when:
 
 - termination, completion, reward, and evaluation share one legal task
   contract;
+- reward and termination histories are globally reduced, stratified by
+  outcome, and recomputable from machine-readable receipts;
 - full-reset and evaluator integrity contracts pass;
 - one foundation and one trench identity are dynamically learnable;
 - both M0 families generalize separately;
