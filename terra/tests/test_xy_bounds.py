@@ -4,8 +4,8 @@ import jax.numpy as jnp
 
 # Ensure project imports work when running directly
 try:
-    from terra.utils import compute_polygon_mask
-except Exception as e:
+    from terra.utils import compute_polygon_mask, get_agent_corners
+except Exception:
     print("Import error: run from project root so 'terra' is importable.")
     raise
 
@@ -14,7 +14,9 @@ def mask_to_numpy(mask: jnp.ndarray) -> np.ndarray:
     return np.asarray(mask, dtype=np.int32)
 
 
-def build_expected_axis_aligned_mask(map_w: int, map_h: int, x0: int, y0: int, x1: int, y1: int) -> np.ndarray:
+def build_expected_axis_aligned_mask(
+    map_w: int, map_h: int, x0: int, y0: int, x1: int, y1: int
+) -> np.ndarray:
     """
     Build an expected mask for an axis-aligned rectangle covering cells
     x in [x0, x1-1], y in [y0, y1-1]. Mask shape is (map_h, map_w).
@@ -35,7 +37,9 @@ def assert_mask_equal(name: str, got: np.ndarray, expected: np.ndarray):
         # Show a small diff summary
         diff = np.where(got != expected)
         samples = list(zip(diff[0][:5], diff[1][:5]))
-        raise AssertionError(f"{name}: values differ at {len(diff[0])} cells, examples={samples}")
+        raise AssertionError(
+            f"{name}: values differ at {len(diff[0])} cells, examples={samples}"
+        )
 
 
 def log_dtype_shape(label: str, arr: jnp.ndarray):
@@ -85,6 +89,34 @@ def test_polygon_mask_axes_and_edges():
     print("OK: compute_polygon_mask axis order, dtype, and edge handling look correct.")
 
 
+def test_actual_odd_agent_footprint_preserves_width_and_height():
+    map_w = 20
+    map_h = 16
+    agent_w = 5
+    agent_h = 3
+    pos_base = jnp.array([8, 8], dtype=jnp.int32)
+
+    corners = get_agent_corners(
+        pos_base=pos_base,
+        base_orientation=jnp.array(0, dtype=jnp.int32),
+        agent_width=jnp.array(agent_w, dtype=jnp.int32),
+        agent_height=jnp.array(agent_h, dtype=jnp.int32),
+        angles_base=jnp.array(8, dtype=jnp.int32),
+    )
+    mask = mask_to_numpy(compute_polygon_mask(corners, map_w, map_h))
+
+    expected = build_expected_axis_aligned_mask(
+        map_w,
+        map_h,
+        x0=6,
+        y0=7,
+        x1=11,
+        y1=10,
+    )
+    assert_mask_equal("actual_odd_agent_footprint", mask, expected)
+    assert int(mask.sum()) == agent_w * agent_h
+
+
 def test_bounds_check():
     map_w = 8
     map_h = 8
@@ -110,7 +142,9 @@ def test_bounds_check():
     assert not valid_bounds(np.array([[1, 7], [2, 7], [2, 8], [1, 8]], dtype=np.int32))
 
     # Negative -> invalid
-    assert not valid_bounds(np.array([[-1, 1], [0, 1], [0, 2], [-1, 2]], dtype=np.int32))
+    assert not valid_bounds(
+        np.array([[-1, 1], [0, 1], [0, 2], [-1, 2]], dtype=np.int32)
+    )
 
     print("OK: bounds check logic dtype/shape and edge behavior correct.")
 
@@ -122,4 +156,4 @@ if __name__ == "__main__":
     except AssertionError as e:
         print("FAILED:", e)
         sys.exit(1)
-    print("All tests passed.") 
+    print("All tests passed.")

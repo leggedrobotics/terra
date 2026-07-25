@@ -167,31 +167,36 @@ def get_agent_corners(
     half_height_top = jnp.ceil(agent_height / 2.0)
 
     # Define corners in local coordinates relative to the center.
-    local_corners = jnp.array([
-        [-half_width_left, -half_height_bottom],
-        [ half_width_right, -half_height_bottom],
-        [ half_width_right,  half_height_top],
-        [-half_width_left,  half_height_top]
-    ])
+    local_corners = jnp.array(
+        [
+            [-half_width_left, -half_height_bottom],
+            [half_width_right, -half_height_bottom],
+            [half_width_right, half_height_top],
+            [-half_width_left, half_height_top],
+        ]
+    )
 
     # Convert degrees to radians using JAX.
-    angle_rad = (base_orientation.astype(jnp.float32) / jnp.array(angles_base, dtype=jnp.float32)) * (2 * jnp.pi)
+    angle_rad = (
+        base_orientation.astype(jnp.float32) / jnp.array(angles_base, dtype=jnp.float32)
+    ) * (2 * jnp.pi)
     cos_a = jnp.cos(angle_rad)
     sin_a = jnp.sin(angle_rad)
     # Build the rotation matrix.
-    R = jnp.array([[cos_a, -sin_a],
-                [sin_a,  cos_a]])
+    R = jnp.array([[cos_a, -sin_a], [sin_a, cos_a]])
     R = R.squeeze()
 
     # Rotate local corners and translate by the center position.
-    global_corners_float = (R @ local_corners.T).T + jnp.array(pos_base, dtype=IntLowDim)
+    global_corners_float = (R @ local_corners.T).T + jnp.array(
+        pos_base, dtype=IntLowDim
+    )
 
     # Bias the rounding: use floor if below the center, ceil otherwise.
     center_arr = jnp.array(pos_base, dtype=IntLowDim)
     biased_corners = jnp.where(
         global_corners_float < center_arr,
         jnp.floor(global_corners_float),
-        jnp.ceil(global_corners_float)
+        jnp.ceil(global_corners_float),
     ).astype(IntLowDim)
 
     return biased_corners
@@ -199,18 +204,22 @@ def get_agent_corners(
 
 def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Array:
     """
-    Compute a mask (map_width x map_height) indicating the cells covered
+    Compute a mask (map_height x map_width) indicating the cells covered
     by the polygon defined by its corners.
     """
-    # Create a grid of points.
-    xs = jnp.arange(map_height)
-    ys = jnp.arange(map_width)
-    X, Y = jnp.meshgrid(xs, ys, indexing='xy')
-    pts = jnp.stack([Y, X], axis=-1).reshape((-1, 2))  # (N,2) as [y,x]
+    # Test cell centers against the continuous polygon. Integer grid points are
+    # cell corners and shrink an axis-aligned W x H footprint to (W-1) x (H-1)
+    # when strict half-plane tests are used.
+    xs = jnp.arange(map_width, dtype=jnp.float32) + jnp.float32(0.5)
+    ys = jnp.arange(map_height, dtype=jnp.float32) + jnp.float32(0.5)
+    X, Y = jnp.meshgrid(xs, ys, indexing="xy")
+    pts = jnp.stack([X, Y], axis=-1).reshape((-1, 2))  # (N,2) as [x,y]
     edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
     diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
     edges_exp = edges[:, None, :]  # (4, 1, 2)
-    cross = edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]  # (4, N)
+    cross = (
+        edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]
+    )  # (4, N)
     inside = jnp.logical_or(jnp.all(cross > 0, axis=0), jnp.all(cross < 0, axis=0))
     mask = inside.reshape((map_height, map_width))
     return mask
