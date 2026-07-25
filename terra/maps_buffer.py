@@ -31,10 +31,15 @@ class MapsBuffer(NamedTuple):
     foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
     foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
     action_maps: Array  # [map_type, n_maps, W, H]
+    slot_indices: Array  # [map_type, n_maps], zero-based manifest slot
+    family_ids: Array  # [map_type, n_maps], index into family_names
+    primary_cell_ids: Array  # [map_type, n_maps], index into primary_cell_names
     n_maps: int  # number of maps for each map type
     distance_maps: Array  # [map_type, n_maps, W, H] normalized float32
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
+    family_names: tuple[str, ...] = ("unknown",)
+    primary_cell_names: tuple[str, ...] = ("unknown",)
 
     def __hash__(self) -> int:
         return hash((len(self.maps),))
@@ -54,9 +59,27 @@ class MapsBuffer(NamedTuple):
         dumpability_masks_init: Array,
         action_maps: Array,
         distance_maps: Array,
+        slot_indices: Array | None = None,
+        family_ids: Array | None = None,
+        primary_cell_ids: Array | None = None,
+        family_names: tuple[str, ...] = ("unknown",),
+        primary_cell_names: tuple[str, ...] = ("unknown",),
     ) -> "MapsBuffer":
         # PATCH: Set all action_map values of 1 to 5 at load time
         #action_maps = jnp.where(action_maps == 1, 5, action_maps)   #DELETE IF NOT NEEDED ANYMORE
+        provenance_shape = maps.shape[:2]
+        if slot_indices is None:
+            slot_indices = jnp.broadcast_to(
+                jnp.arange(maps.shape[1], dtype=jnp.int32),
+                provenance_shape,
+            )
+        if family_ids is None:
+            family_ids = jnp.zeros(provenance_shape, dtype=jnp.int32)
+        if primary_cell_ids is None:
+            primary_cell_ids = jnp.zeros(
+                provenance_shape,
+                dtype=jnp.int32,
+            )
         return MapsBuffer(
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
@@ -67,13 +90,29 @@ class MapsBuffer(NamedTuple):
             foundation_border_types=foundation_border_types,
             n_maps=maps.shape[1],
             action_maps=action_maps.astype(IntLowDim),
+            slot_indices=jnp.asarray(slot_indices, dtype=jnp.int32),
+            family_ids=jnp.asarray(family_ids, dtype=jnp.int32),
+            primary_cell_ids=jnp.asarray(
+                primary_cell_ids,
+                dtype=jnp.int32,
+            ),
             distance_maps=distance_maps.astype(jnp.float32),
+            family_names=tuple(family_names),
+            primary_cell_names=tuple(primary_cell_names),
         )
 
-    def _select_map(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
+    def _select_index(
+        self,
+        key: jax.random.PRNGKey,
+        env_cfg: EnvConfig,
+    ) -> tuple[Array, Array, Array]:
         curriculum_level = env_cfg.curriculum.level
         key, subkey = jax.random.split(key)
         idx = jax.random.randint(subkey, (), 0, self.n_maps)
+        return curriculum_level, idx, key
+
+    def _select_map(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
+        curriculum_level, idx, key = self._select_index(key, env_cfg)
         map = self.maps[curriculum_level, idx]
         padding_mask = self.padding_mask[curriculum_level, idx]
         trench_axes = self.trench_axes[curriculum_level, idx]
@@ -87,6 +126,21 @@ class MapsBuffer(NamedTuple):
         action_map = self.action_maps[curriculum_level, idx]
         distance_map = self.distance_maps[curriculum_level, idx]
         return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_map_provenance(
+        self,
+        key: jax.random.PRNGKey,
+        env_cfg: EnvConfig,
+    ) -> tuple[Array, Array, Array, Array]:
+        """Return the provenance selected by the same key path as get_map."""
+        curriculum_level, idx, key = self._select_index(key, env_cfg)
+        return (
+            self.slot_indices[curriculum_level, idx],
+            self.family_ids[curriculum_level, idx],
+            self.primary_cell_ids[curriculum_level, idx],
+            key,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def _get_map_from_disk(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
@@ -1041,6 +1095,7 @@ def _check_maps(maps: list[Array]) -> tuple[int, int]:
 
 
 def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path: str = None):
+    manifest_rows_per_level: list[list[dict[str, Any]]] | None = None
     if single_map_path is not None:
         print(f"Loading single map from {single_map_path}")
         maps_from_disk = []
@@ -1092,6 +1147,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         foundation_border_types = []
         actions_from_disk = []
         distances_from_disk = []
+        manifest_rows_per_level = []
         for idx, folder_path in enumerate(folder_paths):
             (
                 maps,
@@ -1118,6 +1174,72 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             foundation_border_types.append(foundation_border_type)
             actions_from_disk.append(actions)
             distances_from_disk.append(distances)
+            manifest_rows_per_level.append(
+                _load_json_lines(Path(folder_path) / EXACT_DATASET_MANIFEST)
+            )
+
+    if manifest_rows_per_level is None:
+        family_names = ("unknown",)
+        primary_cell_names = ("unknown",)
+        slot_indices = np.broadcast_to(
+            np.arange(maps_from_disk[0].shape[0], dtype=np.int32),
+            (len(maps_from_disk), maps_from_disk[0].shape[0]),
+        ).copy()
+        family_ids = np.zeros_like(slot_indices)
+        primary_cell_ids = np.zeros_like(slot_indices)
+    else:
+        family_names = (
+            "unknown",
+            *sorted(
+                {
+                    row["family"]
+                    for rows in manifest_rows_per_level
+                    for row in rows
+                }
+            ),
+        )
+        primary_cell_names = (
+            "unknown",
+            *sorted(
+                {
+                    row["primary_cell"]
+                    for rows in manifest_rows_per_level
+                    for row in rows
+                }
+            ),
+        )
+        family_lookup = {
+            name: index for index, name in enumerate(family_names)
+        }
+        primary_cell_lookup = {
+            name: index
+            for index, name in enumerate(primary_cell_names)
+        }
+        slot_indices = np.asarray(
+            [
+                [int(row["slot_index"]) - 1 for row in rows]
+                for rows in manifest_rows_per_level
+            ],
+            dtype=np.int32,
+        )
+        family_ids = np.asarray(
+            [
+                [family_lookup[row["family"]] for row in rows]
+                for rows in manifest_rows_per_level
+            ],
+            dtype=np.int32,
+        )
+        primary_cell_ids = np.asarray(
+            [
+                [
+                    primary_cell_lookup[row["primary_cell"]]
+                    for row in rows
+                ]
+                for rows in manifest_rows_per_level
+            ],
+            dtype=np.int32,
+        )
+
     # Apply padding to ALL maps (unified logic like single-agent)
     maps_width, maps_height = _check_maps(maps_from_disk)
     maps_from_disk_padded, padding_mask, dumpability_masks_init_from_disk_padded, actions_from_disk_padded = _pad_maps(
@@ -1147,6 +1269,12 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
     foundation_border_types = jnp.array(foundation_border_types)
     actions_from_disk_padded = jnp.array(actions_from_disk_padded)
     distances_padded = jnp.array(distances_padded)
+    slot_indices = jnp.array(slot_indices, dtype=jnp.int32)
+    family_ids = jnp.array(family_ids, dtype=jnp.int32)
+    primary_cell_ids = jnp.array(
+        primary_cell_ids,
+        dtype=jnp.int32,
+    )
     print(f"Maps shape: {maps_from_disk_padded.shape}.")
     print(f"Padding mask shape: {padding_mask.shape}.")
     print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
@@ -1156,6 +1284,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
     print(f"Foundation border types shape: {foundation_border_types.shape}.")
     print(f"Actions shape: {actions_from_disk_padded.shape}.")
     print(f"Distance maps shape: {distances_padded.shape}.")
+    print(f"Map provenance shape: {slot_indices.shape}.")
     if shuffle_maps:
         # NOTE: this is only for visualization purposes (allows to visualize in a single gif every level of the curriculum)
         print("Shuffling maps between curriculum levels...")
@@ -1180,6 +1309,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
             (-1, *actions_from_disk_padded.shape[2:])
         )
         distances_padded = distances_padded.reshape((-1, *distances_padded.shape[2:]))
+        slot_indices = slot_indices.reshape((-1,))
+        family_ids = family_ids.reshape((-1,))
+        primary_cell_ids = primary_cell_ids.reshape((-1,))
         # Shuffle
         maps_from_disk_padded = jax.random.permutation(
             rng, maps_from_disk_padded, axis=0
@@ -1201,6 +1333,13 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         )
         distances_padded = jax.random.permutation(
             rng, distances_padded, axis=0
+        )
+        slot_indices = jax.random.permutation(rng, slot_indices, axis=0)
+        family_ids = jax.random.permutation(rng, family_ids, axis=0)
+        primary_cell_ids = jax.random.permutation(
+            rng,
+            primary_cell_ids,
+            axis=0,
         )
         # Reshape back
         maps_from_disk_padded = maps_from_disk_padded.reshape(
@@ -1224,6 +1363,9 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         distances_padded = distances_padded.reshape(
             (d0, d1, *distances_padded.shape[1:])
         )
+        slot_indices = slot_indices.reshape((d0, d1))
+        family_ids = family_ids.reshape((d0, d1))
+        primary_cell_ids = primary_cell_ids.reshape((d0, d1))
         print("Maps shuffled.")
     maps_buffer = MapsBuffer.new(
         maps=maps_from_disk_padded,
@@ -1235,6 +1377,11 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
         dumpability_masks_init=dumpability_masks_init_from_disk,
         action_maps=actions_from_disk_padded,
         distance_maps=distances_padded,
+        slot_indices=slot_indices,
+        family_ids=family_ids,
+        primary_cell_ids=primary_cell_ids,
+        family_names=family_names,
+        primary_cell_names=primary_cell_names,
     )
     # Update batch config with the actual map dimensions
     maps_width = maps_from_disk_padded.shape[2]

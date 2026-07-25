@@ -8,6 +8,7 @@ from terra.actions import TrackedAction
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import MapsDimsConfig
+from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.state import CORRECTED_DENSE_CONTRACT
 from terra.state import State
@@ -455,6 +456,56 @@ class ExactDumpContractTest(unittest.TestCase):
             int(np.asarray(second_lift.world.action_map.map).sum()),
             0,
         )
+
+    def test_transition_diagnostics_count_one_mass_conserving_load_cycle(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        old_state = self._state(target)
+        action_map = old_state.world.action_map.map.at[30, 30].set(-5)
+        new_agent = old_state._get_current_agent_state()._replace(
+            loaded=jnp.array([5], dtype=jnp.int8)
+        )
+        new_state = old_state._replace(
+            world=old_state.world._replace(
+                action_map=old_state.world.action_map._replace(map=action_map)
+            )
+        )._set_current_agent_state(new_agent)
+
+        diagnostics = TerraEnv._transition_diagnostics(old_state, new_state)
+
+        self.assertTrue(bool(diagnostics["action_had_effect"]))
+        self.assertEqual(int(diagnostics["productive_workspace_cycle"]), 1)
+        self.assertEqual(int(diagnostics["transition_mass_residual"]), 0)
+        self.assertFalse(bool(diagnostics["target_mutation"]))
+        self.assertFalse(bool(diagnostics["obstacle_mutation"]))
+
+    def test_transition_diagnostics_ignore_bookkeeping_and_detect_integrity(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        old_state = self._state(target)
+        bookkeeping_only = old_state._replace(
+            env_steps=old_state.env_steps + 1,
+            agent=old_state.agent._replace(current_agent=1),
+        )
+        diagnostics = TerraEnv._transition_diagnostics(
+            old_state,
+            bookkeeping_only,
+        )
+        self.assertFalse(bool(diagnostics["action_had_effect"]))
+        self.assertEqual(int(diagnostics["transition_mass_residual"]), 0)
+
+        target_map = old_state.world.target_map.map.at[1, 1].set(-1)
+        padding_map = old_state.world.padding_mask.map.at[2, 2].set(1)
+        action_map = old_state.world.action_map.map.at[3, 3].set(1)
+        corrupted = old_state._replace(
+            world=old_state.world._replace(
+                target_map=old_state.world.target_map._replace(map=target_map),
+                padding_mask=old_state.world.padding_mask._replace(map=padding_map),
+                action_map=old_state.world.action_map._replace(map=action_map),
+            )
+        )
+        diagnostics = TerraEnv._transition_diagnostics(old_state, corrupted)
+        self.assertTrue(bool(diagnostics["target_mutation"]))
+        self.assertTrue(bool(diagnostics["obstacle_mutation"]))
+        self.assertEqual(int(diagnostics["transition_mass_residual"]), 1)
 
     def test_dump_eager_jit_and_vmap_agree(self):
         legal_coordinate = self._workspace_coordinates()[0]

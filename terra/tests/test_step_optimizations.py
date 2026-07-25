@@ -108,6 +108,19 @@ class FakeEnvState(NamedTuple):
         return {"task_done": task_done}
 
 
+def fake_transition_diagnostics(done):
+    zeros_bool = jnp.zeros_like(done, dtype=jnp.bool_)
+    zeros_int = jnp.zeros_like(done, dtype=jnp.int32)
+    return {
+        "timeout": zeros_bool,
+        "action_had_effect": jnp.ones_like(done, dtype=jnp.bool_),
+        "productive_workspace_cycle": zeros_int,
+        "transition_mass_residual": zeros_int,
+        "target_mutation": zeros_bool,
+        "obstacle_mutation": zeros_bool,
+    }
+
+
 class FakeTerraEnv:
     @staticmethod
     def step_no_reset(state, action, env_cfg):
@@ -117,6 +130,7 @@ class FakeTerraEnv:
         info = {
             **info,
             "reward_components": {"terminal": done.astype(jnp.float32)},
+            **fake_transition_diagnostics(done),
         }
         return TimeStep(
             state=next_state,
@@ -188,7 +202,16 @@ class FakeTerraEnv:
                 item.env_cfg,
             )
             info = reset_state._get_infos(action, item.info["task_done"])
-            info = {**info, "reward_components": item.info["reward_components"]}
+            info = {
+                **info,
+                "reward_components": item.info["reward_components"],
+                **{
+                    key: item.info[key]
+                    for key in fake_transition_diagnostics(
+                        item.done
+                    )
+                },
+            }
             return item._replace(state=reset_state, observation=reset_obs, info=info)
 
         return jax.lax.cond(timestep.done, reset, lambda item: item, timestep)
@@ -235,6 +258,7 @@ class OutcomeTerraEnv(FakeTerraEnv):
             "reward_components": {
                 "terminal": task_done.astype(jnp.float32)
             },
+            **fake_transition_diagnostics(done),
         }
         return TimeStep(
             state=next_state,

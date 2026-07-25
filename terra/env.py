@@ -125,6 +125,7 @@ class TerraEnv(NamedTuple):
             ),
             "task_done": jnp.zeros((), dtype=jnp.bool_),
             "reward_components": self._zero_reward_components(state),
+            **self._zero_transition_diagnostics(),
         }
 
         return TimeStep(
@@ -160,6 +161,90 @@ class TerraEnv(NamedTuple):
             "illegal_dump_volume": zero,
             "remaining_edge_dig_tiles": zero,
             "remaining_inner_dig_tiles": zero,
+        }
+
+    @staticmethod
+    def _zero_transition_diagnostics() -> dict[str, Array]:
+        """Return fixed-shape transition diagnostics for reset timesteps."""
+        return {
+            "timeout": jnp.zeros((), dtype=jnp.bool_),
+            "action_had_effect": jnp.zeros((), dtype=jnp.bool_),
+            "productive_workspace_cycle": jnp.zeros((), dtype=jnp.int32),
+            "transition_mass_residual": jnp.zeros((), dtype=jnp.int32),
+            "target_mutation": jnp.zeros((), dtype=jnp.bool_),
+            "obstacle_mutation": jnp.zeros((), dtype=jnp.bool_),
+        }
+
+    @staticmethod
+    def _transition_diagnostics(
+        state: State,
+        new_state: State,
+    ) -> dict[str, Array]:
+        """Measure physical effects before a terminal state can be reset."""
+
+        def _loaded_vector(candidate: State) -> Array:
+            return jnp.stack(
+                [
+                    agent_state.loaded.astype(jnp.int32).sum()
+                    for agent_state in candidate.agent.agent_states
+                ]
+            )
+
+        physical_agent_changes = []
+        for old_agent, new_agent in zip(
+            state.agent.agent_states,
+            new_state.agent.agent_states,
+        ):
+            for field in (
+                "pos_base",
+                "angle_base",
+                "angle_cabin",
+                "wheel_angle",
+                "loaded",
+                "shovel_lifted",
+            ):
+                physical_agent_changes.append(
+                    jnp.any(getattr(old_agent, field) != getattr(new_agent, field))
+                )
+
+        old_loaded = _loaded_vector(state)
+        new_loaded = _loaded_vector(new_state)
+        old_mass = (
+            state.world.action_map.map.astype(jnp.int32).sum()
+            + old_loaded.sum()
+        )
+        new_mass = (
+            new_state.world.action_map.map.astype(jnp.int32).sum()
+            + new_loaded.sum()
+        )
+        terrain_changed = jnp.any(
+            new_state.world.action_map.map != state.world.action_map.map
+        )
+        current_agent = jnp.asarray(
+            state.agent.current_agent,
+            dtype=jnp.int32,
+        )
+        productive_workspace_cycle = jnp.logical_and(
+            old_loaded[current_agent] == 0,
+            new_loaded[current_agent] > 0,
+        ).astype(jnp.int32)
+        return {
+            "timeout": (
+                new_state.env_steps
+                >= new_state.env_cfg.max_steps_in_episode
+            ),
+            "action_had_effect": jnp.logical_or(
+                terrain_changed,
+                jnp.any(jnp.stack(physical_agent_changes)),
+            ),
+            "productive_workspace_cycle": productive_workspace_cycle,
+            "transition_mass_residual": jnp.abs(new_mass - old_mass),
+            "target_mutation": jnp.any(
+                new_state.world.target_map.map != state.world.target_map.map
+            ),
+            "obstacle_mutation": jnp.any(
+                new_state.world.padding_mask.map != state.world.padding_mask.map
+            ),
         }
 
     @staticmethod
@@ -247,6 +332,10 @@ class TerraEnv(NamedTuple):
         env_cfg: EnvConfig,
     ) -> TimeStep:
         new_state = state._step(action)
+        transition_diagnostics = self._transition_diagnostics(
+            state,
+            new_state,
+        )
         reward, reward_components = state._get_reward(new_state, action)
         # Recompute reachability only for effective DO actions that changed terrain.
         # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
@@ -315,7 +404,10 @@ class TerraEnv(NamedTuple):
             env_cfg,
         )
 
-        infos = new_state._get_infos(action, task_done)
+        infos = {
+            **new_state._get_infos(action, task_done),
+            **transition_diagnostics,
+        }
         # Attach reward components for logging
         try:
             if isinstance(infos, dict):
@@ -340,6 +432,10 @@ class TerraEnv(NamedTuple):
     ) -> TimeStep:
         """Step once and return the terminal state instead of auto-resetting on done."""
         new_state = state._step(action)
+        transition_diagnostics = self._transition_diagnostics(
+            state,
+            new_state,
+        )
         reward, reward_components = state._get_reward(new_state, action)
         is_do = action.action[0] == TrackedActionType.DO
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
@@ -350,7 +446,10 @@ class TerraEnv(NamedTuple):
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )
-        infos = new_state._get_infos(action, task_done)
+        infos = {
+            **new_state._get_infos(action, task_done),
+            **transition_diagnostics,
+        }
         try:
             if isinstance(infos, dict):
                 infos = {**infos, "reward_components": reward_components}
@@ -719,6 +818,14 @@ class TerraEnvBatch:
                 infos = {
                     **infos,
                     "reward_components": item.info["reward_components"],
+                    "timeout": item.info["timeout"],
+                    "action_had_effect": item.info["action_had_effect"],
+                    "productive_workspace_cycle": item.info[
+                        "productive_workspace_cycle"
+                    ],
+                    "transition_mass_residual": item.info["transition_mass_residual"],
+                    "target_mutation": item.info["target_mutation"],
+                    "obstacle_mutation": item.info["obstacle_mutation"],
                 }
                 return item._replace(
                     state=state_reset,

@@ -6,9 +6,17 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
+from terra.config import BatchConfig
+from terra.config import CurriculumGlobalConfig
+from terra.config import EnvConfig
+from terra.config import RewardsType
+from terra.maps_buffer import init_maps_buffer
 from terra.maps_buffer import load_maps_from_disk
+from terra.maps_buffer import MapsBuffer
 
 
 class MapsBufferDistanceContractTest(unittest.TestCase):
@@ -222,6 +230,87 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
                     RuntimeError, "single-layer capacity ratio"
                 ):
                     load_maps_from_disk(str(root))
+
+    def test_init_exposes_exact_manifest_family_and_cell_provenance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            dataset_root = Path(temporary) / "fixture"
+            self.write_map(
+                dataset_root,
+                np.zeros((64, 64), dtype=np.float32),
+            )
+
+            class FixtureCurriculum(CurriculumGlobalConfig):
+                levels = [
+                    {
+                        "maps_path": "fixture",
+                        "max_steps_in_episode": 450,
+                        "rewards_type": RewardsType.DENSE,
+                        "apply_trench_rewards": False,
+                    }
+                ]
+
+            batch_cfg = BatchConfig(
+                curriculum_global=FixtureCurriculum()
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "DATASET_PATH": temporary,
+                    "DATASET_SIZE": "1",
+                },
+            ):
+                buffer, _ = init_maps_buffer(
+                    batch_cfg,
+                    shuffle_maps=False,
+                )
+
+            self.assertEqual(buffer.family_names, ("unknown", "foundation"))
+            self.assertEqual(
+                buffer.primary_cell_names,
+                ("unknown", "fixture"),
+            )
+            np.testing.assert_array_equal(buffer.slot_indices, [[0]])
+            np.testing.assert_array_equal(buffer.family_ids, [[1]])
+            np.testing.assert_array_equal(buffer.primary_cell_ids, [[1]])
+
+    def test_map_and_provenance_selection_share_the_exact_rng_path(self):
+        count = 4
+        maps = jnp.arange(count, dtype=jnp.int8).reshape(1, count, 1, 1)
+        zeros_map = jnp.zeros_like(maps)
+        zeros_axes = jnp.zeros((1, count, 3, 3), dtype=jnp.float32)
+        zeros_foundation_axes = jnp.zeros(
+            (1, count, 64, 3),
+            dtype=jnp.float32,
+        )
+        zeros_types = jnp.zeros((1, count), dtype=jnp.int32)
+        buffer = MapsBuffer.new(
+            maps=maps,
+            padding_mask=zeros_map,
+            trench_axes=zeros_axes,
+            trench_types=zeros_types,
+            foundation_border_axes=zeros_foundation_axes,
+            foundation_border_types=zeros_types,
+            dumpability_masks_init=jnp.ones_like(maps, dtype=jnp.bool_),
+            action_maps=zeros_map,
+            distance_maps=zeros_map.astype(jnp.float32),
+            slot_indices=jnp.arange(count, dtype=jnp.int32)[None, :],
+            family_ids=(10 + jnp.arange(count, dtype=jnp.int32))[None, :],
+            primary_cell_ids=(
+                20 + jnp.arange(count, dtype=jnp.int32)
+            )[None, :],
+        )
+        env_cfg = EnvConfig()
+        for seed in range(8):
+            key = jax.random.PRNGKey(seed)
+            selected_map = buffer.get_map(key, env_cfg)[0]
+            slot, family, cell, _ = buffer.get_map_provenance(
+                key,
+                env_cfg,
+            )
+            selected = int(np.asarray(selected_map)[0, 0])
+            self.assertEqual(int(slot), selected)
+            self.assertEqual(int(family), 10 + selected)
+            self.assertEqual(int(cell), 20 + selected)
 
 
 if __name__ == "__main__":
