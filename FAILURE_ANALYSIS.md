@@ -5,6 +5,9 @@
 - Scope: completed `NEW-MAPS-FLAT` and `NEW-MAPS-STAGED` screen
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Execution backlog: [`TRAINING_TASKS.md`](TRAINING_TASKS.md)
+- Post-audit decisions: exact visible dump mask, contained mass-conserving
+  starter dumping, no potential-based action veto, and scratch small-policy
+  recovery
 - Production training authorized by this report: no
 
 ## 1. Executive verdict
@@ -50,6 +53,27 @@ one easy trench after semantic and instrumentation corrections. The next map
 curriculum must use family-specific, quantitative cells and global
 checkpoint-bounded promotion. Progressive rewards and partial resets remain
 separate later experiments.
+
+### 1.1 What this audit explains
+
+The evidence is sufficient to explain why the **tested training treatments**
+are rejected:
+
+- the historical M0-M2 labels did not order maps monotonically;
+- the per-environment `3/3` scheduler promoted without family/cell mastery;
+- the small repeated training bank and deterministic source-disjoint evaluator
+  measured different policy populations; and
+- inconsistent dump and logging contracts prevent a clean reward-level
+  interpretation.
+
+It is not yet sufficient to assign one causal reason for most individual map
+failures. In particular, it does not separate constrained transport distance,
+dump-boundary physics, procedural geometry, train-identity fit,
+deterministic-versus-sampled action selection, reward incentive, and
+multitask-gradient interference. D1/D2, the two scratch fixed-identity probes,
+orthogonal quantitative map panels, and scratch family specialists are the
+minimal deciding evidence. No architecture or larger-model claim is supported
+before those gates.
 
 ## 2. Frozen run receipt
 
@@ -435,6 +459,27 @@ and `rewards/existence` is the expected constant `-0.003571`.
 No retrospective claim about terminal-reward frequency, return saturation, or
 reward-component dominance should be made from those W&B fields.
 
+### 6.5 Confirmed action and dump-physics constraints
+
+At the exact historical Terra revision, `_handle_dump` predicts post-dump
+relocation potential and returns the unchanged state when that potential is
+higher than its effective baseline. The same criterion appears in the
+skid-steer reverse-drop path. Relocation potential is therefore not only a
+reward: it acts as a hidden greedy action veto.
+
+The same revision expands the local soil-mechanics mask by one cell and limits
+the expansion with obstacles and the general dumpability mask, not the visible
+target dump mask. A dump aimed at a constrained target can therefore relax
+soil across its boundary even though the policy did not explicitly select an
+off-zone dump.
+
+Both are confirmed code facts and are directionally relevant to constrained
+transport and cleanup. Their historical event frequency is unknown because
+the evaluator did not record attempted vetoed dumps, action-map deltas, or
+pre/post-relaxation soil. Future-policy semantics remove the potential veto
+and contain a correctly aimed dump while conserving mass. D1 and targeted
+trajectory replay determine how much historical behavior they explain.
+
 ## 7. Termination and evaluator audit
 
 The reliable training termination fields are:
@@ -482,11 +527,13 @@ these single-agent runs because the backfill window is gated by
 | 3 | train-identity fit and/or stochastic policy explains online/offline gap | likely, unresolved | online near 50%, held-out near zero, tiny repeated banks, deterministic evaluator | exact-train deterministic plus repeated sampled eval |
 | 4 | heterogeneous exposure drives flat retention regression | likely, unresolved | peak-to-final M0 Jaccard `0.25` under 75% M1/M2 exposure | paired 500-update M0-only versus terminal-mixture fork |
 | 5 | reward/termination mismatch depresses constrained-map learning | confirmed defect, unknown effect size | exact versus dilated dump masks | counterfactual replay audit |
-| 6 | late excavation/dump cleanup is the immediate skill bottleneck | supported diagnostic | terminal completion near 0.9 with residual edge tiles | success/timeout-stratified terminal metrics and trajectories |
-| 7 | clipped global positive heights alias transported volume | confirmed information loss, unknown effect | global `action_map` clipped to `[-1, 1]` | paired-state legality/reward/optimal-action test |
-| 8 | PPO entropy or policy drift contributes to churn | possible | moderate entropy and changing fixed success sets | logit/KL/action-mode audit, then bounded fork |
-| 9 | current architecture lacks capacity | not supported | stable optimization; no representation-specific failure isolated | do not sweep architecture |
-| 10 | the runs simply need more time | contradicted for these treatments | 524M transitions each; staged plateau; flat held-out regression | stop unchanged continuations |
+| 6 | potential-based dump veto removes useful actions | confirmed defect, unknown effect size | historical `_handle_dump` rejects predicted potential increases | transition fixtures and attempted-action trajectory audit; remove for future |
+| 7 | soil relaxation crosses a constrained visible dump boundary | confirmed capability, unknown event frequency | historical soil mask expands through general dumpability, not target mask | pre/post-relaxation replay; contained future transition |
+| 8 | late excavation/dump cleanup is the immediate skill bottleneck | supported diagnostic | terminal completion near 0.9 with residual edge tiles | success/timeout-stratified terminal metrics and trajectories |
+| 9 | clipped global positive heights alias transported volume | confirmed information loss, unknown effect | global `action_map` clipped to `[-1, 1]` | paired-state legality/reward/optimal-action test |
+| 10 | PPO entropy or policy drift contributes to churn | possible | moderate entropy and changing fixed success sets | logit/KL/action-mode audit, then bounded fork |
+| 11 | current architecture lacks capacity | not supported | stable optimization; no representation-specific failure isolated | do not sweep architecture |
+| 12 | the runs simply need more time | contradicted for these treatments | 524M transitions each; staged plateau; flat held-out regression | stop unchanged continuations |
 
 Dynamic infeasibility remains possible for some cells. Static capacity and path
 checks explicitly are not action witnesses. It must be tested with bounded
@@ -527,6 +574,11 @@ For the first apron feasibility cells, remove capacity as a bottleneck:
 candidate starting gates are at least `3x` nearby reachable dump area,
 dig-dump median no more than `3` tiles, and no obstacles. These are hypotheses
 to validate, not permanent deployment limits.
+
+The first corrected cells also use contained, mass-conserving dumping: soil
+placed into the exact visible target mask may relax only inside it. Capacity
+validation must cover the exact mask, full bucket placement, and stored-height
+numeric range; no overflow, clipping, or boundary loss is acceptable.
 
 ### 9.3 Trench ladder
 
@@ -611,14 +663,18 @@ a failed family or cell.
    exact unique training identities and development identities.
 3. Repeat sampled-action M0 evaluation for flat updates 1,000/4,000 with eight
    fixed seeds; report deterministic disagreement and logit margin.
-4. Ratify one legal dump-mask contract, then make termination, completion,
-   reward, logging, and evaluation share it.
-5. remove hidden first-episode horizon randomization for full-reset runs;
-6. make map loading exact and fail on missing or duplicated identities unless
+4. Implement the ratified exact visible dump mask in termination, completion,
+   reward, capacity, logging, and evaluation.
+5. Make a correctly aimed starter dump stay inside that mask while conserving
+   all world-plus-carried soil; keep an entirely wrong dump outside.
+6. Remove relocation-potential vetoes from physically valid dump actions.
+7. remove hidden first-episode horizon randomization for full-reset runs;
+8. make map loading exact and fail on missing or duplicated identities unless
    duplication is an explicit treatment; and
-7. add global, termination-stratified reward and integrity logging.
+9. add the minimal fixed-evaluator integrity fields required by P1.
 
-No new PPO training is authorized before this phase closes.
+The full population reward receipt is required before P3 family training, not
+before the two fixed-identity probes.
 
 ### P1 — bounded dynamic-feasibility probes
 
@@ -627,15 +683,15 @@ Train exactly two fixed identities:
 - one low-volume all-around foundation; and
 - one low-volume straight both-side trench.
 
-Use E8 parameters only, a fresh optimizer, the corrected dense reward, untouched
-450-step resets, and the current `_se` architecture. Stop at 50, 100, 250, or
-500 updates as soon as `29/32` fixed reset seeds pass twice with a saved legal
-trajectory.
+Use two independent base `resnet_spatial_8x8` policies initialized from scratch,
+the frozen `corrected_dense_v1` reward, untouched 450-step resets, and no
+partial/map/reward curriculum. Evaluate every 100 updates. Plan 1,000 updates,
+stop earlier only after `29/32` fixed reset seeds pass twice with a saved legal
+trajectory, and extend once to 2,000 only while fixed-seed performance is
+improving.
 
-E8 is appropriate as the first parent because it already solves all-around
-foundations and flat proves that it can adapt to some new straight trenches.
-A scratch control is conditional on a failed fixed-identity probe; it is not
-part of the first minimal set.
+E8 is a historical zero-shot reference only. It supplies neither parameters
+nor teacher targets to the recovery probes.
 
 ### P2 — small orthogonal feasibility panels
 
@@ -654,11 +710,14 @@ These are specialist feasibility instruments, not deployment models.
 
 1. Generate at least 64 unique train identities per selected primary cell,
    with no repeated slots.
-2. Train an easy foundation specialist and an easy trench specialist.
+2. Train an easy foundation specialist and an easy trench specialist
+   independently from scratch with the base small architecture.
 3. Require family and cell gates on separate promotion/development banks.
-4. Train a corrected 50/50 easy-family generalist from E8 parameters, not by
+4. Train a third base-small 50/50 easy-family generalist from scratch, not by
    merging specialist weights.
-5. Use a 1,000-update initial budget and extend to 2,000 only while fixed-bank
+5. After that generalist qualifies, grow and qualify one medium
+   `resnet_spatial_8x8_se` student on the same easy bank.
+6. Use a 1,000-update initial budget and extend to 2,000 only while fixed-bank
    performance is improving.
 
 ### P4 — global map curriculum
@@ -681,23 +740,29 @@ After a corrected dense parent qualifies:
 1. repair the Stage-1 parity conflict in the current local
    `/home/lorenzo/moleworks/terra/PROGRESSIVE_REWARD_CURRICULUM.md`
    specification;
-2. run the matched corrected-dense versus dense-to-terminal A/B/C study on one
+2. keep the optional per-step carried-plus-world mass-distance dense treatment
+   as a separate, conditional A/B that replaces rather than duplicates the
+   current dump-time relocation term;
+3. run the matched corrected-dense versus dense-to-terminal A/B/C study on one
    fixed qualified foundation family;
-3. select lexicographically by success, productive workspace cycles, and
+4. select lexicographically by success, productive workspace cycles, and
    steps;
-4. validate the selected reward sequence separately on trenches; and
-5. test 25% mass-conserving partial resets only after the map sampler is
+5. validate the selected reward sequence separately on trenches; and
+6. test 25% mass-conserving partial resets only after the map sampler is
    selected.
 
 Map level, reward stage, and partial-reset probability must never advance in
 the same causal comparison.
 
-## 12. Required instrumentation before P1
+## 12. Required instrumentation
 
-Every terminal episode must emit one global record containing:
+Before P1, the fixed evaluator needs only the fields required to decide its
+success, integrity, and trajectory gate. Before P3 family training, every
+full rollout must emit one bounded aggregate, reduced over every device and
+environment and keyed by family, primary cell, stage, and termination reason,
+containing:
 
-- `map_id`, split, family, primary cell, and active curriculum stage;
-- termination reason: `task_done`, `timeout`, or `task_done_and_timeout`;
+- episode counts for `task_done`, `timeout`, and `task_done_and_timeout`;
 - exact-target and accepted-mask completion;
 - exact, buffer-only, and illegal positive soil volume;
 - dig completion, dump purity, moved-to-dump completion, and residual component
@@ -712,14 +777,18 @@ Every terminal episode must emit one global record containing:
 
 Training aggregation must reduce over all devices. W&B should log totals and
 bounded rates, not an arbitrary environment element. The machine-readable
-episode receipt remains the source of truth for recomputation.
+aggregate remains the source of truth for recomputation. Per-map episode
+receipts remain in fixed evaluation rather than the high-volume training path.
 
 The fixed evaluator must expose deterministic versus sampled mode explicitly
 and must not call a timeout a successful completion.
 
 ## 13. Architecture decision
 
-Keep `resnet_spatial_8x8_se` through P0-P3.
+Use base `resnet_spatial_8x8` for the scratch P1/P3 specialists and small
+generalist. Grow one medium `resnet_spatial_8x8_se` student only after the
+small 50/50 generalist passes. This lineage choice is not an architecture
+ablation.
 
 Before an architecture experiment:
 
@@ -755,24 +824,30 @@ Do conclude:
 - map difficulty needs quantitative family-specific axes;
 - the reward/termination mismatch must be fixed before future-policy training;
   and
-- trustworthy reward/termination instrumentation is a launch blocker.
+- trustworthy global reward/termination instrumentation is a family/generalist
+  launch blocker, while the minimal fixed evaluator is sufficient for the two
+  bounded feasibility probes.
 
 ## 15. Goal completion criteria
 
 The curriculum-recovery goal is complete only when:
 
 1. one legal dump-mask definition drives termination, completion, reward,
-   metrics, and evaluation;
-2. reward and termination receipts are globally aggregated and recomputable;
-3. one easy foundation and one easy trench pass fixed-identity feasibility;
-4. family specialists pass source-disjoint family and cell gates;
-5. a corrected dense 50/50 easy generalist passes two consecutive retention
-   gates;
-6. a global map curriculum advances by fixed-bank evidence without hiding a
+   actions, capacity, metrics, and evaluation;
+2. contained starter dumping conserves world-plus-carried soil without
+   clipping, deletion, creation, overflow, or boundary spill;
+3. relocation potential no longer vetoes a physically valid dump;
+4. reward and termination receipts are globally aggregated and recomputable;
+5. one easy foundation and one easy trench pass scratch fixed-identity
+   feasibility;
+6. two scratch family specialists pass source-disjoint family and cell gates;
+7. a scratch small 50/50 generalist and its grown medium student pass two
+   consecutive retention gates;
+8. a global map curriculum advances by fixed-bank evidence without hiding a
    failed cell;
-7. dump-distance limits are measured, with remote haul either qualified or
+9. dump-distance limits are measured, with remote haul either qualified or
    explicitly separated as unsupported;
-8. progressive rewards and partial resets are selected in separate matched
+10. progressive rewards and partial resets are selected in separate matched
    experiments; and
-9. one sealed composite bank confirms generalization across feasible
+11. one sealed composite bank confirms generalization across feasible
    foundations, trenches, dump constraints, and site obstacles.

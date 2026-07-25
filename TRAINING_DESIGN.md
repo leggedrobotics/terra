@@ -1,8 +1,8 @@
 # Terra Training Design
 
-- Status: first paired screen complete; neither arm qualified
-- Version: `training_design_v4`
-- Date: 2026-07-24 post-screen status update
+- Status: first paired screen complete; recovery contract ratified
+- Version: historical `training_design_v4` plus `recovery_v1`
+- Date: 2026-07-25 recovery update
 - First target: one 64 x 64 tracked-excavator policy for foundations and
   trenches
 - Production training authorized by this document: no
@@ -22,6 +22,50 @@ Post-screen result:
 - staged peaked at M0 `13/64`, M1 `2/64`, and M2 `0/64`; and
 - neither arm passed a family, cell, retention, or joint mastery gate.
 
+## 0. Ratified recovery contract
+
+The original M0-M2 ladder below is retained only as the frozen description of
+the failed screen. It is outdated as a future map curriculum. The active
+dependency-ordered plan is in [`TRAINING_TASKS.md`](TRAINING_TASKS.md).
+
+The following decisions were ratified after reviewing the failure evidence:
+
+1. **One visible dump mask.** The exact visible target dump mask is the only
+   accepted dump region for action interpretation, capacity validation,
+   completion, termination, reward, logging, and evaluation. There is no
+   hidden one-cell tolerance.
+2. **Contained, mass-conserving starter physics.** For the first scratch
+   teachers and initial quantitative map cells, a dump aimed into the accepted
+   region may redistribute soil only inside that region. It may form piles,
+   but no mass may be clipped, deleted, or spilled across the boundary. A dump
+   made entirely outside the accepted region remains a physically possible
+   mistake; its soil remains outside and must be recovered. Boundary-spill
+   dynamics are a later, separately named difficulty treatment.
+3. **No greedy action veto.** Relocation potential may shape reward, but it
+   must not prohibit a physically valid dump merely because the predicted
+   potential increases.
+4. **Scratch small-policy recovery.** E8 remains a historical zero-shot and
+   lineage reference only. Recovery begins with independent
+   `resnet_spatial_8x8` base policies, approximately 994,825 parameters,
+   initialized from scratch: one foundation policy and one trench policy.
+   Neither is called a teacher until it passes a source-disjoint family gate.
+5. **Adequate scratch budgets.** A scratch learning treatment receives a
+   planned 1,000 PPO-update budget, evaluation every 100 updates, and one
+   extension to 2,000 only while fixed-bank performance is improving. It may
+   stop earlier only after the declared success gate passes twice.
+6. **Separate causal programs.** Map progression, dense-reward design,
+   dense-to-terminal reward progression, and partial-reset progression remain
+   separate experiments. The first feasibility treatment uses one frozen
+   corrected dense reward; it does not change reward and map difficulty
+   together.
+
+The first corrected dense reward removes the action veto and uses the exact
+mask and contained transition above. A possible second dense treatment would
+replace the current dump-time relocation term with one per-step
+mass-distance potential over both off-zone soil and carried load. Its exact
+equation and distance metric are still open decisions; it is not authorized
+for implementation or training yet.
+
 ## 1. Decision
 
 The final target is one policy that completes feasible foundation and trench
@@ -38,8 +82,9 @@ The program has two progressive curricula:
 They are separate experiments. The first campaign changes only the map
 distribution while holding the current dense reward and full-task resets
 fixed. After selecting a map design, the first reward experiment freezes one
-qualified foundation-only family and follows
-[`PROGRESSIVE_REWARD_VALIDATION_PLAN.md`](PROGRESSIVE_REWARD_VALIDATION_PLAN.md).
+qualified foundation-only family and follows the current local draft
+`/home/lorenzo/moleworks/terra/PROGRESSIVE_REWARD_VALIDATION_PLAN.md`, after
+the W0 corrections in `TRAINING_TASKS.md`.
 Only a later confirmation run combines selected treatments.
 
 The minimum first map experiment is:
@@ -526,9 +571,10 @@ C: dense_skill -> terminal_margin -> terminal_objective
 7. run a combined confirmation only after both independent experiments decide.
 
 The equations, correctness gates, cohort rules, and first foundation-only
-scope remain authoritative in
-[`PROGRESSIVE_REWARD_CURRICULUM.md`](PROGRESSIVE_REWARD_CURRICULUM.md) and
-[`PROGRESSIVE_REWARD_VALIDATION_PLAN.md`](PROGRESSIVE_REWARD_VALIDATION_PLAN.md).
+scope remain in the local drafts
+`/home/lorenzo/moleworks/terra/PROGRESSIVE_REWARD_CURRICULUM.md` and
+`/home/lorenzo/moleworks/terra/PROGRESSIVE_REWARD_VALIDATION_PLAN.md`, subject
+to the W0 corrections in `TRAINING_TASKS.md`.
 Reward return never promotes a map level.
 
 ## 8. Partial-completion resets
