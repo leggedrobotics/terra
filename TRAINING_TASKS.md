@@ -1,7 +1,7 @@
 # Terra Training Tasks
 
 - Status: active recovery execution; C0-C5 and C1b complete; D1/D2 running;
-  F0 implementation frozen and launch-ready
+  F0 submitted and awaiting allocation
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -194,7 +194,7 @@ Task index:
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] launch-ready at baselines `6c56525` |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] submitted: train `8629884`, `8629885`; eval `8629886`, `8629887` |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -894,6 +894,22 @@ The two training arms may run concurrently because they answer independent
 fixed-identity feasibility questions. Their dependent evaluators may run only
 after the corresponding training job completes successfully.
 
+Submission receipt, 2026-07-26 01:47 CEST:
+
+- launch receipt SHA-256:
+  `bc1ab0f3808727b2e0ce13305860a95d7dbe1b4f167f2688642b75dc47fab6e4`;
+- submitted-jobs receipt SHA-256:
+  `975c0852391b96a73a2f1aa202856b52214811406217351d50adf27fa3832bb4`;
+- foundation train job `8629884`, requesting exactly four RTX 4090 GPUs,
+  four CPUs, and 32 GB;
+- trench train job `8629885`, with the same independent resource request;
+- foundation evaluator `8629886`, `afterok:8629884`, requesting one RTX 4090;
+- trench evaluator `8629887`, `afterok:8629885`, requesting one RTX 4090; and
+- both training jobs were `PENDING (Priority)` at the first scheduler audit.
+
+Submission is not a passed smoke or a training result. Keep F0 and checklist
+items 7-8 open until the corresponding machine-readable gates exist.
+
 Pass gate:
 
 - at least 29/32 successes in two consecutive evaluations;
@@ -1371,7 +1387,9 @@ acceptance evidence in the corresponding section passes.
 7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
 8. [ ] Launch the two scratch F0 fixed-identity probes with
-   `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates.
+   `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. Submitted as
+   train jobs `8629884`/`8629885` with dependent evaluators
+   `8629886`/`8629887`; this box remains open until both evaluations finish.
 9. [ ] If either F0 arm fails, stop its descendants and run only the
    trajectory/O0/transition/reward diagnosis implicated by that arm.
 10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
