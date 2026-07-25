@@ -1,6 +1,7 @@
 # Terra Training Tasks
 
-- Status: active recovery execution; C0-C5 and C1b complete; D1/D2 running
+- Status: active recovery execution; C0-C5 and C1b complete; D1/D2 running;
+  F0 implementation frozen and launch-ready
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -193,7 +194,7 @@ Task index:
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] open |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] launch-ready at baselines `6c56525` |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -707,20 +708,32 @@ Verified implementation receipt, 2026-07-25:
   across PPO rollout boundaries and writes one bounded
   `terra_training_episode_aggregate_v1` JSON grouped by stage, family, primary
   cell, and separate `task_done`, `timeout`, `both`, and `other` reasons;
+- terra-baselines commit `6c56525` additionally reduces mass residual and
+  immutable-target/obstacle mutation over every transition and every device,
+  aborting before any checkpoint even when no episode terminates in that PPO
+  update;
 - additive values use global device sums while integrity maxima use global
   maxima; W&B receives only reduced totals and rates, never an arbitrary
   environment element;
 - fixtures cover a two-window episode, population-equivalent shard reduction,
   all terminal labels, and checkpoint-blocking mass, mutation, and reward
   reconstruction failures;
-- the full terra-baselines suite passes 123 tests; the final focused aggregate
-  suite passes 5 tests after formatting;
+- the full terra-baselines suite passes 130 tests after the F0 launch and
+  checkpoint-lineage gates; the final focused aggregate suite passes 5 tests;
 - a one-update strict-F0 terminal-path CPU smoke at horizon one records exact
   `foundation / all_around_low_volume` provenance, one timeout, one action,
   return `-0.005` exactly reconstructed by its components, and zero mass,
   mutation, or reward-integrity failures; and
 - its exact saved checkpoint reload has 50 finite model leaves, finite
   optimizer state, and `next_update == 1`.
+
+A second real PPO integration smoke used the exact regenerated F0 foundation
+manifest with a deliberately reduced CPU shape (one device, two environments,
+one step, one update). It exercised the final per-transition hard abort and
+checkpoint schema, recorded exact
+`foundation / all_around_low_volume` provenance, and produced zero transition
+integrity failures. This is implementation evidence only; it does not replace
+either production-shaped four-GPU F0 smoke.
 
 Machine-readable smoke receipt:
 
@@ -732,6 +745,14 @@ Machine-readable smoke receipt:
   `.artifacts/terra_curriculum_recovery_20260725/c5_terminal_smoke/c5-terminal-smoke_FINAL.pkl`,
   SHA-256
   `b57789dbca7fca20ff6e5cb8144444c89d5920f3d4d86f782b774c2b6f46c60a`.
+- F0-path CPU checkpoint:
+  `.artifacts/terra_curriculum_recovery_20260725/f0_launch_cpu_smoke/f0-launch-cpu-smoke-local-2026-07-26-01-30-27_FINAL.pkl`,
+  SHA-256
+  `4c67c470cbba240f6ddf00bac7f09aaffb4892fc0e38fc956ca35d664d8c3f0b`;
+- F0-path CPU aggregate:
+  `.artifacts/terra_curriculum_recovery_20260725/f0_launch_cpu_smoke/episode_aggregates/f0-launch-cpu-smoke-local-2026-07-26-01-30-27_update_000001.json`,
+  SHA-256
+  `5ca79f8bdd1e37030f4374923a631f75a3fe1ae58e6f51b21b5b41802a1e77fa`.
 
 The completed runs expose a logging defect: scalar reward-component fields are
 taken from the final state of one environment, while terminal completion fields
@@ -831,16 +852,47 @@ Run two independent policies, one per identity. For each:
 - use full 450-step resets with `env_steps == 0`;
 - use no partial resets, map curriculum, reward curriculum, or architecture
   change;
-- evaluate deterministically on the same 32 declared reset seeds every 100
-  updates; and
-- plan 1,000 PPO updates, stopping earlier only when the gate passes, and
-  extend once to 2,000 only while the preregistered fixed-seed curve is still
-  improving.
+- save a checkpoint every 100 updates, then evaluate all ten checkpoints
+  deterministically on the same 32 declared reset seeds; and
+- run the preregistered 1,000 PPO updates. This first implementation does not
+  claim online early stopping. Extend once to 2,000 only if no two-checkpoint
+  pass exists and the fixed-seed curve is still improving.
 
 At the current four-device, 1,024-environment-per-device, 32-rollout-step
 shape, one update is 131,072 global transitions; 1,000 and 2,000 updates are
 131,072,000 and 262,144,000 transitions. Record both units and recompute them
 if the probe shape changes.
+
+Frozen F0 launch receipt:
+
+- implementation: terra-baselines `6c56525`;
+- foundation initialization seed: `2026072601`;
+- trench initialization seed: `2026072602`;
+- common evaluation reset seeds: integers `2026072600` through `2026072631`;
+- one independent four-RTX-4090 job per identity, with 1,024 environments per
+  device, 32 rollout steps, two update epochs, and 32 minibatches;
+- explicit learning rate `3e-4`;
+- entropy coefficient cosine-annealed from `0.15` to `0.005` over 950 updates,
+  so the bounded probe reaches its low-exploration regime before update 1,000;
+- base `resnet_spatial_8x8`, float32 encoder, flat minibatch shuffle, no value
+  clipping, and finite checks every update;
+- no resume, warm start, teacher, map-stage transition, reward-stage
+  transition, or partial reset;
+- one exact production-shaped update-1 smoke per arm before its production
+  command, including reload of the saved model and optimizer plus validation of
+  the C5 aggregate;
+- 1,000 mandatory per-update aggregate receipts, ten periodic checkpoints, and
+  one final checkpoint before a training-complete marker can exist; and
+- the evaluator rejects a checkpoint whose seed, treatment, optimizer lineage,
+  model, integrity receipt, cadence, or map identity differs from this frozen
+  declaration.
+
+The new remote root is
+`/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/f0`.
+It must contain immutable source and bank SHA-256 manifests before submission.
+The two training arms may run concurrently because they answer independent
+fixed-identity feasibility questions. Their dependent evaluators may run only
+after the corresponding training job completes successfully.
 
 Pass gate:
 
@@ -1303,20 +1355,37 @@ difficulty.
 
 ## 17. Immediate execution queue
 
-Do these next, respecting the gates:
+This is the live top-level checklist. A box is checked only after the
+acceptance evidence in the corresponding section passes.
 
-1. Run D1 and D2 as parallel no-gradient historical diagnostics.
-2. Implement and test C1 plus C1a from the already-complete C0 decision.
-3. Implement the minimal C2-C4 reset, loader, and fixed-evaluator gates.
-4. Run the two scratch F0 fixed-identity probes with
-   `corrected_dense_v1`.
-5. If F0 fails, stop and run only the O0/transition/reward diagnosis implicated
-   by its trajectories.
-6. If F0 passes, complete C5 and build the small B0 orthogonal feasibility
-   panels.
-7. Expand only passing cells, then run the two scratch F1 family specialists.
-8. If both specialists pass, run G0 and then S0.
-9. Begin K0 only from the qualified S0 medium parent.
+1. [x] Freeze D0 and reject both completed historical curriculum arms.
+2. [x] Ratify and implement C0-C4 plus the contained transition C1a.
+3. [x] Close the C1b excavator-footprint integrity defect before training.
+4. [x] Complete C5 auditable population aggregates and exact finite-checkpoint
+   terminal smoke.
+5. [x] Freeze the two independent F0 launch/evaluation paths, exact
+   hyperparameters, checkpoint-lineage gates, and reduced-shape PPO integration
+   smoke at terra-baselines `6c56525`.
+6. [ ] Finish D1/D2, inspect every JSON integrity field, and write the
+   preregistered materiality/memorization/policy-mode decisions.
+7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
+   F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
+8. [ ] Launch the two scratch F0 fixed-identity probes with
+   `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates.
+9. [ ] If either F0 arm fails, stop its descendants and run only the
+   trajectory/O0/transition/reward diagnosis implicated by that arm.
+10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
+   feasibility panels, then admit only dynamically witnessed cells.
+11. [ ] Run the two scratch F1 family specialists; require family and per-cell
+    gates twice with zero integrity failures.
+12. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
+    new-distribution small multitask teacher.
+13. [ ] Grow and qualify S0 from G0, then begin the checkpoint-bounded K0 map
+    ladder one isolated difficulty axis at a time.
+14. [ ] After S0 qualification, execute the separate W1/W2 reward experiment;
+    run PR0 only after the map sampler is selected.
+15. [ ] Open the sealed bank once after model/treatment selection and publish
+    the final causal, integrity, compute, and checkpoint receipts.
 
 R0 is not in the default launch queue. Authorize it only if D2 confirms
 train-and-development regression and the result would change K0's rehearsal
