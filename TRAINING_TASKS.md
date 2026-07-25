@@ -1,13 +1,14 @@
 # Terra Training Tasks
 
-- Status: active recovery execution; C0-C4 complete; D1/D2 submitted
-- Date: 2026-07-25 ratified-recovery update
+- Status: active recovery execution; C0-C5 and C1b complete; D1/D2 running
+- Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
 - Historical reference: E8 `resnet_spatial_8x8_se`
 - Recovery scratch topology: base `resnet_spatial_8x8`, approximately 994,825
   parameters
-- Production training authorized by this document: no
+- Production training authorized by this document: yes, only for declared
+  tasks whose gates pass; independent declared arms may run concurrently
 
 ## 1. Current decision
 
@@ -144,25 +145,28 @@ C0 exact visible dump mask (ratified)
           |
           +--> C2 full-reset horizon
           +--> C3 exact loader
+          +--> C1b exact footprint rasterization
           `--> C4 minimal fixed evaluator
                     |
-                    +--> F0 two scratch fixed-identity probes
-                    |       | fail
-                    |       `--> O0/transition/reward diagnosis
-                    |       |
-                    |       ` pass
-                    |          |
-                    |         B0 orthogonal feasibility cells
-                    |          |
-                    +--> C5 ---+--> F1 two scratch family specialists
-                                      |
-                                     G0 scratch easy small generalist
-                                      |
-                                     S0 grow and qualify medium student
-                                      |
-                                     K0 global checkpoint-gated map ladder
-                                    /                 \
-                         reward curriculum       partial resets
+                    +--> C5 auditable training aggregates
+                    |
+                    `--> F0 two scratch fixed-identity probes
+                            | fail
+                            `--> O0/transition/reward diagnosis
+                            |
+                            ` pass
+                               |
+                              B0 orthogonal feasibility cells
+                               |
+                              F1 two scratch family specialists
+                               |
+                              G0 scratch easy small generalist
+                               |
+                              S0 grow and qualify medium student
+                               |
+                              K0 global checkpoint-gated map ladder
+                             /                 \
+                  reward curriculum       partial resets
 
 Architecture work remains conditional on a representation-specific failure.
 ```
@@ -170,25 +174,26 @@ Architecture work remains conditional on a representation-specific failure.
 `R0` is the sole historical-revision experiment. `F0` and every other
 future-policy task use the corrected contract. D1 and D2 improve historical
 attribution but do not block the already-ratified future semantic correction.
-C5 is required before family or generalist training, not before a two-map
-feasibility probe.
+C5 and C1b are now complete and are required launch gates for every new PPO
+run.
 
 Task index:
 
 | ID | Priority | Cost class | Depends on | State |
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
-| D1 | P0 | evaluation only | D0 | [ ] running: `8623160` -> `8623162` |
-| D2 | P0 | evaluation only | D0 | [ ] running: `8623160` -> `8623162`, `8623163` |
+| D1 | P0 | evaluation only | D0 | [ ] running: `8626341`; preflight `8626340` passed |
+| D2 | P0 | evaluation only | D0 | [ ] running: `8626341`, `8626343`; preflight passed |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
 | C1a | P0 | Terra transition/tests | C0 | [x] complete |
+| C1b | P0 | Terra geometry/tests | C1a | [x] complete |
 | C2 | P0 | baselines code/test | C1, C1a | [x] complete |
 | C3 | P0 | Terra loader/tests | C1, C1a | [x] complete |
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
-| C5 | P0 | training receipts/tests | C1-C4 | [ ] open |
+| C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C1-C4, C1a | [ ] open |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] open |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -226,18 +231,28 @@ Acceptance:
 
 ### D1 — Audit the dump-mask semantic mismatch
 
-Execution receipt, submitted 2026-07-26:
+Execution receipt, retry submitted 2026-07-26:
 
 - observer-only implementation:
-  terra-baselines `d049107` (`audit_historical_curriculum.py`);
+  terra-baselines `d049107` plus the terminal-threshold default fix
+  `1aeb1a6` (`audit_historical_curriculum.py`);
 - frozen source copy:
   `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/historical_audit/source`;
 - historical Terra and baseline revisions remain
   `d37e780480c0fae64a4b9e4ba6638b4499748761` and
   `2722d832c8381a68d594d8bf8298ba3aec7f4c6a`;
-- preflight job `8623160`;
-- full deterministic job `8623162`, held on
-  `afterok:8623160`; and
+- initial preflight `8623160` failed before producing evidence because the
+  observer directly accessed an optional historical terminal-threshold field;
+  its dependent jobs `8623162` and `8623163` were cancelled automatically;
+- first replacement `8624492` completed the audit but the shell gate rejected
+  a maximum `1.43e-6` float32 reconstruction difference against a `1e-6`
+  threshold; that JSON is preserved under `failed_attempts/`;
+- the explicit, receipt-recorded float32 tolerance is now `1e-5`
+  (`7b5d52d`), with regression coverage;
+- replacement preflight `8626340`, completed in `00:09:09` with exit code
+  `0:0`;
+- replacement full deterministic job `8626341`, released by
+  `afterok:8626340` and currently running; and
 - the deterministic command hard-limits D1 attribution to the three declared
   checkpoints over development M0-M2: exactly 259,200 maximum transitions.
 
@@ -287,11 +302,11 @@ Budget: at most 259,200 evaluation transitions and no gradients.
 
 ### D2 — Separate memorization, policy mode, and held-out regression
 
-Execution receipt, submitted 2026-07-26:
+Execution receipt, retry submitted 2026-07-26:
 
-- deterministic train/development audit job `8623162`, held on the same
-  preflight;
-- sampled M0 job `8623163`, also held on the preflight;
+- deterministic train/development audit job `8626341`, released by the passed
+  preflight and currently running;
+- sampled M0 job `8626343`, also currently running;
 - declared sampled seeds `2026072500` through `2026072507`;
 - exact training-identity view:
   `train/local_M2_terminal`, whose 256 slots must verify as 256 unique source
@@ -526,6 +541,35 @@ Acceptance:
 Physical boundary spill becomes a later named dynamics treatment only after
 the contained contract passes family and retention gates.
 
+### C1b — Preserve the exact excavator footprint
+
+Status: complete.
+
+Verified implementation receipt, 2026-07-26:
+
+- the pre-existing polygon rasterizer sampled integer cell corners under
+  strict half-plane tests, shrinking an axis-aligned `W x H` footprint to
+  `(W-1) x (H-1)`, and its x/y grid construction was transposed;
+- Terra commit `f3eeca6a` samples cell centers in `[x, y]` order and returns a
+  `(map_height, map_width)` mask;
+- a regression built from the production `get_agent_corners` path proves that
+  an odd `5 x 3` excavator occupies exactly 15 correctly oriented cells;
+- the focused footprint, dump-contract, and partial-loading set passes
+  29 tests; and
+- the full Terra suite passes 51 tests plus 6 subtests, with formatting,
+  linting, and whitespace checks clean.
+
+This issue was discovered while closing the training-integrity gates and was
+fixed before any corrected-contract PPO production launch.
+
+Acceptance:
+
+- centered and boundary-touching footprints preserve their declared cells;
+- non-square footprints are not transposed;
+- odd production dimensions occupy exactly `width * height` cells at zero
+  rotation; and
+- dump and partial-loading transition tests remain green.
+
 ### C2 — Restore the full-reset horizon contract
 
 Status: complete.
@@ -652,6 +696,43 @@ Acceptance:
 
 ### C5 — Make reward and termination histories auditable
 
+Status: complete.
+
+Verified implementation receipt, 2026-07-25:
+
+- Terra commit `f6bfc007` exposes pre-reset timeout, action-effect,
+  productive-workspace-cycle, mass-residual, immutable-target/obstacle, and
+  exact manifest-provenance diagnostics;
+- terra-baselines commit `475ae47` carries per-environment episode state
+  across PPO rollout boundaries and writes one bounded
+  `terra_training_episode_aggregate_v1` JSON grouped by stage, family, primary
+  cell, and separate `task_done`, `timeout`, `both`, and `other` reasons;
+- additive values use global device sums while integrity maxima use global
+  maxima; W&B receives only reduced totals and rates, never an arbitrary
+  environment element;
+- fixtures cover a two-window episode, population-equivalent shard reduction,
+  all terminal labels, and checkpoint-blocking mass, mutation, and reward
+  reconstruction failures;
+- the full terra-baselines suite passes 123 tests; the final focused aggregate
+  suite passes 5 tests after formatting;
+- a one-update strict-F0 terminal-path CPU smoke at horizon one records exact
+  `foundation / all_around_low_volume` provenance, one timeout, one action,
+  return `-0.005` exactly reconstructed by its components, and zero mass,
+  mutation, or reward-integrity failures; and
+- its exact saved checkpoint reload has 50 finite model leaves, finite
+  optimizer state, and `next_update == 1`.
+
+Machine-readable smoke receipt:
+
+- aggregate:
+  `.artifacts/terra_curriculum_recovery_20260725/c5_terminal_smoke/episode_aggregates/c5-terminal-smoke_update_000001.json`,
+  SHA-256
+  `29f4cdc2910f43a52781392be19a651883b3243ddd225079ccc5ca5e6cd5ed91`;
+- checkpoint:
+  `.artifacts/terra_curriculum_recovery_20260725/c5_terminal_smoke/c5-terminal-smoke_FINAL.pkl`,
+  SHA-256
+  `b57789dbca7fca20ff6e5cb8144444c89d5920f3d4d86f782b774c2b6f46c60a`.
+
 The completed runs expose a logging defect: scalar reward-component fields are
 taken from the final state of one environment, while terminal completion fields
 cover device 0 and pool successes with timeouts.
@@ -730,7 +811,7 @@ Acceptance:
 
 ### F0 — Overfit one easy foundation and one easy trench
 
-Dependencies: C0-C4 and C1a. C5 and a broad O0 audit are not prerequisites for
+Dependencies: C0-C5, C1a, and C1b. A broad O0 audit is not a prerequisite for
 this bounded probe.
 
 Select and visually record:
