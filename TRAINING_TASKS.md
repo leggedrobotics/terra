@@ -1401,6 +1401,17 @@ The independent 1,000-update production initialization then started as W&B run
 `nosra33p`; neither smoke completion nor a running production job is an F0R
 mastery result.
 
+At update 100, the first numbered production checkpoint
+`0efaf2e7dd2e5ea185098314a6ecc18b9e02eb8dc4a93e1802b1b704027b3cfc`
+independently reloaded on CPU with the exact treatment/configuration, 92 finite
+model leaves, 185 finite optimizer leaves, and zero checkpoint transition
+integrity counters. Updates 1-100 contain 28,674 completed online episodes,
+81 successes, and no hard aggregate failures. The synchronized timeout
+cohorts' mean completion rose from `0.293` at update 15 to `0.584` at update
+99, while no-op/no-effect rates remained about `13-15%`/`34-35%` instead of
+forming the historical late idling attractor. These are healthy intermediate
+training signals only; fixed greedy mastery remains unmeasured.
+
 Decision:
 
 - pass: use the shaping-off contract for the easy trench cells and proceed to
