@@ -9,7 +9,8 @@
   after infrastructure and receipt-gate failures; all five corrected immutable
   replacement update-1 and 500-update training gates passed; deterministic
   development evaluation passed integrity and authorized a continuous
-  1,000-update confirmation for every panel, but no B0 cell witness exists yet
+  1,000-update confirmation for every panel; all five confirmations are
+  submitted, but no B0 cell witness exists yet
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -2051,6 +2052,38 @@ ShellCheck, and whitespace checks pass. Each new run must still pass its own
 remote source/bank manifest checks, update-1 GPU smoke, 1,000 aggregate
 receipts, ten checkpoint gate, and deterministic development evaluation
 before it contributes evidence.
+
+Continuous 1,000-update submission receipt at
+`2026-07-26T09:49:32+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_panels_u1000_v1`;
+- source revisions: Terra
+  `917fbf35a0ffa468148317a42812c7e97b0f5bc1` and terra-baselines
+  `fc93c294861781e19e135c82fb645465b4d8e917`;
+- source-manifest SHA-256
+  `562e3b883282314cc7a6441cd5d7ce614d839f04a9a74379f84f1c46ca9ba955`;
+- unchanged bank-manifest SHA-256
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`;
+- creation-receipt SHA-256
+  `e5e71d8d87c2a618ac03b1b60cc0b6e47c2410744de287e4011ec2b6c2d069df`;
+- submission-receipt SHA-256
+  `81a7de0bb051165b9fdb52b67d563807ab06f179faa4da49c2961fe21f990b55`;
+- the source manifest, bank manifest, bank-internal manifest, exact revisions,
+  update target, and executable launch scripts passed before submission;
+- every job excludes only the diagnosed node `eu-g6-064`.
+
+| Panel | Continuous training | Dependent evaluation |
+|---|---:|---:|
+| foundation geometry | `8651897` | `8651898` |
+| foundation distance | `8651899` | `8651900` |
+| trench distance | `8651901` | `8651902` |
+| trench side | `8651903` | `8651904` |
+| trench topology | `8651905` | `8651906` |
+
+This is a compute receipt, not a learning claim. Each dependent evaluator is
+`afterok`-gated on its matching update-1 smoke and complete 1,000-update
+training receipt.
 
 #### B0c — Expand only witnessed easy cells
 
