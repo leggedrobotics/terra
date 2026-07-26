@@ -2488,6 +2488,35 @@ result only, not a map-learning or promotion result.
 The corresponding continuous-run W&B ID is `aknko0s4`. It is an operational
 pointer only; its online aggregates do not decide continuation or promotion.
 
+The continuous 1,000-update training result is **PASS**:
+
+- job `8658605` completed in `01:47:52` with exit code `0:0`;
+- training-gate, FINAL, last-update, numbered-checkpoint-manifest, and
+  aggregate-manifest SHA-256 values are
+  `9360afde2c8204f6fd77b45983efaad582344a213c49373ab0391c51c2cf515e`,
+  `3295b55872a7ec0e1a10cff648dccfd749dda7e42e594fb2483adfbc6ac06893`,
+  `c28907b4e7b95ee95af0794cf8b743874b766136ea93b9a7e7fe8768d23ab411`,
+  `d25daf3bc60866a34e913d34acdf2ad429719ad0c279b65f6474c1297df28ba8`,
+  and
+  `dcb7e4d75d4881d3dfe227c72647ce9b250404530a0137107663c8d22331aeb4`;
+- all 1,000 ordered aggregate receipts and all 10 numbered checkpoints at
+  updates 100 through 1,000 are present; FINAL exactly equals update 1,000
+  across 92 model and 185 optimizer leaves;
+- the exact 128-map manifest is revalidated; all mass, target, obstacle, and
+  per-transition reward hard violation counts are zero; maximum mass residual
+  is zero and maximum sub-threshold step-reward residual is
+  `4.76837158203125e-07`;
+- 199 completed episodes exceed the informational independently accumulated
+  episode-return drift tolerance. This is the explicitly non-blocking float32
+  association metric documented by the C5 schema-v2 amendment; the
+  transition-level reconstruction hard gate is zero; and
+- the online stream contains 120,380 task completions out of 376,932 completed
+  episodes. That sampled-train quantity is diagnostic only and is not evidence
+  of source-disjoint generalization.
+
+The dependent fixed-development job `8658606` is released only after this
+receipt. Training PASS does not check the B0 witness box.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
