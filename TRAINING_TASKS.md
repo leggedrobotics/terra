@@ -2,7 +2,7 @@
 
 - Status: active recovery execution; C0-C5 and C1b complete; D1 deterministic
   output under integrity diagnosis; D2 sampled evaluation running; first F0
-  attempt preserved and replacement F0 source being sealed
+  attempt preserved and replacement F0 jobs submitted
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -195,7 +195,7 @@ Task index:
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] first attempt stopped by C5 gate defect; corrected retry pending |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] corrected retry train `8632268`/`8632271`, eval `8632273`/`8632307` |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -998,6 +998,31 @@ terra-baselines `c58ad23`, use a distinct immutable `f0_retry1` root, and repeat
 both exact production-shaped update-1 GPU smokes under schema v2. Checklist
 items 7-8 therefore remain open.
 
+Corrected retry submission receipt, 2026-07-26 02:33 CEST:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/f0_retry1`;
+- Terra revision `188362cd34de6757bc93fff1931561e173a9f2a8`;
+- terra-baselines revision `c58ad233e4478316e8aded57361bc29850af6317`;
+- source-manifest SHA-256:
+  `d1d28bedecfe26767fe902664a76d11bad82bd53c5968b9308416a5152856787`;
+- unchanged bank-manifest SHA-256:
+  `0e02471987700460b37e42a88bd13548a5cc68ce812f3986514a2dffd3c53d2b`;
+- bank-validation SHA-256:
+  `40cab18be4527490e531c6289236077e553ce4e322ddb4ebe379d8b56c5c51cc`;
+- launch-receipt SHA-256:
+  `43681f81faccb8729938b8df07eb90b29f7ffa3421f085bcde16ee40ad751a60`;
+- submitted-jobs receipt SHA-256:
+  `543a88804305a0350b30d0659cef75922055b2239938d18e5c85663e23a2fc3c`;
+- foundation train/eval jobs `8632268` and `8632273`;
+- trench train/eval jobs `8632271` and `8632307`; and
+- both training jobs were `PENDING (Priority)` at the first scheduler audit,
+  with evaluators held by `afterok`.
+
+The launch scripts pass the retry root explicitly through Slurm and override the
+log path at submission, preventing an accidental write back into the
+first-attempt root.
+
 Pass gate:
 
 - at least 29/32 successes in two consecutive evaluations;
@@ -1476,12 +1501,12 @@ acceptance evidence in the corresponding section passes.
 7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
    Both first-attempt v1 smokes passed in `8629884`/`8629885`; both must be
-   repeated against the corrected v2 gate in `f0_retry1`.
+   repeated against the corrected v2 gate in retry jobs `8632268`/`8632271`.
 8. [ ] Launch the two scratch F0 fixed-identity probes with
    `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. The first
    attempt is preserved as failed/cancelled infrastructure evidence; submit
    clean replacements from the immutable `f0_retry1` root and keep this box open
-   until both evaluations finish.
+   until both evaluations `8632273`/`8632307` finish.
 9. [ ] If either F0 arm fails, stop its descendants and run only the
    trajectory/O0/transition/reward diagnosis implicated by that arm.
 10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
