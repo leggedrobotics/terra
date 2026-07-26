@@ -2237,6 +2237,38 @@ The corresponding continuous-run W&B IDs are foundation geometry
 They are operational pointers only; W&B online aggregates do not determine
 continuation or promotion.
 
+Continuous 2,000-update training result: **PASS for all three submitted
+panels**.
+
+| Panel | Job / elapsed | Training-gate SHA-256 | FINAL SHA-256 |
+|---|---:|---|---|
+| foundation geometry | `8656160` / `02:56:39` | `397510e7ac9242e78bfb0daab841e822a50dae497f8b278c0994b99b80d0334b` | `4e258f041186e6961dd2f8118d7850b735a68c8ad822bde98c3d056055660a74` |
+| foundation distance | `8656162` / `03:26:15` | `6afa85ae40b728d4528fac547608b8b87573b6a12ac499cf0d31a149e2f618e7` | `d11122ebfa6c7dcd856aafaf98c4a10cb16e2037e9f462bdce151cd945a8cb4e` |
+| trench topology | `8656166` / `02:58:07` | `949e6d8db5e91d40c41c7784c9f0eff6237f09b883e8e5f5304101af25ec26d8` | `49d1a5d2141dcefbc38193a2223076d36ea7337467ecb9b24b4a6d2e4c71531b` |
+
+Each gate has exactly 2,000 ordered aggregate receipts and 20 numbered
+checkpoints, and FINAL exactly matches update 2,000 across 92 model and 185
+optimizer leaves. The hard mass, target, obstacle, and per-transition reward
+counts are zero; maximum mass residual is zero and maximum sub-threshold
+step-reward residual is `4.76837158203125e-07`. This is terminal training
+integrity, not a learning pass.
+
+The first two completed fixed-development decisions are deliberately
+asymmetric:
+
+| Panel | Eval job / elapsed | Evaluation SHA-256 | Source-disjoint result | Decision |
+|---|---:|---|---|---|
+| foundation geometry | `8656161` / `00:32:37` | `efa70d65b2acbec058502739d0d19e2aecbbb268801051632d01a4040b760d12` | zero successes at all 20 checkpoints; procedural median nevertheless rises from its prior best `0.6632` to `0.7569 @1600` | continue once to 5,000 |
+| trench topology | `8656167` / `00:32:49` | `776dbdc9b903226d57e777b669b777735a4091092037dcd3da9b2e875c844bb5` | best aggregate is 5/48 at update 1,100; final-window totals are 1, 2, 0, 3, 0 and no cell exceeds 2/8 | stop and diagnose |
+
+Both evaluators verify exact resets and zero rollout-integrity failures.
+Neither panel has a 6/8 two-consecutive-checkpoint cell witness, so B0 remains
+unchecked. Geometry receives the single fresh continuous 5,000-update repeat
+authorized by the frozen median-completion rule; it is not promoted and does
+not qualify for `gpuhe.120h`. Topology receives no more unchanged PPO compute.
+Foundation-distance evaluation job `8656165` remains active and will be
+adjudicated independently before its next allocation.
+
 The trusted C5 population receipts materially narrow the stopped-trench
 interpretation:
 
