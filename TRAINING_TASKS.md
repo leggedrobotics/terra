@@ -2253,21 +2253,21 @@ counts are zero; maximum mass residual is zero and maximum sub-threshold
 step-reward residual is `4.76837158203125e-07`. This is terminal training
 integrity, not a learning pass.
 
-The first two completed fixed-development decisions are deliberately
+The three completed fixed-development decisions are deliberately
 asymmetric:
 
 | Panel | Eval job / elapsed | Evaluation SHA-256 | Source-disjoint result | Decision |
 |---|---:|---|---|---|
 | foundation geometry | `8656161` / `00:32:37` | `efa70d65b2acbec058502739d0d19e2aecbbb268801051632d01a4040b760d12` | zero successes at all 20 checkpoints; procedural median nevertheless rises from its prior best `0.6632` to `0.7569 @1600` | continue once to 5,000 |
+| foundation distance | `8656165` / `00:31:50` | `70466947332bb67923262d306bec55a180e1f3791c0812cd7417ef5b3c639017` | isolated 1/8 successes for d04 at 500, d02 at 600, and d06 at 1,100; every cell is 0/8 at updates 1,600-2,000 and no final-window median exceeds its prior best | stop and diagnose |
 | trench topology | `8656167` / `00:32:49` | `776dbdc9b903226d57e777b669b777735a4091092037dcd3da9b2e875c844bb5` | best aggregate is 5/48 at update 1,100; final-window totals are 1, 2, 0, 3, 0 and no cell exceeds 2/8 | stop and diagnose |
 
-Both evaluators verify exact resets and zero rollout-integrity failures.
-Neither panel has a 6/8 two-consecutive-checkpoint cell witness, so B0 remains
+All three evaluators verify exact resets and zero rollout-integrity failures.
+No panel has a 6/8 two-consecutive-checkpoint cell witness, so B0 remains
 unchecked. Geometry receives the single fresh continuous 5,000-update repeat
 authorized by the frozen median-completion rule; it is not promoted and does
-not qualify for `gpuhe.120h`. Topology receives no more unchanged PPO compute.
-Foundation-distance evaluation job `8656165` remains active and will be
-adjudicated independently before its next allocation.
+not qualify for `gpuhe.120h`. Foundation distance and trench topology receive
+no more unchanged PPO compute.
 
 The geometry-only 5,000-update repeat was sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
