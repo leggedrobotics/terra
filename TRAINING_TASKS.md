@@ -183,6 +183,33 @@ training banks become mandatory after single-map feasibility is established.
     by checksum-copying them to a verified persistent destination with enough
     capacity; a scratch-only checkpoint is not a durable result.
 
+The production launcher is a narrow qualified-recipe path, not another generic
+curriculum framework. Implement it only against the first concrete qualified
+F1 recipe, reusing the proven B0 hashing, GPU, smoke, aggregate, checkpoint,
+and evaluator helpers without reusing the bounded B0 sbatch itself. Its frozen
+acceptance contract is:
+
+- exactly 200 numbered checkpoints at updates `100, 200, ..., 20,000`, with
+  `FINAL` model and optimizer state exactly equal to update 20,000;
+- deterministic promotion-bank evaluation at all 200 checkpoints and
+  development evaluation at `500, 1,000, ..., 20,000` (40 checkpoints);
+- streaming checkpoint verification/evaluation rather than simultaneously
+  loading all 200 policies;
+- 20,000 ordered per-update aggregate receipts with hard-zero mass,
+  target/obstacle mutation, nonfinite, and reward-residual violations;
+- a dependent finalizer that verifies the terminal contract, evaluates the
+  fixed banks, and checksum-copies source, bank, receipts, checkpoints,
+  aggregates, evaluations, and logs to a verified persistent destination such
+  as `/cluster/work/rsl/lterenzi`; and
+- at launch time, at least 16 GiB and 50,000 inodes of scratch headroom for
+  that run. Current estimates are roughly 2.9-4 GiB for 200 base checkpoints
+  plus receipts before the durable archive, but live space must be refreshed.
+
+The final five scheduled promotion evaluations apply rule 13. Until runner
+state is exact, an improving 20,000-update run authorizes a fresh continuous
+40,000-update repeat, not `--resume_from`; after exact runner-state
+checkpointing exists, it may instead extend in genuine 20,000-update chunks.
+
 In this document, **manifest-sealed** means that the declared source, bank,
 configuration, and receipt bytes are content-addressed and must still match
 their frozen SHA-256 manifests when consumed. It does not imply filesystem
@@ -2547,6 +2574,54 @@ diagnostic only and does not qualify a recipe. It rejects unchanged topology
 compute and restricts any later repair to increased training geometry or an
 explicit topology ladder evaluated on a fresh source-disjoint bank.
 
+The minimal topology repair is now preregistered but deliberately waits for
+the active trench-side 2,000-update decision. A no-write feasibility dry run
+can generate 64 train plus eight fresh development sources for every topology
+cell under centered-dihedral IoU `<0.95`, so a full six-cell bank is
+technically feasible. It is not the next scientific treatment:
+
+- the historical B0a train/development topology splits contain cross-split
+  near-duplicates despite disjoint source IDs (maximum IoU `0.959` for
+  straight and `0.969` for disconnected), so those development identities
+  cannot adjudicate the repair;
+- T, X, disconnected, segmented, and straight cells differ materially in dig
+  volume and generator structure, so a 384-map equal-count mixture would
+  confound topology difficulty with the geometry-diversity treatment; and
+- the active straight/side diversity run is the prerequisite causal test. If
+  it plateaus with the same train/development gap, broadening topology would
+  repeat an unresolved failure.
+
+If trench-side passes or remains integrity-clean and improving, build
+`B0-DIVERSITY-T-SEGMENTS-v1`:
+
+- only `t_segmented2_both_d02` and `t_segmented3_both_d02`;
+- 64 unique train sources per cell, retaining the original eight B0a train
+  identities byte-for-byte and adding 56, for 128 train maps total;
+- eight brand-new development sources per cell in a new seed namespace, for
+  16 development maps total. No previously observed topology development
+  identity may be reused;
+- scratch seed `2026072705`, base `resnet_spatial_8x8`,
+  `corrected_dense_v1_trench_absolute_off`, broad both-side d02 dumping,
+  `3.25x` capacity, no obstacles, exact reset/evaluator, PPO, entropy, and
+  horizon unchanged; and
+- centered-dihedral IoU `<0.95` for every added train geometry against
+  retained train and all historical development geometries, and for every new
+  development geometry against all train, historical development, and earlier
+  new-development candidates. Pin B0a, base builder, source corpus, and all
+  generator hashes; recompute raster topology/component metadata; require
+  unique source/map/dig/target hashes, at least 40% capacity on each side,
+  exact loader checks, manifest, galleries, and visual review.
+
+Its update-1 gate must prove exactly 128 train maps and the usual finite/mass
+integrity contract. Evaluate the 16 fresh development maps every 100 updates.
+Each cell requires 6/8 at two adjacent checkpoints plus a saved legal
+trajectory. Apply rule 13 at 1,000, 2,000, and 5,000; one passing cell and one
+plateau permits at most one failed-cell isolate. A still-improving but
+unqualified 5,000-update screen is explicitly non-saturated and receives a
+separately declared next bounded milestone, not `gpuhe.120h`. T, X, and
+disconnected cells remain later K0 stages. The full 384-train/48-fresh-dev
+six-cell bank is a technically viable fallback, not an authorized launch.
+
 The geometry-only 5,000-update repeat was manifest-sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
 
@@ -3283,7 +3358,10 @@ acceptance evidence in the corresponding section passes.
     cell isolates), expand the eight declared primary easy cells, and pass the
     loader/memory/update-1 gates.
 12. [ ] Run the two scratch F1 family specialists; require family and per-cell
-    gates twice with zero integrity failures.
+    gates twice with zero integrity failures. As soon as either independently
+    qualifies, implement the narrow manifest-sealed production launcher
+    against that exact recipe and start its fresh 20,000-update
+    `gpuhe.120h` run without waiting for the other family.
 13. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
     new-distribution small multitask teacher.
 14. [ ] Grow and qualify S0 from G0, then begin the checkpoint-bounded K0 map
