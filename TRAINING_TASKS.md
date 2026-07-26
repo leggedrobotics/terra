@@ -2085,6 +2085,23 @@ This is a compute receipt, not a learning claim. Each dependent evaluator is
 `afterok`-gated on its matching update-1 smoke and complete 1,000-update
 training receipt.
 
+Continuous-run update-1 result: **PASS for all five panels**.
+
+| Panel | Checkpoint SHA-256 | Aggregate SHA-256 | Smoke-gate SHA-256 |
+|---|---|---|---|
+| foundation geometry | `22a2552778e259af7102959004da83c64911b0df89a6b0a3f347ec3607452dc7` | `517ea36508f89a3d87ae9f8e7353bd1e82bd774d33bead7ab84f452068db3440` | `b4dbc6aabe687e317ac337f5342c8f9a2a0bf9c4b69a10e9a831c6caa03c7ba3` |
+| foundation distance | `6bac8d7df0240066070ed12bd1ccc0150061257be140d89c3f00785c6b7b8790` | `22191963a4c7c232a848113ca2a57846f7dffbdd48809d242683148fb7e31bcb` | `50e986d8b954709c8e806da1aeb5229878bab89fb6595e410b87a89f0b6cc2f7` |
+| trench distance | `9f50256934d30187a0080b8b86ed9113cf880651bdf488ea492ef56e001531ec` | `dec158b290aef6064b1ab542d86d346c3921f96802c7764bac1833ac4501ba42` | `223cf7ed8e158906f405605713a0100ea5fcbb2e0213039ffda3ef37c1fd4a23` |
+| trench side | `689b24819f5b8d8959b5d1e39c40aa2afe1029958f648e271a96b159034332c5` | `d88c15e35c21acc540c8ca208b89265d12fce42c39f8be9d63bf8ddcf0a9b938` | `f48287292e749335f72839a2ff228097ab157eebee0c46e10570e58c04bcd999` |
+| trench topology | `889d7b7dbbb5ff786336b12608c72ef2e306128544dcfc5f3e4482bec11f4c52` | `f5b37754ba65fb2408df92e700644f9d150ccbf40358554e783061b8c355c927` | `d12efa398fc8edbe730e7202c4dca6daeda08e3764a66354e94520049f8e62e1` |
+
+Every smoke gate independently reloads 92 finite model leaves and 185 finite
+optimizer leaves, verifies the exact panel manifest and reward/completion
+contract, and records zero mass, target, or obstacle integrity violations.
+All five jobs passed the pinned four-GPU CUDA, cuDNN, NCCL, seven evaluator
+tests, and two training-receipt tests before the smoke. This authorizes their
+continuous production bodies; it is not yet task-learning evidence.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
