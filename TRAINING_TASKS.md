@@ -2313,7 +2313,8 @@ The geometry-only repeat independently passed its update-1 smoke:
 - maximum mass residual, target mutation, and obstacle mutation are zero.
 
 This authorizes the continuous 5,000-update body. It remains an integrity
-result only.
+result only. The corresponding continuous-run W&B ID is `m0n2yngc`; it is an
+operational pointer, not task evidence.
 
 The trusted C5 population receipts materially narrow the stopped-trench
 interpretation:
