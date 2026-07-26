@@ -7,7 +7,8 @@
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
   generation passed; the first B0b submission was stopped before production
   after infrastructure and receipt-gate failures; all five corrected immutable
-  replacement pairs are submitted and their exact update-1 gates are pending
+  replacement update-1 gates passed and their 500-update production phases are
+  running
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -1950,6 +1951,22 @@ Corrected B0b submission at `2026-07-26T08:31:24+02:00`:
 This is again a submission receipt only. No B0b result is accepted until the
 new-root saved checkpoint, aggregate, training gate, and deterministic
 development evaluation pass.
+
+Corrected update-1 result: **PASS for all five panels** at
+`2026-07-26T08:42+02:00`.
+
+| Panel | Checkpoint SHA-256 | Aggregate SHA-256 | Smoke-receipt SHA-256 |
+|---|---|---|---|
+| foundation geometry | `8260b717e9239f8074b9f6fd1455506720a3e9d46f95a789f6f7b3bd69247fb5` | `72d8241ddae904f729f27c0126c68d39f687efe9a8a3f1e291ff2f26f30cd451` | `7e6c9a9d7ece50d77adc9f9f72d5ec04fc9986a33ac39ef518d4b9dbe4536b78` |
+| foundation distance | `baa60b77639b34abd8e4d84a0457565bbc77dbf2bbbbe2286359ad4a6948f6ad` | `3b39cc7fb9d77e0ad29ec1c4f563b4c3f8113cbd9d83c78e25af784158846072` | `c256533dc549cfc44c65703111687130806b0cedc76eb05ac13bfeac68b3fbda` |
+| trench distance | `f7a6a4ae3463c41a27a05b115ce0c0b67ea477e62ec3475f8adb210baec89c5d` | `37cdca6b460c307bf7aee05c7ed9e023463628f02dd462b55612ff012c8032c3` | `f9941ec6641cb79f92c93517253627232051e0e4aea19374f7e2756230862746` |
+| trench side | `09573db08efe194fe227d7cbfc33bbaf3668e16511c47b005fda22f9ebf384ee` | `ea0fe566961f50edc0efb57efb65d1aa99971bf4103964e2d392080943cd6734` | `6f3d1ac117feb1df7e1899568b0a1581ba745c342b209f16c83f1209faef2d92` |
+| trench topology | `86dae52e7af64321b182672e8ab29aa19b62d10545499fde3aee105ce31f3bcd` | `6746964f2f2e0d593f8c0248fbde90ed776e3f439b5b5734b37f7bf1660d9da0` | `9155c6c7f58ead49cd2206d30908cae1969407e0b34b6f5ce364e403eceffe2f` |
+
+Every receipt records 92 finite model leaves, 185 finite optimizer leaves,
+zero transition-integrity violations, the exact panel manifest, and its frozen
+foundation or shaping-off trench reward contract. This passes the launch gate
+only; it does not establish a dynamic cell witness.
 
 #### B0c — Expand only witnessed easy cells
 
