@@ -2709,11 +2709,23 @@ from the same frozen algorithm, but with disjoint identities:
 - eight development identities per cell; and
 - eight sealed identities per cell.
 
-No small-panel identity may appear in the expanded bank. B0 is complete only
-after the expanded-bank loader, split-disjointness, C1a capacity, visual,
-memory, and exact production-shaped update-1 compile gates all pass. The
-distance-6/8, T/X, and disconnected cells remain named K0 candidates even when
-they pass B0b; they are not mixed into F1.
+The resulting foundation and trench family banks contain 256 training maps and
+32 maps in each evaluation split; the combined easy bank contains 512
+training maps and 64 maps in each evaluation split. Use a new seed/map-ID
+namespace: no source, map, target, or identity from B0a or any diversity,
+repair, or diagnostic panel may appear in the expanded bank, and the four
+expanded splits must be mutually source-disjoint. The current B0a and
+trench-side-diversity builders deliberately preserve panel prefixes/identities
+and therefore cannot be reused unchanged.
+
+B0 is complete only after the expanded-bank exact-count loader,
+split/source/hash disjointness, C1a capacity, numeric-range, paired-geometry,
+visual, memory, and exact production-shaped update-1 compile gates all pass.
+F1 qualification uses only the frozen promotion split, asserts exactly 32
+family and eight per-cell episodes, and requires adjacent scheduled
+100-update evaluations; development remains diagnostic and sealed remains
+unopened. The distance-6/8, T/X, and disconnected cells remain named K0
+candidates even when they pass B0b; they are not mixed into F1.
 
 Before materializing or launching the fixed bank, measure loader memory and
 first-update compile with the intended 64x64 arrays. The training contract is
