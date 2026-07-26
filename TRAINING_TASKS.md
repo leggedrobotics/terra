@@ -2502,6 +2502,23 @@ performance evidence. The fresh 1,000-update body is now running; no learning
 claim exists until its full integrity gate and fixed 32-map development
 evaluation complete.
 
+Future B0 submissions use terra-baselines
+`588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
+explicit. The submission wrapper now validates the declared
+`base_v1`, `trench_side_diversity_v1`, or
+`foundation_distance_diversity_v1` treatment against the requested panel,
+exports the treatment to both the train and dependent evaluator jobs, records
+it in the submission receipt, and requires `PYTHONDONTWRITEBYTECODE=1` so a
+read-only packaged source tree cannot be mutated by imports. Focused wrapper
+tests exercise the successful export/receipt/dependency path and both
+pre-submission rejection paths (`3 passed`); the complete CPU suite remains
+green (`137 passed`). This is a launch-provenance hardening change, not a
+training treatment. It applies to every fresh 2,000-, 5,000-, or qualified
+production package. The active 1,000-update package remains pinned to
+terra-baselines `51fd8d3e4478c828860ae0a4654b6484fda41db7`: its accepted
+update-1 smoke independently proves that the intended 256-map diversity
+treatment was active, so the wrapper hardening does not invalidate that run.
+
 Trench topology likewise receives exactly one evaluator-only policy cross at
 the post-hoc update-1,100 development peak before a repair is chosen. It is a
 diagnostic for action mode versus identity generalization, not an independent
