@@ -2578,6 +2578,17 @@ This is submission evidence only. Update 1 must independently prove the exact
 256-map dataset, finite model/optimizer/gradient state, frozen treatment, and
 zero integrity failures before the body is accepted.
 
+The 2,000-update foundation-distance update-1 smoke passed. Job `8681541`
+started on `eu-g6-069` with exactly four RTX 4090s; the independent gate
+verified the exact 256-map manifest, seed `2026072702`,
+`corrected_dense_v1`/`exact_visible_dump_v1`, base
+`resnet_spatial_8x8` MLP, no resume/warm start/teacher, finite model,
+optimizer, and gradient state, and zero hard integrity counters or mass
+residual. Its read-only smoke-acceptance receipt SHA-256 is
+`933537ccf0e757f4a850321f4c688e01c7d52dd6e84c09ddc6b70fe486cd368c`.
+This admits the continuous 2,000-update body only; fixed-development learning
+evidence remains pending.
+
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
 explicit. The submission wrapper now validates the declared
