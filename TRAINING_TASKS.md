@@ -1256,6 +1256,19 @@ Bounded trajectory-diagnosis launch receipt:
 - one-RTX-4090 job `8642618` was submitted at `2026-07-26T02:49:32Z`;
   submitted-job receipt SHA-256 is
   `e2062250a9153eda0968250238abd401f476e94dde77c5edfac82dcc893acfe8`.
+  It failed after `00:00:26`, exit `1:0`, because the shared Euler venv has no
+  `pytest`; runtime and both immutable manifests passed, and no replay began;
+- the failed root remains sealed. Retry root `trajectory_v1_retry1` changes no
+  treatment or diagnostic logic and invokes the same two focused test
+  functions through Python `runpy`;
+- retry launch-receipt and source-manifest SHA-256 values are
+  `259e78fc95227daca3629126b3d2a5c6f592f437aa7a56882ee3ce7b526f1236`
+  and
+  `63c103e5e261671a09e6bf8d2d2ea529f903b17100e0b6b11ba52ab57ce948a1`;
+  and
+- retry job `8642753` was submitted at `2026-07-26T02:52:14Z`; its
+  submitted-job receipt SHA-256 is
+  `e46e03b26e126c17ae250ed2344f7d442160f8c1c1b75a7ee92a7916318fab1a`.
   Submission is not diagnosis evidence.
 
 Pass gate:
