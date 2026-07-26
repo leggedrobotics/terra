@@ -2216,6 +2216,22 @@ Trench distance and trench side are absent by design. This is a compute
 receipt only; all three new runs require fresh update-1, 2,000-receipt,
 20-checkpoint, and fixed-bank gates.
 
+Continuous 2,000-update update-1 result: **PASS for all three submitted
+panels**.
+
+| Panel | Checkpoint SHA-256 | Aggregate SHA-256 | Smoke-gate SHA-256 |
+|---|---|---|---|
+| foundation geometry | `a532a2f59fd8c90c72296167fda3c3c798664e579676e75b32230d66844eb658` | `041bc3ebb75c21b921eeaae1de44d9bb1d7973873e7adc3a97b4113800449521` | `4e1cd162962c0ff00061e065ea9da505c9a928b78a6b4002b7d915b792f62f54` |
+| foundation distance | `a0dfd18de4dcd8fc41baf064caa4fbd9b8f61a036b8171b54b3627295c1bcfa4` | `7e0c97d7809879bf88fa4228726173a4f24871d71eea8860393919476777ddbf` | `9ffde7d5ec61a3d872280da7fa7713e4abcfff156ea66d806cf338797952e1e6` |
+| trench topology | `e4fdb0304b8d951ec6183d937705016c2e7dece4d63f1149fe78016f4beb20b5` | `efa3c50d99ccb7ea6c4c3b60cb340328df8e0c7bbcbee74fd95b6798c0bb1c1c` | `ed84a5bfacfc40a8110d38b01b5352f034bbca10579460b3174096e3d268ee35` |
+
+Each gate reloads 92 finite model leaves and 185 finite optimizer leaves,
+matches the exact train-panel manifest and declared reward/completion contract,
+and records zero mass-residual, target-mutation, or obstacle-mutation
+violations. All three production bodies started after this gate. This is an
+integrity authorization only; the 20-checkpoint source-disjoint task curves
+remain the learning decision.
+
 The stopped trench panels have a separate, bounded action-trace diagnosis
 queued at `2026-07-26T11:56:10+02:00`. This is evaluator-only compute: it
 does not add PPO updates or alter the fixed bank.
