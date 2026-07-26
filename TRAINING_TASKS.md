@@ -2468,6 +2468,23 @@ pass the exact checkpoint/optimizer/aggregate/dataset gate before the
 production body is accepted; the 10-checkpoint source-disjoint curve then
 decides pass, bounded continuation, or stop.
 
+The update-1 smoke gate subsequently passed:
+
+- checkpoint, aggregate, 128-map train manifest, and smoke-gate SHA-256 values
+  are
+  `9721979acde7700327b6d6012337d8896b0572ad7ee3e8fd980e3f828da538b5`,
+  `a56b0c5701cc9989e1f3821a759d1bf29ceb7f9ff93d3a3421cb3d08ed265fdc`,
+  `183444a6be146b097afe56199abd9a83eda71e8dd9a5d7c1d72f3f2573c75dab`,
+  and
+  `a6bd892801ffea9c6cbd397ba36bab48a548aab037a892a82dbaf3564dbcb6e9`;
+- all 92 model leaves and 185 optimizer leaves are finite;
+- the exact seed, reward, architecture, entropy, PPO, reset, 450-step horizon,
+  and one-update checkpoint configuration match; and
+- maximum mass residual, target mutation, and obstacle mutation are zero.
+
+This authorizes the continuous 1,000-update body. It remains an integrity
+result only, not a map-learning or promotion result.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
