@@ -198,7 +198,7 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
-| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] clean retry jobs 8643823/8643824 submitted |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] update-1 smoke passed; production running |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
@@ -1386,6 +1386,20 @@ and the same source/bank manifests. Training/evaluation jobs
 their submission receipt is
 `8c7431a0a5c44723ac7ea48637692870406576e99a5369cf40a9d542ba9a6668`.
 Both pending jobs have `eu-g6-064` in the scheduler's explicit exclusion list.
+
+Retry job `8643823` then passed the four-device CUDA/cuDNN/NCCL preflight, all
+nine source-contract tests, and the exact saved update-1 smoke on
+`eu-g6-062`. `SMOKE_GATE.json` is
+`172a86f1449d5f10241480cd279a68fc2f1d42352e1641348fd167bafbd35dd5`;
+it reloads checkpoint
+`2a3779a326a045d346e3918e2dbde297b1ac90d93a0a6a83a65402954a106a2f`,
+checks 92 finite model and 185 finite optimizer leaves, verifies the exact
+treatment/configuration, and reports zero mass, target, or obstacle
+violations. Its update-1 population receipt is
+`307556881f098f99972e52538876cc290b674951494e105ad8b370166dc310f7`.
+The independent 1,000-update production initialization then started as W&B run
+`nosra33p`; neither smoke completion nor a running production job is an F0R
+mastery result.
 
 Decision:
 
