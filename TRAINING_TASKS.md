@@ -2289,6 +2289,36 @@ does not add PPO updates or alter the fixed bank.
   mass, completion, and exact-reset verification. Both jobs exclude
   `eu-g6-064`.
 
+Both replacements passed: distance completed in `00:11:01`, side in
+`00:11:45`, with exit code `0:0`, exact-reset verification, and zero rollout
+integrity failures. Their output SHA-256 values are respectively
+`f86fbdc3a64a22a241d71f4c41e10bc53215614cff7524317b8d625edd107dc2`
+and
+`3bf209cef67fe6db659890cd853153f3b4dae04addfe5a9aa81ee7aa277925f7`.
+
+| Panel / update | Maps issuing `DO` | `DO` / effective `DO` actions | Median action switches out of 449 | Deterministic development result |
+|---|---:|---:|---:|---|
+| distance / 200 | 30/32 | 993 / 177 | 438 | cell medians 0.157-0.582 |
+| distance / 300 | 26/32 | 488 / 148 | 284 | cell medians 0.195-0.624 |
+| distance / 600 | 4/32 | 163 / 26 | 444 | every cell median 0 |
+| distance / 1,000 | 4/32 | 14 / 14 | 444 | every cell median 0 |
+| side / 200 | 14/16 | 322 / 53 | 223 | both-side 0.428; one-side 0.305 |
+| side / 400 | 9/16 | 318 / 36 | 442 | both-side 0.421; one-side 0 |
+| side / 600 | 1/16 | 2 / 2 | 444 | both cells median 0 |
+| side / 1,000 | 2/16 | 217 / 8 | 442 | both cells median 0 |
+
+The deterministic development failure is thus an action-mode change, not a
+global physics veto: all four late distance maps that issue `DO` have at least
+one effective `DO`, and all 14 update-1,000 distance `DO` actions are
+effective. Side also retains at least one effective `DO` path. The greedy
+policy instead spends nearly every transition alternating forward, backward,
+and rotation actions; the high switch count rules out a single static no-op
+but identifies movement chattering. Side update 1,000 repeats many ineffective
+`DO` actions on only two maps, so it has both chattering and local repeated-dig
+behavior. These traces explain how the visible zero is produced; they do not
+yet distinguish whether sampled action selection recovers useful behavior or
+whether that behavior generalizes.
+
 The output is diagnostic evidence for selecting a single controlled repair,
 not a promotion gate by itself. After the action-trace replay, run the minimal
 fixed-checkpoint train/development by deterministic/sampled cross above.
