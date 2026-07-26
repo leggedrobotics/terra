@@ -2359,6 +2359,56 @@ to a continuous 20,000-update `gpuhe.120h` production run. An unchanged
 distance 5,000-update run and reward, entropy, architecture, or cell-specialist
 treatments remain unauthorized.
 
+The foundation-distance diversity-only bank was generated and statically
+accepted at `2026-07-26T16:57+02:00`:
+
+- canonical local candidate:
+  `/home/lorenzo/moleworks/.artifacts/terra_b0_foundation_distance_diversity_20260726`;
+- schema `terra_b0_foundation_distance_diversity_v1`, with 64 training source
+  geometries and eight unchanged development source geometries shared across
+  each of `f_apron_d02`, `f_apron_d04`, `f_apron_d06`, and `f_apron_d08`;
+- 288/288 unique map IDs and target arrays, 72 paired geometry groups,
+  source-disjoint train/development splits, and 64/8 unique train/development
+  sources. Every paired group preserves its excavation geometry while changing
+  only the declared dump-distance cell;
+- the exact original eight training groups and all eight development groups
+  are retained. All record fields except the intentionally renamed stratum,
+  and all target, occupancy, dumpability, action, and distance tensors, match
+  the frozen B0a identities byte-for-byte;
+- the source corpus, five procedural generator files, B0a identity and file
+  manifests, and base B0 builder are all SHA-256 pinned before generation;
+- an earlier 0.995-IoU candidate was rejected after detecting two
+  train/development near-duplicate geometries. The accepted generator caps
+  cross-group dihedral IoU at 0.95, rejected two training proposals, and
+  observed a maximum of `0.9470198675496688`;
+- every emitted dataset was passed after writing through Terra's exact runtime
+  loader: four cell directories and one panel directory for each split, ten
+  directories total. This rechecks exact visible-mask capacity, tensors,
+  metadata, distances, slot enumeration, and source provenance on the bytes
+  training will consume;
+- identity-manifest, `provenance.json`, `validation.json`, and `files.sha256`
+  SHA-256 values are
+  `da0b1ee39bea8af1a85b7c2fbbdb491a38c0981c167aec264bae5198adf3fae9`,
+  `0e4069dc1e648b723423dc2e44a78389122f63a05674d33c37506ef658520ab2`,
+  `f48afeb33ff82ce043a7b94ae8dcb39f53176d8e555e4c04748e43190677ca84`,
+  and
+  `ac3232e3322b4268fbb35027f0e5734a1da33e86d40f72295af9b0730f04e940`;
+- all 3,493 manifest-listed files re-hash successfully. The focused new and
+  existing generator/loader suites pass (`14 passed, 4 subtests`), as do Black
+  and whitespace checks; and
+- visual review of train, development, and paired galleries confirmed varied
+  foundation footprints, large all-around dump aprons, monotonic
+  d02/d04/d06/d08 spacing on fixed paired excavations, no obstacles, and no
+  obvious impossible map.
+
+This is static bank evidence, not a learning result. It authorizes exactly one
+fresh continuous 1,000-update diversity-only foundation-distance treatment.
+Its development decision remains the exact unchanged 32-map bank. A single
+additional success in the family/current worst cell or `0.01` absolute median
+terminal-completion gain triggers the fresh 2,000-update milestone under rule
+13; the same rule governs 5,000. Only two clean source-disjoint qualifications
+authorize the separate 20,000-update, five-day `gpuhe.120h` production run.
+
 Trench topology likewise receives exactly one evaluator-only policy cross at
 the post-hoc update-1,100 development peak before a repair is chosen. It is a
 diagnostic for action mode versus identity generalization, not an independent
@@ -2401,6 +2451,35 @@ maps. Because the development bank selected update 1,100 and was already
 observed across 20 checkpoints, any repair chosen from this result must be
 tested on a fresh source-disjoint bank. No topology PPO repair, specialist,
 B0c, or long run is authorized before acceptance and interpretation.
+
+The topology policy cross passed post-run acceptance at
+`2026-07-26T16:58:45+02:00`:
+
+- job `8671422` completed with exit code `0:0` in `00:20:51` on one RTX 4090;
+- output SHA-256 is
+  `9df0a0acaf5974dd6fec8d7b35d195570466f3f6b343d35062422a6ed1497c16`;
+- all 405 source and 3,393 bank files, the exact update-1,100 checkpoint, both
+  split manifests, ten 48-episode records, 480 episode records, and all 33
+  acceptance checks re-verified. Exact resets passed with `env_steps == 0`;
+  mass residual, target/obstacle mutation, nonfinite state, slot/termination
+  disagreement, and dump-mask integrity failures are all zero; and
+- acceptance-receipt SHA-256 is
+  `48215735e6dc0cbcec824ee0fe281a137fd05f15fa94c0fc8ff082737d9d375f`.
+
+| Split | Deterministic | Four sampled seeds |
+|---|---:|---:|
+| exact training identities | 26/48 | 107/192 |
+| source-disjoint development identities | 5/48 | 31/192 |
+
+Sampling adds only `0.015625` train success and `0.057292` development success,
+while train-minus-development gaps remain `0.4375` deterministic and `0.395833`
+sampled. Development T, X, and disconnected cells remain zero under all four
+sampled seeds; only segmented and straight cells show any development success.
+The primary failure is therefore source-disjoint topology/geometry
+generalization, not greedy action selection. The post-hoc update-1,100 peak is
+diagnostic only and does not qualify a recipe. It rejects unchanged topology
+compute and restricts any later repair to increased training geometry or an
+explicit topology ladder evaluated on a fresh source-disjoint bank.
 
 The geometry-only 5,000-update repeat was manifest-sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
