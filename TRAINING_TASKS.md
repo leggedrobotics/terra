@@ -2102,17 +2102,20 @@ All five jobs passed the pinned four-GPU CUDA, cuDNN, NCCL, seven evaluator
 tests, and two training-receipt tests before the smoke. This authorizes their
 continuous production bodies; it is not yet task-learning evidence.
 
-The post-hoc reproducibility gate is terra-baselines `d17d0be`. After each
-1,000-update run completes, it must compare the old 500-update run against the
-new continuous prefix at checkpoints 100/200/300/400/500: exact model,
-optimizer, and train-step trees plus all 500 aggregate payloads, ignoring only
-the deliberately different `run_name`. Its three focused unit tests, Black,
-byte-compilation, and whitespace checks pass. This gate is implemented but is
-not marked passed until the ten-checkpoint runs finish.
+A proposed bitwise cross-process prefix gate in terra-baselines `d17d0be` was
+tested and rejected, then removed by `7879be1`. All five update-1 aggregate
+payloads match their original 500-update counterpart exactly apart from
+`run_name`, but the first aggregate differences appear at update 15 and all 92
+model leaves differ by update 100 in the first three runs. The maximum
+per-leaf absolute difference is `0.585-0.869`. The only configuration
+differences are run/path labels and the declared 500-versus-1,000 horizon;
+learning rate, entropy schedule, PPO, seed, maps, reward, and model are
+unchanged. Therefore cross-process bitwise equality is not a valid gate for
+this GPU training path. Treatment/config receipts and deterministic
+source-disjoint task curves remain authoritative; the continuous 1,000-update
+runs are repeats of the same recipe, not exact replays of the first process.
 
-The first production aggregate already matches its original 500-update
-counterpart exactly, apart from `run_name`, for all five panels; every hard
-integrity count is zero. The new W&B run IDs are:
+Every update-1 hard integrity count is zero. The new W&B run IDs are:
 
 | Panel | W&B run |
 |---|---|
