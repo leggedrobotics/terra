@@ -2298,6 +2298,23 @@ This remains a compute receipt. Its own update-1 smoke, complete 5,000-update
 integrity gate, and deterministic development curve are mandatory; it cannot
 inherit evidence from the 2,000-update process.
 
+The geometry-only repeat independently passed its update-1 smoke:
+
+- checkpoint, aggregate, exact 16-map train manifest, and smoke-gate SHA-256
+  values are
+  `620e4586f720351652cb2430ec169408fd99f4dcd7239d6edb4d6d19425321a2`,
+  `8f5b2fbd3afa2f3e09e88fc2d2689d85d255b9a41dc9d9708a007de5aaa65917`,
+  `dd30a0e5d66ac6b66da2b4a1172d74b1a9d7a420829157c02e75a0d5beb14463`,
+  and
+  `ec61cebf89f33a44fea4b9e84611121aaaf3ae3e38406685cd1b5ba0d8c98199`;
+- all 92 model and 185 optimizer leaves are finite and the declared seed,
+  reward, architecture, entropy, PPO, reset, horizon, and 5,000-update target
+  match; and
+- maximum mass residual, target mutation, and obstacle mutation are zero.
+
+This authorizes the continuous 5,000-update body. It remains an integrity
+result only.
+
 The trusted C5 population receipts materially narrow the stopped-trench
 interpretation:
 
@@ -2652,7 +2669,8 @@ smoke:
 - maximum mass residual, target mutation, and obstacle mutation are zero.
 
 This authorizes only the continuous 2,000-update body. It is an integrity
-result, not a trench-side witness.
+result, not a trench-side witness. The corresponding continuous-run W&B ID is
+`d5srft2n`; it is an operational pointer only.
 
 #### B0c — Expand only witnessed easy cells
 
