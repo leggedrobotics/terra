@@ -168,6 +168,16 @@ training banks become mandatory after single-map feasibility is established.
     With an exact checkpoint contract, extend in 20,000-update chunks. Long
     training never changes map, reward, reset, PPO, or architecture treatment
     in place.
+16. A qualified long run uses a separate production launcher, never the
+    bounded B0 screen launcher. Before submission, prove the exact qualified
+    recipe and train/promotion/development bank hashes, scratch space and inode
+    headroom, four RTX 4090s, CUDA/cuDNN/NCCL preflight, `gpuhe.120h`,
+    `5-00:00:00`, `2,621,440,000` transitions for 20,000 updates, update-1
+    finite smoke, numbered-checkpoint cadence, dependent terminal verifier,
+    and fixed-bank evaluator. Reject `--resume_from` until a checkpoint
+    contract serializes the full runner state. Seal selected final artifacts
+    by checksum-copying them to a verified persistent destination with enough
+    capacity; a scratch-only checkpoint is not a durable result.
 
 ## 4. Dependency graph
 
@@ -1651,11 +1661,14 @@ teacher. No medium growth or reward curriculum begins before it passes.
 
 Dependency: G0 passes.
 
-Use the existing function-preserving checkpoint-growth path to initialize one
-medium `resnet_spatial_8x8_se` student from the qualified small multitask
-teacher. Fresh SE parameters and widened/deeper parameters follow the existing
-growth contract; optimizer and training-schedule semantics must be stated in
-the run receipt.
+The existing growth utility is an approximate grown warm start, not yet a
+proven function-preserving transform for base `resnet_spatial_8x8` to medium
+`resnet_spatial_8x8_se`: widened slices and new SE parameters are freshly
+initialized. Before S0, either make that exact or ratify the approximate
+contract with a frozen-observation policy-logit/value delta gate and an
+explicit threshold. Initialize through `--warm_start_from`, strip inherited
+optimizer/update state, preserve parent and growth hashes, and state the new
+optimizer and training-schedule semantics in the run receipt.
 
 Train on the exact same corrected easy 50/50 bank used by G0. E8 remains a
 zero-shot historical reference and supplies no parameters or distillation
@@ -1674,7 +1687,8 @@ growth/qualification evidence; it is not part of the minimal first set.
 
 ### B0 — Rebuild quantitative cells, then expand source-disjoint banks
 
-Dependency: both F0 probes pass.
+Dependency: the retained foundation F0 witness and shaping-off trench F0R
+witness pass.
 
 Do not enlarge the failed M0-M2 bank unchanged. Its all-around and large-apron
 foundation cells differ by roughly an order of magnitude in relative dump
