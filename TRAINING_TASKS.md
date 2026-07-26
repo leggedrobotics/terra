@@ -1,7 +1,8 @@
 # Terra Training Tasks
 
-- Status: active recovery execution; C0-C5 and C1b complete; D1/D2 running;
-  F0 submitted and awaiting allocation
+- Status: active recovery execution; C0-C5 and C1b complete; D1 deterministic
+  output under integrity diagnosis; D2 sampled evaluation running; first F0
+  attempt preserved and replacement F0 source being sealed
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -183,8 +184,8 @@ Task index:
 | ID | Priority | Cost class | Depends on | State |
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
-| D1 | P0 | evaluation only | D0 | [ ] running: `8626341`; preflight `8626340` passed |
-| D2 | P0 | evaluation only | D0 | [ ] running: `8626341`, `8626343`; preflight passed |
+| D1 | P0 | evaluation only | D0 | [ ] 20/20 records saved by `8626341`; observer mismatch under diagnosis |
+| D2 | P0 | evaluation only | D0 | [ ] deterministic 20/20 saved; sampled `8626343` running |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
 | C1a | P0 | Terra transition/tests | C0 | [x] complete |
@@ -194,7 +195,7 @@ Task index:
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] foundation GPU smoke passed; trench pending; train `8629884`, `8629885`; eval `8629886`, `8629887` |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] first attempt stopped by C5 gate defect; corrected retry pending |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -754,6 +755,41 @@ Machine-readable smoke receipt:
   SHA-256
   `5ca79f8bdd1e37030f4374923a631f75a3fe1ae58e6f51b21b5b41802a1e77fa`.
 
+C5 corrective amendment, 2026-07-26:
+
+- the first foundation production run exposed a false hard failure in schema v1:
+  reward and reward components were accumulated independently for as many as
+  450 signed float32 steps and only compared at episode end;
+- terra-baselines `c58ad23` changes the hard invariant to reward reconstruction
+  on every transition, while retaining the independently accumulated
+  episode-level difference as an explicitly informational drift metric;
+- `terra_training_episode_aggregate_v2` records both quantities separately, and
+  the checkpoint-blocking gate uses only
+  `step_reward_residual_violation_count`;
+- a deterministic 450-step regression with 225 rewards of `+0.8`, 225 of
+  `-0.8`, and exact `0.005` existence components reproduces a v1 episode drift
+  violation while every per-transition residual is exactly zero;
+- a true per-transition missing-component case still fails;
+- the full terra-baselines suite passes 131 tests with 69 warnings, the focused
+  aggregate suite passes 6 tests, shell syntax, byte-compilation, and critical
+  Ruff checks pass;
+- a real reduced F0-path PPO checkpoint reloaded with 92 finite model leaves,
+  185 finite optimizer leaves, schema v2, and zero transition-level violations:
+  checkpoint SHA-256
+  `ec48f2058d64f7888745068f4bbff91ac66c17ddf1c9566997ccafea417c1064`
+  and aggregate SHA-256
+  `4475d5ffc870a64255fd426329e876c8af7f87c4112bf6630e8675d184a6171e`;
+  and
+- a separate horizon-one PPO smoke forced one completed timeout episode whose
+  return and components reconstruct exactly, with zero mass, mutation, or
+  step-reward violations: checkpoint SHA-256
+  `8805fcf070776b95672d3e025cb0742801348ef6dc0aacd2ea473b45633c71b8`
+  and aggregate SHA-256
+  `6cc302e0a03a19212050f20962e8206ab7078e6777e047192821322074693411`.
+
+This amendment repairs the receipt gate; it does not change PPO, reward values,
+map identity, reset, model, or the preregistered F0 feasibility treatment.
+
 The completed runs expose a logging defect: scalar reward-component fields are
 taken from the final state of one environment, while terminal completion fields
 cover device 0 and pool successes with timeouts.
@@ -927,8 +963,40 @@ Foundation update-1 GPU smoke receipt, job `8629884`:
   and
 - production continued as W&B run `u7hhtnrh`.
 
-This closes the foundation half of checklist item 7. The item remains open
-until the independent trench smoke passes.
+The independent trench update-1 smoke in job `8629885` also passed the same
+four-RTX-4090 runtime, finite-checkpoint, configuration, and transition gates:
+
+- smoke gate SHA-256:
+  `5ba0469aa8d5ef2b7faeffe86461682c194e9d7c60d241575c23f0397a2ea888`;
+- FINAL checkpoint SHA-256:
+  `69c95ba12de91e7260520c7800d6d2be88b2c7955b4ba9ba01423100417adedc`;
+  and
+- update-1 aggregate SHA-256:
+  `f0b8a2fa7aa3055abb49c0748deb3ec8ce52b4ac07613a5f96b012446455ae7b`.
+
+First-attempt incident receipt:
+
+- foundation production job `8629884` completed 56 valid updates at roughly
+  30.5k global transitions/s, then failed before update 57 could be written or
+  before the first update-100 checkpoint;
+- the sole reported failure was
+  `reward_residual_violation_count=1`; log SHA-256
+  `5bc005ec3172f3b9fc51713e5b06f8246b18a4dacd99457b04f7195ef5da2d1e`;
+- the deterministic long-episode regression above proves this was a C5
+  float32-association false positive, not evidence of a missing reward component
+  or failed map feasibility;
+- dependent foundation evaluation `8629886` was cancelled by `afterok`;
+- trench job `8629885` was intentionally cancelled after its smoke and before
+  production execution under the known-defective v1 gate; dependent evaluator
+  `8629887` was cancelled; and
+- all first-attempt source, logs, smokes, and 56 foundation aggregate receipts
+  remain preserved under the original immutable F0 root.
+
+No first-attempt production result is admissible as F0 evidence. Replacement
+jobs must start from scratch at the same declared seeds and treatment under
+terra-baselines `c58ad23`, use a distinct immutable `f0_retry1` root, and repeat
+both exact production-shaped update-1 GPU smokes under schema v2. Checklist
+items 7-8 therefore remain open.
 
 Pass gate:
 
@@ -1401,16 +1469,19 @@ acceptance evidence in the corresponding section passes.
    terminal smoke.
 5. [x] Freeze the two independent F0 launch/evaluation paths, exact
    hyperparameters, checkpoint-lineage gates, and reduced-shape PPO integration
-   smoke at terra-baselines `6c56525`.
+   smoke at terra-baselines `6c56525`; correct the receipt gate without changing
+   the treatment at `c58ad23`.
 6. [ ] Finish D1/D2, inspect every JSON integrity field, and write the
    preregistered materiality/memorization/policy-mode decisions.
 7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
-   Foundation passed in `8629884`; trench is pending in `8629885`.
+   Both first-attempt v1 smokes passed in `8629884`/`8629885`; both must be
+   repeated against the corrected v2 gate in `f0_retry1`.
 8. [ ] Launch the two scratch F0 fixed-identity probes with
-   `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. Submitted as
-   train jobs `8629884`/`8629885` with dependent evaluators
-   `8629886`/`8629887`; this box remains open until both evaluations finish.
+   `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. The first
+   attempt is preserved as failed/cancelled infrastructure evidence; submit
+   clean replacements from the immutable `f0_retry1` root and keep this box open
+   until both evaluations finish.
 9. [ ] If either F0 arm fails, stop its descendants and run only the
    trajectory/O0/transition/reward diagnosis implicated by that arm.
 10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
