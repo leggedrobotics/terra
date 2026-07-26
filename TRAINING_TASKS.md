@@ -2252,10 +2252,18 @@ does not add PPO updates or alter the fixed bank.
   `c88e2d3c023a76a93025fab499d08258198d808fd236194af33ae3dfeada76c3`;
 - submission-receipt SHA-256
   `b57f4eead653b246be8a44351eafc92070d083aa25ff4ed8714a6f977de04885`;
-- trench-distance job `8656488` replays updates 200, 300, 600, and 1,000
-  over all 32 panel maps;
-- trench-side job `8656489` replays updates 200, 400, 600, and 1,000 over
-  all 16 panel maps; and
+- initial jobs `8656488` and `8656489` were cancelled at `00:05:55` after
+  prematurely interpreting the compile-averaged first-rollout throughput as
+  steady-state throughput. The reference evaluator shows the first replay
+  rising from `0.1` to `1.3` steps/s as JIT compilation amortizes, followed by
+  approximately `5.5` steps/s;
+- source and treatment remain unchanged. Replacement receipt at
+  `2026-07-26T12:03:12+02:00` has SHA-256
+  `bfab28ce0125fd74d9ae3d705c37b7423c7e65de704e880a392223ca0619a6d1`;
+- replacement trench-distance job `8656748` replays updates 200, 300, 600,
+  and 1,000 over all 32 panel maps;
+- replacement trench-side job `8656750` replays updates 200, 400, 600, and
+  1,000 over all 16 panel maps; and
 - each replay records the eight action-mode counts, effective-action counts,
   first/effective dig step, switches, run-length traces, terminal dig/dump
   mass, completion, and exact-reset verification. Both jobs exclude
