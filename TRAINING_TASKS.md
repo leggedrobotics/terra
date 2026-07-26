@@ -2351,6 +2351,59 @@ This is an evaluator-only causal diagnosis. It does not make update 900 a
 promotable checkpoint and does not authorize a training repair until its cross
 is adjudicated together with the action traces.
 
+Both crossed evaluators passed their exact-reset and zero-integrity gates.
+Distance job `8657124` completed in `00:22:51`; side job `8657126` completed
+in `00:18:55`; both exited `0:0`. Their output SHA-256 values are
+`3a41bc64fc79cc73bb3077f34c0691e0be064583ec21745bbd026a27515d86b6`
+and
+`4560d16b8342c310a284a94f0aa3815b92e42ac51ecbb4db7aaf08ecfb9ebf56`.
+
+| Panel | Train deterministic | Train sampled, four seeds | Development deterministic | Development sampled, four seeds |
+|---|---:|---:|---:|---:|
+| trench distance | 28/32 | 111/128 | 0/32 | 15/128 |
+| trench side | 15/16 | 61/64 | 0/16 | 0/64 |
+
+The distance sampled-development successes decrease with dump distance:
+6/32 at d02, 5/32 at d04, 3/32 at d06, and 1/32 at d08. In contrast, each
+distance train cell has 7/8 deterministic successes, and sampled train success
+is 27-28/32 per cell. Side has 7/8 deterministic train successes for
+both-side, 8/8 for one-side, sampled train rates 29/32 and 32/32, and zero
+sampled development successes in both cells.
+
+This adjudicates the main failure as source-identity memorization:
+
+- deterministic train-minus-development gaps are 87.5 percentage points for
+  distance and 93.75 points for side;
+- sampled train-minus-development gaps remain 75.0 and 95.3125 points;
+- side has no sampled-versus-deterministic development advantage, so an
+  entropy/action-selection repair is not authorized;
+- distance sampling recovers only 11.71875% development success and degrades
+  monotonically with distance. This is useful policy-mode evidence, but not a
+  reason to move far dumping into the starter curriculum.
+
+The single next trench training treatment is therefore
+`B0-DIVERSITY-T-SIDE`, not another unchanged run and not an entropy, reward,
+or architecture ablation:
+
+- keep exactly `t_straight_both_d02` and `t_straight_one_d02`;
+- expand only training diversity from eight to 64 unique geometries per cell;
+- preserve the original eight train identities as an exact subset and use the
+  exact same eight source-disjoint development identities per cell;
+- keep scratch seed 2026072704, `corrected_dense_v1_trench_absolute_off`,
+  PPO, base `resnet_spatial_8x8`, entropy schedule, reset, and 450-step horizon
+  unchanged;
+- start one continuous 1,000-update run, evaluate every 100 updates, require
+  6/8 per cell at two consecutive checkpoints with a saved successful
+  trajectory and zero integrity failures, and apply the global slight-progress
+  rule for a 2,000/5,000 extension; and
+- if this diversity-only treatment still memorizes, stop before changing
+  reward or architecture and inspect its train/development trajectories.
+
+The four-cell distance panel receives no new PPO allocation now. Its d02
+behavior is covered by the close side treatment; d04-d08 remain ordered later
+curriculum cells, with far dumping admitted only after the close cell
+generalizes.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
