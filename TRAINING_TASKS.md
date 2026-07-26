@@ -198,7 +198,7 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
-| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] implementation sealed; launch pending |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] jobs 8643810/8643812 submitted |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
@@ -1362,6 +1362,14 @@ Implementation and launch seal:
   `b203d8a922742ec62dfd62cd9b2e24cd7b6eaa3e` (tree
   `b0a32bc07a490c009c4a43c6d33eb39a9d78e958`). Source and bank are
   read-only after their manifests passed.
+
+F0R was submitted at `2026-07-26T05:24:28+02:00`: training job `8643810`
+owns the production-shaped update-1 smoke, the 1,000-update treatment, and the
+terminal receipt/checkpoint gate; fixed-seed evaluation job `8643812` has an
+`afterok` dependency on it. The submission receipt SHA-256 is
+`cb5ac9cad89246723fd963edbdeb1e02e8dcddb2a9a819ec2a16eace171ebb07`.
+Both jobs were initially pending for priority/dependency, so this records a
+valid submission rather than a passed smoke or experiment result.
 
 Decision:
 
