@@ -3043,6 +3043,53 @@ This authorizes only the continuous 2,000-update body. It is an integrity
 result, not a trench-side witness. The corresponding continuous-run W&B ID is
 `d5srft2n`; it is an operational pointer only.
 
+The 2,000-update training and fixed-development decision are now sealed:
+
+- train job `8666365` completed with exit code `0:0` in `02:55:20`.
+  It contains exactly 2,000 ordered aggregates and 20 numbered checkpoints at
+  updates 100 through 2,000; `FINAL` exactly equals update 2,000 across all 92
+  model and 185 optimizer leaves, and every saved leaf is finite;
+- all source and bank files re-hash, and all hard mass, target, obstacle,
+  nonfinite, and per-transition reward-violation totals are zero. The maximum
+  mass residual is zero and the largest sub-threshold step-reward residual is
+  `4.76837158203125e-07`;
+- the post-training acceptance receipt at
+  `manifests/post_training_acceptance_receipt.txt` has SHA-256
+  `c80b40551b2a638967790108cc4237cc2d7a8cd703484ea5d00e7b25d57140f8`;
+- evaluator job `8666366` completed with exit code `0:0` in `00:32:53`.
+  Its 20 checkpoints, 320 episodes, exact 16-slot resets at
+  `env_steps == 0`, checkpoint/config hashes, terminations, trajectories, and
+  integrity fields all pass. The sealed `eval.json` SHA-256 is
+  `c910e59ed4392cae94a91917d5c0fd75f08115db188ef56e35ac1076b09c3a61`;
+- held-out successes at updates 100 through 2,000 are:
+
+  ```text
+  both-side  0 0 0 0 0 1 1 0 2 4 6 6 4 3 6 7 6 7 5 2
+  one-side   0 0 0 0 0 1 0 1 3 5 3 4 4 4 3 3 3 4 3 3
+  ```
+
+- both-side now has accepted consecutive witness pairs at 1,100-1,200,
+  1,500-1,600, 1,600-1,700, and 1,700-1,800, with saved legal trajectories;
+  one-side never reaches 6/8. Its final-five success curve is
+  `3, 3, 4, 3, 3` against its prior best 5, and its final-five median
+  completion remains below its prior best 1.0; and
+- the frozen evaluator and an independent decision reimplementation both emit
+  `conditional_cell_isolates`. The evaluation acceptance receipt at
+  `manifests/evaluation_acceptance_receipt.txt` has SHA-256
+  `16274bc40e0de2eb588c96fc440b032ae15b9aea818975d7b21d71c3ca91729a`.
+
+The literal family total improves from a prior best 10/16 to 11/16 at update
+1,800, but that extra success is entirely in the already witnessed both-side
+cell. The more specific B0b rule controls: compute is allocated to an unpassed
+cell, and a mixed pass/fail panel permits at most one same-budget conditional
+single-cell isolate. Therefore this result authorizes exactly one fresh,
+continuous 2,000-update `t_straight_one_d02` isolate with the same map
+identities, seed, reward, PPO, architecture, reset, horizon, checkpoint, and
+fixed-development contract. It does **not** authorize a full-panel 5,000 run,
+B0c, F1, or a 120-hour production run. If the isolate fails the same
+two-consecutive 6/8 witness gate, one-side is dynamically unproven and this
+recipe stops before any reward or architecture change.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
