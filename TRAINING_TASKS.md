@@ -2359,6 +2359,49 @@ to a continuous 20,000-update `gpuhe.120h` production run. An unchanged
 distance 5,000-update run and reward, entropy, architecture, or cell-specialist
 treatments remain unauthorized.
 
+Trench topology likewise receives exactly one evaluator-only policy cross at
+the post-hoc update-1,100 development peak before a repair is chosen. It is a
+diagnostic for action mode versus identity generalization, not an independent
+held-out estimate:
+
+- manifest-sealed diagnostic root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_trench_topology_policy_cross_u2000_v1`;
+- the package uses the exact training Terra revision
+  `6702cdfa4926b37e34f62501a21dff7f3460b905` and diagnostic-only
+  terra-baselines revision
+  `8498873457361fd78631589f9979508e7c9ba7ea`;
+- source-manifest, creation-receipt, and pre-submission runtime-equivalence
+  receipt SHA-256 values are
+  `0cd8e87ad058af0feb581f5cd26f06a88a6b15fc794df66a75d8c373cfa8a3be`,
+  `5b269a7fc4bd2f1d33710f55d1eb62e44fd30db5461e965233cd7b32e9f26e35`,
+  and
+  `c6b5a6985550e2bad8fc945f8da032d666f0960550b8e4dedf34975fd3e50cc6`;
+- all 405 source files are hash-verified and filesystem read-only. The exact
+  outer bank manifest and update-1,100 checkpoint SHA-256 values are
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`
+  and
+  `06082a862e6e3cfa5bd61cf925df5109c8cb4976e57e226626587b690b7a7bed`;
+- exact train/development topology manifest SHA-256 values are
+  `b3da1246e7529394ab9118aca03785e1d7e0616bf867e70b18c401aed22cbeaa`
+  and
+  `24d511ab78a7d098edce3256b160fe7bf3b11337f38ed93968f77ccb898e47e8`;
+  each contains six cells times eight identities, with no map/source overlap;
+  and
+- job `8671422` was submitted at `2026-07-26T16:26:35+02:00` on
+  `gpuhe.4h` for `02:00:00`, one RTX 4090, with `eu-g6-064` excluded and
+  bytecode writes disabled. Submission-receipt SHA-256 is
+  `bfba8bbf7486070d31ecd2ab8a83d6ab17e601672efb26e26db72979f64c91e2`.
+
+Acceptance requires Slurm `COMPLETED/0:0`, the exact outer hashes, exactly ten
+48-episode records, all six cells with eight episodes per record, the declared
+deterministic and four sampled seeds on both splits, exact 48-slot resets with
+`env_steps == 0`, and zero integrity failures. The four sampled evaluations
+are stochastic replications on the same 48 identities, not 192 independent
+maps. Because the development bank selected update 1,100 and was already
+observed across 20 checkpoints, any repair chosen from this result must be
+tested on a fresh source-disjoint bank. No topology PPO repair, specialist,
+B0c, or long run is authorized before acceptance and interpretation.
+
 The geometry-only 5,000-update repeat was manifest-sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
 
