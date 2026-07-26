@@ -2514,8 +2514,41 @@ The continuous 1,000-update training result is **PASS**:
   episodes. That sampled-train quantity is diagnostic only and is not evidence
   of source-disjoint generalization.
 
-The dependent fixed-development job `8658606` is released only after this
-receipt. Training PASS does not check the B0 witness box.
+The dependent fixed-development result is **CONTINUE SAME PANEL**, not a B0
+witness:
+
+- job `8658606` completed in `00:19:05` with exit code `0:0`; its sealed
+  `eval.json` has SHA-256
+  `fb2fe771a387540306a27c85e14fbbfd278a2fda1b0ddea9b26966b13082d92d`;
+- exact-reset verification passed for all 16 development identities at
+  `env_steps == 0`, with zero integrity failures;
+- the held-out success curve at updates 100 through 1,000 was:
+
+  ```text
+  update                         100 200 300 400 500 600 700 800 900 1000
+  t_straight_both_d02 successes    0   0   0   0   0   1   1   1   2    3
+  t_straight_one_d02 successes     0   0   0   0   0   0   0   1   2    4
+  ```
+
+- at update 1,000 the median absolute completions were 0.4044 for both-side
+  and 0.5000 for one-side, and a successful action trajectory was saved for
+  each cell;
+- neither cell achieved 6/8 at even one checkpoint, so neither has the
+  required two-consecutive-checkpoint witness and B0 remains unchecked; but
+- both cells improved inside the final five-evaluation window, including
+  success gains at update 1,000. The preregistered slight-progress rule
+  therefore authorizes exactly one fresh, continuous 2,000-update replication
+  of the same diversity-only treatment. It does not authorize B0c, a reward or
+  architecture change, a 5,000-update run yet, or a 120-hour production run.
+
+Because checkpoint-v2 does not serialize the environment, RNG, and action
+history required for a bit-exact continuation, the 2,000-update treatment must
+start from scratch and run continuously. Its source, bank, seed, PPO,
+architecture, reward, reset, entropy, horizon, and development gate remain
+unchanged. A later 5,000-update extension is allowed only if its final
+five-evaluation window again satisfies the same held-out slight-progress rule;
+the 120-hour queue remains reserved for a recipe that clears the repeated
+family/cell gates defined below.
 
 #### B0c — Expand only witnessed easy cells
 
