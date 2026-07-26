@@ -2409,6 +2409,43 @@ terminal-completion gain triggers the fresh 2,000-update milestone under rule
 13; the same rule governs 5,000. Only two clean source-disjoint qualifications
 authorize the separate 20,000-update, five-day `gpuhe.120h` production run.
 
+The 1,000-update treatment was packaged and submitted at
+`2026-07-26T17:09:10+02:00`:
+
+- manifest-sealed root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_distance_diversity_u1000_v1`;
+- source revisions are Terra
+  `008cb6c76e201bf135520df196b8b8eb3b78dfe2` and terra-baselines
+  `51fd8d3e4478c828860ae0a4654b6484fda41db7`;
+- source, outer-bank, and internal-bank manifest SHA-256 values are
+  `52f4ab57ba99769d674918ac6d97a09001eadc5c9f2f616e2c765b936e73dbb4`,
+  `1e49c9a1c5fa1541026a9c5a13a864c536fbb6d09bfff242f5a7c7e83c6412a8`,
+  and
+  `ac3232e3322b4268fbb35027f0e5734a1da33e86d40f72295af9b0730f04e940`,
+  covering 409, 3,494, and 3,493 files. All re-hash successfully, and the
+  copied source and bank files are read-only;
+- exact train/development panel-manifest SHA-256 values are
+  `ca172b2e37a6f11baeed54560238950ad4773c8125ed0960d8cbe6b52850e665`
+  and
+  `c1744f5c6d7f898d6b543617bbe49ab931209816e680445703f245a656a094f9`;
+- creation- and submission-receipt SHA-256 values are
+  `1db31e5aa66ee94006f1d0a9bc9134317237c419757a5ffb6af83bf9ff2c3c20`
+  and
+  `cf21ba97fef359095216ba364f0c72ea314e532a1bdc29ca3d3921ba9121d0ea`;
+- train job `8674045` requests four RTX 4090s for `08:00:00` on
+  `gpuhe.24h`, excludes `eu-g6-064`, and explicitly exports
+  `foundation_distance_diversity_v1`; and
+- evaluation job `8674046` requests one RTX 4090 and is held by
+  `afterok:8674045`. It evaluates all ten scheduled checkpoints only on the
+  unchanged 32-map development bank.
+
+This is a submission receipt, not a training result. Slurm does not expose the
+submitted environment through `scontrol` on this cluster, so the mandatory
+causal activation check is the update-1 smoke itself: it must report
+`expected_dataset_count == 256`, the exact train-manifest hash, seed
+`2026072702`, finite model/optimizer/gradient state, and zero integrity
+failures before the 1,000-update body is accepted.
+
 Trench topology likewise receives exactly one evaluator-only policy cross at
 the post-hoc update-1,100 development peak before a repair is chosen. It is a
 diagnostic for action mode versus identity generalization, not an independent
