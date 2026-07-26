@@ -6,8 +6,8 @@
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
   generation passed; the first B0b submission was stopped before production
-  after infrastructure and receipt-gate failures; corrected immutable
-  replacements are being prepared
+  after infrastructure and receipt-gate failures; all five corrected immutable
+  replacement pairs are submitted and their exact update-1 gates are pending
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -1923,6 +1923,33 @@ leaves, zero transition-integrity violations, exact manifests, and the frozen
 foundation/trench reward contracts. These are valid update-1 smoke witnesses,
 not B0 dynamic-feasibility results. The submitted source root remains
 immutable; production restarts only from a new root containing `c42aa61`.
+
+Corrected B0b submission at `2026-07-26T08:31:24+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_panels_v1_retry1`;
+- source revisions: terra `10cf8f03fb59a94209aa1225148d461d30817fa8`
+  and terra-baselines `c42aa612af747156e0ff027a90f8c3db825d8e4a`;
+- source-manifest SHA-256
+  `f4b0bd57ae9c08955b56357631956da925ef10044a74d353caff40c7242efe58`
+  and unchanged bank-manifest SHA-256
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`;
+- all source, bank, and bank-internal manifests passed remotely before launch;
+- submission receipt SHA-256
+  `95ab8f3c28086447716a5e80a4d4c92c2e821deff5d958330ba24faebe18c01b`;
+- every training job excludes only the diagnosed node `eu-g6-064`;
+
+| Panel | Training job | Dependent evaluation |
+|---|---:|---:|
+| foundation geometry | `8648071` | `8648073` |
+| foundation distance | `8648076` | `8648078` |
+| trench distance | `8648081` | `8648084` |
+| trench side | `8648088` | `8648090` |
+| trench topology | `8648092` | `8648094` |
+
+This is again a submission receipt only. No B0b result is accepted until the
+new-root saved checkpoint, aggregate, training gate, and deterministic
+development evaluation pass.
 
 #### B0c — Expand only witnessed easy cells
 
