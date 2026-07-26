@@ -2125,6 +2125,15 @@ Every update-1 hard integrity count is zero. The new W&B run IDs are:
 | trench side | `sxqzfr3t` |
 | trench topology | `cqp6v20x` |
 
+Interim continuous-boundary audit: **PASS at update 500 for all five runs**.
+Each process crossed update 500 without restart and has exactly 500 aggregate
+receipts plus checkpoints 100/200/300/400/500. Across all 2,500 receipts,
+mass-residual, target-mutation, obstacle-mutation, and step-reward-residual
+hard violation counts are zero; maximum mass residual is zero and the largest
+sub-threshold floating reward residual is `4.76837158203125e-07`. This is an
+integrity milestone only. The fixed-bank ten-checkpoint result remains the
+learning gate.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
