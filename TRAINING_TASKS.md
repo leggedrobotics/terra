@@ -2,8 +2,8 @@
 
 - Status: active recovery execution; C0-C5 and C1b complete; D1 diagnosis
   complete with a failed historical mass-integrity gate and material completion
-  mismatch; D2 sampled evaluation sharded with exact coverage; corrected F0
-  update-1 GPU smokes passed and both production probes are running
+  mismatch; D2 diagnosis complete with memorization and action-mode evidence;
+  corrected F0 update-1 GPU smokes passed and both production probes are running
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -186,7 +186,7 @@ Task index:
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
 | D1 | P0 | evaluation only | D0 | [x] diagnosis complete; historical mass-integrity gate failed |
-| D2 | P0 | evaluation only | D0 | [ ] deterministic 20/20 saved; sampled remainder sharded as `8633209`/`8633211`/`8633220` |
+| D2 | P0 | evaluation only | D0 | [x] 20 deterministic plus 16 sampled records adjudicated |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
 | C1a | P0 | Terra transition/tests | C0 | [x] complete |
@@ -197,7 +197,7 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] corrected retry train `8632268`/`8632271`, eval `8632273`/`8632307` |
-| R0 | P1 | two 500-update historical forks | D1, D2, F0 | [ ] blocked |
+| R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
 | G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
@@ -382,6 +382,17 @@ Execution receipt, retry submitted 2026-07-26:
   `db112eb390acf8722cc0d5144196a10ff70577854f93916179a4d8a111fad50e`;
 - jobs `8633209`, `8633211`, and `8633220` cover, respectively,
   `flat_u1000` seeds 3-7 and `flat_u4000` seeds 0-3 and 4-7, with no overlap;
+- those jobs completed with exit code `0:0` in `00:17:35`, `00:33:57`, and
+  `00:34:00`;
+- shard JSON SHA-256 values, in input order, are
+  `a63e7b1d44aebda1d3774c11568b9bb6aaa0c929463bf14e7a911a2a08b3158a`,
+  `ac0b6f799172f21bbb063df501eb8cee205f8492b04d96fa4f860d732408326d`,
+  `b92bea1538a6939dd3271a9652f94be2f8b230b31eb4a89ce337aa96becdacb6`,
+  and
+  `c0cbd9ca9b3fc0226a3013d4db5978e40c25d5abc23a14a72decf2658a6063d1`;
+- the exact 16-record merge passed uniqueness and static-contract checks and
+  has SHA-256
+  `3ad4805fb64b4bb8b08ed25b32c2903233e2ff551cad87c982a3b37cd9759a74`;
 - declared sampled seeds `2026072500` through `2026072507`;
 - exact training-identity view:
   `train/local_M2_terminal`, whose 256 slots must verify as 256 unique source
@@ -389,9 +400,13 @@ Execution receipt, retry submitted 2026-07-26:
 - checkpoint labels `e8_u20000`, `flat_u1000`, `flat_u4000`,
   `staged_u1000`, and `staged_u4000`, each guarded by its frozen SHA-256.
 
-Do not mark D2 complete until all 20 deterministic records and 16 sampled
-records pass reset/integrity checks and the three preregistered hypotheses are
-decided from the saved JSON.
+D2 execution and diagnosis are complete, but the historical integrity gate did
+not pass. The deterministic records contain 48/2,240 episodes with nonzero
+historical mass residual (maximum 3), and sampled records contain 3/1,024
+episodes with one-unit residuals. None of those 51 episodes succeeded; all
+reset hashes, target/obstacle immutability, finite-state, and terminal-reward
+reconstruction checks passed. Results below retain the failures explicitly and
+include the clean-row sensitivity where relevant.
 
 Hypotheses:
 
@@ -431,6 +446,35 @@ Acceptance:
   semantics;
 - repeated training slots are not double-counted; and
 - the report states which hypotheses remain viable.
+
+Adjudication:
+
+- the exact training view passed with 256 unique source IDs and 256 unique map
+  IDs, so repeated slots were not double-counted;
+- the memorization criterion is supported for the trench family at
+  `flat_u4000`: training reaches 82/128 (64.1%) while source-disjoint
+  development M0 reaches only 3/32 (9.38%), a 54.7-point gap even against the
+  easiest development level. Foundation and overall training do not reach the
+  60% threshold;
+- shared train-and-development drift is rejected. From `flat_u1000` to
+  `flat_u4000`, unique-training success rises from 54/256 to 122/256 while
+  development M0 falls from 24/64 to 11/64. Both families improve on training
+  identities, so the preregistered joint-decline condition is false;
+- diffuse-policy sensitivity is supported at both checkpoints. Update 1,000
+  sampled counts are 31, 29, 36, 34, 30, 35, 34, and 29 (mean 32.25/64,
+  +12.9 points over deterministic 24/64); update 4,000 counts are 21, 19, 20,
+  24, 20, 20, 22, and 19 (mean 20.625/64, +15.0 points over deterministic
+  11/64). All 8/8 seeds improve at each checkpoint;
+- sampled action disagreement averages 35.1% at update 1,000 and 20.0% at
+  update 4,000, consistent with useful probability mass outside the argmax;
+- the three sampled mass-integrity failures all occur at update 1,000, are
+  unsuccessful episodes, and do not change either sampled-action decision
+  under clean-row sensitivity; and
+- the viable explanation for the old screen is family-specific identity fit
+  plus held-out generalization regression, compounded by a material task
+  contract mismatch and deterministic action-mode sensitivity. It is not
+  evidence for architecture insufficiency or for shared optimization drift.
+  R0 is therefore not authorized.
 
 ## 6. Phase C — establish one corrected future-policy contract
 
@@ -1594,7 +1638,7 @@ acceptance evidence in the corresponding section passes.
    hyperparameters, checkpoint-lineage gates, and reduced-shape PPO integration
    smoke at terra-baselines `6c56525`; correct the receipt gate without changing
    the treatment at `c58ad23`.
-6. [ ] Finish D1/D2, inspect every JSON integrity field, and write the
+6. [x] Finish D1/D2, inspect every JSON integrity field, and write the
    preregistered materiality/memorization/policy-mode decisions.
 7. [x] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
