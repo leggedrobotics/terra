@@ -4,7 +4,8 @@
   complete with a failed historical mass-integrity gate and material completion
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
-  failed cleanly; bounded diagnosis selected F0R; F0R passed and authorizes B0
+  failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
+  generation is active
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -200,7 +201,7 @@ Task index:
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
 | F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [x] passed with terminal retention |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
-| B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] authorized next |
+| B0 | P1 | paired generation, five bounded panel probes, bank expansion | foundation F0, trench F0R | [ ] B0a active |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
 | G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
 | S0 | P1 | one grown medium qualification | G0 | [ ] blocked |
@@ -1496,9 +1497,10 @@ identity.
 
 ### F1 — Train easy family-bank specialists
 
-Dependencies: both F0 identities pass, C5 passes, and the larger B0 training
-bank is available. Family generalization must not be judged from the current
-historical eight-identity-per-cell M0 pool.
+Dependencies: both F0 identities pass, C5 passes, and B0c has expanded the
+eight dynamically witnessed primary easy cells into immutable large banks.
+Family generalization must not be judged from the current historical
+eight-identity-per-cell M0 pool or from the small B0a feasibility panels.
 
 Train two independent base `resnet_spatial_8x8` policies from scratch:
 
@@ -1634,19 +1636,52 @@ foundation cells differ by roughly an order of magnitude in relative dump
 area, its procedural foundation cells change geometry and dump layout
 together, and its topology/site cells are not a monotonic ladder.
 
+#### B0a — Build small paired feasibility panels
+
 First build small paired feasibility panels that change one axis at a time:
 
 - OSM versus procedural foundation geometry under identical all-around dumping;
-- broad-apron dump distance centered near 2, 4, 6, and 8 tiles under fixed
-  geometry, volume, capacity, and site;
+- foundation and straight-trench broad-apron dump distance centered near 2, 4,
+  6, and 8 tiles under fixed geometry, volume, capacity, and site;
+- straight-trench close side access as a paired broad-both-side versus
+  broad-one-side treatment with identical geometry, volume, capacity, and site;
 - straight, two/three end-to-end segment, T, X, and disconnected trench
   topology under easy side-cast dumping; and
 - site constraints only after the corresponding geometry/dump cell passes.
 
+The exact B0a candidate-cell names are:
+
+```text
+foundation geometry:
+  f_osm_all, f_procedural_all
+
+foundation distance:
+  f_apron_d02, f_apron_d04, f_apron_d06, f_apron_d08
+
+trench distance:
+  t_straight_both_d02, t_straight_both_d04,
+  t_straight_both_d06, t_straight_both_d08
+
+trench side access:
+  t_straight_both_d02, t_straight_one_d02
+
+trench topology:
+  t_straight_both_d02, t_segmented2_both_d02,
+  t_segmented3_both_d02, t_T_both_d02, t_X_both_d02,
+  t_disconnected_both_d02
+```
+
+The repeated anchor cells are one immutable dataset identity set referenced by
+more than one panel, not independently regenerated lookalikes.
+
 Use eight unique train and eight source-disjoint development identities per
-candidate cell. Admit a cell to the large bank only after a bounded specialist
-provides a dynamic witness. Remote haul at 12 or more tiles remains a separate
-conditional feasibility track.
+candidate cell. Within a paired distance or side-access panel, the same source
+geometry is deliberately reused across conditions and receives one explicit
+`paired_source_group_id`; source geometry and generator seeds never cross the
+train/development boundary. Exact target-array duplicates are forbidden.
+
+Remote haul at 12 or more tiles remains a separate conditional feasibility
+track.
 
 Every starter and panel map uses the exact visible accepted mask, at least
 `3x` reachable single-layer-equivalent capacity, and no obstacles unless site
@@ -1681,7 +1716,83 @@ Validation:
 - reject templated duplicates using exact hashes plus a declared geometric
   similarity check;
 - run static capacity/access validation; and
-- admit a family only after F0/F1 provide dynamic witnesses.
+- measure the actual requested distance statistic rather than labeling a
+  generator parameter as the achieved bin.
+
+Static acceptance of B0a requires:
+
+- all arrays and metadata pass the exact Terra loader;
+- all train/development source sets are disjoint;
+- the only repeated dig geometry is a declared within-split paired source;
+- every map passes C1a contained-pile capacity and numeric-range validation;
+- every distance cell's dig-boundary-to-accepted-dump median is within
+  `0.75` tile of its declared 2/4/6/8-tile center;
+- the one-side trench cell has no accepted cells on the forbidden side, while
+  the both-side anchor has material accepted capacity on both sides;
+- topology metadata and connected-component counts match the saved raster; and
+- all galleries, manifests, generator/source hashes, rejection counts, and
+  validation receipts are sealed before PPO.
+
+#### B0b — Five bounded dynamic panel witnesses
+
+Run five independent scratch base-small specialists, each changing only the
+named map panel:
+
+| Run | Training cells |
+|---|---|
+| `B0-GEO-F` | the two foundation-geometry cells |
+| `B0-DIST-F` | the four foundation-distance cells |
+| `B0-DIST-T` | the four trench-distance cells |
+| `B0-SIDE-T` | the paired close both-side/one-side trench cells |
+| `B0-TOPO-T` | the six trench-topology cells |
+
+Use `corrected_dense_v1` for foundations and
+`corrected_dense_v1_trench_absolute_off` for trenches. Hold PPO, architecture,
+450-step untouched resets, and every non-map setting at F0R. Each run receives
+500 updates initially and deterministic development evaluation every 100
+updates. Extend that same run once to 1,000 only if an unpassed cell is
+improving over its latest two evaluations; otherwise stop.
+
+A candidate cell earns a dynamic witness only when:
+
+- at least 6/8 development identities succeed at two consecutive scheduled
+  checkpoints;
+- all transition, completion, termination, and mass-integrity fields are zero;
+  and
+- at least one successful legal action trajectory for that cell is saved.
+
+The panel policy is a feasibility instrument, not a curriculum parent. If one
+cell fails while another cell in the same panel passes, run at most one
+conditional scratch single-cell specialist for the failed cell before calling
+it dynamically unproven. This conditional run uses the same budget and gate.
+Do not launch all cells as an unconditional hyperparameter sweep.
+
+#### B0c — Expand only witnessed easy cells
+
+The primary easy bank required by F1 is:
+
+```text
+foundation:
+  f_osm_all, f_procedural_all, f_apron_d02, f_apron_d04
+
+trench:
+  t_straight_both_d02, t_straight_one_d02,
+  t_segmented2_both_d02, t_segmented3_both_d02
+```
+
+Every one of these eight cells must pass B0b before F1. Then regenerate each
+from the same frozen algorithm, but with disjoint identities:
+
+- 64 unique training identities per cell;
+- eight promotion identities per cell;
+- eight development identities per cell; and
+- eight sealed identities per cell.
+
+No small-panel identity may appear in the expanded bank. B0 is complete only
+after the expanded-bank loader, split-disjointness, C1a capacity, visual,
+memory, and exact production-shaped update-1 compile gates all pass. The
+distance-6/8, T/X, and disconnected cells remain named K0 candidates even when
+they pass B0b; they are not mixed into F1.
 
 Before fixing the bank size, measure loader memory and first-update compile
 with the intended 64x64 arrays. Prefer 512 unique maps per stratum if it fits;
@@ -1969,15 +2080,19 @@ acceptance evidence in the corresponding section passes.
     retained foundation update-900 witness, this authorizes B0 to build and
     validate the orthogonal feasibility panels and admit only dynamically
     witnessed cells.
-11. [ ] Run the two scratch F1 family specialists; require family and per-cell
+11. [ ] Complete B0a/B0b/B0c: seal the paired static panels, obtain dynamic
+    witnesses from the five bounded panel runs (plus only conditionally needed
+    cell isolates), expand the eight declared primary easy cells, and pass the
+    loader/memory/update-1 gates.
+12. [ ] Run the two scratch F1 family specialists; require family and per-cell
     gates twice with zero integrity failures.
-12. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
+13. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
     new-distribution small multitask teacher.
-13. [ ] Grow and qualify S0 from G0, then begin the checkpoint-bounded K0 map
+14. [ ] Grow and qualify S0 from G0, then begin the checkpoint-bounded K0 map
     ladder one isolated difficulty axis at a time.
-14. [ ] After S0 qualification, execute the separate W1/W2 reward experiment;
+15. [ ] After S0 qualification, execute the separate W1/W2 reward experiment;
     run PR0 only after the map sampler is selected.
-15. [ ] Open the sealed bank once after model/treatment selection and publish
+16. [ ] Open the sealed bank once after model/treatment selection and publish
     the final causal, integrity, compute, and checkpoint receipts.
 
 R0 is not in the default launch queue. Authorize it only if D2 confirms
