@@ -2295,6 +2295,32 @@ fixed-checkpoint train/development by deterministic/sampled cross above.
 In particular, an entropy, reward, or map change must not be inferred solely
 from the already observed deterministic development zero.
 
+That crossed evaluator was implemented and queued at
+`2026-07-26T12:10:52+02:00`:
+
+- immutable evaluator root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_policy_cross_v1`;
+- source revisions: Terra
+  `caad73962b5ab8a916a6919ec2926f074010c4ae` and terra-baselines
+  `34fcbb0d7352d1ef03019b27e3a912f8bde98662`;
+- source-manifest SHA-256
+  `c12b73adf6000effa70f6d3e6148fd72c2e1faaac5c881f6ecab06c310eeb44e`;
+- creation-receipt SHA-256
+  `cefaf3382ad5ff87e0141f9de67e8bbce71e35730743a6dac4dcae5f8696fb1c`;
+- submission-receipt SHA-256
+  `acefbb2a2c185948d97d449af773769bffce8f0047bc3bef199998285bf4f1ad`;
+- trench-distance job `8657124` and trench-side job `8657126` each evaluate
+  only their immutable update-900 checkpoint;
+- each job crosses exact train and source-disjoint development identities with
+  one deterministic replay and sampled seeds 2026072801-2026072804; and
+- the two pure aggregation tests, byte compilation, Black, bash syntax,
+  ShellCheck, source receipt, exact reset, and zero-integrity gates are
+  mandatory. Both jobs exclude `eu-g6-064`.
+
+This is an evaluator-only causal diagnosis. It does not make update 900 a
+promotable checkpoint and does not authorize a training repair until its cross
+is adjudicated together with the action traces.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
