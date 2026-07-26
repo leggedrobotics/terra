@@ -1,9 +1,9 @@
 # Terra Training Tasks
 
-- Status: active recovery execution; C0-C5 and C1b complete; D1 deterministic
-  output under integrity diagnosis; D2 sampled evaluation sharded with exact
-  coverage; corrected F0 update-1 GPU smokes passed and both production probes
-  are running
+- Status: active recovery execution; C0-C5 and C1b complete; D1 diagnosis
+  complete with a failed historical mass-integrity gate and material completion
+  mismatch; D2 sampled evaluation sharded with exact coverage; corrected F0
+  update-1 GPU smokes passed and both production probes are running
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -185,7 +185,7 @@ Task index:
 | ID | Priority | Cost class | Depends on | State |
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
-| D1 | P0 | evaluation only | D0 | [ ] 20/20 records saved by `8626341`; observer mismatch under diagnosis |
+| D1 | P0 | evaluation only | D0 | [x] diagnosis complete; historical mass-integrity gate failed |
 | D2 | P0 | evaluation only | D0 | [ ] deterministic 20/20 saved; sampled remainder sharded as `8633209`/`8633211`/`8633220` |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
@@ -270,12 +270,32 @@ Execution receipt, retry submitted 2026-07-26:
   `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/historical_audit/diagnostics/observer_mismatch_v1`;
 - diagnostic launch-receipt SHA-256:
   `ffbeca6347e73bcfd44599521623599a1708cd91e79c3b702dcd231b9b315f88`;
+- diagnostic job `8632822` completed in `00:10:22` with exit code `0:0`;
+- diagnostic JSON SHA-256:
+  `ca61654b1e1acdefdc61c7ccc888e6d854b03669e83fc81439ac4a21efb4e526`;
+- all three mismatches in the selected `flat_u1000` development-M1 record were
+  non-veto executed dumps, not load-state or veto-branch classification errors:
+  carried loads 43, 37, and 33 became zero while actual world-soil deltas were
+  only 42, 36, and 32;
+- the corresponding independently reconstructed candidate deltas conserved all
+  43, 37, and 33 units and differed from the actual maps by L1 values 3, 1,
+  and 1. The historical transition therefore deleted one soil unit in each
+  selected episode;
+- every one of the original 15 transition-observer mismatches co-occurs with a
+  nonzero historical mass residual. The bounded diagnostic identifies the
+  selected three but does not assume that all remaining twelve share the exact
+  same internal path;
+- observer-derived potential-veto and boundary-flow counts are inadmissible for
+  those 15 episodes. Actual terminal state, success, exact/buffer completion,
+  terminal reward, and independently measured mass residual remain observable;
   and
 - the deterministic command hard-limits D1 attribution to the three declared
   checkpoints over development M0-M2: exactly 259,200 maximum transitions.
 
-Do not mark D1 complete until the preflight and deterministic JSON pass their
-integrity checks and the materiality decision is written below.
+D1 is a completed diagnosis but not a passed clean causal audit: the historical
+transition itself fails mass integrity. Do not erase or waive that gate.
+Materiality conclusions below use the fully clean M0 records and a sensitivity
+view that excludes every integrity-failing M1/M2 episode.
 
 Hypothesis:
 
@@ -317,6 +337,28 @@ Decision:
   regression.
 
 Budget: at most 259,200 evaluation transitions and no gradients.
+
+Adjudication:
+
+- the exact-versus-buffer completion mismatch is a material contributor under
+  the preregistered threshold, but it is not established as the sole cause of
+  poor generalization;
+- on clean development M0, `flat_u1000` changes 11/24 successes overall:
+  1/11 foundation successes (9.09%, below the family threshold) and 10/13
+  trench successes (76.9%);
+- on clean development M0, `flat_u4000` changes 2/11 successes (18.2%);
+- on clean development M0, `staged_u4000` changes 1/11 successes and 3/14
+  top-quartile timeouts, so the timeout criterion is material;
+- after excluding all integrity-failing rows, the aggregate materiality
+  decision remains positive for each declared M1 and M2
+  checkpoint/dataset record;
+- potential-veto attempts and boundary relaxation are present in clean rows,
+  but their rates must be reported separately and cannot be extrapolated from
+  the 15 integrity-failing episodes; and
+- the corrected future contract—exact visible mask everywhere, contained
+  mass-conserving dumping, and no relocation-potential action veto—directly
+  removes all three confounds. No historical R0 continuation may be used as
+  evidence for that corrected contract.
 
 ### D2 — Separate memorization, policy mode, and held-out regression
 
