@@ -2110,6 +2110,18 @@ the deliberately different `run_name`. Its three focused unit tests, Black,
 byte-compilation, and whitespace checks pass. This gate is implemented but is
 not marked passed until the ten-checkpoint runs finish.
 
+The first production aggregate already matches its original 500-update
+counterpart exactly, apart from `run_name`, for all five panels; every hard
+integrity count is zero. The new W&B run IDs are:
+
+| Panel | W&B run |
+|---|---|
+| foundation geometry | `a4vgn9wc` |
+| foundation distance | `edjt0yxt` |
+| trench distance | `ytprpw04` |
+| trench side | `sxqzfr3t` |
+| trench topology | `cqp6v20x` |
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
