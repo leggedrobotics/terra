@@ -1412,6 +1412,16 @@ cohorts' mean completion rose from `0.293` at update 15 to `0.584` at update
 forming the historical late idling attractor. These are healthy intermediate
 training signals only; fixed greedy mastery remains unmeasured.
 
+The online treatment response is material by checkpoint 400. Checkpoint 300 is
+`4dc6b365851a300244a9b4fbb48457ab091b76c992bdda9050ca0ebb03fbe0fb`;
+updates 201-300 completed 130,602/138,269 online episodes successfully
+(`94.5%`) while no-op/no-effect rates fell to `11.9%`/`26.5%`. Checkpoint 400
+is `fbbb23faf80e217b3ef0f78772532ef109580720d66191f82161f93306c722f2`;
+updates 301-400 reached 334,558/334,793 online successes (`99.93%`) with
+`4.9%` no-ops, `10.6%` no-effect actions, and zero hard failures. Thus F0R
+removes the measured online idling attractor, but only the complete
+ten-checkpoint fixed evaluation can establish mastery and late retention.
+
 Decision:
 
 - pass: use the shaping-off contract for the easy trench cells and proceed to
