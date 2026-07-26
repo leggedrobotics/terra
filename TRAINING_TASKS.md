@@ -253,8 +253,23 @@ Execution receipt, retry submitted 2026-07-26:
   (`7b5d52d`), with regression coverage;
 - replacement preflight `8626340`, completed in `00:09:09` with exit code
   `0:0`;
-- replacement full deterministic job `8626341`, released by
-  `afterok:8626340` and currently running; and
+- replacement full deterministic job `8626341` produced all 20 declared records
+  and exact reset receipts, then exited `1:0` because its final shell gate found
+  historical dump-observer transition mismatches;
+- deterministic JSON SHA-256:
+  `22abef7ca13006d31abf2bba2d268581ea5298532b5fe1fd8ece0c976e69df1b`;
+- 15 M1/M2 timeout episodes have both a nonzero mass residual and at least one
+  dump attempt for which the observer did not reproduce the old transition;
+  their dump-veto and boundary-flow diagnostics are not admissible yet;
+- bounded diagnostic implementation `04edebf` records which branch mismatched
+  plus the first-step load and terrain deltas;
+- diagnostic job `8632822` targets only `flat_u1000` on development M1
+  deterministically, at most 28,800 transitions, under immutable diagnostic
+  root
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/historical_audit/diagnostics/observer_mismatch_v1`;
+- diagnostic launch-receipt SHA-256:
+  `ffbeca6347e73bcfd44599521623599a1708cd91e79c3b702dcd231b9b315f88`;
+  and
 - the deterministic command hard-limits D1 attribution to the three declared
   checkpoints over development M0-M2: exactly 259,200 maximum transitions.
 
@@ -306,8 +321,8 @@ Budget: at most 259,200 evaluation transitions and no gradients.
 
 Execution receipt, retry submitted 2026-07-26:
 
-- deterministic train/development audit job `8626341`, released by the passed
-  preflight and currently running;
+- deterministic train/development audit job `8626341` saved all 20 records but
+  exposed the D1 observer-integrity issue described above;
 - sampled M0 job `8626343`, also currently running;
 - declared sampled seeds `2026072500` through `2026072507`;
 - exact training-identity view:
