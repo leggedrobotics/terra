@@ -1232,6 +1232,32 @@ F0 adjudication:
 - B0, F1, and every broad descendant remain blocked until the bounded trench
   trajectory/reward diagnosis selects and validates one minimal repair.
 
+Bounded trajectory-diagnosis launch receipt:
+
+- observer-only code is sealed at terra-baselines `9935c67` under
+  `f0_retry1/diagnostics/trajectory_v1`; it does not modify either immutable F0
+  arm;
+- launch-receipt and source-manifest SHA-256 values are
+  `75eb0edb621db6d9d7ab4f086b5bd9d08adf561c998f3b976e508428e2bca645`
+  and
+  `af5338d6b209e24d6a1de70b2f63a87183b4c4f8ca06119775eac776c9c3cb52`;
+- the four preregistered replays are foundation updates 900/1,000 and trench
+  updates 900/1,000. Each uses the original 32-reset batch and transition RNG,
+  for at most 57,600 transitions and zero gradient updates;
+- compact traces are retained for the foundation retention control
+  `(900, 2026072600)` versus `(1000, 2026072600)`, the trench progressing/stalled
+  pair `(900, 2026072600/2026072601)`, and two distinct update-1,000 failures
+  `(2026072602/2026072611)`;
+- the diagnostic is inadmissible unless all 128 replayed rows match the sealed
+  evaluator in success, termination, length, no-effect count, return, and every
+  completion field. Only then may policy logits, action-effect opportunities,
+  reward components, repeated states, and counterfactual DO rewards select a
+  repair; and
+- one-RTX-4090 job `8642618` was submitted at `2026-07-26T02:49:32Z`;
+  submitted-job receipt SHA-256 is
+  `e2062250a9153eda0968250238abd401f476e94dde77c5edfac82dcc893acfe8`.
+  Submission is not diagnosis evidence.
+
 Pass gate:
 
 - at least 29/32 successes in two consecutive evaluations;
