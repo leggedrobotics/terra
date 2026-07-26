@@ -2232,6 +2232,11 @@ violations. All three production bodies started after this gate. This is an
 integrity authorization only; the 20-checkpoint source-disjoint task curves
 remain the learning decision.
 
+The corresponding continuous-run W&B IDs are foundation geometry
+`6fbwzje9`, foundation distance `ncy5e6yo`, and trench topology `mma0bakl`.
+They are operational pointers only; W&B online aggregates do not determine
+continuation or promotion.
+
 The stopped trench panels have a separate, bounded action-trace diagnosis
 queued at `2026-07-26T11:56:10+02:00`. This is evaluator-only compute: it
 does not add PPO updates or alter the fixed bank.
