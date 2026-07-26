@@ -2550,6 +2550,32 @@ five-evaluation window again satisfies the same held-out slight-progress rule;
 the 120-hour queue remains reserved for a recipe that clears the repeated
 family/cell gates defined below.
 
+That bounded replication was sealed and submitted at
+`2026-07-26T15:14:31+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_trench_side_diversity_u2000_v1`;
+- the exact prior source and bank were copied, rather than regenerated:
+  Terra `db6bead7ee9360bb6a203c8b58f0956984bc73d6`, terra-baselines
+  `3dcb7d2400c391f0630cc8d2a05ce408761187ab`, 128 train identities, and
+  16 source-disjoint development identities;
+- all 2,160 source/bank files passed hash verification. Source-manifest,
+  bank-manifest, creation-receipt, and submission-receipt SHA-256 values are
+  `7eefb6a986a9ed0beda8e80140817321fa7f6b88bdbd85d6627b8ec36a919d9b`,
+  `3711c0d6c3ff715afcbf296926ba6061dfe5d172c496d5af285b4e2929a30ace`,
+  `bf6149f7be1450ba74fd4df2306f43c782c58754f544e5d607dd21131f23f7ed`,
+  and
+  `157b136e786d66abe05b9e50411e43ad00c236767bb1cf91d4358dbe795dab33`;
+- train job `8666365` requests four RTX 4090 GPUs on `gpuhe.24h`, excludes
+  only `eu-g6-064`, and runs 2,000 continuous from-scratch updates with the
+  unchanged `trench_side_diversity_v1` treatment; and
+- fixed-development job `8666366` has an `afterok:8666365` dependency and
+  applies the same 20-checkpoint witness/continuation adjudication.
+
+This is a submission receipt only. Update 1 must pass the exact smoke gate
+before the production body is accepted, and the source-disjoint development
+curve—not online sampled-train success—decides the next allocation.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
