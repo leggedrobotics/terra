@@ -5,7 +5,7 @@
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
-  generation is active
+  generation passed; B0b dynamic-panel tooling is active
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -219,7 +219,7 @@ Task index:
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
 | F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [x] passed with terminal retention |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
-| B0 | P1 | paired generation, five bounded panel probes, bank expansion | foundation F0, trench F0R | [ ] B0a active |
+| B0 | P1 | paired generation, five bounded panel probes, bank expansion | foundation F0, trench F0R | [ ] B0a passed; B0b active |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
 | G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
 | S0 | P1 | one grown medium qualification | G0 | [ ] blocked |
@@ -1757,6 +1757,43 @@ Static acceptance of B0a requires:
 - topology metadata and connected-component counts match the saved raster; and
 - all galleries, manifests, generator/source hashes, rejection counts, and
   validation receipts are sealed before PPO.
+
+B0a result: **PASS** at `2026-07-26T08:00+02:00`.
+
+- implementation commit: Terra `eaf9cf00`;
+- canonical inspectable bank:
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_paired_panels_20260726`;
+- builder SHA-256:
+  `3a1bb66798f6a4bfc1dc5b3515c5a4485eb9a28d6ffe7c9e8413a548492b79a9`;
+- identity manifest SHA-256:
+  `911b6e3a453d6d9e1aeaebfe5fcef33406c89aae0180e1c4eb8739efc1fd5b4e`;
+- source registry SHA-256:
+  `1ffe22f8c3ed4cc608fc8fc9a5106f2ecd26d8e122d042d0d2630b025a293a8d`;
+- validation SHA-256:
+  `aeebafae74f77d19a11617f464969f162c82385aa52a65ff246f0227bd731ca5`;
+- complete file-manifest SHA-256:
+  `89a5b5325e4e6872f7899b087ac5d0a8cd444dac30315feee4f342f8e532a347`;
+- 256 unique identities and target arrays cover 16 cells, eight train plus
+  eight development identities per cell; all 42 per-cell/panel directories
+  reloaded through the exact Terra loader;
+- all 32 declared paired source groups preserve the exact dig raster, while
+  train and development source sets are disjoint;
+- the generator rejected one exact dihedral straight-trench duplicate before
+  sealing; accepted within-cell maximum dihedral IoU ranges from `0.439` to
+  `0.936`, below the declared `0.995` ceiling;
+- constrained maps provide `3.25-3.26x` single-layer-equivalent capacity.
+  Achieved p50 path-distance ranges are `2.00`, `3.83-4.04`,
+  `5.66-6.24`, and `8.00-8.16` tiles for the declared 2/4/6/8 cells;
+- every one-side target has zero forbidden-side cells and every both-side
+  target reserves at least 40% of its cells on each declared side;
+- the five panel galleries and all 32 cell galleries were visually inspected;
+  no obstacle/site axis is present; and
+- four focused generator tests plus eight contained-transition/loader tests
+  pass (`12 passed`). The file manifest verifies without error.
+
+This is static and loader evidence only. B0 remains unchecked until B0b
+supplies legal dynamic trajectories and B0c expands the eight witnessed easy
+cells.
 
 #### B0b — Five bounded dynamic panel witnesses
 
