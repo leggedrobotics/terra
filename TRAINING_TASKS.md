@@ -1533,8 +1533,9 @@ identity.
 
 ### F1 — Train easy family-bank specialists
 
-Dependencies: both F0 identities pass, C5 passes, and B0c has expanded the
-eight dynamically witnessed primary easy cells into immutable large banks.
+Dependencies: the retained foundation F0 witness and the shaping-off trench
+F0R witness pass, C5 passes, and B0c has expanded the eight dynamically
+witnessed primary easy cells into immutable large banks.
 Family generalization must not be judged from the current historical
 eight-identity-per-cell M0 pool or from the small B0a feasibility panels.
 
@@ -2700,9 +2701,11 @@ memory, and exact production-shaped update-1 compile gates all pass. The
 distance-6/8, T/X, and disconnected cells remain named K0 candidates even when
 they pass B0b; they are not mixed into F1.
 
-Before fixing the bank size, measure loader memory and first-update compile
-with the intended 64x64 arrays. Prefer 512 unique maps per stratum if it fits;
-do not silently reduce diversity after launch.
+Before materializing or launching the fixed bank, measure loader memory and
+first-update compile with the intended 64x64 arrays. The training contract is
+512 unique maps total: 64 identities for each of eight cells. If that fixed
+shape does not fit, stop and revise the bank contract explicitly; never
+silently reduce diversity after launch.
 
 ## 12. Phase K — global quantitative map curriculum
 
