@@ -2405,7 +2405,7 @@ curriculum cells, with far dumping admitted only after the close cell
 generalizes.
 
 The diversity-only bank was generated and statically accepted at
-`2026-07-26T12:55+02:00`:
+`2026-07-26T12:40+02:00`:
 
 - local immutable candidate:
   `/home/lorenzo/moleworks/.artifacts/terra_b0_trench_side_diversity_20260726`;
@@ -2439,6 +2439,34 @@ The diversity-only bank was generated and statically accepted at
 This is a static bank receipt, not a learning result. It authorizes exactly
 one 1,000-update `B0-DIVERSITY-T-SIDE` run after the bank and source are copied
 and hash-verified under a new immutable Euler root.
+
+That treatment was packaged and submitted at `2026-07-26T12:50+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_trench_side_diversity_v1`;
+- source revisions: Terra
+  `db6bead7ee9360bb6a203c8b58f0956984bc73d6` and terra-baselines
+  `3dcb7d2400c391f0630cc8d2a05ce408761187ab`;
+- source-manifest, copied-bank-manifest, creation-receipt, and submission-receipt
+  SHA-256 values
+  `7eefb6a986a9ed0beda8e80140817321fa7f6b88bdbd85d6627b8ec36a919d9b`,
+  `3711c0d6c3ff715afcbf296926ba6061dfe5d172c496d5af285b4e2929a30ace`,
+  `5805ec5d83b98c6da59b1ce8dd6a9522c3251ddbb7b4b7c4db95fcced15f1a31`,
+  and
+  `2e695fcca670538964b256e08f618f993144e5bc6db060790667a0d9dab7e73d`;
+- source, all 1,753 copied bank files, the bank-internal manifest, exact
+  revisions, 128-train/16-development counts, validation status, script syntax,
+  and all outer hashes passed before submission;
+- training job `8658605` runs one continuous from-scratch 1,000-update
+  `trench_side_diversity_v1` treatment on four RTX 4090 GPUs, with seed
+  2026072704 and only `eu-g6-064` excluded; and
+- fixed-development evaluation job `8658606` is held by an `afterok`
+  dependency on the complete training and terminal integrity gate.
+
+This remains a submission receipt, not evidence of learning. Update 1 must
+pass the exact checkpoint/optimizer/aggregate/dataset gate before the
+production body is accepted; the 10-checkpoint source-disjoint curve then
+decides pass, bounded continuation, or stop.
 
 #### B0c — Expand only witnessed easy cells
 
