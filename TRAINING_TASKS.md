@@ -2237,6 +2237,26 @@ The corresponding continuous-run W&B IDs are foundation geometry
 They are operational pointers only; W&B online aggregates do not determine
 continuation or promotion.
 
+The trusted C5 population receipts materially narrow the stopped-trench
+interpretation:
+
+| Panel | Sampled online train success at 900 | Sampled online train success at 1,000 | Deterministic source-disjoint development |
+|---|---:|---:|---:|
+| trench distance | 2,218/2,227 | 599/808 | 0 successes from 600 through 1,000 |
+| trench side | 2,528/2,554 | 1,519/1,630 | 0 successes from 500 through 1,000 |
+
+The update-900/update-1,000 aggregate SHA-256 pairs are respectively
+`7bc262988bec5aea7c29a7229277c398182ec048a12d6132fab9bf41e2a9d12f` /
+`7a12ada87ae206666fe300ebdb3499c4e9308da1566a8e3ba8ce26e77b5d8ddd`
+and
+`bf4fbb3c6a1b14a3435d5e948c66fb119b1f51ae0ad4a28e337645202839e9c1` /
+`84405d0a1556420272a51f7df39abff9c0fb9a34a70176ddee65a5ed3d05043f`.
+Therefore the development result is not evidence that the sampled policy
+globally stopped moving dirt. It leaves two crossed explanations: train versus
+source-disjoint identity generalization and sampled versus deterministic
+action selection. Both must be measured on the same fixed checkpoint and
+reset bank before selecting an entropy, reward, or map repair.
+
 The stopped trench panels have a separate, bounded action-trace diagnosis
 queued at `2026-07-26T11:56:10+02:00`. This is evaluator-only compute: it
 does not add PPO updates or alter the fixed bank.
@@ -2270,9 +2290,10 @@ does not add PPO updates or alter the fixed bank.
   `eu-g6-064`.
 
 The output is diagnostic evidence for selecting a single controlled repair,
-not a promotion gate by itself. In particular, an entropy, reward, or map
-change must not be inferred solely from the already observed zero terminal
-mass.
+not a promotion gate by itself. After the action-trace replay, run the minimal
+fixed-checkpoint train/development by deterministic/sampled cross above.
+In particular, an entropy, reward, or map change must not be inferred solely
+from the already observed deterministic development zero.
 
 #### B0c — Expand only witnessed easy cells
 
