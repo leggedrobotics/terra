@@ -4,7 +4,7 @@
   complete with a failed historical mass-integrity gate and material completion
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
-  failed cleanly; bounded diagnosis selected one trench-reward repair, F0R
+  failed cleanly; bounded diagnosis selected F0R; F0R passed and authorizes B0
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -198,9 +198,9 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
-| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] update-1 smoke passed; production running |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [x] passed with terminal retention |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
-| B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
+| B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] authorized next |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
 | G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
 | S0 | P1 | one grown medium qualification | G0 | [ ] blocked |
@@ -1422,6 +1422,50 @@ updates 301-400 reached 334,558/334,793 online successes (`99.93%`) with
 removes the measured online idling attractor, but only the complete
 ten-checkpoint fixed evaluation can establish mastery and late retention.
 
+F0R final adjudication: **PASS**.
+
+- training job `8643823` completed 1,000 updates in `01:34:25`, exit `0:0`;
+  fixed evaluator `8643824` completed in `00:11:19`, also `0:0`;
+- terminal training receipt
+  `212f2da2f8cd7c1305f9ad7c500f7ba5e4964e17bdd5cd9685bd3296e0f868fb`
+  certifies ten checkpoints, all 1,000 schema-v2 aggregates, 92 finite model
+  and 185 finite optimizer leaves, and exact `FINAL`/update-1,000 model and
+  optimizer equality. The checkpoint and aggregate manifest hashes are
+  `ba628a2542758c34933f4c8e3deba3e2599d50ad6cd93ba94127eea63196b899`
+  and
+  `e677589fd5bb810ea7db55dae862bcc15848731efb34f3fe9fadbe00472e30dd`;
+- `FINAL` and update-1,000 SHA-256 values are
+  `e236db0ee10583a1ad1b50cf2e303791c0668bfc27f98eaecc7dc87b066254f0`
+  and
+  `d2b0e0bb2a36c686692ce2ba6bbdc0e5db445563ea9b69952f104b50cff4be53`.
+  Across 2,892,988 online episodes, the treatment records 2,820,943 task
+  completions and 72,054 timeouts. All mass, target, obstacle, and per-step
+  reward-reconstruction gates are zero; four episode-sum drift flags remain
+  informational under the frozen C5 contract;
+- final fixed-evaluation JSON
+  `1a4cc49fa8d6d5a1cb53c8c0ad98e63bf144a40b38f6de9e0f1f0865987ba672`
+  evaluates the exact ten-checkpoint sequence on the 32 frozen resets. The
+  success curve is `0, 7, 31, 32, 0, 32, 32, 32, 32, 32`, with zero integrity
+  failures at every checkpoint;
+- the required consecutive gate first passes at updates 300/400 and also
+  passes at 600/700, 700/800, 800/900, and the terminal 900/1,000 pair. The
+  update-300 witness solves reset `2026072600` in 35 legal effective actions;
+  the terminal update-1,000 witness solves it in 30; and
+- update 500 is a real isolated greedy-selection collapse (`0/32`, mean
+  314.25 no-effect actions) despite strong online behavior. Recovery to
+  `32/32` at update 600 and perfect retention through update 1,000 means the
+  preregistered gate passes, while independently reinforcing the requirement
+  to select qualified checkpoints rather than assume monotonic PPO behavior.
+
+The selected easy-trench parent therefore uses
+`corrected_dense_v1_trench_absolute_off`. No extension, O0 observation change,
+second reward repair, or W0a/W1 experiment is authorized at this gate. The
+retained foundation witness remains update 900
+`68a57f34e0e1cc3f806e8746de27a7e607d3852ec18c8aee1656b1a8fb44c721`;
+together with terminal trench witness
+`d2b0e0bb2a36c686692ce2ba6bbdc0e5db445563ea9b69952f104b50cff4be53`,
+it releases B0 to build and validate the orthogonal feasibility panels.
+
 Decision:
 
 - pass: use the shaping-off contract for the easy trench cells and proceed to
@@ -1920,9 +1964,11 @@ acceptance evidence in the corresponding section passes.
    trajectory/O0/transition/reward diagnosis implicated by that arm. The exact
    replay gate passed and selected F0R without authorizing an observation or
    architecture change.
-10. [ ] Implement and run F0R. Only if the repaired trench and retained
-   foundation witnesses both pass may B0 build and validate the orthogonal
-   feasibility panels, then admit only dynamically witnessed cells.
+10. [x] Implement and run F0R. The shaping-off trench treatment passes at
+    updates 300/400 and retains a terminal 900/1,000 pair; together with the
+    retained foundation update-900 witness, this authorizes B0 to build and
+    validate the orthogonal feasibility panels and admit only dynamically
+    witnessed cells.
 11. [ ] Run the two scratch F1 family specialists; require family and per-cell
     gates twice with zero integrity failures.
 12. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
