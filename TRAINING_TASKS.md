@@ -66,7 +66,7 @@ These decisions supersede stale choices later in the historical v4 design:
 | Initialization | Train new small policies from scratch on the corrected distribution. E8 is evaluation context only, never the initializer or teacher for recovery runs. |
 | Family separation | Foundation and trench feasibility/specialist policies are two independent runs. |
 | Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Any integrity-clean recipe that shows even slight preregistered fixed-bank improvement receives the next meaningful budget; use an exact continuation only when the checkpoint contract preserves all process state, otherwise run the full higher milestone continuously from a declared fresh start. |
-| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. A short-run wall-clock limit must never stop a recipe that has cleared this qualification. |
+| Qualified long runs | Each family specialist independently earns long training as soon as its own recipe clears the twice-observed source-disjoint gate; a qualified foundation recipe does not wait for trench, or vice versa. Run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. A short-run wall-clock limit must never stop a recipe that has cleared this qualification. |
 | Curriculum separation | Map, dense-reward, dense-to-terminal reward, and partial-reset treatments never advance in the same causal comparison. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
@@ -158,7 +158,11 @@ training banks become mandatory after single-map feasibility is established.
     continuation.
 15. A recipe is considered qualified for long training only after its
     source-disjoint family/cell gate passes twice and no semantic, integrity,
-    or causal blocker remains. Qualified continuations use Euler
+    or causal blocker remains. Family specialists qualify independently; one
+    family never waits for the other before receiving its own long run.
+    Slight improvement without two gate passes still earns the next declared
+    bounded milestone under rules 13-14, but is not yet production
+    qualification. Qualified continuations use Euler
     `gpuhe.120h`, request `5-00:00:00`, run for at least 20,000 updates, save
     fixed-bank checkpoints at a declared cadence, and receive more compute
     while rule 13 still shows improvement. Until exact checkpointing is
@@ -1568,11 +1572,11 @@ source-disjoint quantitative easy-family bank every 100 updates.
 
 Use the global milestone rule: review at 1,000, 2,000, and 5,000 updates,
 advance whenever even slight fixed-bank task progress remains, and stop the
-screen once the family gate passes twice. After both family screens pass, each
-selected recipe receives an at-least-20,000-update continuous production run
-on `gpuhe.120h`, following rule 15's exact-checkpoint boundary. Those long
-runs may execute concurrently with G0 and are not substitutes for G0's
-multitask gate.
+screen once the family gate passes twice. Each family immediately receives its
+own at-least-20,000-update continuous production run on `gpuhe.120h` after
+qualifying; it does not wait for the other family. Those long runs may execute
+concurrently with the remaining specialist screen and, once both specialists
+pass, with G0. They are not substitutes for G0's multitask gate.
 
 Family pass gate:
 
@@ -2445,6 +2449,31 @@ causal activation check is the update-1 smoke itself: it must report
 `expected_dataset_count == 256`, the exact train-manifest hash, seed
 `2026072702`, finite model/optimizer/gradient state, and zero integrity
 failures before the 1,000-update body is accepted.
+
+The update-1 smoke passed and authorized the body at
+`2026-07-26T17:21:49+02:00`:
+
+- allocation is exactly four RTX 4090s on `eu-g6-025`; source/bank rehash,
+  quota, CUDA library, four-device JAX, cuDNN backward-convolution, NCCL
+  all-reduce, and both focused test gates passed;
+- the runtime loaded exactly 256 train maps with target tensor shape
+  `(1, 256, 64, 64)`, proving the diversity variant rather than the legacy
+  32-map default was active;
+- the smoke gate records seed `2026072702`, corrected dense reward, base
+  `resnet_spatial_8x8` MLP, no warm start/resume, 92 finite model leaves, 185
+  finite optimizer leaves, and zero mass residual or target/obstacle mutation;
+- checkpoint, aggregate, smoke-gate, and smoke-acceptance receipt SHA-256
+  values are
+  `adcba1554df5c37b641afa370f85c8a1bbf5f5cc910965eb5ef3abf9b15477b3`,
+  `f42056c5af0c7ac7e9af0c8c81aa83db705ccb33ec6c6d5b8560a21454e33529`,
+  `5eb1f45549b5e9388e8cb899412bd25cbb76d4a196d7629b748a5a7e0c5b3dd5`,
+  and
+  `8e915bde41fc549f8932a3bc95ea7255d8ab31d7316723c1a51fdc81322f3c92`.
+
+The smoke's `309.80` steps/s includes first-graph compilation and is not
+performance evidence. The fresh 1,000-update body is now running; no learning
+claim exists until its full integrity gate and fixed 32-map development
+evaluation complete.
 
 Trench topology likewise receives exactly one evaluator-only policy cross at
 the post-hoc update-1,100 development peak before a repair is chosen. It is a
