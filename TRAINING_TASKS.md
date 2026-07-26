@@ -5,8 +5,9 @@
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
-  generation passed; all five B0b train/evaluation pairs are submitted and
-  their exact update-1 gates are pending
+  generation passed; the first B0b submission was stopped before production
+  after infrastructure and receipt-gate failures; corrected immutable
+  replacements are being prepared
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -1834,7 +1835,7 @@ Do not launch all cells as an unconditional hyperparameter sweep.
 
 Frozen B0b implementation receipt:
 
-- terra-baselines revision `7474c3e` defines the five panel presets, scratch
+- terra-baselines revision `c42aa61` defines the five panel presets, scratch
   seeds `2026072701` through `2026072705`, exact update-1 smoke, 500-update
   training gate, deterministic development evaluator, and paired Slurm
   launcher;
@@ -1896,6 +1897,32 @@ Infrastructure replacement receipt at `2026-07-26T08:19+02:00`:
 | foundation geometry | `8647704` | `8647705` | `0edc025cfcb4f3251cc2a13925f1fb37c32cd8078c56a2d4fcc812c380194e24` |
 | trench distance | `8647719` | `8647720` | `fceb4cdaa0e58be811b98ba675dcd9d87a009b4f4165a18bc2bddbaea0b793ca` |
 | trench topology | `8647721` | `8647722` | `b9b7fd320812302c0fe4b5543412cc6c5760a1b91cc5f5d33103608d93a64c9d` |
+
+Receipt-gate correction at `2026-07-26T08:28+02:00`:
+
+- the saved scratch checkpoints correctly serialize the inert
+  `load_env_from_checkpoint` field as `false`; the first B0 verifier expected
+  `true`, even though `resume_from` was `null`;
+- foundation-distance job `8647664` and trench-side job `8647668` each
+  completed exactly one smoke update, saved model/optimizer/aggregate state,
+  then failed only this receipt comparison before production;
+- the three still-compiling replacements `8647704`, `8647719`, and `8647721`
+  and all remaining dependent evaluators were cancelled once the deterministic
+  shared failure was known, avoiding invalid or wasted production work;
+- terra-baselines `c42aa61` changes only that serialized-field expectation and
+  its unit fixture;
+- the corrected verifier independently reloaded both saved family examples:
+
+| Panel | Checkpoint SHA-256 | Aggregate SHA-256 | Corrected receipt SHA-256 |
+|---|---|---|---|
+| foundation distance | `45ae0b6c4471c11dd6b80b3fb11a5f774ec17ae3af89a3f5897bc8ae9c1a49da` | `d4998464eca8a88a703f7b3703f41404c8da0fb60c39e689f4edd0cb19bfe5b8` | `0f44b9309f4e303b29c079eab32d9d74dd2cb1fe9691fbce02d4eb221dd13782` |
+| trench side | `9b0e18060643ca93d2dffbb36df69798662a19d2561e6c2b68e663e6fd66594c` | `1139b4de0fb7e332dc478bccddd705b2911876e36d17c152844ea041208d3d39` | `b381a09331fb218c7c9bbbf40afd212d95f6a842e1c353d451c4116b7b86a4db` |
+
+Both corrected receipts have 92 finite model leaves, 185 finite optimizer
+leaves, zero transition-integrity violations, exact manifests, and the frozen
+foundation/trench reward contracts. These are valid update-1 smoke witnesses,
+not B0 dynamic-feasibility results. The submitted source root remains
+immutable; production restarts only from a new root containing `c42aa61`.
 
 #### B0c — Expand only witnessed easy cells
 
