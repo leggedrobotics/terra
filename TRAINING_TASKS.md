@@ -1831,6 +1831,28 @@ conditional scratch single-cell specialist for the failed cell before calling
 it dynamically unproven. This conditional run uses the same budget and gate.
 Do not launch all cells as an unconditional hyperparameter sweep.
 
+Frozen B0b implementation receipt:
+
+- terra-baselines revision `7474c3e` defines the five panel presets, scratch
+  seeds `2026072701` through `2026072705`, exact update-1 smoke, 500-update
+  training gate, deterministic development evaluator, and paired Slurm
+  launcher;
+- all five runs use 4 x RTX 4090, 1,024 environments per device, 32 rollout
+  steps, base `resnet_spatial_8x8`, float32 encoder compute, and the full F0R
+  PPO/reward treatment except for the declared panel and independent seed;
+- each panel retains checkpoints every 100 updates and evaluates every
+  development identity with recorded legal action traces;
+- the evaluator emits exactly one of `panel_witness_passed`,
+  `continue_same_panel`, `conditional_cell_isolates`, or
+  `stop_and_diagnose_panel`;
+- `continue_same_panel` requires a preregistered task-metric improvement within
+  the last five scheduled evaluations. A reward, loss, or online-success
+  change cannot authorize more compute; and
+- six B0 evaluator/config tests, two training-receipt tests, seven F0
+  regression tests, Python compilation, Black, `bash -n`, ShellCheck, and
+  whitespace checks pass locally. The production update-1 GPU smokes remain
+  cluster gates and are not claimed by these local checks.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
