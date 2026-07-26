@@ -2404,6 +2404,42 @@ behavior is covered by the close side treatment; d04-d08 remain ordered later
 curriculum cells, with far dumping admitted only after the close cell
 generalizes.
 
+The diversity-only bank was generated and statically accepted at
+`2026-07-26T12:55+02:00`:
+
+- local immutable candidate:
+  `/home/lorenzo/moleworks/.artifacts/terra_b0_trench_side_diversity_20260726`;
+- schema `terra_b0_trench_side_diversity_v1`, with 64 training identities and
+  eight development identities for each of `t_straight_both_d02` and
+  `t_straight_one_d02`;
+- 144/144 unique map IDs and target arrays, source-disjoint train/development
+  splits, preserved paired dig geometry, and all static capacity, obstacle,
+  source, and loader checks passed;
+- the original first eight training identities and all eight development
+  identities per cell match the frozen B0a bank in all 18 declared identity,
+  geometry, target, and validation fields. The 32-row reference gate used B0a
+  identity-manifest SHA-256
+  `911b6e3a453d6d9e1aeaebfe5fcef33406c89aae0180e1c4eb8739efc1fd5b4e`;
+- 31 training and one development proposals were rejected as templated
+  duplicates before the declared counts were reached;
+- `files.sha256`, `provenance.json`, `validation.json`, and the paired panel
+  gallery have SHA-256 values
+  `3e9059d7e167f8b0f054c46a9da2b3b5f1e1d6991041f57fde4e4ca3f953f4eb`,
+  `4658f7611e5590cb34051bb3802ba5dc4269098157df47568262a6d242976bff`,
+  `177740f1b3f9e04ce9f21c56cb467fffca3fd4ceec5fe71f283d6e8018c8a91c`,
+  and
+  `a6cfbe8dd7a25d1931dbaf6834a31482262d7b6ae3f721fad407001f014f9a1b`;
+- visual review of the train and development galleries confirmed close,
+  oversized side-cast regions, distinct both/one-side access, varied trench
+  position/orientation/length, no obstacles, and no obvious impossible map;
+  and
+- the new generator tests plus the original B0 feasibility-panel tests pass
+  (`6 passed`), as do byte compilation, Black, and whitespace checks.
+
+This is a static bank receipt, not a learning result. It authorizes exactly
+one 1,000-update `B0-DIVERSITY-T-SIDE` run after the bank and source are copied
+and hash-verified under a new immutable Euler root.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
