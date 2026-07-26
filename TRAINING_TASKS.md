@@ -9,8 +9,9 @@
   after infrastructure and receipt-gate failures; all five corrected immutable
   replacement update-1 and 500-update training gates passed; deterministic
   development evaluation passed integrity and authorized a continuous
-  1,000-update confirmation for every panel; all five confirmations are
-  submitted, but no B0 cell witness exists yet
+  1,000-update confirmation for every panel; all five confirmations completed,
+  three panels advance to 2,000 while two require diagnosis, and no B0 cell
+  witness exists yet
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -2150,6 +2151,40 @@ checkpoints at updates 100 through 1,000, one FINAL exactly equal to update
 maximum mass residual zero, and maximum sub-threshold floating reward residual
 `4.76837158203125e-07`. All jobs exited `0:0`. The online counts above are
 diagnostic only and do not rank or promote panels.
+
+Continuous 1,000-update development result: **three panels continue; two stop
+for diagnosis; no cell has a dynamic witness**.
+
+| Panel | Eval job / elapsed | Evaluation SHA-256 | Best source-disjoint evidence | Decision |
+|---|---|---|---|---|
+| foundation geometry | `8651898` / `00:18:52` | `22e936a3e44e1d96ef8a01f1b3095fbcfb507c0c2b0028b1f8909996ab5dff0d` | one OSM success at 500; OSM median `0.878 @500`; procedural `0.852 @700`; both collapse by 800–1,000 | continue to 2,000 |
+| foundation distance | `8651900` / `00:18:55` | `1ad753e03ee71fac00cac6c7d726c80d3f911ce8a396bd6b11eddae88ee1667a` | one d06 success at 300, d02 at 600, d08 at 700; all cells zero at 900/1,000 | continue to 2,000 |
+| trench distance | `8651902` / `00:18:57` | `87b0a3b5efdd8cb88ec98598fc66f16937e12f9bfb1228057c8a1edb753868b1` | no successes; best medians d02 `0.582 @200`, d04 `0.624 @300`, d06 `0.573 @300`, d08 `0.213 @400`; all cells zero from 600 | stop and diagnose |
+| trench side | `8651904` / `00:18:28` | `247595d095f353de97bf6a9db48bbdce2e50ae9c69d06cd323c7faafb4bd059a` | no successes; both-side `0.428 @200`, one-side `0.305 @200`; both zero from 500 | stop and diagnose |
+| trench topology | `8651906` / `00:19:09` | `b8d0d14840a59024551b8c40f0db7af82ba6f27cb0d117c83254c67c1f0fed0d` | one segmented-2 success at 400; three total successes at 900 and four at 1,000, including two straight and two segmented-2 with trajectories | continue to 2,000 |
+
+All 50 scheduled evaluations have zero integrity failures and exact reset
+verification. Geometry and foundation-distance satisfy the frozen
+five-evaluation rule because their last success/improvement at 700 is only
+three evaluations old, despite terminal collapse. Topology has direct success
+growth at 900/1,000. Trench distance and side have at least five consecutive
+flat evaluations after their last improvement and are stopped. None reaches
+6/8 in any cell at two consecutive checkpoints, so B0 remains unchecked and
+no 120-hour recipe is qualified.
+
+The next compute decision is therefore asymmetric:
+
+- launch fresh continuous 2,000-update repeats only for foundation geometry,
+  foundation distance, and trench topology, preserving all earlier best
+  checkpoints;
+- do not spend more unchanged PPO compute on trench distance or trench side;
+  diagnose their mid-run-to-zero collapse before selecting a repair; and
+- keep any entropy/reward/map repair separate from the unchanged 2,000-update
+  repeats.
+
+terra-baselines `008b5bd` extends the sealed launcher and evaluator to the
+2,000-update/20-checkpoint milestone. `bash -n`, ShellCheck, and whitespace
+checks pass.
 
 #### B0c — Expand only witnessed easy cells
 
