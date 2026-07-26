@@ -7,8 +7,8 @@
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
   generation passed; the first B0b submission was stopped before production
   after infrastructure and receipt-gate failures; all five corrected immutable
-  replacement update-1 gates passed and their 500-update production phases are
-  running
+  replacement update-1 and 500-update training gates passed; deterministic
+  development evaluation is running
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -1967,6 +1967,25 @@ Every receipt records 92 finite model leaves, 185 finite optimizer leaves,
 zero transition-integrity violations, the exact panel manifest, and its frozen
 foundation or shaping-off trench reward contract. This passes the launch gate
 only; it does not establish a dynamic cell witness.
+
+Bounded 500-update training result: **PASS for all five panels** at
+`2026-07-26T09:27+02:00`.
+
+| Panel | W&B | Training-gate SHA-256 | FINAL SHA-256 | Online done / episodes |
+|---|---|---|---|---:|
+| foundation geometry | `q24yinzc` | `d02a6603e49e6a5c910483741033da7676d9a9b21fd0fe5982f632cda4b5de80` | `d2b259bacc8ecee46526f6b101b0f36f3ac64b51637f0f99495b79c0d2887e98` | 1,632 / 144,167 |
+| foundation distance | `rryzgmnh` | `8db63c0643b8f9c2ab7f38bb2d868e75099513eeb9c37a6a11294cb7263fe878` | `8b488c292178504dec7badc37d287e64f48819a1db5451a8b217b16861965fc2` | 7,734 / 146,305 |
+| trench distance | `ghs31rt3` | `a8fb706747a400f381c1cd301c7e50dc756510613420c6ec714a8f548dde938c` | `ed7387409192fbd64d7d121528cf8706529959b5c400c414f3d6f8d4afd992de` | 6,314 / 147,559 |
+| trench side | `314071nj` | `2053fd48db240d53759c159281ca8ebefc49c47adcc88b618f6b563e87b764c2` | `215d2e9feb1efcf58d0ff077d73ac026cdaf9893dbc059ddf9358d334cf8740b` | 9,281 / 149,616 |
+| trench topology | `jwvr6vvy` | `bcc7bff23b94e52a91fd956597867b988d077d137e94326f0ca7ac695d42c1ac` | `cba2fcbca23e2e97b08bfdcb6cfbbec8a4261207089b3ef83422efe045ce7fcc` | 2,408 / 144,577 |
+
+Every training gate has exactly 500 aggregate receipts, numbered checkpoints
+at 100/200/300/400/500, one FINAL checkpoint exactly equal to update 500,
+maximum mass residual zero, and zero mass/target/obstacle/reward-residual
+violation counts. The maximum sub-threshold floating reward residual was
+`4.76837158203125e-07`. Online completion rose during every panel but remains
+diagnostic; only the running source-disjoint development evaluations adjudicate
+B0b or authorize continuation.
 
 #### B0c — Expand only witnessed easy cells
 
