@@ -1880,6 +1880,23 @@ Submitted B0b execution receipt at `2026-07-26T08:17:28+02:00`:
 This receipt records submission, not a passing smoke or learning result. Each
 evaluation remains `afterok`-dependent on its matching training gate.
 
+Infrastructure replacement receipt at `2026-07-26T08:19+02:00`:
+
+- original training jobs `8647662`, `8647666`, and `8647670` all landed on
+  `eu-g6-064`, where Slurm allocated four RTX 4090s but the frozen runtime gate
+  independently saw only JAX devices `[0, 1, 3]`;
+- all three failed before the update-1 smoke began, wrote zero training files,
+  and their dependent evaluators `8647663`, `8647667`, and `8647671` were
+  cancelled as `DependencyNeverSatisfied`;
+- no GPU check was weakened and none of these jobs is scientific evidence;
+- identical clean replacements exclude only `eu-g6-064`:
+
+| Panel | Replacement training | Replacement evaluation | Receipt SHA-256 |
+|---|---:|---:|---|
+| foundation geometry | `8647704` | `8647705` | `0edc025cfcb4f3251cc2a13925f1fb37c32cd8078c56a2d4fcc812c380194e24` |
+| trench distance | `8647719` | `8647720` | `fceb4cdaa0e58be811b98ba675dcd9d87a009b4f4165a18bc2bddbaea0b793ca` |
+| trench topology | `8647721` | `8647722` | `b9b7fd320812302c0fe4b5543412cc6c5760a1b91cc5f5d33103608d93a64c9d` |
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
