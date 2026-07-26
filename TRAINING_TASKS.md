@@ -65,8 +65,8 @@ These decisions supersede stale choices later in the historical v4 design:
 | Action validity | Remove every relocation-potential veto on a physically valid dump. Potential belongs in reward, not action legality. |
 | Initialization | Train new small policies from scratch on the corrected distribution. E8 is evaluation context only, never the initializer or teacher for recovery runs. |
 | Family separation | Foundation and trench feasibility/specialist policies are two independent runs. |
-| Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Advance whenever fixed task metrics show even slight preregistered improvement; use an exact continuation only when the checkpoint contract preserves all process state, otherwise run the full higher milestone continuously from a declared fresh start. |
-| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. |
+| Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Any integrity-clean recipe that shows even slight preregistered fixed-bank improvement receives the next meaningful budget; use an exact continuation only when the checkpoint contract preserves all process state, otherwise run the full higher milestone continuously from a declared fresh start. |
+| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. A short-run wall-clock limit must never stop a recipe that has cleared this qualification. |
 | Curriculum separation | Map, dense-reward, dense-to-terminal reward, and partial-reset treatments never advance in the same causal comparison. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
@@ -178,6 +178,14 @@ training banks become mandatory after single-map feasibility is established.
     contract serializes the full runner state. Seal selected final artifacts
     by checksum-copying them to a verified persistent destination with enough
     capacity; a scratch-only checkpoint is not a durable result.
+
+In this document, **manifest-sealed** means that the declared source, bank,
+configuration, and receipt bytes are content-addressed and must still match
+their frozen SHA-256 manifests when consumed. It does not imply filesystem
+write protection unless a separate permission receipt says so. Unmanifested
+runtime files such as `__pycache__` do not enter the causal package, but any
+drift in a manifest-listed file invalidates the evidence. Historical uses of
+“immutable root” should be read under this exact contract.
 
 ## 4. Dependency graph
 
@@ -2290,10 +2298,10 @@ completed successes at update 2,000 while greedy source-disjoint development
 is 0/32 throughout updates 1,600-2,000. Because the modes differ, that gap does
 not yet prove identity memorization.
 
-The train/development × deterministic/four-sampled cross was sealed and
-submitted at `2026-07-26T15:57:22+02:00`:
+The train/development × deterministic/four-sampled cross completed and passed
+post-run acceptance:
 
-- immutable diagnostic root:
+- manifest-sealed diagnostic root:
   `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_distance_policy_cross_u2000_v1`;
 - it reuses the exact 2,000-update bank and update-2,000 checkpoint, whose
   manifest and checkpoint SHA-256 values are
@@ -2313,20 +2321,48 @@ submitted at `2026-07-26T15:57:22+02:00`:
   `2a93910f00775226beafb5b726fd4375af4192cc70c7b18d62454b8c2088178e`,
   and
   `15fb60c612a06db35b557b2b69b3f86b0fb231bd2045a0f609a6b8ee7244b4da`;
-- job `8668675` runs one deterministic and four sampled seeds on each of the
-  exact 32 train and 32 development identities, excludes `eu-g6-064`, and
-  writes `policy_cross_update_002000.json`; and
-- acceptance requires exactly ten records, exact reset verification on both
-  splits, and zero integrity failures.
+- the runtime-equivalence receipt was written after submission but before the
+  first rollout. It is retrospective pre-rollout verification, not a
+  pre-submission gate;
+- job `8668675` completed with exit code `0:0` in `00:16:55`; the effective
+  allocation was `gpuhe.4h` with a `02:00:00` limit, despite the packaged
+  header naming `gpuhe.24h`;
+- the output SHA-256 is
+  `b72f30ad61ba72e56cd02624287f735cefb833bcd49e1cae885f6286f92ba279`;
+  all 407 source-manifest files, all 3,393 bank-manifest files, and the exact
+  checkpoint were re-hashed after completion; and
+- the post-run acceptance receipt SHA-256 is
+  `2528d466e2ae82570b46c4a747356590ad260975b60a2f9c18fc27888256800e`.
+  It verifies exactly ten records, the declared deterministic seed plus four
+  sampled seeds on both splits, 32 episodes per record, exact 32-slot resets
+  with `env_steps == 0`, the exact train/development manifest hashes, and zero
+  integrity failures.
 
-This is a diagnostic submission, not evidence for memorization or a repair.
-Do not launch a distance 5,000-update, reward, entropy, architecture, or
-cell-specialist treatment until the cross is complete.
+| Split | Deterministic | Four sampled seeds |
+|---|---:|---:|
+| exact training identities | 31/32 | 128/128 |
+| source-disjoint development identities | 0/32 | 2/128 |
 
-The geometry-only 5,000-update repeat was sealed and submitted at
+Both sampled development successes are in `f_apron_d06`; d02, d04, and d08
+remain 0/32 sampled. The train-minus-development gaps are `0.96875`
+deterministic and `0.984375` sampled. Action sampling therefore does not
+explain the collapse: this is strong training-identity memorization with
+source-disjoint generalization failure.
+
+The only authorized repair is increased foundation source-geometry diversity
+while keeping the four d02/d04/d06/d08 cells, corrected dense recipe, seed,
+model, PPO settings, exact development identities, and evaluation contract
+fixed. Start at a fresh continuous 1,000-update milestone. If rule 13 detects
+even slight held-out improvement, run the full 2,000 and then 5,000 milestones;
+once the recipe clears the twice-observed family/cell qualification, move it
+to a continuous 20,000-update `gpuhe.120h` production run. An unchanged
+distance 5,000-update run and reward, entropy, architecture, or cell-specialist
+treatments remain unauthorized.
+
+The geometry-only 5,000-update repeat was manifest-sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
 
-- immutable root:
+- manifest-sealed root:
   `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_geometry_u5000_v1`;
 - source revisions are Terra
   `146919ffd78242f1bcf6d17091a47a20fd22b2bc` and terra-baselines
