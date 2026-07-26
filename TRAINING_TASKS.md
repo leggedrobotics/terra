@@ -59,7 +59,8 @@ These decisions supersede stale choices later in the historical v4 design:
 | Action validity | Remove every relocation-potential veto on a physically valid dump. Potential belongs in reward, not action legality. |
 | Initialization | Train new small policies from scratch on the corrected distribution. E8 is evaluation context only, never the initializer or teacher for recovery runs. |
 | Family separation | Foundation and trench feasibility/specialist policies are two independent runs. |
-| Scratch budget | Plan 1,000 PPO updates, evaluate every 100, extend once to 2,000 only while fixed-bank performance improves, and stop earlier only after the gate passes twice. |
+| Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Continue the same checkpoint lineage whenever the fixed task metrics show even slight preregistered improvement; stop a feasibility screen once its gate passes twice. |
+| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments as at least 20,000-update continuations on `gpuhe.120h` with a five-day wall-time request. Continue in 20,000-update chunks while the fixed bank still improves. |
 | Curriculum separation | Map, dense-reward, dense-to-terminal reward, and partial-reset treatments never advance in the same causal comparison. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
@@ -132,6 +133,23 @@ training banks become mandatory after single-map feasibility is established.
     invalid.
 12. Use the small base architecture for recovery feasibility and teacher
     training. Do not mix an architecture comparison into those runs.
+13. Short budgets are decision milestones, not evidence that learning has
+    saturated. On a deterministic source-disjoint bank, "slight improvement"
+    means either one additional successful identity in the family or current
+    worst cell, or at least `0.01` absolute improvement in median terminal task
+    completion, relative to the previous best scheduled evaluation. Reward,
+    loss, or online success alone cannot trigger continuation.
+14. At a milestone, continue the exact model, optimizer, RNG, and schedule
+    lineage to the next `500 -> 1,000 -> 2,000 -> 5,000` milestone whenever
+    slight improvement exists and integrity remains clean. A five-evaluation
+    fixed-bank plateau with no such improvement is the stop rule.
+15. A recipe is considered qualified for long training only after its
+    source-disjoint family/cell gate passes twice and no semantic, integrity,
+    or causal blocker remains. Qualified continuations use Euler
+    `gpuhe.120h`, request `5-00:00:00`, run for at least 20,000 updates, save
+    fixed-bank checkpoints at a declared cadence, and continue in additional
+    20,000-update chunks while rule 13 still shows improvement. Long training
+    never changes map, reward, reset, PPO, or architecture treatment in place.
 
 ## 4. Dependency graph
 
@@ -1511,8 +1529,12 @@ Hold PPO, model, reward, horizon, reset, and evaluation fixed. Use only the
 named family as the treatment. Evaluate deterministically on the
 source-disjoint quantitative easy-family bank every 100 updates.
 
-Plan 1,000 updates and extend once to 2,000 only while fixed-bank performance
-is improving. Stop earlier only after the family gate passes twice.
+Use the global continuation rule: review at 1,000, 2,000, and 5,000 updates,
+continue whenever even slight fixed-bank task progress remains, and stop the
+screen once the family gate passes twice. After both family screens pass, each
+selected specialist receives an at-least-20,000-update continuation on
+`gpuhe.120h`; those long continuations may run concurrently with G0 and are
+not substitutes for G0's multitask gate.
 
 Family pass gate:
 
@@ -1583,8 +1605,10 @@ Initialize a third base `resnet_spatial_8x8` policy from scratch, not from E8
 or either specialist. Train a 50/50 easy foundation/trench mixture with the
 corrected contract and the expanded B0 training bank.
 
-Evaluate every 100 updates. Initial budget 1,000 updates; extend once to 2,000
-only if the preregistered learning curve is still improving.
+Evaluate every 100 updates. Review at 1,000, 2,000, and 5,000 updates and
+continue under the global slight-improvement rule. Once G0 passes twice, its
+selected checkpoint starts an at-least-20,000-update `gpuhe.120h`
+continuation with the treatment held fixed.
 
 Pass gate:
 
@@ -1617,9 +1641,10 @@ Train on the exact same corrected easy 50/50 bank used by G0. E8 remains a
 zero-shot historical reference and supplies no parameters or distillation
 targets.
 
-Plan 1,000 updates, evaluate every 100, and extend once to 2,000 only while
-fixed-bank performance improves. Apply the same family, cell, two-consecutive,
-and integrity gates as G0.
+Evaluate every 100 updates and apply the global 1,000/2,000/5,000 continuation
+rule plus the same family, cell, two-consecutive, and integrity gates as G0.
+Once qualified, the selected S0 checkpoint receives its own
+at-least-20,000-update `gpuhe.120h` continuation.
 
 The purpose is to establish one medium parent on the new distribution, not to
 compare architectures. A scratch-medium control is conditional on failed
@@ -1750,8 +1775,10 @@ Use `corrected_dense_v1` for foundations and
 `corrected_dense_v1_trench_absolute_off` for trenches. Hold PPO, architecture,
 450-step untouched resets, and every non-map setting at F0R. Each run receives
 500 updates initially and deterministic development evaluation every 100
-updates. Extend that same run once to 1,000 only if an unpassed cell is
-improving over its latest two evaluations; otherwise stop.
+updates. For an unpassed cell, continue the exact lineage through the
+1,000/2,000/5,000 milestones whenever the global slight-improvement rule
+passes. A passing panel stops because its purpose is only a dynamic witness;
+long 120-hour-queue training begins after the family recipe is qualified.
 
 A candidate cell earns a dynamic witness only when:
 
@@ -1967,8 +1994,8 @@ Before implementation, ratify:
 Trigger a dense A/B only if `corrected_dense_v1` passes F0 but shows a
 transport-specific failure on the first otherwise-feasible constrained cell,
 or Lorenzo explicitly authorizes it. Use the same scratch initialization,
-maps, reset seeds, PPO, 1,000-update plan, 100-update evaluation cadence, and
-conditional extension to 2,000. Do not combine this with a map-stage,
+maps, reset seeds, PPO, 100-update evaluation cadence, and global
+slight-improvement continuation rule. Do not combine this with a map-stage,
 architecture, terminal-reward, or partial-reset change.
 
 ### W1 — Qualify one foundation dense parent

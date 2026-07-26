@@ -49,10 +49,13 @@ The following decisions were ratified after reviewing the failure evidence:
    `resnet_spatial_8x8` base policies, approximately 994,825 parameters,
    initialized from scratch: one foundation policy and one trench policy.
    Neither is called a teacher until it passes a source-disjoint family gate.
-5. **Adequate scratch budgets.** A scratch learning treatment receives a
-   planned 1,000 PPO-update budget, evaluation every 100 updates, and one
-   extension to 2,000 only while fixed-bank performance is improving. It may
-   stop earlier only after the declared success gate passes twice.
+5. **Adequate scratch and long-run budgets.** Treat 500, 1,000, 2,000, and
+   5,000 PPO updates as review milestones. Continue the exact lineage whenever
+   a deterministic fixed bank gains one successful identity or `0.01` median
+   terminal completion; do not use reward alone. Once the family/cell recipe
+   passes twice, selected policies receive at least 20,000 updates on
+   `gpuhe.120h` with a five-day request and continue in 20,000-update chunks
+   while the fixed task metrics still improve.
 6. **Separate causal programs.** Map progression, dense-reward design,
    dense-to-terminal reward progression, and partial-reset progression remain
    separate experiments. The first feasibility treatment uses one frozen
