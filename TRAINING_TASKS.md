@@ -2134,6 +2134,23 @@ sub-threshold floating reward residual is `4.76837158203125e-07`. This is an
 integrity milestone only. The fixed-bank ten-checkpoint result remains the
 learning gate.
 
+Continuous 1,000-update training result: **PASS for all five panels**.
+
+| Panel | Job / elapsed | Training-gate SHA-256 | FINAL SHA-256 | Online done / episodes |
+|---|---|---|---|---:|
+| foundation geometry | `8651897` / `01:32:19` | `d3f82192ae1ef8e2833d5b2a2887ce49faf8d5e6e2bc28faccc7be77a212d664` | `be0e6b524cbd51a7af05b5f74d73e80f96c277cc0fe6a8be1d9bc7d79bc7577b` | 54,222 / 331,247 |
+| foundation distance | `8651899` / `01:33:57` | `08abaf5f1fe17c1ce597df7e7a9fd7a2e8f1a0e7047411f3c570fe05f87443d9` | `44a4014ed3399350c39d666c412697325dcbcbae270592cfee46e1fbe3da3723` | 320,758 / 537,739 |
+| trench distance | `8651901` / `01:33:23` | `c234110f27df5bf363f3ad467545a10a159b96097a9237a178137995521a60d7` | `41c73cc28bf485b1d57565920660359609ac04ec5420ac486e792d4f7247bd3f` | 640,854 / 828,426 |
+| trench side | `8651903` / `01:32:14` | `32b9faa94fdae1d3139234543d6a5756996f0309abca7221090462bbc2060e11` | `8c85be08ec71376ab41443b6a8c0967ed2704150cd17e9be0f24fc2a36ed4312` | 804,548 / 992,903 |
+| trench topology | `8651905` / `01:32:06` | `354abb6e1e0896043f250c4562856448b7dfa3ec6cf21bc96f979a27225b1d32` | `b44d8b3894325e4f87314b3e042e5a150570d1b37414452304fc759721503329` | 81,282 / 348,385 |
+
+Every gate certifies exactly 1,000 ordered aggregate receipts, ten numbered
+checkpoints at updates 100 through 1,000, one FINAL exactly equal to update
+1,000 across 92 model and 185 optimizer leaves, zero hard integrity counts,
+maximum mass residual zero, and maximum sub-threshold floating reward residual
+`4.76837158203125e-07`. All jobs exited `0:0`. The online counts above are
+diagnostic only and do not rank or promote panels.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
