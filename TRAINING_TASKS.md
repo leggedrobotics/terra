@@ -10,8 +10,8 @@
   replacement update-1 and 500-update training gates passed; deterministic
   development evaluation passed integrity and authorized a continuous
   1,000-update confirmation for every panel; all five confirmations completed,
-  three panels advance to 2,000 while two require diagnosis, and no B0 cell
-  witness exists yet
+  three 2,000-update panels are submitted while two require diagnosis, and no
+  B0 cell witness exists yet
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -2185,6 +2185,36 @@ The next compute decision is therefore asymmetric:
 terra-baselines `008b5bd` extends the sealed launcher and evaluator to the
 2,000-update/20-checkpoint milestone. `bash -n`, ShellCheck, and whitespace
 checks pass.
+
+Continuous 2,000-update submission receipt at
+`2026-07-26T11:48:51+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_panels_u2000_v1`;
+- source revisions: Terra
+  `6702cdfa4926b37e34f62501a21dff7f3460b905` and terra-baselines
+  `008b5bdd11437777a44821dfe5886b5e9ac2d6ab`;
+- source-manifest SHA-256
+  `96852d44712c59ffe9ea26c43c38377239043183ccd6428a5c4926e47473bc20`;
+- unchanged bank-manifest SHA-256
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`;
+- creation-receipt SHA-256
+  `f3419501d679ad39121a0844eef2712919eb4653c34221ca845932b92a7a5927`;
+- submission-receipt SHA-256
+  `11f8b2928c5465f3fdf65500c8b55b56f669fe652c224310361a7091c822cd2f`;
+- source, copied bank, bank-internal manifest, exact revisions, declared panel
+  subset, and 2,000-update target all passed before submission;
+- every job excludes only `eu-g6-064`.
+
+| Panel | Continuous training | Dependent evaluation |
+|---|---:|---:|
+| foundation geometry | `8656160` | `8656161` |
+| foundation distance | `8656162` | `8656165` |
+| trench topology | `8656166` | `8656167` |
+
+Trench distance and trench side are absent by design. This is a compute
+receipt only; all three new runs require fresh update-1, 2,000-receipt,
+20-checkpoint, and fixed-bank gates.
 
 #### B0c — Expand only witnessed easy cells
 
