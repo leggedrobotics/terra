@@ -4,7 +4,7 @@
   complete with a failed historical mass-integrity gate and material completion
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
-  failed cleanly and its bounded trajectory/reward diagnosis is active
+  failed cleanly; bounded diagnosis selected one trench-reward repair, F0R
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -157,10 +157,10 @@ C0 exact visible dump mask (ratified)
                     `--> F0 two scratch fixed-identity probes
                             | fail
                             `--> O0/transition/reward diagnosis
-                            |
-                            ` pass
-                               |
-                              B0 orthogonal feasibility cells
+                                      |
+                                     F0R one-factor trench repair
+                                      |
+                                     B0 orthogonal feasibility cells
                                |
                               F1 two scratch family specialists
                                |
@@ -196,11 +196,12 @@ Task index:
 | C3 | P0 | Terra loader/tests | C1, C1a | [x] complete |
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
-| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] trajectory/reward diagnosis active; alias test only if implicated |
+| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] implementation and launch pending |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
-| B0 | P1 | generation/validation | F0 | [ ] blocked |
-| F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
+| B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
+| F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
 | G0 | P1 | one scratch small easy generalist | F1 | [ ] blocked |
 | S0 | P1 | one grown medium qualification | G0 | [ ] blocked |
 | K0 | P2 | global staged map campaign | S0 | [ ] blocked |
@@ -1269,7 +1270,79 @@ Bounded trajectory-diagnosis launch receipt:
 - retry job `8642753` was submitted at `2026-07-26T02:52:14Z`; its
   submitted-job receipt SHA-256 is
   `e46e03b26e126c17ae250ed2344f7d442160f8c1c1b75a7ee92a7916318fab1a`.
-  Submission is not diagnosis evidence.
+  It completed in `00:16:40`, exit `0:0`;
+- all four replays and all 128 sealed evaluator rows match exactly, including
+  zero maximum float error. The 57,600-transition observer gate passed with
+  zero gradient updates; output and log SHA-256 values are
+  `8b313453fb3c420d2730195252d82c8ad1afb1c9b88d35a888e2fc7ab6115d3f`
+  and
+  `be49a22907108ec32039e3ed80dcf170e22231ee4b0a3a8b1e2a7aca9e4dc7ed`;
+- the successful foundation update-900 control finishes in 21 effective steps.
+  Update 1,000 instead alternates 220 forward and 222 backward actions, visits
+  only 11 physical states, and never digs. DO would have an effect on 227
+  steps, has positive immediate reward advantage on all 227, yet is ranked
+  eighth by the policy every time;
+- trench update 900 seed `2026072600` makes 20 effective actions, moves 48/66
+  units legally, then selects 430 explicit no-ops. Seed `2026072601` makes nine
+  effective moves and then selects 441 no-ops; movement and rotation remain
+  effective, but it never reaches a DO-effective workspace;
+- trench update 1,000 seed `2026072602` cycles through only six physical states
+  for 450 effective movement actions without reaching a DO-effective workspace.
+  Seed `2026072611` digs 41/66, places 19, remains loaded with 22, then
+  oscillates between 218/219 cabin rotations. DO is effect-capable on 441
+  steps but selected only three times; 437/438 missed DO actions have higher
+  immediate reward, by `+0.270` on average; and
+- the 100-update training-receipt bins independently show the trench no-op
+  fraction rising from `13.3%` to `92.2%`, no-effect actions from `35.8%` to
+  `92.7%`, and productive cycles falling from `6.73` to `2.09` per episode
+  while mean return improves from `-7.91` to `-1.11`. The foundation control
+  learns while its no-op/no-effect rates fall.
+
+Diagnosis:
+
+- the map is statically valid and supports repeated legal dig/dump progress;
+  transition, capacity, mass, and exact-mask contracts are not the blocker;
+- no trace requires different hidden outcomes from an identical model input.
+  This is not a broad alias search, so it supplies no authorization for O0
+  feature or recurrence work;
+- the failed policies exploit idling or short motion/cabin cycles after easy
+  progress. The foundation control rejects a universal PPO or base-architecture
+  failure, but its update-1,000 collapse makes checkpoint-bounded retention
+  mandatory; and
+- the first implicated treatment is the trench-only absolute distance/alignment
+  reward. It becomes less negative as the population settles and return
+  improves while task work collapses. This is a causal hypothesis, not yet a
+  selected reward: it requires the one-factor F0R ablation below.
+
+### F0R — Remove absolute trench shaping as a one-factor repair
+
+Dependency: the completed failed-trench diagnosis above. Foundation is not
+rerun because it already supplies the matched PPO/model feasibility control.
+
+Freeze every F0 trench choice, including:
+
+- the same exact trench identity, reset bank, horizon, initialization seed
+  `2026072602`, fresh optimizer, 4 x 1,024 x 32 PPO shape, learning rate,
+  entropy schedule, model, checkpoint cadence, and 1,000-update budget;
+- `corrected_dense_v1` action rewards, exact completion, terminal reward,
+  transition, and integrity gates; and
+- independent update-1 GPU smoke, ten fixed evaluations, and the same
+  29/32-at-two-consecutive-checkpoints pass gate.
+
+Change exactly one environment field: set `apply_trench_rewards=false`. This
+removes the absolute per-step distance/alignment term; it does not add progress
+reward, change action costs, change the map, alter PPO, or begin W0a/W1.
+Record the treatment as `corrected_dense_v1_trench_absolute_off`.
+
+Decision:
+
+- pass: use the shaping-off contract for the easy trench cells and proceed to
+  B0; do not call the historical absolute trench term part of the corrected
+  parent;
+- fail with an improving fixed curve: use F0's single conditional extension;
+  and
+- fail flat: stop again and test a bounded completion-delta/potential reward,
+  not architecture, map diversity, or a broad hyperparameter sweep.
 
 Pass gate:
 
@@ -1755,9 +1828,12 @@ acceptance evidence in the corresponding section passes.
    attempt is preserved as failed/cancelled infrastructure evidence. Clean
    replacements from immutable root `f0_retry1` completed: foundation passed
    feasibility but failed terminal retention, while trench failed cleanly.
-9. [ ] If either F0 arm fails, stop its descendants and run only the
-   trajectory/O0/transition/reward diagnosis implicated by that arm.
-10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
+9. [x] If either F0 arm fails, stop its descendants and run only the
+   trajectory/O0/transition/reward diagnosis implicated by that arm. The exact
+   replay gate passed and selected F0R without authorizing an observation or
+   architecture change.
+10. [ ] Implement and run F0R. Only if the repaired trench and retained
+   foundation witnesses both pass may B0 build and validate the orthogonal
    feasibility panels, then admit only dynamically witnessed cells.
 11. [ ] Run the two scratch F1 family specialists; require family and per-cell
     gates twice with zero integrity failures.
