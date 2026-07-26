@@ -52,10 +52,14 @@ The following decisions were ratified after reviewing the failure evidence:
 5. **Adequate scratch and long-run budgets.** Treat 500, 1,000, 2,000, and
    5,000 PPO updates as review milestones. Continue the exact lineage whenever
    a deterministic fixed bank gains one successful identity or `0.01` median
-   terminal completion; do not use reward alone. Once the family/cell recipe
-   passes twice, selected policies receive at least 20,000 updates on
-   `gpuhe.120h` with a five-day request and continue in 20,000-update chunks
-   while the fixed task metrics still improve.
+   terminal completion; do not use reward alone. A checkpoint format that
+   restarts environment, RNG, or action history is not an exact continuation:
+   until exact checkpointing exists, schedule each extended confirmation as
+   one continuous run at its full declared budget. Once the family/cell recipe
+   passes twice, selected policies receive at least 20,000 continuous updates
+   on `gpuhe.120h` with a five-day request. While fixed task metrics still
+   improve, extend in 20,000-update chunks only with exact checkpointing;
+   otherwise launch one fresh continuous run at the full higher milestone.
 6. **Separate causal programs.** Map progression, dense-reward design,
    dense-to-terminal reward progression, and partial-reset progression remain
    separate experiments. The first feasibility treatment uses one frozen

@@ -8,7 +8,8 @@
   generation passed; the first B0b submission was stopped before production
   after infrastructure and receipt-gate failures; all five corrected immutable
   replacement update-1 and 500-update training gates passed; deterministic
-  development evaluation is running
+  development evaluation passed integrity and authorized a continuous
+  1,000-update confirmation for every panel, but no B0 cell witness exists yet
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -62,8 +63,8 @@ These decisions supersede stale choices later in the historical v4 design:
 | Action validity | Remove every relocation-potential veto on a physically valid dump. Potential belongs in reward, not action legality. |
 | Initialization | Train new small policies from scratch on the corrected distribution. E8 is evaluation context only, never the initializer or teacher for recovery runs. |
 | Family separation | Foundation and trench feasibility/specialist policies are two independent runs. |
-| Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Continue the same checkpoint lineage whenever the fixed task metrics show even slight preregistered improvement; stop a feasibility screen once its gate passes twice. |
-| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments as at least 20,000-update continuations on `gpuhe.120h` with a five-day wall-time request. Continue in 20,000-update chunks while the fixed bank still improves. |
+| Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Advance whenever fixed task metrics show even slight preregistered improvement; use an exact continuation only when the checkpoint contract preserves all process state, otherwise run the full higher milestone continuously from a declared fresh start. |
+| Qualified long runs | Once both F1 specialists establish the recipe, run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. |
 | Curriculum separation | Map, dense-reward, dense-to-terminal reward, and partial-reset treatments never advance in the same causal comparison. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
@@ -142,17 +143,29 @@ training banks become mandatory after single-map feasibility is established.
     worst cell, or at least `0.01` absolute improvement in median terminal task
     completion, relative to the previous best scheduled evaluation. Reward,
     loss, or online success alone cannot trigger continuation.
-14. At a milestone, continue the exact model, optimizer, RNG, and schedule
-    lineage to the next `500 -> 1,000 -> 2,000 -> 5,000` milestone whenever
-    slight improvement exists and integrity remains clean. A five-evaluation
-    fixed-bank plateau with no such improvement is the stop rule.
+14. At a milestone, continue the exact model, optimizer, RNG, environment,
+    action-history, and schedule lineage to the next
+    `500 -> 1,000 -> 2,000 -> 5,000` milestone whenever slight improvement
+    exists and integrity remains clean. A five-evaluation fixed-bank plateau
+    with no such improvement is the stop rule. The current checkpoint-v2
+    resume path restores model, optimizer, update, and schedule position but
+    explicitly restarts environment, RNG, and action history; it therefore
+    does **not** satisfy this rule. Until an exact checkpoint contract exists,
+    an extended confirmation must be launched as one fresh continuous run at
+    the full declared milestone and reported as a repeat, not as an exact
+    continuation.
 15. A recipe is considered qualified for long training only after its
     source-disjoint family/cell gate passes twice and no semantic, integrity,
     or causal blocker remains. Qualified continuations use Euler
     `gpuhe.120h`, request `5-00:00:00`, run for at least 20,000 updates, save
-    fixed-bank checkpoints at a declared cadence, and continue in additional
-    20,000-update chunks while rule 13 still shows improvement. Long training
-    never changes map, reward, reset, PPO, or architecture treatment in place.
+    fixed-bank checkpoints at a declared cadence, and receive more compute
+    while rule 13 still shows improvement. Until exact checkpointing is
+    implemented, the first selected production treatment is one continuous
+    20,000-update run; a higher milestone must be a fresh continuous run at
+    the full cumulative budget rather than a checkpoint-v2 pseudo-resume.
+    With an exact checkpoint contract, extend in 20,000-update chunks. Long
+    training never changes map, reward, reset, PPO, or architecture treatment
+    in place.
 
 ## 4. Dependency graph
 
@@ -1532,12 +1545,13 @@ Hold PPO, model, reward, horizon, reset, and evaluation fixed. Use only the
 named family as the treatment. Evaluate deterministically on the
 source-disjoint quantitative easy-family bank every 100 updates.
 
-Use the global continuation rule: review at 1,000, 2,000, and 5,000 updates,
-continue whenever even slight fixed-bank task progress remains, and stop the
+Use the global milestone rule: review at 1,000, 2,000, and 5,000 updates,
+advance whenever even slight fixed-bank task progress remains, and stop the
 screen once the family gate passes twice. After both family screens pass, each
-selected specialist receives an at-least-20,000-update continuation on
-`gpuhe.120h`; those long continuations may run concurrently with G0 and are
-not substitutes for G0's multitask gate.
+selected recipe receives an at-least-20,000-update continuous production run
+on `gpuhe.120h`, following rule 15's exact-checkpoint boundary. Those long
+runs may execute concurrently with G0 and are not substitutes for G0's
+multitask gate.
 
 Family pass gate:
 
@@ -1609,9 +1623,9 @@ or either specialist. Train a 50/50 easy foundation/trench mixture with the
 corrected contract and the expanded B0 training bank.
 
 Evaluate every 100 updates. Review at 1,000, 2,000, and 5,000 updates and
-continue under the global slight-improvement rule. Once G0 passes twice, its
-selected checkpoint starts an at-least-20,000-update `gpuhe.120h`
-continuation with the treatment held fixed.
+advance under the global slight-improvement rule. Once G0 passes twice, its
+recipe starts an at-least-20,000-update continuous `gpuhe.120h` production
+run under rule 15, with the treatment held fixed.
 
 Pass gate:
 
@@ -1644,10 +1658,10 @@ Train on the exact same corrected easy 50/50 bank used by G0. E8 remains a
 zero-shot historical reference and supplies no parameters or distillation
 targets.
 
-Evaluate every 100 updates and apply the global 1,000/2,000/5,000 continuation
+Evaluate every 100 updates and apply the global 1,000/2,000/5,000 milestone
 rule plus the same family, cell, two-consecutive, and integrity gates as G0.
-Once qualified, the selected S0 checkpoint receives its own
-at-least-20,000-update `gpuhe.120h` continuation.
+Once qualified, the selected S0 recipe receives its own at-least-20,000-update
+continuous `gpuhe.120h` production run under rule 15.
 
 The purpose is to establish one medium parent on the new distribution, not to
 compare architectures. A scratch-medium control is conditional on failed
@@ -1815,10 +1829,14 @@ Use `corrected_dense_v1` for foundations and
 `corrected_dense_v1_trench_absolute_off` for trenches. Hold PPO, architecture,
 450-step untouched resets, and every non-map setting at F0R. Each run receives
 500 updates initially and deterministic development evaluation every 100
-updates. For an unpassed cell, continue the exact lineage through the
-1,000/2,000/5,000 milestones whenever the global slight-improvement rule
-passes. A passing panel stops because its purpose is only a dynamic witness;
-long 120-hour-queue training begins after the family recipe is qualified.
+updates. For an unpassed cell, advance through the 1,000/2,000/5,000
+milestones whenever the global slight-improvement rule passes. Because
+checkpoint v2 cannot preserve environment/RNG/action-history state, the first
+500-to-1,000 advance is a new continuous 1,000-update scratch confirmation
+with the same panel recipe and declared seed, not a resume. The 500-update
+runs and their best checkpoints remain immutable evidence. A passing panel
+stops because its purpose is only a dynamic witness; long 120-hour-queue
+training begins after the family recipe is qualified.
 
 A candidate cell earns a dynamic witness only when:
 
@@ -1986,6 +2004,53 @@ violation counts. The maximum sub-threshold floating reward residual was
 `4.76837158203125e-07`. Online completion rose during every panel but remains
 diagnostic; only the running source-disjoint development evaluations adjudicate
 B0b or authorize continuation.
+
+Bounded 500-update development result: **all five panels authorize more
+bounded compute; none has a dynamic cell witness yet**.
+
+| Panel | Evaluation job | Evaluation SHA-256 | Successful identities observed | Best scheduled median-completion evidence | Decision |
+|---|---:|---|---|---|---|
+| foundation geometry | `8648073` | `1c101c44d553dc4fbac48d7576ff27d61616948ae0d485804cc839c595d74783` | none | OSM `0.780 @400`; procedural `0.417 @300` | continue |
+| foundation distance | `8648078` | `fd4ac9eef8769322ad8052c026061f2426a1aeaf8bf0f951889fd59130cdca46` | none | d02 `0.463 @300`; d04 `0.464 @400`; d06 `0.363 @400`; d08 `0.274 @500` | continue |
+| trench distance | `8648084` | `e6308b802ce58cc62e9fa5cc70282cf97721eca01d1b106d968b8f3e7b59631e` | one d02 identity at update 400, with trajectory | d02 `0.448 @200`; d04 `0.428 @200`; d06 `0.452 @200`; d08 `0.567 @300` | continue |
+| trench side | `8648090` | `a29f213839a213cf309342792c80228503c6d78bc5ca0af89ccd0678d4623f08` | one one-side identity at update 500, with trajectory | both-side `0.495 @200`; one-side `0.482 @300` | continue |
+| trench topology | `8651299` | `9e3154582834080b617e8d44b9e0469e15d2ecd188f9fdb46fbea76840247a3a` | one segmented-2 and one segmented-3 identity at update 500, both with trajectories | straight `0.784 @400`; T `0.561 @400`; X `0.562 @400`; disconnected `0.644 @300`; segmented-2 `0.754 @400`; segmented-3 `0.624 @500` | continue |
+
+All 25 scheduled fixed-bank evaluations have zero integrity failures and exact
+reset-manifest verification. No cell reaches 6/8 at two consecutive
+checkpoints, so no row is promotable and B0 remains unchecked. Several
+terminal checkpoints regress from an earlier best; preserve all checkpoint
+histories and select by fixed-bank evidence rather than assuming FINAL is
+best.
+
+Topology evaluation recovery:
+
+- original evaluator job `8648094` failed before rollout because 48 maps were
+  passed to an inherited 32-minibatch topology, a shape-only evaluator defect;
+- terra-baselines `d7867a7` selects `gcd(48, 32) = 16` evaluation
+  minibatches, and `d415af2` allows a pinned evaluator source without
+  modifying the immutable training root;
+- retry source root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_eval_retry1`;
+- retry source-manifest SHA-256
+  `9daffd0188a7dd5321996bdd5ea1cd4c23447b4a8453bbec75c88fb058cc3a45`
+  and submission-receipt SHA-256
+  `9ac2068d8f9690999d505b9fefaa18e38c80c8147ba8e4880f59cca9e243754a`;
+- retry job `8651299` completed in `00:12:28` on `eu-g6-005`, using the
+  unchanged five training checkpoints and bank. Its update-100 through
+  update-500 success totals are `0, 0, 0, 0, 2`.
+
+The next bounded treatment is therefore one fresh, continuous 1,000-update
+scratch run for each of the five unchanged panel recipes. This deliberately
+duplicates the first 500 updates: it preserves continuous process state across
+the 1,000-update milestone and avoids falsely describing checkpoint-v2 resume
+as exact. terra-baselines `fc93c29` parameterizes the sealed launcher,
+training gate, evaluator, checkpoint count, receipt, panel subset, and
+diagnosed-node exclusion for the 1,000-update treatment. `bash -n`,
+ShellCheck, and whitespace checks pass. Each new run must still pass its own
+remote source/bank manifest checks, update-1 GPU smoke, 1,000 aggregate
+receipts, ten checkpoint gate, and deterministic development evaluation
+before it contributes evidence.
 
 #### B0c — Expand only witnessed easy cells
 
