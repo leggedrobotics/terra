@@ -2102,6 +2102,14 @@ All five jobs passed the pinned four-GPU CUDA, cuDNN, NCCL, seven evaluator
 tests, and two training-receipt tests before the smoke. This authorizes their
 continuous production bodies; it is not yet task-learning evidence.
 
+The post-hoc reproducibility gate is terra-baselines `d17d0be`. After each
+1,000-update run completes, it must compare the old 500-update run against the
+new continuous prefix at checkpoints 100/200/300/400/500: exact model,
+optimizer, and train-step trees plus all 500 aggregate payloads, ignoring only
+the deliberately different `run_name`. Its three focused unit tests, Black,
+byte-compilation, and whitespace checks pass. This gate is implemented but is
+not marked passed until the ten-checkpoint runs finish.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
