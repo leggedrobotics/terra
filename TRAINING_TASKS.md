@@ -2485,6 +2485,9 @@ The update-1 smoke gate subsequently passed:
 This authorizes the continuous 1,000-update body. It remains an integrity
 result only, not a map-learning or promotion result.
 
+The corresponding continuous-run W&B ID is `aknko0s4`. It is an operational
+pointer only; its online aggregates do not decide continuation or promotion.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
