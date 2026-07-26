@@ -1,8 +1,9 @@
 # Terra Training Tasks
 
 - Status: active recovery execution; C0-C5 and C1b complete; D1 deterministic
-  output under integrity diagnosis; D2 sampled evaluation running; first F0
-  attempt preserved and replacement F0 jobs submitted
+  output under integrity diagnosis; D2 sampled evaluation sharded with exact
+  coverage; corrected F0 update-1 GPU smokes passed and both production probes
+  are running
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -185,7 +186,7 @@ Task index:
 |---|---|---|---|---|
 | D0 | P0 | documentation | completed evaluators | [x] complete |
 | D1 | P0 | evaluation only | D0 | [ ] 20/20 records saved by `8626341`; observer mismatch under diagnosis |
-| D2 | P0 | evaluation only | D0 | [ ] deterministic 20/20 saved; sampled `8626343` running |
+| D2 | P0 | evaluation only | D0 | [ ] deterministic 20/20 saved; sampled remainder sharded as `8633209`/`8633211`/`8633220` |
 | C0 | P0 | decision | design review | [x] complete |
 | C1 | P0 | Terra code/tests | C0 | [x] complete |
 | C1a | P0 | Terra transition/tests | C0 | [x] complete |
@@ -323,7 +324,22 @@ Execution receipt, retry submitted 2026-07-26:
 
 - deterministic train/development audit job `8626341` saved all 20 records but
   exposed the D1 observer-integrity issue described above;
-- sampled M0 job `8626343`, also currently running;
+- sampled M0 job `8626343` produced the first three complete records, then was
+  intentionally cancelled after `01:38:03` because its serial execution rate
+  could not finish the exact grid inside the four-hour allocation;
+- the preserved `flat_u1000` seeds `2026072500` through `2026072502` JSON has
+  SHA-256
+  `a63e7b1d44aebda1d3774c11568b9bb6aaa0c929463bf14e7a911a2a08b3158a`;
+- execution-only sharding at terra-baselines `b34c122` leaves checkpoints,
+  maps, seeds, horizon, action sampling, and historical source unchanged;
+- immutable shard root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/historical_audit/sampled_shards_v1`;
+- shard launch-receipt SHA-256:
+  `9019d01b7515554df086ecc18ca0fafee8cada5c40aea94287eb8512384e3cff`;
+- submitted-jobs receipt SHA-256:
+  `db112eb390acf8722cc0d5144196a10ff70577854f93916179a4d8a111fad50e`;
+- jobs `8633209`, `8633211`, and `8633220` cover, respectively,
+  `flat_u1000` seeds 3-7 and `flat_u4000` seeds 0-3 and 4-7, with no overlap;
 - declared sampled seeds `2026072500` through `2026072507`;
 - exact training-identity view:
   `train/local_M2_terminal`, whose 256 slots must verify as 256 unique source
@@ -1038,6 +1054,31 @@ The launch scripts pass the retry root explicitly through Slurm and override the
 log path at submission, preventing an accidental write back into the
 first-attempt root.
 
+Corrected retry update-1 GPU smoke receipts:
+
+- foundation job `8632268` passed the exact four-RTX-4090,
+  4 x 1,024-environment x 32-step update under aggregate schema
+  `terra_training_episode_aggregate_v2`;
+- foundation smoke-gate, reloaded FINAL checkpoint, and update-1 aggregate
+  SHA-256 values are
+  `d193f9e9d94b9299664dab235a2cdcf074b4b0ad39d1cde3c4c9ab6005c60adb`,
+  `072f9bd402dc8be697c578058a4b85f32fd72e1bf21fc9e2bc27dd219d00bb82`,
+  and
+  `921cf537c1a62e4634fdc12adb46d22a5e16ae7430c81004e49699c20a347308`;
+- trench job `8632271` independently passed the same production-shaped gate
+  with seed `2026072602`;
+- trench smoke-gate, reloaded FINAL checkpoint, and update-1 aggregate SHA-256
+  values are
+  `9e87b0fc93f14bb36d61e4150ee175fcf4b6906d429638dc5b84e63647d39b06`,
+  `713d1f9761faa6f33e3b95c31ee7db8f99c4dc6051a831f93ba1d5536059c60a`,
+  and
+  `7102bfc8f1dbce1248d2265082e996de16f32fb6e1a3fdf099354fed47edbf42`;
+- both gates reloaded 92 finite model leaves and 185 finite optimizer leaves,
+  matched the frozen configuration and lineage, and reported zero mass
+  residual, target mutation, and obstacle mutation; and
+- both jobs then entered fresh 1,000-update production runs. No production
+  checkpoint or feasibility result is inferred from the smoke.
+
 Pass gate:
 
 - at least 29/32 successes in two consecutive evaluations;
@@ -1513,10 +1554,10 @@ acceptance evidence in the corresponding section passes.
    the treatment at `c58ad23`.
 6. [ ] Finish D1/D2, inspect every JSON integrity field, and write the
    preregistered materiality/memorization/policy-mode decisions.
-7. [ ] Run independent update-1 finite GPU smokes for the foundation and trench
+7. [x] Run independent update-1 finite GPU smokes for the foundation and trench
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
-   Both first-attempt v1 smokes passed in `8629884`/`8629885`; both must be
-   repeated against the corrected v2 gate in retry jobs `8632268`/`8632271`.
+   The corrected v2 smokes passed in retry jobs `8632268`/`8632271`; their
+   independent hashes and configuration receipts are recorded in F0.
 8. [ ] Launch the two scratch F0 fixed-identity probes with
    `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. The first
    attempt is preserved as failed/cancelled infrastructure evidence; submit
