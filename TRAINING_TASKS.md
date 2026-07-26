@@ -198,7 +198,7 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
-| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] jobs 8643810/8643812 submitted |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] clean retry jobs 8643823/8643824 submitted |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
@@ -1370,6 +1370,22 @@ terminal receipt/checkpoint gate; fixed-seed evaluation job `8643812` has an
 `cb5ac9cad89246723fd963edbdeb1e02e8dcddb2a9a819ec2a16eace171ebb07`.
 Both jobs were initially pending for priority/dependency, so this records a
 valid submission rather than a passed smoke or experiment result.
+
+Job `8643810` subsequently failed in `17 s` on `eu-g6-064` before the source
+tests or PPO: Slurm and `nvidia-smi` allocated four RTX 4090s, but the
+independent runtime gate saw only JAX devices `0`, `1`, and `3`. Evaluator
+`8643812` was therefore cancelled by dependency. The untouched failure log is
+`c0b9e513c2cd5e4da03ca4ac8e66633d27457b2276f5ba8f485accc80137de24`;
+this is infrastructure evidence, not an update-1 smoke or treatment result.
+
+The no-treatment-change retry uses immutable root
+`f0r_trench_absolute_off_v1_retry1`, launch receipt
+`49a8e0ae582fbfb45075cc841ca4fd4ffbe2ebe1af9e295ee8513c7a6c557e46`,
+and the same source/bank manifests. Training/evaluation jobs
+`8643823`/`8643824` were submitted at `2026-07-26T05:26:31+02:00`;
+their submission receipt is
+`8c7431a0a5c44723ac7ea48637692870406576e99a5369cf40a9d542ba9a6668`.
+Both pending jobs have `eu-g6-064` in the scheduler's explicit exclusion list.
 
 Decision:
 
