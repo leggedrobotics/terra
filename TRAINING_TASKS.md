@@ -2269,6 +2269,35 @@ not qualify for `gpuhe.120h`. Topology receives no more unchanged PPO compute.
 Foundation-distance evaluation job `8656165` remains active and will be
 adjudicated independently before its next allocation.
 
+The geometry-only 5,000-update repeat was sealed and submitted at
+`2026-07-26T15:27:11+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_geometry_u5000_v1`;
+- source revisions are Terra
+  `146919ffd78242f1bcf6d17091a47a20fd22b2bc` and terra-baselines
+  `c418bb8bc8b57102a3d6982d85c7a3c9bd6bd85a`; the latter changes only the
+  bounded launcher to admit the preregistered 5,000-update milestone and a
+  16-hour train request;
+- the exact prior B0a bank was copied without regeneration. Source-manifest,
+  bank-manifest, creation-receipt, and submission-receipt SHA-256 values are
+  `efcffedab1beb19220c96ff626548331b272b44362a9bc42e2dcdf8972ecf9a3`,
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`,
+  `256a49d6f86c2952eed172a4bc18d6b7ada1ea3216fe93a17c285218731b789c`,
+  and
+  `0fceddc7941d308facb594bfa16a640ddd04c31681b065a204dfdf6eb260417d`;
+- all 407 source and 3,393 bank files, revisions, scripts, syntax, 16 train
+  identities, and 16 development identities passed before submission;
+- train job `8667019` requests four RTX 4090 GPUs for `16:00:00` on
+  `gpuhe.24h`, excludes only `eu-g6-064`, and runs continuously from scratch;
+  and
+- evaluation job `8667022` is held by `afterok:8667019` and requires all 50
+  scheduled checkpoints.
+
+This remains a compute receipt. Its own update-1 smoke, complete 5,000-update
+integrity gate, and deterministic development curve are mandatory; it cannot
+inherit evidence from the 2,000-update process.
+
 The trusted C5 population receipts materially narrow the stopped-trench
 interpretation:
 
