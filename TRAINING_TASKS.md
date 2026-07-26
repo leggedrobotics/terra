@@ -2216,6 +2216,35 @@ Trench distance and trench side are absent by design. This is a compute
 receipt only; all three new runs require fresh update-1, 2,000-receipt,
 20-checkpoint, and fixed-bank gates.
 
+The stopped trench panels have a separate, bounded action-trace diagnosis
+queued at `2026-07-26T11:56:10+02:00`. This is evaluator-only compute: it
+does not add PPO updates or alter the fixed bank.
+
+- immutable evaluator root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_collapse_diag_v1`;
+- source revisions: Terra
+  `9ca7bceebde5d84700290faa3a805183bb281b24` and terra-baselines
+  `8a3f510e1422e8feaf73965e55886d2c1f9b0fd7`;
+- source-manifest SHA-256
+  `66774e156e9e640465fdb8196e15e8ec4268e3ce1583b6cf065a09373aadc8f9`;
+- creation-receipt SHA-256
+  `c88e2d3c023a76a93025fab499d08258198d808fd236194af33ae3dfeada76c3`;
+- submission-receipt SHA-256
+  `b57f4eead653b246be8a44351eafc92070d083aa25ff4ed8714a6f977de04885`;
+- trench-distance job `8656488` replays updates 200, 300, 600, and 1,000
+  over all 32 panel maps;
+- trench-side job `8656489` replays updates 200, 400, 600, and 1,000 over
+  all 16 panel maps; and
+- each replay records the eight action-mode counts, effective-action counts,
+  first/effective dig step, switches, run-length traces, terminal dig/dump
+  mass, completion, and exact-reset verification. Both jobs exclude
+  `eu-g6-064`.
+
+The output is diagnostic evidence for selecting a single controlled repair,
+not a promotion gate by itself. In particular, an entropy, reward, or map
+change must not be inferred solely from the already observed zero terminal
+mass.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
