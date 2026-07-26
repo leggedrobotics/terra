@@ -198,7 +198,7 @@ Task index:
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
 | O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [x] alias test not authorized: trajectory evidence implicates action/reward attractors |
 | F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
-| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] implementation and launch pending |
+| F0R | P0 | one scratch trench reward repair | failed trench F0, diagnosis | [ ] implementation sealed; launch pending |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | foundation F0, trench F0R | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, foundation F0, trench F0R, C5 | [ ] blocked |
@@ -1333,6 +1333,35 @@ Change exactly one environment field: set `apply_trench_rewards=false`. This
 removes the absolute per-step distance/alignment term; it does not add progress
 reward, change action costs, change the map, alter PPO, or begin W0a/W1.
 Record the treatment as `corrected_dense_v1_trench_absolute_off`.
+
+Implementation and launch seal:
+
+- terra-baselines `b203d8a922742ec62dfd62cd9b2e24cd7b6eaa3e`
+  adds the treatment-specific preset, independent smoke/evaluation contract,
+  and `terra_f0_training_gate_v1`. The latter reloads every numbered
+  checkpoint and `FINAL`, requires exact update-1,000 model and optimizer
+  equality, and audits all 1,000 population receipts before marking training
+  complete;
+- a field-for-field regression test proves that the control and F0R presets
+  differ only in their name, description, and
+  `maps[0].apply_trench_rewards`; the semantic treatment changes only that
+  Boolean. The seven F0 evaluator tests and two terminal-verifier tests passed
+  in the sealed Euler source environment;
+- immutable run root
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/f0r_trench_absolute_off_v1`
+  reuses the exact F0 retry bank without regeneration. Its source manifest is
+  `6b32132f67fd33021094119bd6f9ab320290276f5fd4c0d19eddfc3aada71116`,
+  its unchanged bank manifest is
+  `0e02471987700460b37e42a88bd13548a5cc68ce812f3986514a2dffd3c53d2b`,
+  and its preregistered launch receipt is
+  `48ebe22b248accfa9915c53db99d1f306f95dcb464681c7131cba4f72ae78bf1`;
+  and
+- sealed source revisions are Terra
+  `200e30d55e7999bb6c2466343c5000bca37be3e1` (tree
+  `6ba53bd7e0603ebb2ff5458acd1345e97f14cd62`) and terra-baselines
+  `b203d8a922742ec62dfd62cd9b2e24cd7b6eaa3e` (tree
+  `b0a32bc07a490c009c4a43c6d33eb39a9d78e958`). Source and bank are
+  read-only after their manifests passed.
 
 Decision:
 
