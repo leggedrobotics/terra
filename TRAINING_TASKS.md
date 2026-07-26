@@ -5,7 +5,8 @@
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
   F0 foundation feasibility passed with a terminal retention failure; F0 trench
   failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
-  generation passed; B0b dynamic-panel tooling is active
+  generation passed; all five B0b train/evaluation pairs are submitted and
+  their exact update-1 gates are pending
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -1852,6 +1853,32 @@ Frozen B0b implementation receipt:
   regression tests, Python compilation, Black, `bash -n`, ShellCheck, and
   whitespace checks pass locally. The production update-1 GPU smokes remain
   cluster gates and are not claimed by these local checks.
+
+Submitted B0b execution receipt at `2026-07-26T08:17:28+02:00`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_panels_v1`;
+- source revisions: terra `5f7351a8fb13a912c15887265d70359ffe99e976`
+  and terra-baselines `7474c3e954386881db435c54495005184649ceb8`;
+- source-manifest SHA-256
+  `a060c65f0fa33bf791ae4b11974b3276dcec8b51c3c3fd0703fb4cdd895e7f97`
+  and bank-manifest SHA-256
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`;
+- the remote source manifest, remote bank manifest, and the bank-internal
+  manifest all passed before submission;
+- submission-receipt SHA-256
+  `823c4f21800dc03aa12cd5328f09a35b97cf9e29a215f3bd300ba282ddfcd544`;
+
+| Panel | Training job | Dependent evaluation |
+|---|---:|---:|
+| foundation geometry | `8647662` | `8647663` |
+| foundation distance | `8647664` | `8647665` |
+| trench distance | `8647666` | `8647667` |
+| trench side | `8647668` | `8647669` |
+| trench topology | `8647670` | `8647671` |
+
+This receipt records submission, not a passing smoke or learning result. Each
+evaluation remains `afterok`-dependent on its matching training gate.
 
 #### B0c — Expand only witnessed easy cells
 
