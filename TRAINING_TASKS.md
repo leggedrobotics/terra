@@ -3,7 +3,8 @@
 - Status: active recovery execution; C0-C5 and C1b complete; D1 diagnosis
   complete with a failed historical mass-integrity gate and material completion
   mismatch; D2 diagnosis complete with memorization and action-mode evidence;
-  corrected F0 update-1 GPU smokes passed and both production probes are running
+  F0 foundation feasibility passed with a terminal retention failure; F0 trench
+  failed cleanly and its bounded trajectory/reward diagnosis is active
 - Date: 2026-07-26 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
@@ -195,8 +196,8 @@ Task index:
 | C3 | P0 | Terra loader/tests | C1, C1a | [x] complete |
 | C4 | P0 | evaluator/tests | C1-C3, C1a | [x] complete |
 | C5 | P0 | training receipts/tests | C1-C4 | [x] complete |
-| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] blocked |
-| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [ ] corrected retry train `8632268`/`8632271`, eval `8632273`/`8632307` |
+| O0 | P1 | conditional deterministic tests | failed F0 or direct alias evidence | [ ] trajectory/reward diagnosis active; alias test only if implicated |
+| F0 | P0 | two scratch bounded PPO probes | C0-C5, C1a, C1b | [x] foundation passed; trench failed |
 | R0 | P1 | two 500-update historical forks | D1, D2, F0 | [x] not authorized: shared train-and-development drift rejected |
 | B0 | P1 | generation/validation | F0 | [ ] blocked |
 | F1 | P1 | two scratch family specialists | B0, F0, C5 | [ ] blocked |
@@ -1113,7 +1114,7 @@ No first-attempt production result is admissible as F0 evidence. Replacement
 jobs must start from scratch at the same declared seeds and treatment under
 terra-baselines `c58ad23`, use a distinct immutable `f0_retry1` root, and repeat
 both exact production-shaped update-1 GPU smokes under schema v2. Checklist
-items 7-8 therefore remain open.
+items 7-8 therefore remained open until the retry evidence below.
 
 Corrected retry submission receipt, 2026-07-26 02:33 CEST:
 
@@ -1164,6 +1165,72 @@ Corrected retry update-1 GPU smoke receipts:
   residual, target mutation, and obstacle mutation; and
 - both jobs then entered fresh 1,000-update production runs. No production
   checkpoint or feasibility result is inferred from the smoke.
+
+Corrected retry terminal training receipts:
+
+- foundation job `8632268` completed 1,000 updates in `01:34:41` with exit code
+  `0:0`; trench job `8632271` completed in `01:31:48`, also `0:0`;
+- each arm has exactly 1,000 schema-v2 aggregates, checkpoints at updates
+  100–1,000 in increments of 100, one FINAL, and `TRAINING_COMPLETE`;
+- independent terminal gates reload both FINAL and update-1,000 with 92 finite
+  model leaves and 185 finite optimizer leaves, prove their model and optimizer
+  trees equal, and verify every hard aggregate field;
+- foundation and trench training-gate JSON SHA-256 values are
+  `800ea2648faaa584988523647576b9d7d93b7c367782bc59ef4facc26380ae19`
+  and
+  `0379637fd80925911c9aee11e75f514c9a4dc718f4128d1b9e64067de00b94c2`;
+- foundation FINAL and update-1,000 SHA-256 values are
+  `8ab3cf96f8de4543e8cc071e61e68fc60b4adf779acf92358e3d698b54b505c9`
+  and
+  `7c3344c270a3e0d25d847810a43fe9b996c5778ec480521a20ba9cf051aea00a`;
+- trench FINAL and update-1,000 SHA-256 values are
+  `ff76ad33b0db7bbc4455affafb66b329ec1ef99529baba1dbc19930e6f2eaa3e`
+  and
+  `cbdbe766a208002dbf6ed16fef22da810e3ace4957e084020f5ed85e0b512a0c`;
+- no transition has a mass, target, obstacle, or per-step reward-reconstruction
+  violation. The retained episode-level float drift is informational: 16
+  foundation episodes and one trench episode over the entire run;
+- foundation records 2,690,368 online successes and 94,750 timeouts; trench
+  records only 8 successes and 290,808 timeouts; and
+- both arms executed the full declared 131,072,000 global transitions.
+
+Corrected retry fixed-evaluation receipts:
+
+- foundation evaluator `8632273` completed in `00:11:48`, exit `0:0`; trench
+  evaluator `8632307` completed in `00:19:07`, exit `0:0`;
+- foundation and trench evaluation JSON SHA-256 values are
+  `a05286563e8fdd42e51b67b6b3f12304dbbc95b7f2fdfa183ee2b2b45a774ad0`
+  and
+  `16b5893fbba396dcfa8adc7751384a1207345238e4317172e3b554c12f298479`;
+- every one of the 640 fixed rollouts passes reset, mass, immutable-map, finite
+  state, completion, and checkpoint-lineage integrity;
+- foundation successes at updates 100–1,000 are
+  `0, 0, 16, 32, 32, 32, 32, 32, 32, 0` out of 32. Passing pairs are
+  400/500 through 800/900, and a legal successful trajectory is saved;
+- update 900 is the foundation feasibility witness, SHA-256
+  `68a57f34e0e1cc3f806e8746de27a7e607d3852ec18c8aee1656b1a8fb44c721`.
+  Update 1,000 is not promotable: deterministic behavior regresses to 0/32 and
+  usually performs no excavation despite its finite, lineage-valid state;
+- trench is 0/32 at every checkpoint. Its best individual fixed resets reach
+  48/66 legal moved units (72.7% completion), while many initial poses make no
+  progress or settle into no-effect behavior; and
+- no 2,000-update extension is authorized. Foundation already passes, whereas
+  the trench fixed curve is flat, its productive-cycle rate declines, and the
+  extension criterion requires continued fixed-bank improvement.
+
+F0 adjudication:
+
+- the corrected action/observation/dynamics contract can learn the foundation
+  identity, so broad architecture insufficiency and universal PPO failure are
+  rejected;
+- the foundation terminal collapse is a retention/action-selection failure,
+  not a feasibility failure, and must be protected by checkpoint-bounded
+  promotion rather than final-checkpoint selection;
+- the tested trench treatment fails cleanly. Its partial legal progress rules
+  out a completely broken dump transition, but does not yet distinguish
+  geometry/pose reachability, local reward incentive, or policy cycling; and
+- B0, F1, and every broad descendant remain blocked until the bounded trench
+  trajectory/reward diagnosis selects and validates one minimal repair.
 
 Pass gate:
 
@@ -1644,11 +1711,11 @@ acceptance evidence in the corresponding section passes.
    F0 jobs, reload each exact saved checkpoint, and verify the C5 receipt.
    The corrected v2 smokes passed in retry jobs `8632268`/`8632271`; their
    independent hashes and configuration receipts are recorded in F0.
-8. [ ] Launch the two scratch F0 fixed-identity probes with
+8. [x] Launch the two scratch F0 fixed-identity probes with
    `corrected_dense_v1`; evaluate 32 fixed seeds every 100 updates. The first
-   attempt is preserved as failed/cancelled infrastructure evidence; submit
-   clean replacements from the immutable `f0_retry1` root and keep this box open
-   until both evaluations `8632273`/`8632307` finish.
+   attempt is preserved as failed/cancelled infrastructure evidence. Clean
+   replacements from immutable root `f0_retry1` completed: foundation passed
+   feasibility but failed terminal retention, while trench failed cleanly.
 9. [ ] If either F0 arm fails, stop its descendants and run only the
    trajectory/O0/transition/reward diagnosis implicated by that arm.
 10. [ ] If both F0 arms pass twice, build and validate the B0 orthogonal
