@@ -3226,6 +3226,24 @@ The one-shot isolate was packaged and submitted at `2026-07-26`:
 This remains submission/infrastructure evidence. The exact 64-map update-1
 smoke must pass before the one-shot 2,000-update body is admitted.
 
+The isolate update-1 smoke passed:
+
+- an independent validator reloaded the exact 64-map
+  `t_straight_one_d02` manifest, verified the preserved source and bank
+  hashes, and proved numbered/final equality across all 92 model and 185
+  optimizer leaves;
+- every leaf and gradient diagnostic is finite, with gradient norm
+  `0.165367946`, and mass, target, obstacle, and per-transition reward hard
+  violations are all zero; and
+- independent-validator and read-only smoke-acceptance receipt SHA-256 values
+  are
+  `680e87e5cb68083bdd6892dec13422fc2f74198c063565e361a30c6acf2d7b57`
+  and
+  `92232dca83108bad516688b11466b53867699003df5774515c62e43b2b57ef3b`.
+
+This admits the continuous 2,000-update body only. The fixed eight-map
+development evaluation remains the one-shot learning decision.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
