@@ -2637,6 +2637,23 @@ This is a submission receipt only. Update 1 must pass the exact smoke gate
 before the production body is accepted, and the source-disjoint development
 curve—not online sampled-train success—decides the next allocation.
 
+The 2,000-update diversity replication independently passed its update-1
+smoke:
+
+- checkpoint, aggregate, unchanged 128-map dataset manifest, and smoke-gate
+  SHA-256 values are
+  `0c4eb6d10b8f0da7121afebe0201d03ec8320d6e2760ded234f88babaff47f21`,
+  `4a2b5a60aa35f25ee17c768a70cd94441da07b16ad55a2aa40772b69302ad6cc`,
+  `183444a6be146b097afe56199abd9a83eda71e8dd9a5d7c1d72f3f2573c75dab`,
+  and
+  `437cce0eeb8881f354b9a6a821918b22bb2aecd6b33bee41b7e17aa8a72f2b5e`;
+- all 92 model and 185 optimizer leaves are finite and the exact declared
+  seed, reward, architecture, entropy, PPO, reset, and horizon match; and
+- maximum mass residual, target mutation, and obstacle mutation are zero.
+
+This authorizes only the continuous 2,000-update body. It is an integrity
+result, not a trench-side witness.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
