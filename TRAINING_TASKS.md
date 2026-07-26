@@ -2284,6 +2284,45 @@ authorized by the frozen median-completion rule; it is not promoted and does
 not qualify for `gpuhe.120h`. Foundation distance and trench topology receive
 no more unchanged PPO compute.
 
+Foundation distance receives exactly one evaluator-only policy cross before
+any repair is selected. Its sampled online train stream ends at 2,204/2,204
+completed successes at update 2,000 while greedy source-disjoint development
+is 0/32 throughout updates 1,600-2,000. Because the modes differ, that gap does
+not yet prove identity memorization.
+
+The train/development × deterministic/four-sampled cross was sealed and
+submitted at `2026-07-26T15:57:22+02:00`:
+
+- immutable diagnostic root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_distance_policy_cross_u2000_v1`;
+- it reuses the exact 2,000-update bank and update-2,000 checkpoint, whose
+  manifest and checkpoint SHA-256 values are
+  `98fa41ca879f3523f846e42405daa065bbbe97cfb2aab9f75bdd2288d47ffa2b`
+  and
+  `5e03e5d2b64ef95ee249e030733b9d1120f55721897e2826cb7cd1c72c8b57af`;
+- diagnostic source revisions are Terra
+  `16e640a2cd732b363efb358db2a4760010a78acf` and terra-baselines
+  `df3defdfc95c875c0e557fcecc08eb40c9fa8e5f`. Relative to the training
+  Terra revision `6702cdfa4926b37e34f62501a21dff7f3460b905`, only this document
+  and unused trench-diversity builder/test files differ; no imported runtime
+  source changed;
+- source-manifest, creation-receipt, runtime-equivalence-receipt, and
+  submission-receipt SHA-256 values are
+  `968590621907ddaccf07ec3dce06a2c15ca86e9da5bf4683a48932567678ce15`,
+  `95e898a3131c9a1e4ab9580a3e8d38ef5d03e156b0114b05f45d038db029d7c4`,
+  `2a93910f00775226beafb5b726fd4375af4192cc70c7b18d62454b8c2088178e`,
+  and
+  `15fb60c612a06db35b557b2b69b3f86b0fb231bd2045a0f609a6b8ee7244b4da`;
+- job `8668675` runs one deterministic and four sampled seeds on each of the
+  exact 32 train and 32 development identities, excludes `eu-g6-064`, and
+  writes `policy_cross_update_002000.json`; and
+- acceptance requires exactly ten records, exact reset verification on both
+  splits, and zero integrity failures.
+
+This is a diagnostic submission, not evidence for memorization or a repair.
+Do not launch a distance 5,000-update, reward, entropy, architecture, or
+cell-specialist treatment until the cross is complete.
+
 The geometry-only 5,000-update repeat was sealed and submitted at
 `2026-07-26T15:27:11+02:00`:
 
