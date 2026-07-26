@@ -2498,9 +2498,49 @@ The update-1 smoke passed and authorized the body at
   `8e915bde41fc549f8932a3bc95ea7255d8ab31d7316723c1a51fdc81322f3c92`.
 
 The smoke's `309.80` steps/s includes first-graph compilation and is not
-performance evidence. The fresh 1,000-update body is now running; no learning
-claim exists until its full integrity gate and fixed 32-map development
-evaluation complete.
+performance evidence.
+
+The full 1,000-update treatment and fixed-development decision are now sealed:
+
+- train job `8674045` completed with exit code `0:0` in `01:33:18`, with
+  exactly 1,000 ordered aggregates and ten numbered checkpoints at updates
+  100 through 1,000. `FINAL` exactly equals update 1,000 across 92 model and
+  185 optimizer leaves, and all leaves are finite;
+- its exact training receipt, aggregate-manifest, checkpoint-manifest,
+  `FINAL`, and update-1,000 SHA-256 values are
+  `9cc6551b8c1fea2d080b640c31a2d7541807713149dc7e9faf8856c913fde040`,
+  `a173cfbcff13dde4c36bf081f1e7ce79d6f567e1cab73276792f214b74a84151`,
+  `0047f34699c94305e36e3bd99c998eea1f83d40c5fe08c630769f7621c4fc961`,
+  `0dde1d1ac206fd7a44472d8ca09418f6fc2f984a252cb9387a08b8b9c6482602`,
+  and
+  `fed947570c444bcc21453c64db0d966d5752dc05377bc3b959d2a4a0cb5ec9ba`;
+- every hard mass, target, obstacle, nonfinite, and per-transition reward
+  violation total is zero. Maximum mass residual is zero and the maximum
+  sub-threshold step-reward residual is `4.76837158203125e-07`;
+- evaluator job `8674046` completed with exit code `0:0` in `00:18:43`.
+  It covered the exact ten checkpoints and all 320 episodes on the unchanged
+  32-map development bank, with exact resets at `env_steps == 0`, frozen
+  source/layer hashes, and zero integrity failures;
+- the overall held-out success curve at updates 100 through 1,000 is
+  `0, 0, 0, 0, 0, 0, 1, 1, 6, 6`. At update 900, d02/d04/d06/d08 successes
+  are `0/3/2/1`; at update 1,000 they are `2/1/2/1`;
+- compared with the old same-budget 1,000-update recipe, best
+  success/median-completion values improve from `1/.4975` to `2/.9452` on
+  d02, `0/.3524` to `3/.9403` on d04, `1/.3475` to `2/.8809` on d06, and
+  `1/.3089` to `1/.9450` on d08. Every cell passes the frozen last-five
+  slight-improvement gate, with its last improvement at update 900 or 1,000;
+  and
+- sealed evaluation and combined acceptance-manifest SHA-256 values are
+  `2f540cc5387356b752ed986e3358a260317db83c36ca5d86120df3e9dc080f22`
+  and
+  `c7405ba3a2101a32e29b0501cbf25c412f2ea54d329c879a0caca1863aa45283`.
+
+No cell yet has 6/8 successes at two adjacent checkpoints, so this is strong
+source-disjoint task progress but not a B0 witness or long-run qualification.
+Under rule 13 it authorizes exactly one fresh, continuous 2,000-update
+replication with the same accepted bank, seed, PPO, architecture, reward,
+reset, entropy, horizon, and evaluation contract. It does not authorize a
+5,000-update run, B0c, F1, or `gpuhe.120h` yet.
 
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
@@ -3089,6 +3129,37 @@ fixed-development contract. It does **not** authorize a full-panel 5,000 run,
 B0c, F1, or a 120-hour production run. If the isolate fails the same
 two-consecutive 6/8 witness gate, one-side is dynamically unproven and this
 recipe stops before any reward or architecture change.
+
+The conditional isolate was implemented at terra-baselines
+`0d86f63c85c294d428694b01c34e7782b1598231` as one explicit
+`trench_one_d02_isolate` path rather than an ambient variant:
+
+- it reuses the accepted first-class
+  `cells/train/t_straight_one_d02` and
+  `cells/development/t_straight_one_d02` views already present in the sealed
+  diversity bank: exactly 64 train and eight development identities, with
+  manifest SHA-256 values
+  `00f1e32c15c11a7013f09a22047f1ca3c8dc1f6cb706dc6f8fa3faa8119c4020`
+  and
+  `804fea45a2a87f3abfe4df835de70dfbd1e92d9d472a936c86a3fdf3f715c29d`;
+- train and evaluation launchers hard-require exactly 2,000 updates, the
+  explicit single panel, 64/8 dataset counts, the original seed, and the
+  original corrected trench treatment. The isolate is absent from the default
+  multi-panel submission list;
+- the checkpoint verifier freezes the exact cell paths and all PPO, reward,
+  reset, horizon, architecture, and seed values. A failed isolate still
+  records slight-progress diagnostics but can emit only
+  `stop_and_diagnose_panel`, never another continuation authorization; a true
+  adjacent 6/8 witness can still pass normally;
+- direct runtime validation loaded exactly the 64/8 single-cell views with
+  no map/source overlap, and an independent review found no P0/P1 defect;
+  focused evaluator/submission/training-receipt tests pass (`18 passed`), the
+  complete CPU suite passes (`143 passed`), and Black, byte-compilation,
+  `bash -n`, ShellCheck, and whitespace checks are clean; and
+- packaging must copy the entire accepted 1,753-file bank byte-for-byte and
+  preserve outer bank-manifest SHA-256
+  `3711c0d6c3ff715afcbf296926ba6061dfe5d172c496d5af285b4e2929a30ace`.
+  A regenerated or hand-filtered bank is rejected.
 
 #### B0c — Expand only witnessed easy cells
 
