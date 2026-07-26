@@ -2542,6 +2542,42 @@ replication with the same accepted bank, seed, PPO, architecture, reward,
 reset, entropy, horizon, and evaluation contract. It does not authorize a
 5,000-update run, B0c, F1, or `gpuhe.120h` yet.
 
+The authorized 2,000-update replication was packaged and submitted at
+`2026-07-26`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_distance_diversity_u2000_v1`;
+- source is pinned to the explicit Terra archive
+  `3e048c661fd39b6ec6aa7e67266b160475be8e43` and terra-baselines
+  `0d86f63c85c294d428694b01c34e7782b1598231`. The 412-file source-manifest
+  SHA-256 is
+  `8444e68c0a8807ee13166eafeccb8c30c049c7065467ad9c92ad3e7a6b522170`;
+- the accepted bank was copied byte-for-byte, not regenerated. Its outer and
+  internal manifest SHA-256 values remain
+  `1e49c9a1c5fa1541026a9c5a13a864c536fbb6d09bfff242f5a7c7e83c6412a8`
+  and
+  `ac3232e3322b4268fbb35027f0e5734a1da33e86d40f72295af9b0730f04e940`,
+  and its exact 256-train/32-development panel manifests remain
+  `ca172b2e37a6f11baeed54560238950ad4773c8125ed0960d8cbe6b52850e665`
+  and
+  `c1744f5c6d7f898d6b543617bbe49ab931209816e680445703f245a656a094f9`;
+- creation, wrapper-submission, and submission-acceptance receipt SHA-256
+  values are
+  `2ba0bd1dc896ff0dc6eb5adb11dd886c7cd9cd3f45e308b9bd1f8bbc196c0805`,
+  `a74ddf1f3a5e84beeecb92fdbdf901be2451ab610063317f9cb64f5bf6bfe7f3`,
+  and
+  `5e8d9a388c9697952e7e14d77e89074be4aa1b9036ea207ae77616b0e1b87a4b`;
+  and
+- train job `8681541` requests four RTX 4090s for `08:00:00` on
+  `gpuhe.24h`, with explicit
+  `foundation_distance_diversity_v1`, 2,000 updates, and bytecode writes
+  disabled. Evaluator `8681542` requests one RTX 4090 and is held by
+  `afterok:8681541`.
+
+This is submission evidence only. Update 1 must independently prove the exact
+256-map dataset, finite model/optimizer/gradient state, frozen treatment, and
+zero integrity failures before the body is accepted.
+
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
 explicit. The submission wrapper now validates the declared
@@ -3160,6 +3196,35 @@ The conditional isolate was implemented at terra-baselines
   preserve outer bank-manifest SHA-256
   `3711c0d6c3ff715afcbf296926ba6061dfe5d172c496d5af285b4e2929a30ace`.
   A regenerated or hand-filtered bank is rejected.
+
+The one-shot isolate was packaged and submitted at `2026-07-26`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_trench_one_d02_isolate_u2000_v1`;
+- source is pinned to Terra
+  `3e048c661fd39b6ec6aa7e67266b160475be8e43` and terra-baselines
+  `0d86f63c85c294d428694b01c34e7782b1598231`. The 410-file source-manifest
+  SHA-256 is
+  `85f2582af3a8b028deadc7192d1044fc62637bae7203feaab3dba2666cdc4dcb`;
+- all 1,753 outer-bank files and all 1,752 internal-bank files re-hash
+  successfully. Exact-loader validation confirms 64/8 unique one-side maps,
+  64x64 shape, capacity ratio 3.0, and no train/development map or source
+  overlap. Its loader-receipt SHA-256 is
+  `e7933f9f960807c53b5f0d471a09de68f80132b91454cd6ae4b5a5fe9382c635`;
+- creation, wrapper-submission, and submission-acceptance receipt SHA-256
+  values are
+  `fd331acb2b0efabf0f9666e710bcc4b5bfc595d976b8f7867231a874203cc680`,
+  `deff6cecc88ce20e03e17f2db36d010039ff35679d724b3cbc594c6c5b6ae29a`,
+  and
+  `84722b11d69d9ca7f4c4f8fde86c86e8a309da1cf40cf9bc614e2499c5697a30`;
+  and
+- train job `8681252` requests four RTX 4090s for `08:00:00` on
+  `gpuhe.24h`; evaluator `8681256` requests one RTX 4090 under
+  `afterok:8681252`. The train allocation started on `eu-g6-071` with exactly
+  four verified RTX 4090s.
+
+This remains submission/infrastructure evidence. The exact 64-map update-1
+smoke must pass before the one-shot 2,000-update body is admitted.
 
 #### B0c — Expand only witnessed easy cells
 
