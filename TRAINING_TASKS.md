@@ -3843,7 +3843,10 @@ Current implementation checklist:
   Exact source/output hashes, verification commands, responsive screenshots,
   local URL, implementation commit, and unresolved Static/Witness/S2
   limitations are recorded in `DIGGING_BENCHMARK_SITE_GOAL.md`. No Lorenzo
-  decision or S2 admission is claimed.
+  decision or S2 admission is claimed. Site commit `91ccf87` additionally
+  exposes the verified `64`-map/`32`-pair capacity bank as the default review
+  dataset, keeps B0a selectable, and passes comment-before-decision
+  persistence plus exact-hash JSONL round-trip on live port `4173`.
 - [x] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.

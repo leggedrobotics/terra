@@ -1,8 +1,8 @@
 # Terra Digging Benchmark Review goal
 
 - Goal ID: `terra-digging-benchmark-review-v1`
-- Status: local B0a preview complete; owner review and S1-S2 admission remain
-  active inside the Terra curriculum-recovery goal
+- Status: local controlled-capacity and B0a previews complete; owner review
+  and S1-S2 admission remain active inside the Terra curriculum-recovery goal
 - Owner-facing outcome: Lorenzo can inspect, compare, and record decisions on
   the actual training-map distribution through a graphical review site while
   benchmark admission work continues.
@@ -107,6 +107,8 @@ deploying a production version is deferred until Lorenzo asks.
 - [x] Run data, UI, visual, and production-build verification.
 - [x] Start and verify the local review server and organized example tree.
 - [x] Record implementation evidence in both canonical documents.
+- [x] Add the fresh controlled-capacity bank without upgrading its
+  exact-loader-only, Static-pending status.
 - [ ] Record Lorenzo's actual approve/reject/quarantine decisions and notes as
   deterministic JSONL and in both canonical documents.
 - [ ] Swap in the source-disjoint 448-scenario S2 bank after all prerequisite
@@ -167,6 +169,41 @@ deploying a production version is deferred until Lorenzo asks.
   pinned Next/OpenNext tree, with no compatible automatic fix. Loopback review
   is accepted; publication remains gated on resolving or explicitly accepting
   that dependency receipt.
+
+## Local controlled-capacity review receipt
+
+- Site source:
+  `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
+  `91ccf87b2deafdee533bf8bd181f5642680178ae`.
+- Input:
+  `/home/lorenzo/moleworks/.artifacts/terra_pilot_apron_capacity_review_20260727_v1/`
+  with source `files.sha256` SHA-256
+  `03b5af27c3fc2acea05b6ecb001e4dcb7cdcbfe3f2677efa64ad2a6e3e7df80f`.
+  The site exporter re-verifies every source file before rendering.
+- Export: `64` public-train scenarios, `32` exact low/high pairs, `32` source
+  groups, `2` capacity cells, `448` layer PNGs, and zero sealed assets.
+  `capacity-review-data.json` has SHA-256
+  `8fa452adfe47c4ffb5675e002c264cc69f250d061f6c00ae2ccf826008c0bc49`;
+  the stronger review-manifest SHA-256 is
+  `b287a9a5e65b71e4a00ddda61e0028d07ffd816c11e95520d296325fa0145d22`.
+- Verification passed: all source/export integrity checks, seven Python
+  tests, TypeScript checking, the production build, desktop paired-review and
+  narrow-layout Playwright flows, review-bank switching, and exact-hash JSONL
+  export/import.
+- The `Map comment` field is enabled before accept/reject/quarantine. A live
+  port-4173 test wrote a comment with no decision, reloaded it from local
+  storage, and round-tripped it through JSONL bound to the exact capacity
+  release, manifest, and scenario hashes.
+- Local review URL:
+  `http://127.0.0.1:4173/?build=91ccf87&bank=capacity&comments=enabled`.
+  `next-server` PID `3731061` is bound to `127.0.0.1:4173`; the URL returns
+  HTTP `200`. The historical B0a input remains selectable under
+  **Review bank**.
+- Scientific status remains non-admission: exact-loader validation passes,
+  live Static validation is pending the direct-service cost gate, Witness and
+  policy results are absent, and no benchmark or PPO gate is satisfied. The
+  `140-189`-cell targets occupy only `3.42%-4.61%` of the map, so this surface
+  isolates dump capacity and does not claim broad foundation-size coverage.
 
 ## Stop conditions
 
