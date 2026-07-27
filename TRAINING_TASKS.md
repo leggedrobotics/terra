@@ -219,7 +219,7 @@ These decisions supersede stale choices later in the historical v4 design:
   `174e604c4c27bda0c73a3e2a9457b1060472e1e1f26139e80aebc9d9ed624f05`.
   The next bounded treatment is a fixed-row 4/8/16 service-batch sweep with
   exact output parity and honest padded counters.
-- [ ] The batch-size treatment is frozen before execution. It reuses the pinned
+- [x] The batch-size treatment was frozen before execution. It reuses the pinned
   v1 probe identity, four-map source group, explicit initial state, protocol,
   inputs, CPU host, and unchanged exact service kernel. It builds the graph and
   prefilter once, hashes the first 16 accepted timing rows and the first 18
@@ -237,6 +237,19 @@ These decisions supersede stale choices later in the historical v4 design:
   complete validator and never emits admission. A selected change authorizes
   only a fresh canonical cost probe and, if its first gate passes, one complete
   confirmation; it does not authorize the 256-scenario profile.
+  The clean-worktree sweep at commit `af1bf5c4` passed exact parity for every
+  arm with common output SHA-256
+  `fa8dd4f8d579cd1c08ffd64876117f6be3ab41b6164a9220eacb37f4f64e1106`;
+  all timing and cumulative-memory gates passed, and opening/closing batch-4
+  complete-16-row p50 drift was only `2.27%`. Batch 4 opening/closing p50 was
+  `0.3137/0.3067 s`, while batch 8 and 16 were slower at `0.3711/0.3389 s`.
+  Their 256-scenario p95 projections were `75.5/75.1 h`, versus `65.4-65.5 h`
+  for batch 4 and a strict faster-control p50 threshold of `62.8 h`. The frozen
+  rule therefore retains batch 4 and authorizes neither a fresh probe/full
+  confirmation nor the 256-scenario profile. The non-admission receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_batch_sweep_20260727_v1/direct_service_batch_size_sweep.json`
+  at SHA-256
+  `727c358357a026ff75b9e8340d6cd117efff6c782d455eba82630fe8e9312db9`.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
