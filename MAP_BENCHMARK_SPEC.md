@@ -1,6 +1,7 @@
 # TerraMap-Bench specification
 
-Status: design-frozen v0.3; S1 implementation pending
+Status: design-frozen v0.3; local B0a preview complete; S1 implementation
+pending
 
 Last accepted-review update: 2026-07-27
 
@@ -1420,7 +1421,8 @@ The active delivery goal and its verification checklist are pinned in
 is subordinate to this scientific contract and
 [`TRAINING_TASKS.md`](TRAINING_TASKS.md).
 
-The first deliverable is one local `index.html`, not a web service. It shows:
+The first deliverable is one locally served static client, not a scientific
+service. It shows:
 
 - the condition x policy heatmap with worst cells first;
 - Anchor, One-axis, and Composed review with prerequisite links;
@@ -1431,6 +1433,10 @@ The first deliverable is one local `index.html`, not a web service. It shows:
 
 The separate pages below are the publication phase. Browser uploads, persistent
 review state, and submission handling do not block the first inspector.
+
+The B0a preview is a static client application served locally, not a
+scientific service. It is an implementation precursor; the fail-closed S1-S2
+golden-path builder and standalone release bundle remain pending.
 
 ### 16.1 Overview
 
@@ -1674,6 +1680,7 @@ Suggested delivery gates:
 | Status | Gate | Deliverable | Pass condition |
 |---|---|---|---|
 | `[x]` | `S0 Spec` | v0.3 accepted plan and reviewer-decision log | No stale M0-M5 or protocol claim is normative |
+| `[x]` | `B0a Preview` | Local design-input inspector and organized gallery | Hash-verified public-train/development input is reviewable; zero sealed assets; no Static, Witness, admission, or ranking claim |
 | `[ ]` | `S1 Schema` | Manifest normalizer, explicit initial-state reset, live validator, migration receipt, and cost profile | Existing rasters are re-audited at 0.5714 m/tile; full hashes/outcomes and projected 448-scenario validation cost are reviewed; failures are listed, not hidden |
 | `[ ]` | `S1 Capacity` | adjustable apron generator | Exact-dig `slcap03_04`/`slcap07_10` pair matches separation and passes visual/static review |
 | `[ ]` | `S1 Support` | pair-specific foundation matching and topology-aware trench length sampler | Train-only audits freeze supported numeric bands/covariates; no `vmatch` reaches S2 |
@@ -1746,6 +1753,7 @@ cannot silently regain authority.
 | `R-20260727-37` | Accepted and executed | The controlled sweep passed exact output parity, memory, and the 2.27% opening/closing drift gate, but batches 8 and 16 were slower over the same 16 logical rows. Their projected 256-scenario p95 costs are 75.5 and 75.1 hours versus 65.4-65.5 hours for batch 4; neither beats the strict 62.8-hour batch-4 p50 threshold. Retain batch 4. Do not re-probe, re-confirm, or run 256 scenarios from this treatment. |
 | `R-20260727-38` | Accepted delivery priority | Standardize the training-distribution review contract and build the graphical benchmark inspector now, while unresolved S1 admission work continues. Its first input is the current B0a bank and must be labelled design input, not S2 or a frozen release. The owner-only site exports human decisions as data, exposes no sealed maps, executes no models, and becomes the same exporter/UI used for the admitted S2 bank rather than a parallel dashboard. |
 | `R-20260727-39` | Accepted delivery simplification | Host the current review build locally rather than deploying it. Also export a Nautilus-friendly image tree organized by provisional Anchor/One-axis/Composed review depth, then family and condition, so map distributions can be reviewed outside the application. The legacy B0a depth grouping remains visibly provisional. A hosting project may be reserved, but no production version is saved or deployed until explicitly requested. |
+| `R-20260727-40` | Accepted and executed as non-admission tooling | The local B0a preview exports 256 design-input scenarios across 16 legacy cells and 144 source groups, with 1,792 deterministic layer graphics, 16 overview sheets, 256 individual composites, and zero sealed assets. It provides pair/layer navigation, distribution, curriculum-exposure, and receipt views plus deterministic review-decision JSONL import/export bound to exact release and scenario hashes. Format validation passes; live-geometry Static validation, Witness validation, canonical S2 identities, policy results, and Lorenzo's actual review remain pending. The provisional depth folders are not the S2 pilot or a frozen release. |
 
 Still to decide through S1-S2 evidence:
 

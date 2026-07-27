@@ -1,7 +1,8 @@
 # Terra Digging Benchmark Review goal
 
 - Goal ID: `terra-digging-benchmark-review-v1`
-- Status: active; first priority inside the Terra curriculum-recovery goal
+- Status: local B0a preview complete; owner review and S1-S2 admission remain
+  active inside the Terra curriculum-recovery goal
 - Owner-facing outcome: Lorenzo can inspect, compare, and record decisions on
   the actual training-map distribution through a graphical review site while
   benchmark admission work continues.
@@ -100,15 +101,60 @@ deploying a production version is deferred until Lorenzo asks.
 ## Execution checklist
 
 - [x] Freeze this goal and bind it to both canonical documents.
-- [ ] Define and validate the normalized public review-data schema.
-- [ ] Export the current B0a design-input bank and deterministic graphics.
-- [ ] Build the required review surfaces and decision-data workflow.
-- [ ] Run data, UI, visual, and production-build verification.
-- [ ] Start and verify the local review server and organized example tree.
-- [ ] Record review decisions and implementation evidence in both canonical
-  documents.
+- [x] Define and validate the normalized public review-data schema.
+- [x] Export the current B0a design-input bank and deterministic graphics.
+- [x] Build the required review surfaces and decision-data workflow.
+- [x] Run data, UI, visual, and production-build verification.
+- [x] Start and verify the local review server and organized example tree.
+- [x] Record implementation evidence in both canonical documents.
+- [ ] Record Lorenzo's actual approve/reject/quarantine decisions and notes as
+  deterministic JSONL and in both canonical documents.
 - [ ] Swap in the source-disjoint 448-scenario S2 bank after all prerequisite
   gates pass; do not relabel the B0a preview as S2.
+
+## Local B0a design-input preview receipt
+
+- Site source:
+  `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
+  `ad09043a1c74ebf56552d86de548eb6529c81857`.
+- Input: historical B0a paired-panel design input. The identity-manifest
+  SHA-256 is
+  `911b6e3a453d6d9e1aeaebfe5fcef33406c89aae0180e1c4eb8739efc1fd5b4e`;
+  the stronger review-manifest SHA-256
+  `c0c27de498561bed00715b05acf7daff442a7835a37c9f0109372a93576e736b`
+  also binds the file registry, source registry, validation receipt, and
+  exporter source.
+- Export: `256` scenarios, `16` legacy cells, `144` source groups, `1,792`
+  layer PNGs, `16` overview sheets, `256` individual example composites, and
+  zero sealed assets. `review-data.json` SHA-256 is
+  `cbfbea5df54a03248faf2c1f294f3fe819f5478f3f4d250326bfc6cdba7622fe`;
+  the complete example-tree SHA-256 is
+  `3df169695a6073adce26186865ad1daae06df3b1d0f7022c33593f46ea85b968`.
+  A second clean export reproduced both hashes exactly.
+- Organized examples:
+  `/home/lorenzo/moleworks/.artifacts/terra_digging_benchmark_review_20260727/examples`.
+- Responsive screenshots:
+  `/home/lorenzo/moleworks/.artifacts/terra_digging_benchmark_review_20260727/site_screenshots`.
+- Verification passed: five exporter unit tests, array/PNG/tree export
+  verification, Python compilation and Black checking, TypeScript checking,
+  the production build, OpenNext packaging, and the Playwright review,
+  comparison, curriculum-exposure, layer, and decision round trip
+  (`2 passed`, `2 project-specific skips`). The decision importer also rejects
+  missing manifest/scenario hashes.
+- Local review URL: `http://127.0.0.1:4173`. At the 2026-07-27 16:30 CEST
+  handoff, `next-server` PID `3044816` was bound only to `127.0.0.1:4173`;
+  both `/` and a generated map asset returned HTTP `200`.
+- Scientific status: Format validation passed; live-geometry Static
+  validation and Witness validation have not run, and no policy result is
+  supplied. Canonical `condition_id` and `scenario_id` remain absent and the
+  depth labels are provisional legacy groupings. This is unranked design
+  input, not S2.
+- The Playwright JSONL is synthetic workflow evidence, not Lorenzo's review.
+  No owner decision has been recorded yet.
+- `npm audit` reports nine high and zero critical transitive advisories in the
+  pinned Next/OpenNext tree, with no compatible automatic fix. Loopback review
+  is accepted; publication remains gated on resolving or explicitly accepting
+  that dependency receipt.
 
 ## Stop conditions
 

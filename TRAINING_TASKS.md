@@ -45,7 +45,7 @@ log in Section 20. The benchmark/site goal in
 [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md) is now the
 first delivery priority. The immediate order is:
 
-1. standardize the public review-data contract and deploy the graphical
+1. standardize the public review-data contract and serve the graphical
    inspector locally against current B0a data, with separately browsable
    depth/family/condition example folders and explicit design-input labels
    rather than an admitted-benchmark claim;
@@ -3774,12 +3774,19 @@ Current implementation checklist:
 
 - [x] S0 records the accepted three-depth design and append-only reviewer
   decision log.
-- [ ] The active
+- [x] The active
   [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md)
   standardizes current B0a design-input records, exports map graphics and
   distributions, supports data-backed human review, and serves a local
   inspector plus organized image folders before the admitted S2 bank is
   ready. Production deployment is deferred by user choice.
+  Execution receipt: the non-admission preview contains `256` scenarios,
+  `16` legacy cells, `144` source groups, `1,792` verified layer PNGs,
+  `16` overview sheets, `256` individual composites, and zero sealed assets.
+  Exact source/output hashes, verification commands, responsive screenshots,
+  local URL, implementation commit, and unresolved Static/Witness/S2
+  limitations are recorded in `DIGGING_BENCHMARK_SITE_GOAL.md`. No Lorenzo
+  decision or S2 admission is claimed.
 - [ ] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.
