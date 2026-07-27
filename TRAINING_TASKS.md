@@ -3918,9 +3918,10 @@ Current implementation checklist:
   24/48 hours p95 for 256/448 sequential scenarios before this profile runs.
   The first confirmation agrees at `1.0324x` but fails both time limits, so
   this item is blocked on exact-path optimization and a new staged receipt.
-  The next treatment is the preregistered unchanged-kernel GPU parity/cost
-  ladder above; scenario sharding and heading-vectorization remain
-  unauthorized.
+  The pure-GPU ladder was rejected because graph/prefilter populations differ
+  by device. The next treatment is the preregistered CPU-graph/prefilter plus
+  GPU-service hybrid parity/cost gate above; scenario sharding and
+  heading-vectorization remain unauthorized.
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`.
@@ -3954,10 +3955,21 @@ Current implementation checklist:
     visual slice only: it is a narrow generator tail, is not source-matched to
     OSM, does not establish broad `8-12%` support, and remains Static/witness
     pending and non-admitted.
-  - [ ] Before this slice can support admission, regenerate its inherited
-    separation-in-metres fields with live
-    `0.571428571428125` m/tile instead of stale `0.6875`; the current review
-    site intentionally exports tile separation only.
+  - [x] The corrected v2 artifact regenerates all 48 p50/p95/max metre fields
+    from the frozen live `36.5714285714 / 64 =
+    0.571428571428125` m/tile receipt instead of stale `0.6875`. All 16
+    identities satisfy exact tiles-times-tile-size equality; a disagreeing
+    benchmark/environment protocol now fails closed. Deterministic rebuild and
+    exact-loader verification pass. Compared with v1, only
+    `identities.jsonl`, `provenance.json`, `summary.json`, and
+    `files.sha256` change; every NPY and PNG is byte-identical, and identities
+    are byte-identical after deleting the three corrected metre fields.
+    Artifact
+    `/home/lorenzo/moleworks/.artifacts/terra_pilot_large_foundation_review_20260727_v2/`
+    has manifest SHA-256
+    `3def81e558ff9776bdb0e9c8e17969d0c2c91f6ee43d98e80b2d227cc01a79b0`.
+    This repairs metadata only and still grants no Static, witness, broad
+    support, or admission claim.
 - [ ] S3 supplies exact replay witnesses within the 450-step protocol and
   reports witness margin; any stricter publication-Core cutoff requires an
   evidence-backed spec revision.

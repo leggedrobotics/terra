@@ -249,7 +249,10 @@ deploying a production version is deferred until Lorenzo asks.
 - The source artifact inherits stale metre separation fields computed with
   `0.6875` m/tile even though its protocol pins live
   `0.571428571428125` m/tile. The site exposes the correct tile measurements
-  only. Regenerate the metre fields before any admission claim.
+  only. The separate corrected v2 source artifact now passes deterministic
+  rebuild with those metre fields derived from the live receipt; the immutable
+  v1 visual release remains non-admission and need not invalidate existing
+  browser comments.
 
 ## Stop conditions
 
