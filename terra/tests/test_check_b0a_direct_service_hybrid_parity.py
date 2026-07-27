@@ -106,6 +106,13 @@ def test_ordered_leaf_hash_fails_on_dtype_shape_or_row_loss():
         hasher.update((np.zeros((1, 2), dtype=np.int32),), 1)
 
 
+def test_service_rows_reject_dtype_drift_without_coercion():
+    rows = np.zeros((4, 4), dtype=np.int32)
+    assert hybrid._require_int32_rows(rows, "rows") is rows
+    with pytest.raises(RuntimeError, match="must remain int32"):
+        hybrid._require_int32_rows(rows.astype(np.int64), "rows")
+
+
 def test_population_counter_mapping_and_reference_gate():
     poses = np.zeros((3, 3), dtype=np.int32)
     candidates = np.zeros((36, 4), dtype=np.int32)
@@ -256,12 +263,27 @@ def test_nonadmission_receipt_allows_profile_authorization_but_no_results():
         "bank_profile_called": False,
         "static_admission_authorized": False,
         "ppo_authorized": False,
-        "decision": {"authorizes_one_hybrid_cost_profile": True},
+        "decision": {
+            "authorizes_one_hybrid_cost_profile": True,
+            "authorizes_bank_profile": False,
+            "authorizes_static_admission": False,
+            "authorizes_ppo": False,
+        },
     }
     hybrid._assert_non_admission_receipt(receipt)
 
     receipt["ppo_authorized"] = True
     with pytest.raises(RuntimeError, match="exceeds its scope"):
+        hybrid._assert_non_admission_receipt(receipt)
+
+    receipt["ppo_authorized"] = False
+    receipt["decision"]["authorizes_ppo"] = True
+    with pytest.raises(RuntimeError, match="decision exceeds"):
+        hybrid._assert_non_admission_receipt(receipt)
+
+    receipt["decision"]["authorizes_ppo"] = False
+    receipt["decision"]["authorizes_one_hybrid_cost_profile"] = False
+    with pytest.raises(RuntimeError, match="decision exceeds"):
         hybrid._assert_non_admission_receipt(receipt)
 
 
@@ -298,6 +320,7 @@ def test_actual_confirmation_and_shared_code_are_still_pinned():
 def test_gpu_runner_source_has_only_the_exact_service_kernel_boundary():
     source = inspect.getsource(hybrid._GpuServiceRunner)
     assert "_service_batch.lower" in source
+    assert "dtype=np.int32" not in source
     for forbidden in (
         "_reachable_base_poses",
         "_movement_successor_batch",

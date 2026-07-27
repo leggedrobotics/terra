@@ -322,6 +322,13 @@ def _require_tree_on_platform(jax: Any, tree: Any, platform_name: str) -> None:
         )
 
 
+def _require_int32_rows(value: Any, name: str) -> np.ndarray:
+    rows = np.asarray(value)
+    if rows.dtype != np.int32:
+        raise RuntimeError(f"{name} must remain int32, got {rows.dtype}.")
+    return rows
+
+
 class _OrderedLeafHasher:
     """Stream ordered unpadded rows using the repository's array-hash contract."""
 
@@ -477,7 +484,11 @@ class _CpuServiceRunner:
         _require_tree_on_platform(self._jax, rows, "cpu")
         result = self._service_batch(state, rows)
         _require_tree_on_platform(self._jax, result, "cpu")
-        return result, np.asarray(self._jax.device_get(rows), dtype=np.int32)
+        host_rows = _require_int32_rows(
+            self._jax.device_get(rows),
+            "Canonical CPU service rows",
+        )
+        return result, host_rows
 
 
 class _GpuServiceRunner:
@@ -497,7 +508,10 @@ class _GpuServiceRunner:
     def __call__(self, state: Any, rows: Any) -> tuple[Any, np.ndarray]:
         _require_tree_on_platform(self._jax, state, "cpu")
         _require_tree_on_platform(self._jax, rows, "cpu")
-        host_rows = np.asarray(self._jax.device_get(rows), dtype=np.int32)
+        host_rows = _require_int32_rows(
+            self._jax.device_get(rows),
+            "Pre-transfer CPU service rows",
+        )
         with self._jax.default_device(self._gpu_device):
             if self._gpu_state is None:
                 self._gpu_state = self._jax.device_put(state, self._gpu_device)
@@ -511,9 +525,9 @@ class _GpuServiceRunner:
                 ).compile()
             result = self._compiled(self._gpu_state, gpu_rows)
             _require_tree_on_platform(self._jax, result, "gpu")
-            roundtrip_rows = np.asarray(
+            roundtrip_rows = _require_int32_rows(
                 self._jax.device_get(gpu_rows),
-                dtype=np.int32,
+                "Post-transfer GPU service rows",
             )
             host_result = tuple(
                 np.asarray(self._jax.device_get(leaf)) for leaf in result
@@ -643,7 +657,10 @@ class _ReplayCapture:
             expected_chunk,
             SERVICE_BATCH_SIZE,
         )
-        host_rows = np.asarray(self.jax.device_get(rows), dtype=np.int32)
+        host_rows = _require_int32_rows(
+            self.jax.device_get(rows),
+            "Canonical replay service rows",
+        )
         if not np.array_equal(host_rows, expected_padded):
             raise RuntimeError(
                 "Canonical service order or padding changed before dispatch."
@@ -784,9 +801,9 @@ def _validate_full_population_parity(
         "reference_limitation": (
             "The pinned CPU confirmation predates full candidate/output hashes. "
             "This run establishes them with a fresh canonical CPU replay whose "
-            "entire outcome, every population counter, code, input, protocol, "
-            "and state match that pinned confirmation, then requires exact GPU "
-            "service equality."
+            "entire outcome, every population counter, shared execution code, "
+            "input, protocol, and state match that pinned confirmation, then "
+            "requires exact GPU service equality."
         ),
     }
 
@@ -804,6 +821,25 @@ def _assert_non_admission_receipt(receipt: dict[str, Any]) -> None:
     failures = [key for key in required_false if receipt.get(key) is not False]
     if failures:
         raise RuntimeError(f"Hybrid parity receipt exceeds its scope: {failures}.")
+    decision = receipt.get("decision")
+    if not isinstance(decision, dict):
+        raise RuntimeError("Hybrid parity receipt has no decision object.")
+    expected_decision = {
+        "authorizes_one_hybrid_cost_profile": True,
+        "authorizes_bank_profile": False,
+        "authorizes_static_admission": False,
+        "authorizes_ppo": False,
+    }
+    decision_failures = [
+        key
+        for key, expected in expected_decision.items()
+        if decision.get(key) is not expected
+    ]
+    if decision_failures:
+        raise RuntimeError(
+            "Hybrid parity decision exceeds or contradicts its scope: "
+            f"{decision_failures}."
+        )
     forbidden_result_keys = {
         "wall_seconds",
         "timings_seconds",
