@@ -368,6 +368,19 @@ These decisions supersede stale choices later in the historical v4 design:
   `49638f9b48fdc479cba5a01554c0afdbd71c6429886bacc33c877d883b1bc110`.
   Reject hybrid timing and retain exact CPU execution; only external
   scenario-level CPU process parallelism is eligible next.
+- [ ] Test exactly one CPU process-scaling treatment before the 256-identity
+  profile. Launch one fresh cohort of four long-lived spawned workers on fixed
+  disjoint CPU affinity sets; each worker rematerializes the pinned confirmed
+  state and calls the unchanged exact CPU entrypoint twice. Require all eight
+  outcomes/counters to equal confirmation `f4bc393a...aae7`, four distinct
+  successful PIDs, CPU-only backend, zero swap/OOM, complete code/input/state/
+  protocol receipts, and conservative aggregate peak memory at most `80%`.
+  With per-worker cold/warm totals `C_i/W_i`, freeze
+  `P_N = max_i(C_i + (ceil(N/4)-1)*W_i)` and require
+  `P_256 <= 86,400 s`, `P_448 <= 172,800 s`, and every call at most
+  `3,600 s`. Do not sweep worker counts or retry a failed cohort. A pass
+  authorizes only one four-worker 256-identity exact profile, not Static,
+  admission, or PPO.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
