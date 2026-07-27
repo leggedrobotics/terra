@@ -218,6 +218,12 @@ environment and PPO configurations
 
 ## 4. Map curriculum
 
+The proposed public map schema, named progression tiers, source-disjoint
+benchmark splits, evaluation contract, and visual review website are specified
+in [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md). That specification
+standardizes and publishes the map contract; this section remains the
+experiment-specific curriculum design.
+
 ### 4.1 Difficulty axes
 
 Map difficulty is factored into four independently recorded axes:
