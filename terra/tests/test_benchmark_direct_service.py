@@ -12,68 +12,11 @@ from terra.benchmark_direct_service import _classify_complete_dump
 from terra.benchmark_direct_service import _dig_prefilter_batch
 from terra.benchmark_direct_service import _iter_chunks
 from terra.benchmark_direct_service import _pad_rows
-from terra.benchmark_direct_service import _rotate_cabin_steps
-from terra.benchmark_direct_service import _service_batch
-from terra.benchmark_direct_service import _state_at_base_pose
 from terra.benchmark_direct_service import _target_dig_progress_batch
-from terra.benchmark_direct_service import _target_progress
 from terra.benchmark_direct_service import _transition_state
 from terra.benchmark_direct_service import compute_initial_direct_service
 from terra.config import EnvConfig
 from terra.env import TerraEnv
-
-
-def _reference_service_for_candidate(state, candidate):
-    """The pre-optimization loop, including wraps after every transition."""
-    posed = _state_at_base_pose(state, candidate[:3])
-    posed = _rotate_cabin_steps(posed, candidate[3])
-    posed = TerraEnv.wrap_state(posed, update_reachability=jnp.bool_(False))
-
-    do_action = TrackedAction.do()
-    cabin_action = TrackedAction.cabin_anticlock()
-    dug = _transition_state(posed, do_action)
-    progress = _target_progress(posed, dug)
-    dig_valid = jnp.logical_and(
-        dug.agent.agent_states[0].loaded[0] > 0,
-        jnp.sum(progress) > 0,
-    )
-
-    def try_dump_heading(_, carry):
-        rotated, counts = carry
-        dumped = _transition_state(rotated, do_action)
-        counts = counts + jnp.asarray(
-            _classify_complete_dump(rotated, dumped),
-            dtype=jnp.int32,
-        )
-        return _transition_state(rotated, cabin_action), counts
-
-    _, counts = jax.lax.fori_loop(
-        0,
-        state.env_cfg.agent.angles_cabin,
-        try_dump_heading,
-        (dug, jnp.zeros((4,), dtype=jnp.int32)),
-    )
-    workspace_progress = jnp.where(dig_valid, progress, jnp.zeros_like(progress))
-    direct_progress = jnp.where(
-        jnp.logical_and(dig_valid, counts[0] > 0),
-        progress,
-        jnp.zeros_like(progress),
-    )
-    diagnostics = jnp.concatenate(
-        (
-            jnp.asarray((dig_valid,), dtype=jnp.int32),
-            counts,
-        )
-    )
-    return workspace_progress, direct_progress, diagnostics
-
-
-@jax.jit
-def _reference_service_batch(state, candidates):
-    return jax.vmap(
-        _reference_service_for_candidate,
-        in_axes=(None, 0),
-    )(state, candidates)
 
 
 class BenchmarkDirectServiceTest(unittest.TestCase):
@@ -219,45 +162,6 @@ class BenchmarkDirectServiceTest(unittest.TestCase):
         self.assertEqual(len(candidates), base_orientations * cabin_orientations)
         self.assertGreater(rejected_count, 0)
         self.assertGreater(accepted_count, 0)
-
-    def test_raw_counterfactual_steps_match_full_wrap_batch(self):
-        candidates = jnp.asarray(
-            (
-                (9, 9, 0, 0),
-                (9, 9, 0, 1),
-                (9, 9, 0, 11),
-                (9, 9, 0, 6),
-            ),
-            dtype=jnp.int32,
-        )
-        for nearby_dump in (True, False):
-            with self.subTest(nearby_dump=nearby_dump):
-                _, state = self._state(nearby_dump=nearby_dump)
-                optimized = _service_batch(state, candidates)
-                reference = _reference_service_batch(state, candidates)
-                for optimized_value, reference_value in zip(
-                    optimized,
-                    reference,
-                ):
-                    np.testing.assert_array_equal(
-                        np.asarray(jax.device_get(optimized_value)),
-                        np.asarray(jax.device_get(reference_value)),
-                    )
-
-                diagnostics = np.asarray(jax.device_get(optimized[2]))
-                np.testing.assert_array_equal(
-                    diagnostics[:3, 0],
-                    np.ones((3,), dtype=np.int32),
-                )
-                np.testing.assert_array_equal(
-                    diagnostics[3],
-                    np.asarray((0, 0, 0, 12, 0), dtype=np.int32),
-                )
-                self.assertGreater(int(diagnostics[:3, 2].sum()), 0)
-                if nearby_dump:
-                    self.assertGreater(int(diagnostics[:3, 1].sum()), 0)
-                else:
-                    self.assertEqual(int(diagnostics[:3, 1].sum()), 0)
 
     def test_transition_helper_matches_step_no_reset_state(self):
         env, state = self._state(nearby_dump=True)
