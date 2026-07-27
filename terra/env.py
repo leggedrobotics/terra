@@ -9,6 +9,7 @@ from jax import Array
 
 from terra.actions import Action
 from terra.actions import TrackedActionType
+from terra.agent import Agent
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
@@ -92,6 +93,7 @@ class TerraEnv(NamedTuple):
         action_map: Array,
         distance_map: Array,
         env_cfg: EnvConfig,
+        initial_agent: Agent | None = None,
     ) -> tuple[State, dict[str, Array]]:
         """
         Resets the environment using values from config files, and a seed.
@@ -109,6 +111,7 @@ class TerraEnv(NamedTuple):
             dumpability_mask_init,
             action_map,
             distance_map_override=distance_map,
+            initial_agent=initial_agent,
         )
         state = self.wrap_state(state)
 
@@ -700,20 +703,37 @@ class TerraEnvBatch:
         dumpability_mask_init: Array,
         action_maps: Array,
         distance_maps: Array,
+        initial_agents: Agent | None = None,
     ) -> State:
-        timestep = jax.vmap(self.terra_env.reset)(
-            rng_key,
-            target_maps,
-            padding_masks,
-            trench_axes,
-            trench_type,
-            foundation_border_axes,
-            foundation_border_type,
-            dumpability_mask_init,
-            action_maps,
-            distance_maps,
-            env_cfgs,
-        )
+        if initial_agents is None:
+            timestep = jax.vmap(self.terra_env.reset)(
+                rng_key,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+                env_cfgs,
+            )
+        else:
+            timestep = jax.vmap(self.terra_env.reset)(
+                rng_key,
+                target_maps,
+                padding_masks,
+                trench_axes,
+                trench_type,
+                foundation_border_axes,
+                foundation_border_type,
+                dumpability_mask_init,
+                action_maps,
+                distance_maps,
+                env_cfgs,
+                initial_agents,
+            )
         return timestep
 
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:

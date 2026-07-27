@@ -11,6 +11,9 @@ from terra.utils import compute_polygon_mask
 from terra.utils import get_agent_corners
 
 
+TRACKED_MIN_BORDER_DISTANCE_TILES = 8
+
+
 class AgentState(NamedTuple):
     """
     Clarifications on the agent state representation.
@@ -144,7 +147,7 @@ class Agent(NamedTuple):
             require_all_allowed = jnp.logical_not(is_truck_road_restricted)
             min_border_distance = jax.lax.cond(
                 agent_type_val == 0,
-                lambda _: jnp.int32(8),
+                lambda _: jnp.int32(TRACKED_MIN_BORDER_DISTANCE_TILES),
                 lambda _: jnp.int32(-1),
                 operand=None,
             )
@@ -243,7 +246,7 @@ class Agent(NamedTuple):
             require_all_allowed = jnp.logical_not(is_truck_road_restricted)
             min_border_distance = jnp.where(
                 agent_type_val == 0,
-                jnp.int32(8),
+                jnp.int32(TRACKED_MIN_BORDER_DISTANCE_TILES),
                 jnp.int32(-1),
             )
             pos_i, angle_i, per_agent_keys[i] = _get_random_init_state(

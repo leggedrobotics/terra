@@ -106,10 +106,21 @@ These decisions supersede stale choices later in the historical v4 design:
 - [x] The tracked pilot generator now constructs `slcap03_04` and
   `slcap07_10` from one exact OSM dig raster/source group at nominal ratios
   `3.25` and `8.5`, hard-failing outside the closed capacity or `sep02` p50
-  bands. Six focused tests pass, and a compatibility probe constructed both
-  variants for all 16 frozen B0a OSM apron sources. This closes the pure
-  constructor subtask only: S1 Capacity remains open until a materialized
-  receipt, live static validation, and Lorenzo's visual review pass.
+  bands. Six focused tests pass. A read-only diagnostic constructed both
+  variants for all 16 already-burned B0a train/development OSM apron sources;
+  it selected no parameter and is not admission evidence. This closes the
+  pure constructor subtask only: S1 Capacity remains open until a new
+  train-only materialized receipt, live static validation, and Lorenzo's
+  visual review pass.
+- [x] Single and batched resets now accept a complete explicit `Agent` tree
+  while preserving every leaf and the reset RNG. `terra_agent_state_v1`
+  hashes all four live slots with path/dtype/rank/shape-prefixed canonical
+  bytes, rejects untracked schema changes, and validates the one-active
+  tracked-excavator full-reset contract with the live footprint and shared
+  eight-tile border constant. The canonical test vector is
+  `debd22b6ff2c8b31d263ceb843e524d5bf9ae1ffe186e26291f1e5ec3d18fb1a`;
+  eager/JIT/batched-vmap preservation and the existing dump contract pass
+  together (`22 passed`).
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3630,7 +3641,7 @@ Current implementation checklist:
   preserves identities that pass, and lists/replaces only failures in one
   hashed per-identity migration receipt. The old unreceipted probe count is
   not a target.
-- [ ] S1 adds explicit batched complete-agent-state reset plus admissibility
+- [x] S1 adds explicit batched complete-agent-state reset plus admissibility
   validation and hashes every reset-consumed `Agent`/`AgentState` field.
 - [ ] S1 implements action-reachable exact dig-to-dump direct-service fields
   for the initial scenario before any map is described as forced rehandling;

@@ -119,12 +119,24 @@ class State(NamedTuple):
         dumpability_mask_init: Array,
         action_map: Array,
         distance_map_override: Array | None = None,
+        initial_agent: Agent | None = None,
     ) -> "State":
 
         world = GridWorld.new(
             target_map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map,
             relocation_distance_map_override=distance_map_override,
         )
+
+        if initial_agent is not None:
+            # Benchmark resets own the complete Agent tree. Do not derive caches,
+            # choose a current agent, or consume reset randomness in this path.
+            return State(
+                key=key,
+                env_cfg=env_cfg,
+                world=world,
+                agent=initial_agent,
+                env_steps=0,
+            )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
         agent_types = getattr(env_cfg, 'agent_types', (0, 2))

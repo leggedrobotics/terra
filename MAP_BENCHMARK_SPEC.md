@@ -388,8 +388,9 @@ validation:
 
 `map_id` changes when a physical map layer changes. `scenario_id` additionally
 includes initial soil, the explicit initial excavator state, and environment
-reset seed. S1 must add an explicit admissible `initial_agent_state` input to
-the reset path; a seed plus commit is not a portable serialized state.
+reset seed. S1 exposes an explicit admissible `initial_agent_state` input on
+the single and batched reset paths; a seed plus commit is not a portable
+serialized state.
 `initial_agent_state_sha256` covers the canonical byte encoding of every
 reset-consumed `Agent` and `AgentState` field, including the active mask,
 current-agent index, fixed four-slot state tree, footprint dimensions,
@@ -408,6 +409,13 @@ The release records the codec revision and test vectors. Witness
 Witness terminal semantic-state hashes additionally cover the frozen RNG key,
 all mutable `GridWorld` arrays/scalars, the complete `Agent` tree, and
 `env_steps`; the protocol hash owns immutable `EnvConfig`.
+
+The implemented `terra_agent_state_v1` codec asserts exact coverage of the
+live `Agent`/`AgentState` field trees, preserves the live `int8[4]` active
+mask, and hashes all four slots. Explicit reset bypasses `Agent.new`, cache
+derivation, current-agent randomization, and reset-RNG consumption. The
+canonical one-agent test vector digest is
+`debd22b6ff2c8b31d263ceb843e524d5bf9ae1ffe186e26291f1e5ec3d18fb1a`.
 
 `treatment_id` changes when the reward-distance or reward contract changes.
 Environment/reset seeds and policy-sampling seeds are different namespaces and
@@ -1642,12 +1650,12 @@ cannot silently regain authority.
 | `R-20260727-21` | Accepted | Foundation volume matching is pair-specific: retune procedural all-around generation toward fixed OSM support for the source comparison, while the apron capacity pair shares exact OSM dig rasters and pairwise volume. No single interval spans all four foundation cells. |
 | `R-20260727-22` | Accepted | Remove the unreceipted 23/256 probe count. S1 emits a hashed per-identity migration receipt and profiles exact direct-service validation before S2. Normalize legacy `broad_side_cast` provenance to canonical `side_cast`. |
 | `R-20260727-23` | Accepted and executed | Keep the proposed ten-integer-cell trench-band width fixed, audit only its location under the preregistered support/interior rule, and freeze `v68_77`. The tracked pilot sampler leaves the hash-pinned B0 builder unchanged and receipts generator retries, duplicates, and conditioning covariates. |
+| `R-20260727-24` | Accepted and executed | Add an optional complete `Agent` input to single/batched reset, preserve the supplied tree and RNG exactly, and freeze `terra_agent_state_v1` as path/dtype/rank/shape-prefixed canonical bytes over every live field and all four slots. Admissibility remains a separate host-side gate. |
 
 Still to decide through S1-S2 evidence:
 
 - the exact moderate-apron construction that changes capacity without changing
   the dig raster or separation distribution;
-- the explicit batched initial-agent-state reset API and admissibility record;
 - the conservative relay-hop algorithm and method-neutral witness supplier;
 - whether S3 evidence supports a stricter publication-Core witness margin than
   the frozen 450-step pilot horizon;
