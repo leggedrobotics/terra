@@ -1415,6 +1415,10 @@ Old releases and leaderboards remain accessible.
 The website is generated from versioned JSON, thumbnails, and optional result
 receipts. It can be hosted as static files. Sealed evaluation runs elsewhere
 and exports public-safe receipts; the website never executes submitted models.
+The active delivery goal and its verification checklist are pinned in
+[`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md); that goal
+is subordinate to this scientific contract and
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md).
 
 The first deliverable is one local `index.html`, not a web service. It shows:
 
@@ -1740,6 +1744,7 @@ cannot silently regain authority.
 | `R-20260727-35` | Rejected after exact null | The focused parity test preserved outputs after replacing counterfactual dump/cabin wrapping with raw real transitions, but warmed batch latency was effectively unchanged (`0.9986x` p50 and `1.0041x` p95, new/old). This is consistent with compiler elimination or amortization, not proof of it. Revert the extra semantic proof surface. Next test only fixed service batch sizes `4/8/16` with exact output parity before considering another algorithmic change. |
 | `R-20260727-36` | Accepted optimization gate; amended before execution | Sweep only exact service batch sizes `4/8/16` on the same pinned state: first 16 accepted rows for timing, first 18 for padded-tail parity. Give every arm one equal 16-row warmup and 12 timed repeats; bracket with a closing batch-4 control whose p50 drift must be at most 5%. Exact parity means matching dtype/shape/content hashes. Persistent compilation caching fails closed; padding and cumulative shared-process memory remain explicit. Select away from 4 only when the eligible winner's projected 256-scenario p95 is strictly below the smaller opening/closing batch-4 p50, breaking ties toward the smaller batch. Selection authorizes a fresh staged probe, not a bank run. |
 | `R-20260727-37` | Accepted and executed | The controlled sweep passed exact output parity, memory, and the 2.27% opening/closing drift gate, but batches 8 and 16 were slower over the same 16 logical rows. Their projected 256-scenario p95 costs are 75.5 and 75.1 hours versus 65.4-65.5 hours for batch 4; neither beats the strict 62.8-hour batch-4 p50 threshold. Retain batch 4. Do not re-probe, re-confirm, or run 256 scenarios from this treatment. |
+| `R-20260727-38` | Accepted delivery priority | Standardize the training-distribution review contract and build the graphical benchmark inspector now, while unresolved S1 admission work continues. Its first input is the current B0a bank and must be labelled design input, not S2 or a frozen release. The owner-only site exports human decisions as data, exposes no sealed maps, executes no models, and becomes the same exporter/UI used for the admitted S2 bank rather than a parallel dashboard. |
 
 Still to decide through S1-S2 evidence:
 

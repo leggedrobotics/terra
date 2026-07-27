@@ -15,6 +15,10 @@
 - Canonical current map-benchmark/curriculum specification:
   [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), especially the v0.3
   reviewer decision log in Section 20
+- Active first subgoal: standardize the training distribution and deliver its
+  graphical review workflow under
+  [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md); it is
+  jointly governed by this ledger and `MAP_BENCHMARK_SPEC.md`
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
 - Historical reference: E8 `resnet_spatial_8x8_se`
 - Recovery scratch topology: base `resnet_spatial_8x8`, approximately 994,825
@@ -37,14 +41,20 @@ PPO is not justified.
 
 The live plan is the factorized admission graph in
 [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), with its accepted-review
-log in Section 20. The immediate order is:
+log in Section 20. The benchmark/site goal in
+[`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md) is now the
+first delivery priority. The immediate order is:
 
-1. S1: complete state/condition schema, live-geometry revalidation,
+1. standardize the public review-data contract and deploy the graphical
+   inspector against current B0a data, explicitly labelled design input rather
+   than an admitted benchmark;
+2. S1: complete state/condition schema, live-geometry revalidation,
    exact direct-service metric and cost receipt, pair-specific foundation
    support, topology-aware trench support, and adjustable apron capacity;
-2. S2: build and visually review the balanced 448-scenario pilot;
-3. S3: replay exact witnesses within 450 steps; and
-4. only then materialize selected active cells and resume specialist/generalist
+3. S2: replace the preview data with the balanced 448-scenario pilot and
+   record Lorenzo's visual decisions;
+4. S3: replay exact witnesses within 450 steps; and
+5. only then materialize selected active cells and resume specialist/generalist
    PPO under source-disjoint promotion gates.
 
 The rejected flat M0-M2 and per-environment 3/3 treatments and all completed
@@ -3763,6 +3773,11 @@ Current implementation checklist:
 
 - [x] S0 records the accepted three-depth design and append-only reviewer
   decision log.
+- [ ] The active
+  [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md)
+  standardizes current B0a design-input records, exports map graphics and
+  distributions, supports data-backed human review, and deploys an owner-only
+  inspector before the admitted S2 bank is ready.
 - [ ] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.
