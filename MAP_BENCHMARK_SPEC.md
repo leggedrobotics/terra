@@ -1709,8 +1709,8 @@ their fixed affinity and CPU backend, swap and cgroup OOM deltas are zero,
 coordinator plus conservative summed worker peak RSS is at most 80% of physical
 memory, and pre/post code and input receipts match. Zero direct service remains
 valid measured data rather than a profile failure. Any failure emits partial
-evidence but no merged success file and authorizes no Static claim, bank
-admission, witness, or PPO. Any corrected rerun requires a new append-only
+evidence but no authoritative merged result and authorizes no Static claim,
+bank admission, witness, or PPO. Any corrected rerun requires a new append-only
 decision and fresh output directory.
 
 The R-58 receipt's narrow
@@ -1845,6 +1845,7 @@ cannot silently regain authority.
 | `R-20260727-61` | Pre-execution persistence correction to R-60 | Replace R-60's imprecise word `rename` with the existing atomic no-replace hard-link publication primitive. Identity duration ends after the scenario receipt is durably published and is recorded later in the worker ledger. After all workers exit, write and verify a clearly named canonical candidate merge; include that work in observed makespan and compute every cost/resource/integrity gate before publishing the success filename. A failed profile may retain the candidate as partial evidence but must never emit `direct_service_results.jsonl`. This changes no population, timing equation, threshold, retry rule, or scientific authority. |
 | `R-20260727-62` | Pre-execution protocol-provenance clarification | Preserve the migration protocol receipt (`affc0d921...`, `15e4d45f...`, EnvConfig `02863f62...`) as historical identity provenance and separately derive the execution protocol from the profile's clean committed revision. Require all workers to agree and require the EnvConfig/constants, code, packages, executable, authorization, confirmation, B0a identities/checksum/source/provenance manifests, and migration JSONL/summary to remain exact pre/post. Do not require the revision-dependent migration and execution protocol hashes to equal and do not let this cost sidecar mark a migration row Static-valid. This changes no map, state, outcome, threshold, or authority. |
 | `R-20260727-63` | Pre-execution manifest-integrity clarification | R-62's pre/post manifest equality is necessary but not sufficient. Before success publication, re-verify every path named by frozen `files.sha256` against its recorded digest and reject missing, changed, or unmanifested consumed files. The no-replace hard-link publication is durable only because the source file is fsynced before linking and the containing directory is fsynced afterward; require both operations. This adds no new artifact format, map, timing threshold, or authority. |
+| `R-20260727-64` | Pre-execution two-file commit clarification | Under the simple one-directory writer, `direct_service_results.jsonl` is never authoritative by filename alone. A usable sidecar requires both that file and a passing no-replace `validation_cost.json` whose recorded result hash matches it. Result publication is the final data-path operation after every scientific gate; the validation receipt is the commit marker. If the hard-link succeeds but its directory fsync or final commit-marker publication fails, preserve and receipt the orphan as non-authoritative partial evidence rather than destructively deleting it. This narrowly supersedes R-61's literal claim that a failure can never leave the success filename; it does not weaken any scientific gate or authorize retry, Static, admission, witness, or PPO. |
 
 Still to decide through S1-S2 evidence:
 

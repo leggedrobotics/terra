@@ -417,8 +417,12 @@ These decisions supersede stale choices later in the historical v4 design:
   and require its generic `authorizes_bank_profile` flag to remain false. Do
   not expose worker count, sharding, backend, retry, resume, or cache controls.
   Failure preserves partial receipts and the candidate merge if it exists but
-  emits no merged success result and authorizes no Static claim, admission,
-  witness, or PPO.
+  emits no authoritative merged result and authorizes no Static claim,
+  admission, witness, or PPO. `direct_service_results.jsonl` is usable only
+  together with a passing no-replace `validation_cost.json` that records the
+  same result hash. If the result hard-link succeeds but directory fsync or
+  final commit-marker publication fails, preserve and receipt that orphan as
+  non-authoritative partial evidence; do not delete or reuse it.
   Preserve migration provenance (`affc0d921...`, full protocol
   `15e4d45f...`, EnvConfig `02863f62...`) separately from the full execution
   protocol derived from the profiler's clean committed revision. Require
