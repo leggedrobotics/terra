@@ -188,6 +188,21 @@ These decisions supersede stale choices later in the historical v4 design:
   at SHA-256
   `d283351640e5eaf2cc2ac5734766175a9863dc749bd4067a6c88c94f3d72e110`;
   it emits no admission or feasibility outcome.
+- [x] The one authorized complete exact confirmation reproduced the same
+  state and dependency hashes and made one
+  `compute_initial_direct_service` call. Exact-validator wall time was
+  `1,086.615 s` versus the probe's `1,052.509 s` p50, a ratio of `1.0324`;
+  process peak was `3,558,344 KiB`, or `3.61%` of host capacity. The selected
+  scenario has required volume `104`, workspace/direct-serviceable volume
+  `104/104`, and direct-service coverage `1.0`. This is evidence for that
+  scenario only, not bank admission. Calibrated 256/448 p95 costs are
+  `223,001/390,083 s` (about `61.9/108.4 h`), so both operational time gates
+  fail and no bank-scale profile is authorized. The clean-worktree receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_confirmation_20260727_v1/validation_cost_confirmation.json`
+  at SHA-256
+  `f4bc393a7eabcdc058eb5f4de69281c5e1bed9feef275f9f75833f3f3c4aaae7`.
+  S1 must optimize the same exact path and re-profile; it may not weaken or
+  approximate the validator.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3718,13 +3733,15 @@ Current implementation checklist:
   separating logical attempts from padded kernel execution and emitting no
   subset feasibility result. It passed the frozen 60-minute p95 and
   20%-memory-headroom gate.
-- [ ] S1 confirms the probe estimate on one complete exact 64 x 64 scenario
+- [x] S1 confirms the probe estimate on one complete exact 64 x 64 scenario
   before any 256-identity profile.
 - [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
   identities, receipts cold/steady runtime, replay counts, peak memory, and
   projected 448-scenario cost, and reviews that receipt before S2. The
   confirmation must agree within a factor of two and calibrate to at most
   24/48 hours p95 for 256/448 sequential scenarios before this profile runs.
+  The first confirmation agrees at `1.0324x` but fails both time limits, so
+  this item is blocked on exact-path optimization and a new staged receipt.
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`.
