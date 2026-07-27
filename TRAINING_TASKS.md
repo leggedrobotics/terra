@@ -2633,6 +2633,34 @@ The sealed decision is `continue_same_panel`. Exactly one fresh continuous
 rules 13-14. It must not resume the 2,000-update process. B0c, F1, and
 `gpuhe.120h` remain unauthorized.
 
+The authorized 5,000-update confirmation was submitted at `2026-07-27`:
+
+- immutable root:
+  `/cluster/scratch/lterenzi/codex_terra_edge_runs/curriculum_recovery_v1_20260725/b0_foundation_distance_diversity_u5000_v1`;
+- source, outer-bank, internal-bank, exact 256-train, and exact
+  32-development manifest SHA-256 values remain
+  `8444e68c0a8807ee13166eafeccb8c30c049c7065467ad9c92ad3e7a6b522170`,
+  `1e49c9a1c5fa1541026a9c5a13a864c536fbb6d09bfff242f5a7c7e83c6412a8`,
+  `ac3232e3322b4268fbb35027f0e5734a1da33e86d40f72295af9b0730f04e940`,
+  `ca172b2e37a6f11baeed54560238950ad4773c8125ed0960d8cbe6b52850e665`,
+  and
+  `c1744f5c6d7f898d6b543617bbe49ab931209816e680445703f245a656a094f9`;
+- recursive source/bank equivalence, read-only sealing, exact loader counts,
+  focused tests, shell syntax, and ShellCheck passed. Creation,
+  wrapper-submission, and submitted-jobs receipt SHA-256 values are
+  `0bc6ba6e8a34d567e4e24c052ba323fa3c379a34a5e4554d37ee2b6ee9c13ee8`,
+  `b908567d29326c811562a8d34248a77951276356d7f97bad3a1870804342db5f`,
+  and
+  `29826e51670ae57154dd43ac787677227d855a6e1095c85dedc5330b4e767ec9`;
+  and
+- train job `8727052` requests four RTX 4090s for `16:00:00` on
+  `gpuhe.24h`; evaluator `8727053` requests one RTX 4090 under
+  `afterok:8727052`. The run is fresh from seed `2026072702`, with no resume,
+  warm start, or teacher, and covers 655,360,000 environment transitions.
+
+This is submission evidence only. Runtime GPU/update-1 acceptance remains
+mandatory before the 5,000-update body is admitted.
+
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
 explicit. The submission wrapper now validates the declared
