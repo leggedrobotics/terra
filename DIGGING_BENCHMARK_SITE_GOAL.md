@@ -116,7 +116,7 @@ deploying a production version is deferred until Lorenzo asks.
 
 - Site source:
   `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
-  `cb3e1b822d3abc8b051c1e443d7b147fea462560`.
+  `276482f7d79d84b92c57ae46c684f5cd6aa917c6`.
 - Input: historical B0a paired-panel design input. The identity-manifest
   SHA-256 is
   `911b6e3a453d6d9e1aeaebfe5fcef33406c89aae0180e1c4eb8739efc1fd5b4e`;
@@ -139,14 +139,15 @@ deploying a production version is deferred until Lorenzo asks.
   verification, Python compilation and Black checking, TypeScript checking,
   the production build, OpenNext packaging, and the Playwright review,
   comparison, curriculum-exposure, layer, and decision round trip
-  (`2 passed`, `2 project-specific skips`). The decision importer also rejects
+  (`3 passed`, `3 project-specific skips`). The importer also rejects
   missing manifest/scenario hashes.
 - The owner-review correction moves the decision-and-comment editor above the
-  audit details and exposes a plain `Map comment` field. The browser round-trip
-  test records the observed foundation-size concern and verifies that it
-  survives exact-hash JSONL export/import as `semanticNote`.
+  audit details and exposes a plain `Map comment` field. It is writable before
+  a decision; a comment-only `terra-map-review-record-v2` remains visibly
+  decision-pending and survives exact-hash JSONL export/import. A later
+  accept/reject/quarantine action preserves that comment.
 - Local review URL: `http://127.0.0.1:4173`. After the comment-UX rebuild,
-  `next-server` PID `3219301` was bound only to `127.0.0.1:4173`;
+  `next-server` PID `3244226` was bound only to `127.0.0.1:4173`;
   both `/` and a generated map asset returned HTTP `200`.
 - Scientific status: Format validation passed; live-geometry Static
   validation and Witness validation have not run, and no policy result is
