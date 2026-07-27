@@ -128,6 +128,7 @@ _INTERNAL_ENV_KEYS = (
     _EXPECTED_CODE_BUNDLE_ENV,
 )
 _DISALLOWED_RUNTIME_ENV = (
+    "PYTHONPATH",
     "JAX_ENABLE_COMPILATION_CACHE",
     "JAX_COMPILATION_CACHE_DIR",
     "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS",
@@ -140,6 +141,15 @@ _DISALLOWED_RUNTIME_ENV = (
     "TF_NUM_INTRAOP_THREADS",
     "TF_NUM_INTEROP_THREADS",
 )
+EXPECTED_WORKER_MODULE_PATHS = {
+    "terra.benchmark_direct_service": "terra/benchmark_direct_service.py",
+    "tools.confirm_b0a_direct_service_cost": (
+        "tools/confirm_b0a_direct_service_cost.py"
+    ),
+    "tools.profile_b0a_direct_service_cost": (
+        "tools/profile_b0a_direct_service_cost.py"
+    ),
+}
 
 
 class ProbeRejected(RuntimeError):
@@ -409,7 +419,7 @@ def _require_runtime_environment(environment: Mapping[str, str]) -> dict[str, An
     }
     if present:
         raise RuntimeError(
-            "CPU process probe requires an unmodified JAX/XLA environment; "
+            "CPU process probe requires an unmodified import/JAX/XLA environment; "
             f"unset {sorted(present)}."
         )
     return {
@@ -422,6 +432,37 @@ def _require_runtime_environment(environment: Mapping[str, str]) -> dict[str, An
         "persistent_compilation_cache": False,
         "new_xla_or_thread_flags": False,
         "passes": True,
+    }
+
+
+def _module_origin_receipt(
+    repository: Path,
+    modules: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(modules) != set(EXPECTED_WORKER_MODULE_PATHS):
+        raise RuntimeError("Worker origin audit module set changed.")
+    origins = {}
+    for name, relative in EXPECTED_WORKER_MODULE_PATHS.items():
+        expected = (repository / relative).resolve()
+        module_file = getattr(modules[name], "__file__", None)
+        if not isinstance(module_file, str):
+            raise RuntimeError(f"{name} has no filesystem origin.")
+        observed = Path(module_file).resolve()
+        if observed != expected:
+            raise RuntimeError(
+                f"{name} resolved outside the executing repository: "
+                f"{observed} != {expected}."
+            )
+        origins[name] = {
+            "expected_path": str(expected),
+            "observed_path": str(observed),
+            "matches": True,
+        }
+    return {
+        "executing_repository": str(repository.resolve()),
+        "origins": origins,
+        "all_origins_match_exact_paths": True,
+        "pythonpath_override": os.environ.get("PYTHONPATH"),
     }
 
 
@@ -650,6 +691,15 @@ def _worker_contract(
     import tools.confirm_b0a_direct_service_cost as confirmation
     import tools.profile_b0a_direct_service_cost as probe_tool
 
+    repository = Path(__file__).resolve().parents[1]
+    module_origins = _module_origin_receipt(
+        repository,
+        {
+            "terra.benchmark_direct_service": direct_service,
+            "tools.confirm_b0a_direct_service_cost": confirmation,
+            "tools.profile_b0a_direct_service_cost": probe_tool,
+        },
+    )
     devices = jax.devices()
     if len(devices) != 1 or devices[0].platform != "cpu":
         raise RuntimeError(f"Worker requires one CPU JAX device, got {devices}.")
@@ -734,6 +784,7 @@ def _worker_contract(
         "source_grouping": source_grouping,
         "verified_selected_files": verified_selected_files,
         "selected_identity": selected_identity,
+        "module_origins": module_origins,
         "selected_input_contract_sha256": _canonical_json_sha256(
             {
                 "manifest": manifest_sha256,
@@ -844,6 +895,7 @@ def _worker_main() -> int:
                 "pid": os.getpid(),
                 "affinity_cpus": affinity_before,
                 "thread_affinity": thread_affinity_before,
+                "module_origins": input_receipt["module_origins"],
                 "device": device_receipt,
                 "ready_unix_seconds": time.time(),
                 "code_bundle_sha256": code_before["code_bundle_sha256"],
@@ -1063,6 +1115,19 @@ def _validate_worker_results(
             raise RuntimeError(f"Worker {index} transiently used swap.")
         if worker.get("reference", {}).get("sha256") != reference_sha256:
             raise RuntimeError(f"Worker {index} reference receipt changed.")
+        module_origins = worker.get("input", {}).get("module_origins", {})
+        origin_rows = module_origins.get("origins", {})
+        if (
+            module_origins.get("all_origins_match_exact_paths") is not True
+            or module_origins.get("pythonpath_override") is not None
+            or set(origin_rows) != set(EXPECTED_WORKER_MODULE_PATHS)
+            or any(
+                row.get("matches") is not True
+                or row.get("observed_path") != row.get("expected_path")
+                for row in origin_rows.values()
+            )
+        ):
+            raise RuntimeError(f"Worker {index} module origins changed.")
         validator = worker.get("validator", {})
         if (
             validator.get("code_before", {}).get("code_bundle_sha256")
@@ -1267,6 +1332,8 @@ def _run_cohort(
                 or ready.get("thread_affinity", {}).get(
                     "all_worker_threads_within_fixed_cpuset"
                 )
+                is not True
+                or ready.get("module_origins", {}).get("all_origins_match_exact_paths")
                 is not True
             ):
                 raise ProbeRejected(f"Worker {index} ready receipt changed.")

@@ -33,6 +33,18 @@ def _worker(index, *, cold=100.0, warm=10.0, peak=100, pid=None):
         "tasks": {"100": {"parsed_cpus": list(probe.AFFINITY_SETS[index])}},
         "all_worker_threads_within_fixed_cpuset": True,
     }
+    module_origins = {
+        "all_origins_match_exact_paths": True,
+        "pythonpath_override": None,
+        "origins": {
+            name: {
+                "expected_path": f"/repo/{relative}",
+                "observed_path": f"/repo/{relative}",
+                "matches": True,
+            }
+            for name, relative in probe.EXPECTED_WORKER_MODULE_PATHS.items()
+        },
+    }
     calls = [
         {
             "call_index": 0,
@@ -61,7 +73,10 @@ def _worker(index, *, cold=100.0, warm=10.0, peak=100, pid=None):
         "thread_affinity_after_calls": thread_affinity,
         "device": {"device_count": 1, "platform": "cpu", "default_backend": "cpu"},
         "reference": {"sha256": REFERENCE_SHA256},
-        "input": {"selected_input_contract_sha256": "c" * 64},
+        "input": {
+            "selected_input_contract_sha256": "c" * 64,
+            "module_origins": module_origins,
+        },
         "protocol": {"protocol_receipt_sha256": "d" * 64},
         "initial_state": {"stable_receipt_sha256": "e" * 64},
         "validator": {
@@ -98,6 +113,7 @@ def test_module_import_is_stdlib_only_until_worker_runtime():
 def test_worker_module_resolves_in_fresh_interpreter_from_pinned_cwd():
     repository = Path(probe.__file__).resolve().parents[1]
     environment = dict(os.environ)
+    environment.pop("PYTHONPATH", None)
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONPROFILEIMPORTTIME"] = "1"
     result = subprocess.run(
@@ -129,6 +145,52 @@ def test_worker_module_resolves_in_fresh_interpreter_from_pinned_cwd():
         or name.startswith("terra.")
         for name in imported_modules
     )
+
+
+def test_worker_scientific_modules_resolve_to_exact_repository_paths():
+    repository = Path(probe.__file__).resolve().parents[1]
+    environment = dict(os.environ)
+    environment.pop("PYTHONPATH", None)
+    environment["JAX_PLATFORMS"] = "cpu"
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    source = """
+import json
+from pathlib import Path
+import terra.benchmark_direct_service as direct_service
+import tools.confirm_b0a_direct_service_cost as confirmation
+import tools.profile_b0a_direct_service_cost as profile
+from tools.probe_b0a_direct_service_cpu_processes import _module_origin_receipt
+
+print(json.dumps(_module_origin_receipt(
+    Path.cwd(),
+    {
+        "terra.benchmark_direct_service": direct_service,
+        "tools.confirm_b0a_direct_service_cost": confirmation,
+        "tools.profile_b0a_direct_service_cost": profile,
+    },
+), sort_keys=True))
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    receipt = json.loads(result.stdout.strip().splitlines()[-1])
+    assert receipt["executing_repository"] == str(repository)
+    assert receipt["pythonpath_override"] is None
+    assert receipt["all_origins_match_exact_paths"] is True
+    for name, relative in probe.EXPECTED_WORKER_MODULE_PATHS.items():
+        expected = str((repository / relative).resolve())
+        assert receipt["origins"][name] == {
+            "expected_path": expected,
+            "observed_path": expected,
+            "matches": True,
+        }
 
 
 def test_fixed_affinities_partition_the_pinned_topology():
