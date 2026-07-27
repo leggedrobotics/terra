@@ -3925,9 +3925,16 @@ Current implementation checklist:
   by device. The next treatment is the preregistered CPU-graph/prefilter plus
   GPU-service hybrid parity/cost gate above; scenario sharding and
   heading-vectorization remain unauthorized.
-- [ ] S1 freezes full condition IDs: source, achieved separation, named
+- [x] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
-  volume/compactness support. No S2 record retains `vmatch`.
+  volume/compactness support. No S2 record retains `vmatch`. Commit
+  `847322e5` materializes the eight-condition canonical registry and verifier:
+  `4` foundation plus `4` trench, `3` Anchor plus `5` One-axis, literal
+  prerequisites, equal weights, exact panel memberships, and `448` projected
+  scenarios. The verifier re-hashes all `435` files across the three support
+  trees. `maximum_centered_dihedral_iou` thresholds remain `UNSET` and
+  explicitly block S2; scenario materialization, Static, Witness, and PPO
+  flags remain false.
 - [x] S1 Foundation retunes procedural all-around generation toward fixed OSM
   support and freezes one source-pair interval/tolerance; the apron capacity
   pair instead shares exact OSM dig identities and volumes.
