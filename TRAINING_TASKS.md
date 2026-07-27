@@ -368,7 +368,7 @@ These decisions supersede stale choices later in the historical v4 design:
   `49638f9b48fdc479cba5a01554c0afdbd71c6429886bacc33c877d883b1bc110`.
   Reject hybrid timing and retain exact CPU execution; only external
   scenario-level CPU process parallelism is eligible next.
-- [ ] Test exactly one CPU process-scaling treatment before the 256-identity
+- [x] Test exactly one CPU process-scaling treatment before the 256-identity
   profile. Launch one fresh cohort of four long-lived spawned workers on fixed
   disjoint CPU affinity sets; each worker rematerializes the pinned confirmed
   state and calls the unchanged exact CPU entrypoint twice. Require all eight
@@ -394,8 +394,25 @@ These decisions supersede stale choices later in the historical v4 design:
   after asserting the imported Terra/profile/confirmation files originate
   there. If any corrected worker reaches readiness, no further cohort rerun is
   allowed.
-- [ ] If and only if the corrected R-58 cohort passes, pin its receipt SHA-256
-  and run one fixed four-worker profile over the 256 frozen B0a migration
+  The corrected v2 cohort passed. Its hash-pinned receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cpu_process_probe_20260727_v2/cpu_process_probe.json`
+  at SHA-256
+  `7a42ecca04100f410afd19d4d2dd25e4a163ccd1797c9faf860350ef7af0aa22`.
+  Four distinct workers completed all eight exact calls with fixed affinities
+  and confirmation-identical typed outcomes and counters. Cold totals were
+  `1,353.848/1,477.051/1,644.589/1,776.767 s`; warm totals were
+  `1,050.778/1,125.202/1,204.426/1,227.335 s`. The frozen equation projects
+  worst-worker 256/448 costs of `79,098.861/138,010.933 s`
+  (`21.972/38.336 h`), both passing. Conservative aggregate peak RSS was
+  `14,435,036 KiB` of `98,578,360 KiB` (`14.643%`), with zero swap and zero
+  cgroup OOM delta. Before pinning, direct read-only revalidation recomputed
+  the artifact hashes, typed equality, projections, resources, and authority;
+  `sha256sum --quiet -c files.sha256` also passed all `3,392` frozen B0a
+  manifest entries. The receipt grants only
+  `authorizes_one_deterministic_four_worker_256_profile`; generic bank-profile,
+  Static, admission, witness, retry, and PPO authority remain false.
+- [ ] With the passing corrected R-58 receipt pinned, run one fixed four-worker
+  profile over the 256 frozen B0a migration
   identities. Canonical rows are ordered by `legacy_map_id` and assigned by
   global index `i % 4`; each worker receives exactly 64 scenarios and decodes
   every row's explicit serialized state. Each identity is executed once and
@@ -4002,8 +4019,9 @@ Current implementation checklist:
   because graph/prefilter populations differ by device, and the
   CPU-graph/GPU-service hybrid was rejected because its full-population service
   outputs and final result differ. The only current amendment is the
-  preregistered R-58 external four-process CPU treatment. If R-58 passes, pin
-  its receipt SHA-256 and execute exactly the fixed R-60 profile: four
+  preregistered R-58 external four-process CPU treatment. R-58 v2 passed and
+  its receipt SHA-256 `7a42ecca...aa22` is pinned; execute exactly the fixed
+  R-60 profile: four
   deterministic 64-identity shards, explicit migrated states, no retry/resume/
   cache, observed 256 makespan at most 24 hours, and
   `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)` at most 48 hours.

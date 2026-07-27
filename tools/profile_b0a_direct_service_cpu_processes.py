@@ -24,9 +24,11 @@ RESULTS_NAME = "direct_service_results.jsonl"
 CANDIDATE_RESULTS_NAME = "direct_service_results.candidate.jsonl"
 WORKER_MODULE = "tools.profile_b0a_direct_service_cpu_processes"
 
-# Root pins this only after the single R-58 v2 cohort passes. UNSET makes the
-# expensive profile impossible to launch from an unreviewed scaling result.
-EXPECTED_CPU_PROCESS_PROBE_SHA256 = "UNSET"
+# The single reviewed R-58 v2 cohort is the only authority for this one-shot
+# profile. A different receipt requires a new append-only decision.
+EXPECTED_CPU_PROCESS_PROBE_SHA256 = (
+    "7a42ecca04100f410afd19d4d2dd25e4a163ccd1797c9faf860350ef7af0aa22"
+)
 EXPECTED_CPU_CONFIRMATION_SHA256 = process_probe.EXPECTED_CPU_CONFIRMATION_SHA256
 EXPECTED_MIGRATION_VALIDATION_SHA256 = (
     "ce14b52e330cd734997f3c269b85d58a93ab24f67fc1e3f1499af0ecc5228b37"
