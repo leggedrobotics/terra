@@ -1629,15 +1629,23 @@ fixed-bank evaluation, receipts, and trajectory replay. Do not create a
 parallel environment implementation.
 
 Before exact direct service becomes a universal 448-scenario export gate, S1
-profiles it over all 256 frozen B0a identities and writes
-`validation_cost.json`. The receipt records the named machine, software and
-input/protocol/validator hashes, cold compile separately from steady-state
-time, candidate-pose and replay-attempt counts, per-scenario p50/p95/max and
-total wall time, peak memory, and projected 448-scenario cost. Review that
-receipt before S2. If cost is prohibitive, optimize the one exact validator
-path or revise the spec explicitly; never substitute an unreceipted geometric
-approximation. Content-addressed caching is added only if this profile shows
-it is needed.
+first writes a non-admission `validation_cost_probe.json` for one fixed
+public-train B0a identity and explicit state. It runs the complete exact
+movement graph and prefilter, cold-compiles the unchanged exact service kernel
+on one real batch, then times a deterministic warmed subset with synchronized
+outputs. The subset produces cost evidence only: it emits no coverage or
+validity decision. The receipt separates logical attempts from padded kernel
+rows and records machine/software/input/protocol/validator hashes, JAX device,
+cold compile, first execution, steady per-row p50/p95, candidate counts, peak
+memory, and explicit 1/256/448-scenario projections.
+
+If that estimate is viable, run one complete exact 64 x 64 scenario and compare
+observed versus projected cost. Only then profile all 256 frozen B0a identities
+and write the admission `validation_cost.json`, including per-scenario
+p50/p95/max and total wall time. Review both receipts before S2. If cost is
+prohibitive, optimize the one exact validator path or revise the spec
+explicitly; never substitute an unreceipted geometric approximation.
+Content-addressed caching is added only if the profile shows it is needed.
 
 Repository ownership stays narrow:
 
@@ -1713,6 +1721,9 @@ cannot silently regain authority.
 | `R-20260727-26` | Accepted | Compute initial direct service by exact action replay from the serialized state. A complete off-zone wrong dump remains a valid C1a mistake but never counts as legal service. Union overlapping hypothetical digs by capped per-cell maximum progress before computing coverage. |
 | `R-20260727-27` | Accepted and executed | Freeze foundation source support at `v140_189` and compactness `[0.30,0.65]`; pair at exact required volume and four-neighbour perimeter. The audit uses a fixed 256-group train partition, leaves reserve groups identity-and-eligibility-only, retunes only procedural main length/width, and preserves distinct source IDs. Raw OSM attribution remains a publication gate rather than being inferred from raster filenames. |
 | `R-20260727-28` | Accepted implementation hardening | Treat the foundation result as a volume/compactness-matched source-geometry comparison, not source-only causal isolation. Reject cross-family canonical-raster collisions explicitly and receipt Python/NumPy/SciPy versions; tracked generator portability is required before S2 materialization. |
+| `R-20260727-29` | Accepted implementation staging | The exact direct-service kernel remains the validator contract, but cost discovery is staged: one non-admission 64 x 64 probe with full pose graph/prefilter and a warmed exact-service subset, then one complete scenario, then the required 256-identity profile. Logical attempts and padded kernel executions are receipted separately; a subset never emits feasibility. |
+| `R-20260727-30` | Accepted migration identity contract | In the legacy B0a migration, canonical `source_group_id` is the existing `source_id`; this yields 144 groups across 256 rows (112 singleton, 16 four-map foundation-distance, 16 five-map straight-trench). `paired_source_group_id` remains counterfactual-panel metadata and `topology_match_group_id` never shares reset state. Use release ID `terramap-bench-v1.0.0`; direct-service coverage is diagnostic, while static dump access gates reachable capacity rather than requiring every optional dump component. |
+| `R-20260727-31` | Accepted and executed | The exact initial direct-service validator uses real tracked movement, dig, cabin, and dump transitions; the exact visible accepted mask; diagnostic entirely off-zone complete dumps; hard failure for mixed-boundary complete dumps; and capped per-cell union across hypothetical digs. Logical/padded counters and a prefilter differential guard are mandatory. The semantic suite passes, while 64 x 64 cost remains a separate open gate. |
 
 Still to decide through S1-S2 evidence:
 

@@ -83,6 +83,7 @@ These decisions supersede stale choices later in the historical v4 design:
 | Migration/cost evidence | Withdraw the unreceipted 23/256 probe count. S1 writes a hashed per-identity migration receipt and an exact direct-service validation cost profile before S2. |
 | Pilot initial states | Materialize one hash-seeded live `Agent.new` result per source group and split over the variants' intersected spawn contract. Counterfactuals share the exact state; never resample after observing feasibility or policy performance. |
 | Direct-service union | Replay actual movement/dig/cabin/dump transitions. Off-zone complete dumps remain recoverable mistakes but do not count; overlapping hypothetical digs are unioned by capped per-cell maximum progress. |
+| B0a migration identity | Use legacy `source_id` as canonical `source_group_id`: 144 groups over 256 rows. Keep pair/topology-match labels separate; topology matches never share reset state. Gate reachable dump capacity, not every optional component, and keep direct-service coverage diagnostic. |
 
 ### 1.2 First S1 execution receipts
 
@@ -152,6 +153,23 @@ These decisions supersede stale choices later in the historical v4 design:
   source-only intervention. Raster support is closed; tracked generator
   portability is required before S2, and raw OSM feature attribution is still
   required before publication.
+- [x] The exact initial direct-service validator now enumerates base poses
+  reachable by Terra's real tracked forward/backward/base-rotation
+  transitions, replays every cabin heading with the real dig/dump transition,
+  and uses the exact visible accepted mask. Entirely off-zone complete dumps
+  are diagnostic mistakes, mixed accepted/off-zone complete dumps hard-fail,
+  and overlapping hypothetical digs are combined by capped per-cell maximum
+  rather than summed. Logical attempts and padded JAX executions are
+  separately receipted, and an exhaustive fixed-pose differential test guards
+  the dig prefilter against false negatives. The combined direct-service and
+  dump-contract suite passed `23` tests plus `4` transition-parity subtests in
+  `358.01 s` wall time with `6,168,612 KiB` peak RSS on CPU. The implementation
+  and focused-test SHA-256 values are
+  `3469f3b04f4e66379aa52a9b0c8d2cd97f567590c1e52fd9d75da3004420b2c3`
+  and
+  `2dc3a7bb856240ff731ac976bd817f438db4cdb7668632e769359e972efbba15`.
+  This closes the semantic implementation gate only; it is not the required
+  64 x 64 cost receipt.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3674,10 +3692,14 @@ Current implementation checklist:
   not a target.
 - [x] S1 adds explicit batched complete-agent-state reset plus admissibility
   validation and hashes every reset-consumed `Agent`/`AgentState` field.
-- [ ] S1 implements action-reachable exact dig-to-dump direct-service fields
+- [x] S1 implements action-reachable exact dig-to-dump direct-service fields
   for the initial scenario before any map is described as forced rehandling;
   terminal/during-trace access fields wait for canonical witness replay, and
   relay-hop scoring is deferred until its graph is specified.
+- [ ] S1 runs the fixed one-identity non-admission direct-service cost probe,
+  separating logical attempts from padded kernel execution and emitting no
+  subset feasibility result; if viable, it confirms the estimate on one
+  complete 64 x 64 scenario.
 - [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
   identities, receipts cold/steady runtime, replay counts, peak memory, and
   projected 448-scenario cost, and reviews that receipt before S2.
