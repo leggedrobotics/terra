@@ -23,6 +23,7 @@ from typing import Any, Callable, Mapping
 
 SCHEMA = "terra_direct_service_cpu_process_probe_v1"
 OUTPUT_NAME = "cpu_process_probe.json"
+WORKER_MODULE = "tools.probe_b0a_direct_service_cpu_processes"
 EXPECTED_CPU_CONFIRMATION_SHA256 = (
     "f4bc393a7eabcdc058eb5f4de69281c5e1bed9feef275f9f75833f3f3c4aaae7"
 )
@@ -1157,6 +1158,10 @@ def _terminate_workers(processes: list[subprocess.Popen[Any]]) -> None:
                 process.wait()
 
 
+def _worker_command() -> list[str]:
+    return [sys.executable, "-m", WORKER_MODULE]
+
+
 def _run_cohort(
     *,
     b0a_root: Path,
@@ -1213,7 +1218,7 @@ def _run_cohort(
                 }
             )
             process = subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve())],
+                _worker_command(),
                 cwd=Path(__file__).resolve().parents[1],
                 env=environment,
                 stdout=log_stream,

@@ -1,6 +1,9 @@
 import ast
 import inspect
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,6 +92,42 @@ def test_module_import_is_stdlib_only_until_worker_runtime():
         or name.startswith("terra.")
         or name.startswith("tools.")
         for name in top_level_imports
+    )
+
+
+def test_worker_module_resolves_in_fresh_interpreter_from_pinned_cwd():
+    repository = Path(probe.__file__).resolve().parents[1]
+    environment = dict(os.environ)
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["PYTHONPROFILEIMPORTTIME"] = "1"
+    result = subprocess.run(
+        [*probe._worker_command(), "--help"],
+        cwd=repository,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert probe._worker_command() == [
+        sys.executable,
+        "-m",
+        "tools.probe_b0a_direct_service_cpu_processes",
+    ]
+    assert result.returncode == 0, result.stderr
+    assert "four-worker CPU scaling gate" in result.stdout
+    imported_modules = {
+        line.rsplit("|", maxsplit=1)[-1].strip()
+        for line in result.stderr.splitlines()
+        if line.startswith("import time:")
+    }
+    assert imported_modules
+    assert not any(
+        name == "jax"
+        or name.startswith("jax.")
+        or name == "terra"
+        or name.startswith("terra.")
+        for name in imported_modules
     )
 
 
