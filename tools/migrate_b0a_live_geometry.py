@@ -1310,6 +1310,25 @@ def _load_dataset(
     return manifest, [np.asarray(jax.device_get(array)) for array in loaded]
 
 
+def _validate_legacy_target_identity(
+    *,
+    legacy_map_id: str,
+    identity: Mapping[str, Any],
+    raw_target: np.ndarray,
+    loaded_target: np.ndarray,
+) -> None:
+    """Verify the stored identity without conflating storage and loader dtypes."""
+
+    if sha256_array(raw_target) != identity.get("target_identity_sha256"):
+        raise ValueError(f"{legacy_map_id} target identity hash changed.")
+    if not np.array_equal(loaded_target, raw_target):
+        raise ValueError(f"{legacy_map_id} exact loader changed target values.")
+    if sha256_array((raw_target < 0).astype(np.uint8)) != identity.get(
+        "dig_identity_sha256"
+    ):
+        raise ValueError(f"{legacy_map_id} dig identity hash changed.")
+
+
 def load_legacy_scenarios(
     input_root: Path,
     *,
@@ -1389,12 +1408,16 @@ def load_legacy_scenarios(
         metadata_path = directory / "metadata" / f"trench_{slot_index}.json"
         metadata = _read_json(metadata_path)
         target = targets[slot]
-        if sha256_array(target) != identity.get("target_identity_sha256"):
-            raise ValueError(f"{legacy_map_id} target identity hash changed.")
-        if sha256_array((target < 0).astype(np.uint8)) != identity.get(
-            "dig_identity_sha256"
-        ):
-            raise ValueError(f"{legacy_map_id} dig identity hash changed.")
+        raw_target = np.load(
+            directory / "images" / f"img_{slot_index}.npy",
+            allow_pickle=False,
+        )
+        _validate_legacy_target_identity(
+            legacy_map_id=legacy_map_id,
+            identity=identity,
+            raw_target=raw_target,
+            loaded_target=target,
+        )
         source_files = (
             directory / "dataset.json",
             directory / "manifest.jsonl",

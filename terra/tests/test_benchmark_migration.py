@@ -473,6 +473,34 @@ def test_input_integrity_rejects_a_file_changed_after_manifest(tmp_path):
         )
 
 
+def test_legacy_target_identity_uses_raw_dtype_and_checks_loader_values():
+    raw_target, *_ = _layers()
+    loaded_target = raw_target.astype(np.int16)
+    identity = {
+        "target_identity_sha256": migration.sha256_array(raw_target),
+        "dig_identity_sha256": migration.sha256_array(
+            (raw_target < 0).astype(np.uint8)
+        ),
+    }
+
+    migration._validate_legacy_target_identity(
+        legacy_map_id="legacy-a",
+        identity=identity,
+        raw_target=raw_target,
+        loaded_target=loaded_target,
+    )
+
+    changed_target = loaded_target.copy()
+    changed_target[0, 0] = 1
+    with pytest.raises(ValueError, match="exact loader changed target values"):
+        migration._validate_legacy_target_identity(
+            legacy_map_id="legacy-a",
+            identity=identity,
+            raw_target=raw_target,
+            loaded_target=changed_target,
+        )
+
+
 def test_input_integrity_rejects_provenance_cross_hash_mismatch(tmp_path):
     manifest_sha256 = _write_integrity_tree(
         tmp_path,
