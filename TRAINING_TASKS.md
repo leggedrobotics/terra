@@ -400,22 +400,25 @@ These decisions supersede stale choices later in the historical v4 design:
   global index `i % 4`; each worker receives exactly 64 scenarios and decodes
   every row's explicit serialized state. Each identity is executed once and
   gets one duration from exact map/state load through synchronized outcome and
-  atomic scenario-receipt rename, stored afterward in the final worker ledger.
-  Report nearest-rank p50/p95/max across all 256 durations. For worker `i`,
-  exclude its first identity and define `Q95_warm_i` over its 63 warm values,
-  then freeze
+  atomic no-replace scenario-receipt publication, stored afterward in the final
+  worker ledger. Report nearest-rank p50/p95/max across all 256 durations. For
+  worker `i`, exclude its first identity and define `Q95_warm_i` over its 63
+  warm values, then freeze
   `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)`. Observed makespan
   starts immediately before first worker spawn and ends after successful worker
-  exits, verification of all 256 receipts, and atomic canonical merge. Require
-  exact confirmation sentinel equality, all 256 identities exactly once, at
-  most `3,600 s` per identity, at most `86,400 s` observed makespan, at most
-  `172,800 s` projected 448 cost, fixed CPU backend/affinity, zero swap/OOM, at
-  most 80% conservative aggregate memory, and unchanged code/input receipts.
-  Consume only R-58's named one-shot profile authorization and require its
-  generic `authorizes_bank_profile` flag to remain false. Do not expose worker
-  count, sharding, backend, retry, resume, or cache controls. Failure preserves
-  partial receipts but emits no merged success result and authorizes no Static
-  claim, admission, witness, or PPO.
+  exits, verification of all 256 receipts, and atomic persistence and
+  verification of a clearly named canonical candidate merge. Publish
+  `direct_service_results.jsonl` from that candidate only after every gate
+  passes. Require exact confirmation sentinel equality, all 256 identities
+  exactly once, at most `3,600 s` per identity, at most `86,400 s` observed
+  makespan, at most `172,800 s` projected 448 cost, fixed CPU backend/affinity,
+  zero swap/OOM, at most 80% conservative aggregate memory, and unchanged
+  code/input receipts. Consume only R-58's named one-shot profile authorization
+  and require its generic `authorizes_bank_profile` flag to remain false. Do
+  not expose worker count, sharding, backend, retry, resume, or cache controls.
+  Failure preserves partial receipts and the candidate merge if it exists but
+  emits no merged success result and authorizes no Static claim, admission,
+  witness, or PPO.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
