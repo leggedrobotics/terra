@@ -77,10 +77,32 @@ These decisions supersede stale choices later in the historical v4 design:
 | Family/rehearsal sampling | Generalists preserve 50/50 foundation/trench sampling, then use 50% frontier/50% admitted rehearsal inside an active family. Specialists remain single-family. |
 | Feasibility horizon | Pilot-ranked maps need an exact replay witness within 450 steps. Record margin; do not silently enforce an unratified 225-step Core gate. |
 | Exact reset state | Hash every reset-consumed `Agent`/`AgentState` field. A seed or partial pose tuple is not a portable scenario state. |
-| Trench volume support | Withdraw `v65_74`. Audit candidate topology-specific length ranges on train-only proposals, then freeze a supported volume-conditioned band; existing B0 trench identities do not carry into the pilot. |
+| Trench volume support | `v68_77` is frozen from the train-only S1 audit using fixed radius-one straight, segmented-2 `U[10,13)`, and segmented-3 `U[7,9.5)` generation. Existing B0 trench identities do not carry into the pilot. |
 | Foundation volume support | Match OSM/procedural all-around through a source-pair interval after retuning procedural generation toward OSM. Match the apron capacity pair separately by exact OSM dig identity. |
 | Retention arithmetic | Freeze the lower of two passing counts. Retain an 8-map condition at `max(6, reference-1)` and the fixed 32-map family panel at `max(26, reference-1)`; only consecutive complete integrity-valid failures count toward rollback. |
 | Migration/cost evidence | Withdraw the unreceipted 23/256 probe count. S1 writes a hashed per-identity migration receipt and an exact direct-service validation cost profile before S2. |
+
+### 1.2 First S1 execution receipts
+
+- [x] The deterministic train-only trench audit sampled 20,000 raster-valid
+  proposals per topology under seed `2026072701`, selected the closed
+  `v68_77` band, and reproduced byte-identically in an independent second
+  output directory. Support was `21.46%` straight, `52.795%` segmented-2,
+  and `79.50%` segmented-3; accepted unique-raster counts were 3,077, 8,130,
+  and 15,420. The full length/turn/volume/width/rejection receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_pilot_trench_volume_support_20260727_v2/`.
+  `support_summary.json` has SHA-256
+  `a0927ef98e13774edfe0c500184ba1dd88b23e35bb67b14b0628c852bb8fb01c`;
+  `samples.jsonl` has SHA-256
+  `651e3487838175e8d6c23bc86994dfa55fdffe8b843dd2a804b18ca88dedda54`.
+  The historical B0 builder remains byte-identical at SHA-256
+  `3a1bb66798f6a4bfc1dc5b3515c5a4485eb9a28d6ffe7c9e8413a548492b79a9`.
+- [x] The fixed-bank history aggregator now applies the ratified integer
+  retention contract, including lower-of-two mastery references, per-panel
+  streak reset, neutral invalid/incomplete evaluations, and a sticky
+  two-failure rollback receipt. Focused `n=8`, `n=32`, evaluator, compile, and
+  formatting gates pass in the paired terra-baselines worktree at commit
+  `671c4d9`.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3616,13 +3638,13 @@ Current implementation checklist:
 - [ ] S1 Foundation retunes procedural all-around generation toward fixed OSM
   support and freezes one source-pair interval/tolerance; the apron capacity
   pair instead shares exact OSM dig identities and volumes.
-- [ ] S1 Trench keeps straight fixed, audits candidate segmented-2
+- [x] S1 Trench keeps straight fixed, audits candidate segmented-2
   `U[10,13)` and segmented-3 `U[7,9.5)` length ranges, freezes only a
   well-supported common band, and receipts lengths, turns, conditioning, and
   rejection histograms. Pilot trench identities are fresh.
 - [ ] S1 Capacity builds and visually verifies one exact-dig,
   separation-matched `slcap03_04`/`slcap07_10` apron pair.
-- [ ] S1 updates the history aggregator to the integer retention gates and
+- [x] S1 updates the history aggregator to the integer retention gates and
   focused `n=8`/`n=32`/invalid-evaluation/streak-reset tests.
 - [ ] S2 builds the eight-condition 448-scenario train/promotion/development/
   sealed pilot and local review site.

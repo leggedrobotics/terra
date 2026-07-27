@@ -605,7 +605,7 @@ score.
 ```text
 trench.straight.c1.j0
 __source.procedural
-__side_cast.both.sep02.slcap03_04.vmatch
+__side_cast.both.sep02.slcap03_04.v68_77
 __site.none
 __reset.full
 ```
@@ -773,10 +773,10 @@ bands are frozen only after the pair-specific train-only support audits below.
 | `f.all.procedural.sep00_02.slcap20_45.vmatch` | procedural all-around source slice matched in volume and compactness |
 | `f.apron.osm.sep02.slcap07_10.vmatch` | new moderate-capacity OSM apron capability |
 | `f.apron.osm.sep02.slcap03_04.vmatch` | exact-dig paired constrained-capacity OSM counterfactual |
-| `t.straight.both.sep02.slcap03_04.vmatch` | straight, both-side local trench candidate |
-| `t.straight.one.sep02.slcap03_04.vmatch` | exact-dig one-side counterfactual |
-| `t.segmented2.both.sep02.slcap03_04.vmatch` | no-junction, volume-conditioned topology comparison |
-| `t.segmented3.both.sep02.slcap03_04.vmatch` | three-segment no-junction, volume-conditioned topology comparison |
+| `t.straight.both.sep02.slcap03_04.v68_77` | straight, both-side local trench candidate |
+| `t.straight.one.sep02.slcap03_04.v68_77` | exact-dig one-side counterfactual |
+| `t.segmented2.both.sep02.slcap03_04.v68_77` | no-junction, volume-conditioned topology comparison |
+| `t.segmented3.both.sep02.slcap03_04.v68_77` | three-segment no-junction, volume-conditioned topology comparison |
 
 `slcap07_10` and the generous apron are new generator work; the current bank
 jumps from `3.25x` constrained capacity to roughly `20.6x`-`41.2x`
@@ -814,17 +814,25 @@ S1 therefore adds one narrow trench-support deliverable:
   `U[10, 13)` tiles for segmented-2 and `U[7, 9.5)` for segmented-3;
 - use one fixed train-only seed namespace and at least 20,000 raster-valid
   proposals per topology;
-- freeze a single closed required-volume interval only if it contains at least
-  10% of proposals from each topology and its midpoint lies inside each
+- compare closed ten-integer-cell intervals, retaining the width of the
+  withdrawn `v65_74` proposal so the audit selects location rather than
+  jointly optimizing location and width; freeze one only if it contains at
+  least 10% of proposals from each topology and its midpoint lies inside each
   topology's empirical 10th-90th-percentile range; and
 - receipt raw and accepted segment lengths, turn angles, achieved volumes,
   uniqueness, and every rejection category.
 
-The proposed length ranges are starting values, not frozen parameters. After
-S1 selects the sampler and band, S2 materializes fresh source-disjoint
-`32/8/8/8` splits without retuning on promotion, development, or sealed
-identities. Volume conditioning inherently shifts segmented-2 toward longer
-segments and segmented-3 toward shorter segments; the website must show those
+The train-only S1 audit froze `U[10,13)` for segmented-2, `U[7,9.5)` for
+segmented-3, fixed radius-one width, and `v68_77`. Across 20,000 proposals per
+topology, support was `21.46%` straight, `52.795%` segmented-2, and `79.50%`
+segmented-3, with 3,077, 8,130, and 15,420 unique accepted rasters. The
+byte-reproduced receipt is
+`/home/lorenzo/moleworks/.artifacts/terra_pilot_trench_volume_support_20260727_v2/`
+(`support_summary.json` SHA-256
+`a0927ef98e13774edfe0c500184ba1dd88b23e35bb67b14b0628c852bb8fb01c`).
+S2 materializes fresh source-disjoint `32/8/8/8` splits without retuning on
+promotion, development, or sealed identities. Volume conditioning shifts
+segmented-2 toward longer segments; the website must show the receipted
 covariates, and the result is named a volume-conditioned topology comparison,
 not a pure geometry-only causal estimate.
 
@@ -1633,6 +1641,7 @@ cannot silently regain authority.
 | `R-20260727-20` | Accepted | Replace the unquantized five-percentage-point retention rule with integer gates. Freeze the lower of two passing counts; retain at `max(6, reference-1)` on 8-map cells and `max(26, reference-1)` on the fixed 32-map family panel. Only two consecutive complete integrity-valid failures trigger rollback. |
 | `R-20260727-21` | Accepted | Foundation volume matching is pair-specific: retune procedural all-around generation toward fixed OSM support for the source comparison, while the apron capacity pair shares exact OSM dig rasters and pairwise volume. No single interval spans all four foundation cells. |
 | `R-20260727-22` | Accepted | Remove the unreceipted 23/256 probe count. S1 emits a hashed per-identity migration receipt and profiles exact direct-service validation before S2. Normalize legacy `broad_side_cast` provenance to canonical `side_cast`. |
+| `R-20260727-23` | Accepted and executed | Keep the proposed ten-integer-cell trench-band width fixed, audit only its location under the preregistered support/interior rule, and freeze `v68_77`. The tracked pilot sampler leaves the hash-pinned B0 builder unchanged and receipts generator retries, duplicates, and conditioning covariates. |
 
 Still to decide through S1-S2 evidence:
 
@@ -1642,8 +1651,8 @@ Still to decide through S1-S2 evidence:
 - the conservative relay-hop algorithm and method-neutral witness supplier;
 - whether S3 evidence supports a stricter publication-Core witness margin than
   the frozen 450-step pilot horizon;
-- numeric pair-specific volume/compactness tolerances, the frozen trench
-  volume interval, and family-specific cross-split similarity thresholds;
+- numeric foundation-pair volume/compactness tolerances and family-specific
+  cross-split similarity thresholds;
 - whether a future matched, diverse OSM/procedural experiment permits pooling;
 - the publication test confidence/effect target and number of fixed initial
   states per map;
