@@ -103,6 +103,13 @@ These decisions supersede stale choices later in the historical v4 design:
   two-failure rollback receipt. Focused `n=8`, `n=32`, evaluator, compile, and
   formatting gates pass in the paired terra-baselines worktree at commit
   `671c4d9`.
+- [x] The tracked pilot generator now constructs `slcap03_04` and
+  `slcap07_10` from one exact OSM dig raster/source group at nominal ratios
+  `3.25` and `8.5`, hard-failing outside the closed capacity or `sep02` p50
+  bands. Six focused tests pass, and a compatibility probe constructed both
+  variants for all 16 frozen B0a OSM apron sources. This closes the pure
+  constructor subtask only: S1 Capacity remains open until a materialized
+  receipt, live static validation, and Lorenzo's visual review pass.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving

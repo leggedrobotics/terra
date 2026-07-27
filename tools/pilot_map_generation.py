@@ -7,6 +7,19 @@ from typing import Any
 
 import numpy as np
 
+from tools import build_b0_feasibility_panels as b0
+
+APRON_CAPACITY_BANDS = {
+    "slcap03_04": (3.0, 4.0),
+    "slcap07_10": (7.0, 10.0),
+}
+APRON_NOMINAL_CAPACITY_RATIOS = {
+    "slcap03_04": 3.25,
+    "slcap07_10": 8.5,
+}
+APRON_SEPARATION_CENTER_TILES = 2
+APRON_SEPARATION_BAND_TILES = (1.25, 2.75)
+
 
 def _line_coefficients(
     point_a_yx: np.ndarray,
@@ -85,3 +98,80 @@ def sample_segmented_trench(
             "audit_generator_rejections": rejections,
         }
     raise RuntimeError(f"could not generate a {segment_count}-segment trench")
+
+
+def build_osm_apron_capacity_pair(
+    dig: np.ndarray,
+    source_group_id: str,
+) -> dict[str, Any]:
+    """Build the constrained/moderate apron pair on one exact OSM dig mask."""
+    dig = np.asarray(dig)
+    if dig.shape != (b0.MAP_SIZE, b0.MAP_SIZE):
+        raise ValueError(f"dig must be 64 x 64, got {dig.shape}")
+    if dig.dtype != np.bool_:
+        raise ValueError(f"dig must have boolean dtype, got {dig.dtype}")
+    if not np.any(dig):
+        raise ValueError("dig must contain at least one excavation cell")
+    if not source_group_id:
+        raise ValueError("source_group_id must be non-empty")
+
+    dig = dig.copy()
+    dig_identity_sha256 = b0.sha256_array(dig.astype(np.uint8))
+    variants = {}
+    for capacity_token, nominal_ratio in APRON_NOMINAL_CAPACITY_RATIOS.items():
+        dump, apron_metadata = b0.build_apron_dump(
+            dig,
+            APRON_SEPARATION_CENTER_TILES,
+            side_access="all",
+            target_capacity_ratio=nominal_ratio,
+        )
+        achieved_ratio = float(dump.sum() / dig.sum())
+        capacity_lower, capacity_upper = APRON_CAPACITY_BANDS[capacity_token]
+        if not capacity_lower <= achieved_ratio <= capacity_upper:
+            raise RuntimeError(
+                f"{capacity_token} achieved capacity {achieved_ratio:.6f} "
+                f"outside [{capacity_lower}, {capacity_upper}]"
+            )
+        separation_p50 = float(apron_metadata["p50_tiles"])
+        separation_lower, separation_upper = APRON_SEPARATION_BAND_TILES
+        if not separation_lower <= separation_p50 <= separation_upper:
+            raise RuntimeError(
+                f"{capacity_token} achieved separation {separation_p50:.6f} "
+                f"outside [{separation_lower}, {separation_upper}]"
+            )
+
+        target = np.zeros(dig.shape, dtype=np.int8)
+        target[dig] = -1
+        target[dump] = 1
+        variants[capacity_token] = {
+            "target": target,
+            "dump": dump,
+            "metadata": {
+                "source_family": "osm",
+                "source_group_id": source_group_id,
+                "dig_identity_sha256": dig_identity_sha256,
+                "capacity_token": capacity_token,
+                "nominal_single_layer_area_ratio": nominal_ratio,
+                "achieved_single_layer_area_ratio": achieved_ratio,
+                "capacity_band_inclusive": [
+                    capacity_lower,
+                    capacity_upper,
+                ],
+                "separation_token": "sep02",
+                "separation_p50_tiles": separation_p50,
+                "separation_p95_tiles": float(apron_metadata["p95_tiles"]),
+                "separation_max_tiles": float(apron_metadata["max_tiles"]),
+                "separation_band_p50_tiles_inclusive": [
+                    separation_lower,
+                    separation_upper,
+                ],
+            },
+        }
+
+    return {
+        "source_family": "osm",
+        "source_group_id": source_group_id,
+        "dig": dig,
+        "dig_identity_sha256": dig_identity_sha256,
+        "variants": variants,
+    }
