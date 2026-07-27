@@ -116,7 +116,7 @@ deploying a production version is deferred until Lorenzo asks.
 
 - Site source:
   `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
-  `ad09043a1c74ebf56552d86de548eb6529c81857`.
+  `cb3e1b822d3abc8b051c1e443d7b147fea462560`.
 - Input: historical B0a paired-panel design input. The identity-manifest
   SHA-256 is
   `911b6e3a453d6d9e1aeaebfe5fcef33406c89aae0180e1c4eb8739efc1fd5b4e`;
@@ -141,8 +141,12 @@ deploying a production version is deferred until Lorenzo asks.
   comparison, curriculum-exposure, layer, and decision round trip
   (`2 passed`, `2 project-specific skips`). The decision importer also rejects
   missing manifest/scenario hashes.
-- Local review URL: `http://127.0.0.1:4173`. At the 2026-07-27 16:30 CEST
-  handoff, `next-server` PID `3044816` was bound only to `127.0.0.1:4173`;
+- The owner-review correction moves the decision-and-comment editor above the
+  audit details and exposes a plain `Map comment` field. The browser round-trip
+  test records the observed foundation-size concern and verifies that it
+  survives exact-hash JSONL export/import as `semanticNote`.
+- Local review URL: `http://127.0.0.1:4173`. After the comment-UX rebuild,
+  `next-server` PID `3219301` was bound only to `127.0.0.1:4173`;
   both `/` and a generated map asset returned HTTP `200`.
 - Scientific status: Format validation passed; live-geometry Static
   validation and Witness validation have not run, and no policy result is
@@ -151,6 +155,13 @@ deploying a production version is deferred until Lorenzo asks.
   input, not S2.
 - The Playwright JSONL is synthetic workflow evidence, not Lorenzo's review.
   No owner decision has been recorded yet.
+- Lorenzo's first distribution-level observation is recorded separately from
+  per-map decisions: current source-bank foundation targets look small
+  relative to the available site. The 16 `f_osm_all` preview identities span
+  97-179 dig cells (median 155.5), or only 2.37%-4.37% of the 64 x 64 raster.
+  Small tasks remain anchors, but S2 must show target-area/required-volume
+  coverage and include a larger-footprint candidate review slice before
+  claiming broad foundation coverage.
 - `npm audit` reports nine high and zero critical transitive advisories in the
   pinned Next/OpenNext tree, with no compatible automatic fix. Loopback review
   is accepted; publication remains gated on resolving or explicitly accepting

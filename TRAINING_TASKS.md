@@ -3831,6 +3831,12 @@ Current implementation checklist:
   sealed pilot and local review site.
 - [ ] S2 records Lorenzo's per-condition visual decisions before expanding an
   active training cell to 256 identities.
+- [ ] S2 foundation review reports target-area and required-volume coverage
+  explicitly and includes a deliberately larger-footprint candidate slice.
+  Small foundations remain valid anchors, but the current B0a source-bank
+  preview is not evidence of broad work-volume coverage. Admission as a
+  work-volume condition still requires train-only numeric support and a
+  450-step witness.
 - [ ] S3 supplies exact replay witnesses within the 450-step protocol and
   reports witness margin; any stricter publication-Core cutoff requires an
   evidence-backed spec revision.
