@@ -204,13 +204,16 @@ These decisions supersede stale choices later in the historical v4 design:
   S1 must optimize the same exact path and re-profile; it may not weaken or
   approximate the validator.
 - [x] The first exact-path optimization probe removed 24 source-level
-  `wrap_state` calls per candidate after proving old/new output parity, but
-  measured no throughput benefit: warmed four-row batch p50 changed from
+  `wrap_state` calls per candidate. The focused parity test in commit
+  `7ff0cca1` preserved old/new outputs, but the cost probe measured no
+  meaningful latency benefit: warmed four-row batch p50 changed from
   `0.072704` to `0.072606 s` (`0.9986x`), p95 changed from `0.073481` to
   `0.073782 s`, and projected 256 p95 changed from `216,001` to `218,679 s`.
-  XLA already eliminated the unused derived outputs. The patch is therefore
-  rejected and reverted under the simplicity rule; no v2 full confirmation is
-  warranted. The non-admission null receipt is
+  This null is consistent with compiler elimination or amortization of the
+  unused derived outputs, but does not distinguish that explanation from
+  remaining transition cost or timing noise. The patch is therefore rejected
+  and reverted under the simplicity rule; no v2 full confirmation is warranted.
+  The non-admission null receipt is
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_probe_20260727_v2_rawwrap/validation_cost_probe.json`
   at SHA-256
   `174e604c4c27bda0c73a3e2a9457b1060472e1e1f26139e80aebc9d9ed624f05`.
