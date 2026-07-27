@@ -23,23 +23,22 @@ import jax.numpy as jnp
 import numpy as np
 
 import terra.benchmark_direct_service as direct_service
+from terra.benchmark_protocol import BENCHMARK_MAP_SIZE as MAP_SIZE
+from terra.benchmark_protocol import BENCHMARK_RELEASE_ID as RELEASE_ID
+from terra.benchmark_protocol import frozen_benchmark_protocol
 from terra.benchmark_state import agent_to_record
 from terra.benchmark_state import agent_state_sha256
 from terra.benchmark_state import sample_benchmark_initial_agent
 from terra.benchmark_state import validate_benchmark_initial_agent
-from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.env import TerraEnv
 from terra.maps_buffer import load_maps_from_disk
 from terra.maps_buffer import validate_exact_dataset_contract
 
 SCHEMA = "terra_direct_service_validation_cost_probe_v1"
-RELEASE_ID = "terramap-bench-v1.0.0"
 BENCHMARK_SPLIT = "public_train"
 LEGACY_B0A_SPLIT = "train"
 SELECTED_MAP_ID = "b0a-train-f_apron_d02-00"
-MAP_SIZE = 64
-MAX_STEPS = 450
 WARM_SUBSET_ROWS = 16
 WARM_REPEATS = 3
 EXPECTED_B0A_IDENTITIES = 256
@@ -349,44 +348,7 @@ def _intersect_spawn_contract(
 
 
 def _frozen_env_config() -> tuple[EnvConfig, dict[str, Any]]:
-    base = EnvConfig()
-    immutable_agent = BatchConfig().agent
-    edge_length_m = float(base.maps.edge_length_m)
-    tile_size_m = edge_length_m / MAP_SIZE
-    agent_height = round(immutable_agent.dimensions.WIDTH / tile_size_m)
-    if agent_height % 2 == 0:
-        agent_height += 1
-    agent_width = round(immutable_agent.dimensions.HEIGHT / tile_size_m)
-    if agent_width % 2 == 0:
-        agent_width += 1
-    if (agent_width, agent_height) != (7, 11):
-        raise RuntimeError(
-            "Frozen tracked-excavator footprint changed: "
-            f"{agent_width} x {agent_height}."
-        )
-
-    config = base._replace(
-        tile_size=np.float32(tile_size_m),
-        agent=base.agent._replace(width=agent_width, height=agent_height),
-        maps=base.maps._replace(edge_length_px=MAP_SIZE),
-        apply_trench_rewards=False,
-        max_steps_in_episode=MAX_STEPS,
-        agent_types=(0,),
-        action_types=(0,),
-        enable_reachability_obs=False,
-    )
-    payload = _jsonable(config)
-    return config, {
-        "env_config": payload,
-        "env_config_sha256": _canonical_json_sha256(payload),
-        "edge_length_m": edge_length_m,
-        "edge_length_px": MAP_SIZE,
-        "tile_size_m_derived_float64": tile_size_m,
-        "tile_size_m_runtime_float32": float(np.float32(tile_size_m)),
-        "agent_width_tiles": agent_width,
-        "agent_height_tiles": agent_height,
-        "max_steps_in_episode": MAX_STEPS,
-    }
+    return frozen_benchmark_protocol()
 
 
 def _synchronize(tree: Any) -> Any:
