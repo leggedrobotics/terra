@@ -2661,6 +2661,26 @@ The authorized 5,000-update confirmation was submitted at `2026-07-27`:
 This is submission evidence only. Runtime GPU/update-1 acceptance remains
 mandatory before the 5,000-update body is admitted.
 
+The 5,000-update runtime smoke passed on `eu-g6-034`:
+
+- exactly four RTX 4090 devices passed JAX CUDA, cuDNN backward convolution,
+  NCCL `pmap` all-reduce, and in-job test gates;
+- the runtime loaded the exact 256-map treatment and produced finite model,
+  optimizer, gradient, and rollout state with zero mass residual, target or
+  obstacle mutation, and per-transition reward violations;
+- seed, reward, model, PPO, reset, horizon, and no-resume/no-warm/no-teacher
+  configuration match the accepted treatment; and
+- smoke-gate, final-smoke-checkpoint, update-1 aggregate, and read-only
+  smoke-acceptance receipt SHA-256 values are
+  `897721e1beadfd934afcece5e4fff6e73408fcf33a818e11796bde969e02ee3f`,
+  `3292008bf89ec5ad08b38c525a922ec35b8cb36744d74c123c37214ec582e5f5`,
+  `e34c609c16c14d66eb82af76e3be427e9f0ce5f7031b476880fa173aef62765a`,
+  and
+  `331e1f24927936a16d2d38c7934f69cc02a681955c8fee0ced18f76b880e1db5`.
+
+This admits only the fresh continuous 5,000-update body; the 50-checkpoint
+fixed-development curve remains authoritative.
+
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
 explicit. The submission wrapper now validates the declared
