@@ -197,10 +197,9 @@ deploying a production version is deferred until Lorenzo asks.
   port-4173 test wrote a comment with no decision, reloaded it from local
   storage, and round-tripped it through JSONL bound to the exact capacity
   release, manifest, and scenario hashes.
-- Local review URL:
-  `http://127.0.0.1:4173/?build=91ccf87&bank=capacity&comments=enabled`.
-  `next-server` PID `3731061` is bound to `127.0.0.1:4173`; the URL returns
-  HTTP `200`. The historical B0a input remains selectable under
+- Local review URL: `http://127.0.0.1:4173/`. The persistent user service
+  `terra-digging-benchmark-review.service` is bound to `127.0.0.1:4173`; the
+  URL returns HTTP `200`. The historical B0a input remains selectable under
   **Review bank**.
 - Scientific status remains non-admission: exact-loader validation passes,
   live Static validation is pending the direct-service cost gate, Witness and
@@ -253,6 +252,24 @@ deploying a production version is deferred until Lorenzo asks.
   rebuild with those metre fields derived from the live receipt; the immutable
   v1 visual release remains non-admission and need not invalidate existing
   browser comments.
+
+## Local curriculum-group navigation receipt
+
+- Site source:
+  `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
+  `8340fbb62a8685a4ec157d013949dc7411dbfb6d`.
+- The review queue now exposes an always-visible **Curriculum review groups**
+  navigator. In the B0a design-input bank it orders and counts
+  `Anchor preview (32)`, `One-axis preview (176)`, and
+  `Composed preview (48)` and filters the queue with one click.
+- The navigator says **Visual depth only - not admitted levels**. Controlled
+  capacity and provisional large-work banks show their supplied review
+  grouping without being promoted to curriculum stages.
+- Verification passed: TypeScript, nine exporter tests, the production build,
+  four Playwright workflows with four intended project-specific skips,
+  desktop visual inspection, narrow-layout visual inspection, and HTTP `200`
+  from the restarted loopback service. Existing browser review records remain
+  scoped by release in local storage and are unchanged by the UI-only update.
 
 ## Stop conditions
 

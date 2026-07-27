@@ -3888,7 +3888,10 @@ Current implementation checklist:
   commit `21d5526` adds a separate `16`-map narrow large-foundation bank,
   retains both earlier releases byte-identically, and explicitly labels the
   unpaired work-size slice as a review candidate rather than a curriculum
-  level. Its exact source/export hashes, tests, and unresolved
+  level. Site commit `8340fbb` makes the B0a Anchor, One-axis, and Composed
+  review groups visible in their intended order with exact counts and
+  one-click filtering, while explicitly stating that they are display groups
+  rather than admitted levels. Its exact source/export hashes, tests, and unresolved
   Static/Witness/metre-field limitations are recorded in the site goal.
 - [x] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
