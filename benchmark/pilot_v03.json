@@ -1,0 +1,638 @@
+{
+  "admission_status": {
+    "condition_registry_frozen": true,
+    "ppo_authorized": false,
+    "scenario_bank_materialized": false,
+    "static_validated": false,
+    "witnessed": false
+  },
+  "condition_id_grammar": "{family}.{topology}.c{component_count}.j{junction_count}__source.{source_family}__{dump_layout}.{side_access}.{separation_token}.{capacity_token}.{volume_token}__site.{site_class}__reset.{reset_mode}",
+  "condition_registry_path": "benchmark/conditions.jsonl",
+  "conditions": [
+    {
+      "condition_id": "foundation.connected.c1.j0__source.osm__all_around.all.sep00_02.slcap20_45.v140_189__site.none__reset.full",
+      "display_depth": "anchor",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap20_45",
+        "component_count": 1,
+        "dump_layout": "all_around",
+        "family": "foundation",
+        "geometry_class": "connected",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep00_02",
+        "side_access": "all",
+        "site_class": "none",
+        "source_family": "osm",
+        "topology": "connected",
+        "volume_token": "v140_189"
+      },
+      "provenance": {
+        "original_candidate_alias": "f.all.osm.sep00_02.slcap20_45.v140_189",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [],
+      "resolved_alias": "f.all.osm.sep00_02.slcap20_45.v140_189",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "foundation_osm_anchor",
+      "suite_ids": [
+        "pilot_v03",
+        "foundation_source_panel"
+      ],
+      "support": {
+        "compactness": {
+          "lower_inclusive": 0.3,
+          "metric": "4pi_required_volume_over_perimeter_4_edges_squared",
+          "upper_inclusive": 0.65
+        },
+        "receipts": [
+          "foundation_source_support_v3"
+        ]
+      }
+    },
+    {
+      "condition_id": "foundation.connected.c1.j0__source.procedural__all_around.all.sep00_02.slcap20_45.v140_189__site.none__reset.full",
+      "display_depth": "anchor",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap20_45",
+        "component_count": 1,
+        "dump_layout": "all_around",
+        "family": "foundation",
+        "geometry_class": "connected",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep00_02",
+        "side_access": "all",
+        "site_class": "none",
+        "source_family": "procedural",
+        "topology": "connected",
+        "volume_token": "v140_189"
+      },
+      "provenance": {
+        "original_candidate_alias": "f.all.procedural.sep00_02.slcap20_45.v140_189",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [],
+      "resolved_alias": "f.all.procedural.sep00_02.slcap20_45.v140_189",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "foundation_procedural_anchor",
+      "suite_ids": [
+        "pilot_v03",
+        "foundation_source_panel"
+      ],
+      "support": {
+        "compactness": {
+          "lower_inclusive": 0.3,
+          "metric": "4pi_required_volume_over_perimeter_4_edges_squared",
+          "upper_inclusive": 0.65
+        },
+        "receipts": [
+          "foundation_source_support_v3"
+        ]
+      }
+    },
+    {
+      "condition_id": "foundation.connected.c1.j0__source.osm__apron.all.sep02.slcap07_10.v140_189__site.none__reset.full",
+      "display_depth": "one_axis",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap07_10",
+        "component_count": 1,
+        "dump_layout": "apron",
+        "family": "foundation",
+        "geometry_class": "connected",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "all",
+        "site_class": "none",
+        "source_family": "osm",
+        "topology": "connected",
+        "volume_token": "v140_189"
+      },
+      "provenance": {
+        "original_candidate_alias": "f.apron.osm.sep02.slcap07_10.vmatch",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [
+        "foundation.connected.c1.j0__source.osm__all_around.all.sep00_02.slcap20_45.v140_189__site.none__reset.full"
+      ],
+      "resolved_alias": "f.apron.osm.sep02.slcap07_10.v140_189",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "foundation_osm_apron_generous",
+      "suite_ids": [
+        "pilot_v03",
+        "foundation_capacity_panel"
+      ],
+      "support": {
+        "compactness": {
+          "lower_inclusive": 0.3,
+          "metric": "4pi_required_volume_over_perimeter_4_edges_squared",
+          "upper_inclusive": 0.65
+        },
+        "receipts": [
+          "foundation_source_support_v3",
+          "foundation_capacity_review_v1"
+        ]
+      }
+    },
+    {
+      "condition_id": "foundation.connected.c1.j0__source.osm__apron.all.sep02.slcap03_04.v140_189__site.none__reset.full",
+      "display_depth": "one_axis",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap03_04",
+        "component_count": 1,
+        "dump_layout": "apron",
+        "family": "foundation",
+        "geometry_class": "connected",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "all",
+        "site_class": "none",
+        "source_family": "osm",
+        "topology": "connected",
+        "volume_token": "v140_189"
+      },
+      "provenance": {
+        "original_candidate_alias": "f.apron.osm.sep02.slcap03_04.vmatch",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [
+        "foundation.connected.c1.j0__source.osm__apron.all.sep02.slcap07_10.v140_189__site.none__reset.full"
+      ],
+      "resolved_alias": "f.apron.osm.sep02.slcap03_04.v140_189",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "foundation_osm_apron_constrained",
+      "suite_ids": [
+        "pilot_v03",
+        "foundation_capacity_panel"
+      ],
+      "support": {
+        "compactness": {
+          "lower_inclusive": 0.3,
+          "metric": "4pi_required_volume_over_perimeter_4_edges_squared",
+          "upper_inclusive": 0.65
+        },
+        "receipts": [
+          "foundation_source_support_v3",
+          "foundation_capacity_review_v1"
+        ]
+      }
+    },
+    {
+      "condition_id": "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+      "display_depth": "anchor",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap03_04",
+        "component_count": 1,
+        "dump_layout": "side_cast",
+        "family": "trench",
+        "geometry_class": "trench",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "both",
+        "site_class": "none",
+        "source_family": "procedural",
+        "topology": "straight",
+        "volume_token": "v68_77"
+      },
+      "provenance": {
+        "original_candidate_alias": "t.straight.both.sep02.slcap03_04.v68_77",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [],
+      "resolved_alias": "t.straight.both.sep02.slcap03_04.v68_77",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "trench_straight_both_anchor",
+      "suite_ids": [
+        "pilot_v03",
+        "trench_side_panel",
+        "trench_topology_panel"
+      ],
+      "support": {
+        "receipts": [
+          "trench_volume_support_v2"
+        ]
+      }
+    },
+    {
+      "condition_id": "trench.straight.c1.j0__source.procedural__side_cast.one.sep02.slcap03_04.v68_77__site.none__reset.full",
+      "display_depth": "one_axis",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap03_04",
+        "component_count": 1,
+        "dump_layout": "side_cast",
+        "family": "trench",
+        "geometry_class": "trench",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "one",
+        "site_class": "none",
+        "source_family": "procedural",
+        "topology": "straight",
+        "volume_token": "v68_77"
+      },
+      "provenance": {
+        "original_candidate_alias": "t.straight.one.sep02.slcap03_04.v68_77",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [
+        "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full"
+      ],
+      "resolved_alias": "t.straight.one.sep02.slcap03_04.v68_77",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "trench_straight_one",
+      "suite_ids": [
+        "pilot_v03",
+        "trench_side_panel"
+      ],
+      "support": {
+        "receipts": [
+          "trench_volume_support_v2"
+        ]
+      }
+    },
+    {
+      "condition_id": "trench.segmented_2.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+      "display_depth": "one_axis",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap03_04",
+        "component_count": 1,
+        "dump_layout": "side_cast",
+        "family": "trench",
+        "geometry_class": "trench",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "both",
+        "site_class": "none",
+        "source_family": "procedural",
+        "topology": "segmented_2",
+        "volume_token": "v68_77"
+      },
+      "provenance": {
+        "original_candidate_alias": "t.segmented2.both.sep02.slcap03_04.v68_77",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [
+        "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full"
+      ],
+      "resolved_alias": "t.segmented2.both.sep02.slcap03_04.v68_77",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "trench_segmented_2_both",
+      "suite_ids": [
+        "pilot_v03",
+        "trench_topology_panel"
+      ],
+      "support": {
+        "receipts": [
+          "trench_volume_support_v2"
+        ]
+      }
+    },
+    {
+      "condition_id": "trench.segmented_3.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+      "display_depth": "one_axis",
+      "evaluation_weight": 0.125,
+      "expected_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "expected_unique_source_group_counts": {
+        "promotion": 8,
+        "public_dev": 8,
+        "public_train": 32,
+        "sealed_pilot": 8
+      },
+      "factors": {
+        "capacity_token": "slcap03_04",
+        "component_count": 1,
+        "dump_layout": "side_cast",
+        "family": "trench",
+        "geometry_class": "trench",
+        "junction_count": 0,
+        "reset_mode": "full",
+        "separation_token": "sep02",
+        "side_access": "both",
+        "site_class": "none",
+        "source_family": "procedural",
+        "topology": "segmented_3",
+        "volume_token": "v68_77"
+      },
+      "provenance": {
+        "original_candidate_alias": "t.segmented3.both.sep02.slcap03_04.v68_77",
+        "original_candidate_alias_is_identity": false
+      },
+      "requires": [
+        "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full"
+      ],
+      "resolved_alias": "t.segmented3.both.sep02.slcap03_04.v68_77",
+      "schema": "terra_benchmark_condition_v1",
+      "source_gate": "trench_segmented_3_both",
+      "suite_ids": [
+        "pilot_v03",
+        "trench_topology_panel"
+      ],
+      "support": {
+        "receipts": [
+          "trench_volume_support_v2"
+        ]
+      }
+    }
+  ],
+  "factor_bands": {
+    "capacity": {
+      "metric": "single_layer_area_ratio",
+      "slcap03_04": {
+        "lower_inclusive": 3.0,
+        "upper_inclusive": 4.0
+      },
+      "slcap07_10": {
+        "lower_inclusive": 7.0,
+        "upper_inclusive": 10.0
+      },
+      "slcap20_45": {
+        "lower_inclusive": 20.0,
+        "upper_inclusive": 45.0
+      }
+    },
+    "separation": {
+      "metric": "p50_tiles",
+      "sep00_02": {
+        "lower_inclusive": 0.0,
+        "upper_inclusive": 2.0
+      },
+      "sep02": {
+        "lower_inclusive": 1.25,
+        "upper_inclusive": 2.75
+      }
+    },
+    "volume": {
+      "metric": "required_volume",
+      "unit": "unit_depth_cell_volume",
+      "v140_189": {
+        "lower_inclusive": 140,
+        "upper_inclusive": 189
+      },
+      "v68_77": {
+        "lower_inclusive": 68,
+        "upper_inclusive": 77
+      }
+    }
+  },
+  "pair_invariants": [
+    {
+      "allowed_factor_differences": [
+        "source_family"
+      ],
+      "id": "foundation_source_panel",
+      "members": [
+        "foundation.connected.c1.j0__source.osm__all_around.all.sep00_02.slcap20_45.v140_189__site.none__reset.full",
+        "foundation.connected.c1.j0__source.procedural__all_around.all.sep00_02.slcap20_45.v140_189__site.none__reset.full"
+      ],
+      "scenario_contract": {
+        "cross_family_canonical_dig_equality_rejected": true,
+        "exact_pairwise_compactness": true,
+        "exact_pairwise_perimeter_4_edges": true,
+        "exact_pairwise_required_volume": true,
+        "shared_source_group_id": false
+      },
+      "support_receipt": "foundation_source_support_v3"
+    },
+    {
+      "allowed_factor_differences": [
+        "capacity_token"
+      ],
+      "id": "foundation_capacity_panel",
+      "members": [
+        "foundation.connected.c1.j0__source.osm__apron.all.sep02.slcap07_10.v140_189__site.none__reset.full",
+        "foundation.connected.c1.j0__source.osm__apron.all.sep02.slcap03_04.v140_189__site.none__reset.full"
+      ],
+      "scenario_contract": {
+        "exact_pairwise_initial_agent_state": true,
+        "exact_pairwise_required_volume": true,
+        "exact_pairwise_separation_p50_p95": true,
+        "exact_pairwise_target_dig_raster": true,
+        "shared_source_group_id": true
+      },
+      "support_receipt": "foundation_capacity_review_v1"
+    },
+    {
+      "allowed_factor_differences": [
+        "side_access"
+      ],
+      "id": "trench_side_panel",
+      "members": [
+        "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+        "trench.straight.c1.j0__source.procedural__side_cast.one.sep02.slcap03_04.v68_77__site.none__reset.full"
+      ],
+      "scenario_contract": {
+        "exact_pairwise_initial_agent_state": true,
+        "exact_pairwise_required_volume": true,
+        "exact_pairwise_target_dig_raster": true,
+        "shared_source_group_id": true
+      },
+      "support_receipt": "trench_volume_support_v2"
+    },
+    {
+      "allowed_factor_differences": [
+        "topology"
+      ],
+      "id": "trench_topology_panel",
+      "members": [
+        "trench.straight.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+        "trench.segmented_2.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full",
+        "trench.segmented_3.c1.j0__source.procedural__side_cast.both.sep02.slcap03_04.v68_77__site.none__reset.full"
+      ],
+      "scenario_contract": {
+        "exact_pairwise_target_dig_raster": false,
+        "fresh_source_groups": true,
+        "shared_closed_volume_band": "v68_77",
+        "volume_conditioned_comparison": true
+      },
+      "support_receipt": "trench_volume_support_v2"
+    }
+  ],
+  "protocol": {
+    "apply_trench_rewards": false,
+    "max_steps_in_episode": 450,
+    "reset_mode": "full",
+    "rewards_type": "DENSE"
+  },
+  "release_id": "terramap-bench-v1.0.0",
+  "schema": "terra_benchmark_pilot_registry_v1",
+  "similarity_policy": {
+    "frozen_exact_rules": {
+      "cross_family_canonical_dig_equality_rejected": true,
+      "source_groups_must_be_disjoint_across_splits": true,
+      "within_source_counterfactuals_must_share_split": true
+    },
+    "thresholded_cross_split_similarity": {
+      "blocks_s2_materialization": true,
+      "foundation_threshold": "UNSET",
+      "metric": "maximum_centered_dihedral_iou",
+      "status": "pending_s2_freeze",
+      "trench_threshold": "UNSET"
+    }
+  },
+  "source_spec": {
+    "path": "MAP_BENCHMARK_SPEC.md",
+    "terra_revision": "50ee15ddd8296f2293c85e0242d4004c02f63929"
+  },
+  "split_counts_per_condition": {
+    "promotion": 8,
+    "public_dev": 8,
+    "public_train": 32,
+    "sealed_pilot": 8
+  },
+  "suite_id": "terramap-pilot-v0.3",
+  "support_receipts": {
+    "foundation_capacity_review_v1": {
+      "artifact_path": "/home/lorenzo/moleworks/.artifacts/terra_pilot_apron_capacity_review_20260727_v1",
+      "files": {
+        "files.sha256": {
+          "sha256": "03b5af27c3fc2acea05b6ecb001e4dcb7cdcbfe3f2677efa64ad2a6e3e7df80f"
+        },
+        "identities.jsonl": {
+          "line_count": 64,
+          "sha256": "6f04393aa6bb001fa4e0ae57bfae8b55380caaeeaa3a906e5f997cfcbcdd7085"
+        },
+        "pairs.jsonl": {
+          "line_count": 32,
+          "sha256": "aa1dd3bc7b1fc971ef842ae6a3249b1129494557fdcfd5c02863357d64aebcb3"
+        },
+        "summary.json": {
+          "sha256": "a33441cd43ef2a18ea3f184b3b2a202683966ba138be0878d603e2604bf7602a"
+        }
+      },
+      "scope": "train_only_exact_dig_capacity_pair_support_not_static_admission"
+    },
+    "foundation_source_support_v3": {
+      "artifact_path": "/home/lorenzo/moleworks/.artifacts/terra_pilot_foundation_source_support_20260727_v3",
+      "files": {
+        "files.sha256": {
+          "sha256": "7a656c06a381486b2f69d2eb3150f3227832c0ed8202fdaa0693ce78a5551f15"
+        },
+        "matched_train_pairs.jsonl": {
+          "line_count": 32,
+          "sha256": "8c5528a2b43a485858df15acbca5835a41be8f9d3d8ab6159cf272c6f9d06688"
+        },
+        "support_summary.json": {
+          "sha256": "e0867f67669c5f7f2e6ce15890c2c824783666056ddb58ebe21e56107191261f"
+        }
+      },
+      "scope": "train_only_volume_compactness_source_pair_support"
+    },
+    "trench_volume_support_v2": {
+      "artifact_path": "/home/lorenzo/moleworks/.artifacts/terra_pilot_trench_volume_support_20260727_v2",
+      "files": {
+        "files.sha256": {
+          "sha256": "911334a07e64632ae9f1ec3b546e7e4b9a2961d9523fdab5d64d3e8d5e8ae26e"
+        },
+        "samples.jsonl": {
+          "line_count": 60000,
+          "sha256": "651e3487838175e8d6c23bc86994dfa55fdffe8b843dd2a804b18ca88dedda54"
+        },
+        "support_summary.json": {
+          "sha256": "a0927ef98e13774edfe0c500184ba1dd88b23e35bb67b14b0628c852bb8fb01c"
+        }
+      },
+      "scope": "train_only_topology_volume_support"
+    }
+  }
+}
