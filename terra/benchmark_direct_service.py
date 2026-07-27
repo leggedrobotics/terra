@@ -245,7 +245,9 @@ def _service_for_candidate(
         carry: tuple[State, jax.Array],
     ) -> tuple[State, jax.Array]:
         rotated, counts = carry
-        dumped = _transition_state(rotated, do_action)
+        # Each dump is a terminal counterfactual; the carried branch only rotates
+        # the cabin, so neither branch needs observation-mask recomputation.
+        dumped = rotated._step(do_action)
         legal, wrong, rejected, violation = _classify_complete_dump(
             rotated,
             dumped,
@@ -254,7 +256,7 @@ def _service_for_candidate(
             (legal, wrong, rejected, violation),
             dtype=jnp.int32,
         )
-        return _transition_state(rotated, cabin_action), counts
+        return rotated._step(cabin_action), counts
 
     _, counts = jax.lax.fori_loop(
         0,
