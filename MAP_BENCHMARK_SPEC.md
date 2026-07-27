@@ -1651,11 +1651,17 @@ memory, and explicit 1/256/448-scenario projections.
 
 If that estimate is viable, run one complete exact 64 x 64 scenario and compare
 observed versus projected cost. Only then profile all 256 frozen B0a identities
-and write the admission `validation_cost.json`, including per-scenario
-p50/p95/max and total wall time. Review both receipts before S2. If cost is
-prohibitive, optimize the one exact validator path or revise the spec
-explicitly; never substitute an unreceipted geometric approximation.
-Content-addressed caching is added only if the profile shows it is needed.
+and write the bank-profile `validation_cost.json`. Each identity has exactly
+one synchronized end-to-end duration, measured from the start of exact
+map/state loading through synchronized outcome computation and atomic scenario
+receipt rename. Because a receipt cannot contain the duration of its own final
+rename, the worker records that duration afterward in its final shard ledger.
+The aggregate receipt reports nearest-rank p50, p95, and maximum over those 256
+identity durations plus total observed makespan; it does not claim repeated
+per-identity quantiles. Review both receipts before S2. If cost is prohibitive,
+optimize the one exact validator path or revise the spec explicitly; never
+substitute an unreceipted geometric approximation. Content-addressed caching is
+added only if the profile shows it is needed.
 
 The operational go/no-go rule is frozen before observing the probe. Proceed to
 one complete scenario only when the cost-only probe completes without error,
@@ -1671,6 +1677,43 @@ unchanged exact entrypoint and owns a deterministic scenario shard. No
 in-process vectorization, alternate kernel, dynamic worker count, or result
 approximation is implied. A failed gate selects optimization or corrected
 accounting, not weaker validation.
+
+The conditional 256-identity profile is itself one fixed treatment. It consumes
+the frozen B0a live-migration receipt in lexicographic `legacy_map_id` order and
+assigns global index `i` to worker `i % 4`, yielding four disjoint 64-scenario
+shards. Each long-lived worker loads the migrated record's explicit serialized
+agent state and calls the unchanged exact CPU entrypoint once per assigned
+identity. Worker zero evaluates the pinned confirmation identity first within
+its ordinary shard and must reproduce its complete typed outcome exactly.
+There is no retry, resume, result cache, backend option, worker-count option, or
+dynamic scheduling.
+
+Let `D_j` be the one end-to-end duration for identity `j`, including its atomic
+scenario-receipt rename. Nearest-rank p50/p95/max are reported across all 256
+values. For worker `i`, let `Q95_warm_i` be the nearest-rank p95 over its 63
+durations after excluding that worker's first identity. With 64 observed
+identities per worker and 112 needed for a 448-scenario bank, freeze the
+cost-only extrapolation
+`P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)`. The observed
+256-scenario makespan begins immediately before the first worker spawn and ends
+only after all four workers exit successfully, all 256 scenario receipts are
+verified, and the canonical merged result is atomically persisted. The profile
+passes only when all 256 canonical identities complete exactly once, the
+confirmation sentinel matches bit-for-bit, every identity takes at most 3,600
+seconds, observed makespan is at most 86,400 seconds, `P_448` is at most
+172,800 seconds, all workers retain their fixed affinity and CPU backend, swap
+and cgroup OOM deltas are zero, coordinator plus conservative summed worker
+peak RSS is at most 80% of physical memory, and pre/post code and input
+receipts match. Zero direct service remains valid measured data rather than a
+profile failure. Any failure emits partial evidence but no merged success file
+and authorizes no Static claim, bank admission, witness, or PPO. Any corrected
+rerun requires a new append-only decision and fresh output directory.
+
+The R-58 receipt's narrow
+`authorizes_one_deterministic_four_worker_256_profile: true` is the only
+authority consumed by this profile. Its generic `authorizes_bank_profile:
+false` remains required and means that no reusable or alternate bank-profile
+authority was granted; it does not negate the named one-shot authorization.
 
 Repository ownership stays narrow:
 
@@ -1778,6 +1821,7 @@ cannot silently regain authority.
 | `R-20260727-57` | Hybrid exact validator rejected at the preregistered full-population gate | The clean `d66969fc` replay ran the confirmed CPU graph/prefilter and only `_service_batch` on one RTX 4090. Both full replays completed; the CPU final outcome reproduced confirmation `f4bc393a...aae7`, all CPU/hybrid population counters matched it, and ordered CPU candidates matched GPU dispatch and round-trip exactly. Full ordered GPU service outputs did not match CPU, and the hybrid final outcome therefore differed. The process exited `1` after 1,328 s wall, 42 min 3.754 s CPU, 5.5 GiB peak, and no swap/OOM. Because the harness writes only after success, no validator receipt or candidate artifact exists; the timestamped journal-derived failure record is `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_hybrid_parity_20260727_v1/hybrid_parity_failure.json`, SHA-256 `49638f9b48fdc479cba5a01554c0afdbd71c6429886bacc33c877d883b1bc110`. Reject hybrid timing and do not introduce float tolerances or a GPU-specific geometry contract. Retain the exact CPU validator and evaluate only external scenario-level CPU process parallelism next. No bank profile, Static admission, or PPO is authorized. |
 | `R-20260727-58` | Preregistered fixed CPU-process scaling gate | Test one orchestration-only treatment: one fresh cohort of four long-lived spawned CPU workers, each making exactly two complete calls on the pinned confirmed scenario. Every call rematerializes the exact state; call one measures cold import/load/compile/execute and call two measures process-local warm throughput. Workers use `JAX_PLATFORMS=cpu`, no persistent compilation cache or new XLA/thread flags, and fixed disjoint affinity sets `0-3,16-19`, `4-7,20-23`, `8-11,24-27`, and `12-15,28-31` on the pinned 32-CPU starship topology. All eight complete outcomes and every counter must exactly equal CPU confirmation `f4bc393a...aae7`; state, protocol, input, dependency, harness, backend, PID, and affinity receipts are mandatory. For worker `i`, let `C_i` be launch through synchronized first result and `W_i` be rematerialization through synchronized second result. Freeze `P_N = max_i(C_i + (ceil(N/4)-1)*W_i)` and require `P_256 <= 86,400 s`, `P_448 <= 172,800 s`, every call <=3,600 s, four distinct successful PIDs, zero worker swap/OOM, and coordinator plus conservative summed worker peak RSS <=80% physical memory. One failure rejects the treatment without retry or width sweep. A pass authorizes only one deterministic four-worker 256-identity exact profile; that profile must itself finish within 24 hours and project 448 within 48 hours. Static, bank admission, and PPO remain false. |
 | `R-20260727-59` | First R-58 service bootstrap classified execution-null; one corrected bootstrap allowed | Receipt `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cpu_process_probe_20260727_v1/cpu_process_probe.json`, SHA-256 `e09bb9719039754a64e8ca50286d2b1cbfd24d55334fe38c3f2f395bb1d8ce21`, records all four workers exiting with the same `ModuleNotFoundError` because file-path execution placed `tools/` rather than the pinned worktree root first on `sys.path`. The coordinator stopped after `0.417 s`; there are no ready receipts, start barrier, call receipts, state/protocol/projection/gate/resource records, or exact entrypoint calls. Treat v1 as a null execution bootstrap, preserve it, and exclude all of its timing and memory values. This append-only decision overrides only v1's mechanical `authorizes_retry: false`: freeze module launch as `python -m tools.probe_b0a_direct_service_cpu_processes` from the same clean repository root, assert and receipt that direct-service, confirmation, and profile modules resolve to that root, and permit one fresh v2 output directory. Worker count, affinities, environment, state, exact entrypoint, timing equation, and gates remain unchanged. Once any corrected worker reaches readiness, no further cohort rerun is allowed. |
+| `R-20260727-60` | Preregistered conditional 256-identity CPU profile | Run only after a passing R-58 v2 receipt is hash-pinned. Consume the frozen live-migration rows in lexicographic `legacy_map_id` order, assign index `i` to worker `i % 4`, and keep four persistent fixed-affinity CPU workers with 64 identities each. Decode each row's explicit serialized state; never regenerate development states through a public-train namespace. Each identity gets one duration from exact load through synchronized outcome and atomic receipt rename, stored afterward in its final worker ledger. Report nearest-rank p50/p95/max across 256 durations. For worker `i`, exclude its first identity and define `Q95_warm_i` over its 63 warm durations; freeze `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)`. Makespan runs from immediately before first spawn through successful worker exits, verification of all 256 receipts, and atomic canonical merge. Require all 256 identities exactly once, exact confirmation-sentinel equality, every identity <=3,600 s, observed makespan <=86,400 s, `P_448 <=172,800 s`, fixed CPU backend/affinity, zero swap/OOM, <=80% conservative memory, and unchanged code/input receipts. Consume only the named one-shot R-58 authorization; require generic `authorizes_bank_profile` to remain false. No retries, resume, cache, alternate worker count, Static claim, admission, witness, or PPO. A failure writes partial evidence but no merged success output; any corrected rerun needs a new append-only decision and output directory. |
 
 Still to decide through S1-S2 evidence:
 

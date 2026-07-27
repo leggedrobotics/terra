@@ -394,6 +394,28 @@ These decisions supersede stale choices later in the historical v4 design:
   after asserting the imported Terra/profile/confirmation files originate
   there. If any corrected worker reaches readiness, no further cohort rerun is
   allowed.
+- [ ] If and only if the corrected R-58 cohort passes, pin its receipt SHA-256
+  and run one fixed four-worker profile over the 256 frozen B0a migration
+  identities. Canonical rows are ordered by `legacy_map_id` and assigned by
+  global index `i % 4`; each worker receives exactly 64 scenarios and decodes
+  every row's explicit serialized state. Each identity is executed once and
+  gets one duration from exact map/state load through synchronized outcome and
+  atomic scenario-receipt rename, stored afterward in the final worker ledger.
+  Report nearest-rank p50/p95/max across all 256 durations. For worker `i`,
+  exclude its first identity and define `Q95_warm_i` over its 63 warm values,
+  then freeze
+  `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)`. Observed makespan
+  starts immediately before first worker spawn and ends after successful worker
+  exits, verification of all 256 receipts, and atomic canonical merge. Require
+  exact confirmation sentinel equality, all 256 identities exactly once, at
+  most `3,600 s` per identity, at most `86,400 s` observed makespan, at most
+  `172,800 s` projected 448 cost, fixed CPU backend/affinity, zero swap/OOM, at
+  most 80% conservative aggregate memory, and unchanged code/input receipts.
+  Consume only R-58's named one-shot profile authorization and require its
+  generic `authorizes_bank_profile` flag to remain false. Do not expose worker
+  count, sharding, backend, retry, resume, or cache controls. Failure preserves
+  partial receipts but emits no merged success result and authorizes no Static
+  claim, admission, witness, or PPO.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3953,18 +3975,23 @@ Current implementation checklist:
 - [x] S1 confirms the probe estimate on one complete exact 64 x 64 scenario
   before any 256-identity profile.
 - [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
-  identities, receipts cold/steady runtime, replay counts, peak memory, and
-  projected 448-scenario cost, and reviews that receipt before S2. The
-  confirmation must agree within a factor of two and calibrate to at most
-  24/48 hours p95 for 256/448 sequential scenarios before this profile runs.
-  The first confirmation agrees at `1.0324x` but fails both time limits, so
-  this item is blocked on exact-path optimization and a new staged receipt.
-  The pure-GPU ladder was rejected because graph/prefilter populations differ
-  by device, and the CPU-graph/GPU-service hybrid was rejected because its
-  full-population service outputs and final result differ. The next bounded
-  treatment may change only external scenario-level CPU process concurrency;
-  validator semantics, scenario identity, and per-scenario outputs stay
-  unchanged. Heading-vectorization remains unauthorized.
+  identities, receipts one synchronized duration per identity plus
+  nearest-rank population p50/p95/max, replay counts, peak memory, observed
+  makespan, and projected 448-scenario cost, and reviews that receipt before
+  S2. The original one-scenario confirmation agrees with its probe at
+  `1.0324x` but fails the sequential 24/48-hour limits. Pure GPU was rejected
+  because graph/prefilter populations differ by device, and the
+  CPU-graph/GPU-service hybrid was rejected because its full-population service
+  outputs and final result differ. The only current amendment is the
+  preregistered R-58 external four-process CPU treatment. If R-58 passes, pin
+  its receipt SHA-256 and execute exactly the fixed R-60 profile: four
+  deterministic 64-identity shards, explicit migrated states, no retry/resume/
+  cache, observed 256 makespan at most 24 hours, and
+  `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)` at most 48 hours.
+  Validator semantics, scenario identity, and per-scenario outputs remain
+  unchanged.
+  Heading-vectorization remains unauthorized, and this item stays open until
+  the complete profile and independent receipt review pass.
 - [x] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`. Commit
