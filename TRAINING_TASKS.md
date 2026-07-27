@@ -3698,11 +3698,14 @@ Current implementation checklist:
   relay-hop scoring is deferred until its graph is specified.
 - [ ] S1 runs the fixed one-identity non-admission direct-service cost probe,
   separating logical attempts from padded kernel execution and emitting no
-  subset feasibility result; if viable, it confirms the estimate on one
+  subset feasibility result. It advances only under the frozen 60-minute p95
+  and 20%-memory-headroom gate; if viable, it confirms the estimate on one
   complete 64 x 64 scenario.
 - [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
   identities, receipts cold/steady runtime, replay counts, peak memory, and
-  projected 448-scenario cost, and reviews that receipt before S2.
+  projected 448-scenario cost, and reviews that receipt before S2. The
+  confirmation must agree within a factor of two and calibrate to at most
+  24/48 hours p95 for 256/448 sequential scenarios before this profile runs.
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`.

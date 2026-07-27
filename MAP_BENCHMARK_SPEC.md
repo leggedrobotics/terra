@@ -1647,6 +1647,16 @@ prohibitive, optimize the one exact validator path or revise the spec
 explicitly; never substitute an unreceipted geometric approximation.
 Content-addressed caching is added only if the profile shows it is needed.
 
+The operational go/no-go rule is frozen before observing the probe. Proceed to
+one complete scenario only when the cost-only probe completes without error,
+its synchronized one-scenario p95 projection is at most 60 minutes, and peak
+host/device use is at most 80% of capacity. Proceed from that confirmation to
+the 256-identity profile only when observed wall time is within `[0.5, 2.0]`
+times the probe's one-scenario p50 projection, calibrated 256/448-scenario p95
+costs are at most 24/48 hours, and the same memory headroom holds. Scenarios
+run sequentially. A failed gate selects optimization or corrected accounting,
+not weaker validation.
+
 Repository ownership stays narrow:
 
 - Terra owns conditions, generators, exact map/scenario manifests, validation,
@@ -1724,6 +1734,7 @@ cannot silently regain authority.
 | `R-20260727-29` | Accepted implementation staging | The exact direct-service kernel remains the validator contract, but cost discovery is staged: one non-admission 64 x 64 probe with full pose graph/prefilter and a warmed exact-service subset, then one complete scenario, then the required 256-identity profile. Logical attempts and padded kernel executions are receipted separately; a subset never emits feasibility. |
 | `R-20260727-30` | Accepted migration identity contract | In the legacy B0a migration, canonical `source_group_id` is the existing `source_id`; this yields 144 groups across 256 rows (112 singleton, 16 four-map foundation-distance, 16 five-map straight-trench). `paired_source_group_id` remains counterfactual-panel metadata and `topology_match_group_id` never shares reset state. Use release ID `terramap-bench-v1.0.0`; direct-service coverage is diagnostic, while static dump access gates reachable capacity rather than requiring every optional dump component. |
 | `R-20260727-31` | Accepted and executed | The exact initial direct-service validator uses real tracked movement, dig, cabin, and dump transitions; the exact visible accepted mask; diagnostic entirely off-zone complete dumps; hard failure for mixed-boundary complete dumps; and capped per-cell union across hypothetical digs. Logical/padded counters and a prefilter differential guard are mandatory. The semantic suite passes, while 64 x 64 cost remains a separate open gate. |
+| `R-20260727-32` | Accepted operational gate | Cost escalation is staged with preregistered limits: probe-to-full requires at most 60 minutes projected p95 and 20% memory headroom; full-to-256 requires factor-two projection agreement, at most 24/48 hours calibrated p95 for 256/448 sequential scenarios, and the same headroom. Failure selects optimization or corrected accounting, never an approximate validator. |
 
 Still to decide through S1-S2 evidence:
 
