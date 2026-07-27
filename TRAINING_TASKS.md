@@ -261,6 +261,16 @@ These decisions supersede stale choices later in the historical v4 design:
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_batch_sweep_20260727_v1/direct_service_batch_size_sweep.json`
   at SHA-256
   `727c358357a026ff75b9e8340d6cd117efff6c782d455eba82630fe8e9312db9`.
+- [ ] The next bounded exact-path candidate avoids building and dilating the
+  truck-transfer cone when the frozen scenario has no other active truck.
+  Commit `9f7b95fa` implements the empty-candidate early exit and preserves
+  eager/JIT no-truck behavior plus the active-truck transfer path. It does not
+  alter dump physics or the direct-service algorithm. Run one cost-only probe
+  on the same pinned B0a identity/source group/state, CPU host, batch size, and
+  exact service kernel. Keep it only if both warmed batch p50 and p95 improve
+  by at least `5%` over the v1 control; otherwise revert it. A pass authorizes
+  only the ordinary staged R-32 confirmation, not the 256-scenario profile,
+  Static admission, or PPO.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
