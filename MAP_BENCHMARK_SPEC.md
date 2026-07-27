@@ -1,11 +1,21 @@
 # TerraMap-Bench specification
 
-Status: proposed v0.2, for review before implementation
+Status: proposed v0.3, accepted design recorded before implementation
+
+Last accepted-review update: 2026-07-27
+
+This is the canonical current map-benchmark and map-curriculum design. Section
+20 is the append-only decision log for reviewer comments: an accepted or
+modified comment must be recorded there in the same change that updates the
+normative sections. `TRAINING_TASKS.md` owns execution evidence and links back
+to this document; chat history is never the only record of an accepted design
+change.
 
 This document specifies a public, versioned benchmark for Terra excavation
-maps. It covers the map format, difficulty taxonomy, curriculum levels,
-feasibility gates, train/evaluation splits, policy submissions, metrics, and a
-website for inspecting maps, distributions, and policy failures.
+maps. It covers the map format, difficulty taxonomy, admission graph, training
+mixtures, feasibility gates, train/evaluation splits, policy submissions,
+metrics, and a website for inspecting maps, distributions, and policy
+failures.
 
 No benchmark bank is frozen by this document. The existing local review set and
 B0 feasibility panels are design inputs, not benchmark releases.
@@ -33,29 +43,28 @@ versioned suites without changing the v1 meaning.
 
 ## 2. Design principles
 
-### 2.1 Factorized conditions, named progression levels
+### 2.1 Factorized conditions, three display depths
 
 A map is described by its factor vector. It is never defined only as "easy",
 "medium", or "hard".
 
-TerraMap-Bench retains the familiar `M0` through `M5` progression, but gives
-each level a descriptive, single-axis name and derives membership from
-versioned factor rules. The deployment mixture is reported separately because
-it is a mixture, not another ordered difficulty:
+The benchmark uses three human-readable display depths, not an intrinsic total
+order over maps:
 
-| Tier | Display name | Main change |
-|---|---|---|
-| `M0` | Nearby Generous | Simple geometry and large nearby dump regions |
-| `M1` | Nearby Geometry | Connected geometry variation while dumping stays generous and nearby |
-| `M2` | Nearby Dump Constraints | Side access, fragmentation, and irregular nearby masks on qualified geometry |
-| `M3` | Complex Geometry | Structural foundations and intersecting or disconnected trench networks |
-| `M4` | Site Access | Objects, roads, barriers, and then combined site constraints |
-| `M5` | Remote Hauling | Medium/far hauling and later capacity pressure |
-| `D0` | Deployment Mix | Frozen realistic mixture of already qualified factors; not a curriculum tier |
+| Display depth | Meaning |
+|---|---|
+| `Anchor` | A full-reset condition that has passed its source-disjoint promotion gate |
+| `One-axis` | Exactly one geometry, work, dump, or site factor changes from a passed direct parent |
+| `Composed` | Two or more individually admitted factors are combined |
 
-These tiers are a curriculum ordering, not a claim that every policy finds
-every `M1` map easier than every `M2` map. Empirical difficulty remains
-policy-dependent and is reported separately.
+Display depth is organizational metadata. Conditions are admitted
+independently through an explicit `requires` list. Sibling one-axis conditions
+are unordered, and no stage-wide pass over all siblings is required.
+
+The deployment mixture and forced-rehandling Challenge are separate suites,
+not additional depths. A scalar depth must never drive Terra's per-environment
+`curriculum.level` controller or silently select reward, horizon, or reset
+semantics.
 
 ### 2.2 Separate map, reset, dynamics, and policy evaluation
 
@@ -147,6 +156,8 @@ terramap-bench-v1/
   splits/
     public_train/
       <exact-loader datasets>
+    promotion/
+      <frozen source-disjoint promotion datasets>
     public_dev/
       <exact-loader datasets>
     sealed_pilot/
@@ -179,21 +190,34 @@ manifest.jsonl
 - schema, taxonomy, suite, and release versions;
 - Terra and terra-baselines commits;
 - generator, validator, and evaluator hashes;
-- map shape, tile size, coordinate/frame convention, and dtypes;
+- map shape `64 x 64`, `edge_length_m = 36.5714285714`,
+  `tile_size_m = 0.571428571428125`, coordinate/frame convention, and dtypes;
+- tracked-excavator dimensions and their derived `7 x 11` tile footprint,
+  `move_tiles = 5`, `dig_radius_tiles = 5`, `dig_depth = 1`, twelve base
+  orientations, twelve cabin orientations, and the exact workspace rule;
 - map-layer meanings;
 - exact dump, mass, dynamics, action, observation, and completion contracts;
-- evaluation horizon and deterministic action rule;
+- `max_steps_in_episode = 450`, `rewards_type = DENSE`,
+  `apply_trench_rewards = false`, the corrected dense reward hash, and the
+  deterministic evaluation action rule;
 - split counts and cell weights;
+- the uniform-over-materialized-slots sampler contract, common slot count,
+  per-condition multiplicities, and slot-to-scenario mapping;
 - similarity/leakage policy; and
 - the root checksum.
 
 Changing a frozen item creates a new scored benchmark version.
 
+The validator must assert
+`tile_size_m == edge_length_m / edge_length_px`. The live physical scale is
+authoritative. No benchmark repair may change `edge_length_m` merely to match
+stale metadata.
+
 ## 5. Canonical scenario schema
 
 The scenario manifest contains authored identity, provenance, declared
 condition inputs, and immutable layer hashes. Generator-authored metadata is
-not accepted as proof of capacity, distance, connectivity, or feasibility.
+not accepted as proof of capacity, separation, connectivity, or feasibility.
 Those values are recomputed from saved arrays by the frozen validator and
 written once to `audit.jsonl`.
 
@@ -210,10 +234,11 @@ geometry_id: ...
 source_group_id: ...
 source_id: ...
 condition_id: ...
-split: public_train | public_dev | sealed_pilot | private_test | compositional_dev | compositional_test
+split: public_train | promotion | public_dev | sealed_pilot | private_test | compositional_dev | compositional_test
 
 family: foundation | trench
-tier_id: M0 | M1 | M2 | M3 | M4 | M5
+display_depth: anchor | one_axis | composed
+requires: [...]
 suite_ids: [...]
 
 layers:
@@ -223,7 +248,8 @@ layers:
   initial_soil_sha256: ...
   metadata_sha256: ...
   shape: [64, 64]
-  tile_size_m: 0.6875
+  edge_length_m: 36.5714285714
+  tile_size_m: 0.571428571428125
 
 generator:
   name: ...
@@ -233,10 +259,19 @@ generator:
   attempt: ...
 
 declared_condition:
+  source_family: ...
   geometry_class: ...
   topology: ...
   dump_layout: ...
   side_access: ...
+  dig_dump_separation_band:
+    metric: p50_tiles
+    lower_inclusive: ...
+    upper_inclusive: ...
+  capacity_band:
+    metric: single_layer_area_ratio
+    lower_inclusive: ...
+    upper_inclusive: ...
   site_class: ...
   volume_band: ...
   reset_mode: ...
@@ -244,11 +279,26 @@ declared_condition:
 initial_condition:
   environment_reset_seed: ...
   initial_agent_state:
-    base_position: [...]
-    base_orientation: ...
-    loaded_volume: ...
-    current_agent: ...
-  serialized_state_sha256: ...
+    schema: terra_agent_state_v1
+    width: 7
+    height: 11
+    max_agents: 4
+    num_agents: 1
+    current_agent: 0
+    moving_dumped_dirt: false
+    agent_active: [true, false, false, false]
+    agent_states:
+      pos_base: [[...], [...], [...], [...]]
+      angle_base: [...]
+      angle_cabin: [...]
+      wheel_angle: [...]
+      loaded: [...]
+      agent_type: [...]
+      action_type: [...]
+      shovel_lifted: [...]
+      carry_baseline_potential: [...]
+      carry_potential_after_lift: [...]
+  initial_agent_state_sha256: ...
   initial_soil_sha256: ...
   initial_negative_volume: ...
   initial_positive_volume: ...
@@ -287,8 +337,10 @@ dump:
   cells_per_component: [...]
   accepted_cells: ...
   legal_free_coverage: ...
-  path_distance_tiles: {p50: ..., p95: ..., max: ...}
-  path_distance_m: {p50: ..., p95: ..., max: ...}
+  dig_dump_separation_tiles: {p50: ..., p95: ..., max: ...}
+  dig_dump_separation_m: {p50: ..., p95: ..., max: ...}
+  any_direct_transfer_pose_exists_initial: ...
+  direct_service_coverage_initial: ...
   single_layer_area_ratio: ...
   reachable_capacity_ratio: ...
   representable_remaining_volume: ...
@@ -302,13 +354,13 @@ site:
   traversable_components: ...
   spawn_component_fraction: ...
   minimum_access_width_tiles: ...
-  pre_dig_workspace_coverage: ...
-  post_dig_workspace_coverage: ...
+  initial_workspace_coverage: ...
+  admissible_pose_count_initial: ...
 
 work:
-  volume_band: ...
   required_volume: ...
-  transport_work_proxy: ...
+  separation_work_proxy: ...
+  forced_rehandling: ...
 
 reset:
   mode: full | partial_in_zone | partial_mixed | partial_near_zone
@@ -325,14 +377,41 @@ validation:
   witness_type: constructive | planner | policy
   witness_trace_sha256: ...
   witness_horizon: 450
-  witness_initial_state_sha256: ...
+  witness_steps: ...
+  witness_step_fraction: ...
+  witness_initial_scenario_sha256: ...
+  witness_terminal_semantic_state_sha256: ...
+  terminal_workspace_coverage: ...
+  terminal_admissible_pose_count: ...
+  minimum_admissible_pose_count_during_witness: ...
 ```
 
 `map_id` changes when a physical map layer changes. `scenario_id` additionally
-includes initial soil, the serialized initial excavator state, and environment
-reset seed. `treatment_id` changes when the reward-distance or reward contract
-changes. Environment/reset seeds and policy-sampling seeds are different
-namespaces and must never be substituted for each other.
+includes initial soil, the explicit initial excavator state, and environment
+reset seed. S1 must add an explicit admissible `initial_agent_state` input to
+the reset path; a seed plus commit is not a portable serialized state.
+`initial_agent_state_sha256` covers the canonical byte encoding of every
+reset-consumed `Agent` and `AgentState` field, including the active mask,
+current-agent index, fixed four-slot state tree, footprint dimensions,
+moving-dirt flag, wheel/action/shovel state, and both carry-potential caches.
+Inactive slots use declared canonical bytes rather than being omitted. The v1
+full reset records zero-valued caches rather than silently deriving them.
+Adding or removing a state field requires a new state schema and protocol
+hash.
+
+The state codec is part of S1 rather than an implied host serialization. It
+hashes fields in declared schema order; prefixes every array with its field
+path, dtype, rank, and shape; canonicalizes numeric leaves to declared
+little-endian integer or IEEE-754 representations; and hashes C-order bytes.
+The release records the codec revision and test vectors. Witness
+`initial_scenario` hashes cover the scenario record and referenced bytes.
+Witness terminal semantic-state hashes additionally cover the frozen RNG key,
+all mutable `GridWorld` arrays/scalars, the complete `Agent` tree, and
+`env_steps`; the protocol hash owns immutable `EnvConfig`.
+
+`treatment_id` changes when the reward-distance or reward contract changes.
+Environment/reset seeds and policy-sampling seeds are different namespaces and
+must never be substituted for each other.
 
 The benchmark may evaluate more than one fixed admissible initial excavator
 state per physical map. Each is a separate scenario that shares `map_id`; the
@@ -343,15 +422,23 @@ release declares the exact number and clusters uncertainty by map and
 
 ### 6.1 Foundation geometry
 
-| Canonical class | Meaning |
+| Field/class | Meaning |
 |---|---|
-| `osm_connected` | Connected footprint derived from the OSM/source bank |
-| `procedural_connected` | Generated connected footprint with varied orientation, aspect, wings, or segmentation |
+| `source_family=osm` | Provenance: connected footprint derived from the OSM/source bank |
+| `source_family=procedural` | Provenance: generated connected footprint |
+| `connected` | One connected excavation footprint |
 | `structural_disconnected` | Bearing strips, pads, pillars, or mixed disconnected foundation elements |
 
 Foundation records must additionally include component count, area, perimeter,
 aspect ratio, orientation, compactness, holes, bearing strips, and pad/pillar
 counts when applicable.
+
+OSM versus procedural is a source/coverage slice, not an intrinsic difficulty
+axis: Terra consumes the resulting raster without a source tag. The pilot
+keeps matched OSM and procedural all-around cells separate because the current
+generators are not distribution-matched and the completed B0-GEO-F run
+qualified neither source. They may be pooled inside a future condition only
+after matched volume/compactness support and separate source-slice gates pass.
 
 ### 6.2 Trench geometry
 
@@ -390,7 +477,7 @@ Canonical layouts:
 - `separated`;
 - `irregular_near`;
 - `remote_one_side`; and
-- `haul_edge`.
+- `remote_edge`.
 
 Canonical side access:
 
@@ -400,12 +487,63 @@ Canonical side access:
 - `per_segment`.
 
 Every case records exact accepted cells, components, cells per component,
-side balance, legal-free coverage, obstacle-aware path distance, and capacity.
-For `one` and `per_segment`, the accepted side or side vector is explicit.
+side balance, legal-free coverage, obstacle-aware separation, direct-service
+coverage, and capacity. For `one` and `per_segment`, the accepted side or side
+vector is explicit.
 
-Distance is the shortest traversable 8-connected path from dig-boundary work
-cells to accepted dump cells, using cardinal cost `1`, diagonal cost
-`sqrt(2)`, and obstacles as blocked cells. It is recorded in tiles and metres.
+The existing `d02`, `d04`, `d06`, and `d08` quantity is the shortest
+traversable 8-connected path from dig-boundary cells to accepted dump cells,
+using cardinal cost `1`, diagonal cost `sqrt(2)`, and obstacles as blocked
+cells. It is recorded in tiles and metres and is named **dig/dump
+separation**, not transport or hauling distance.
+
+The live tracked-excavator **radial envelope** is an annulus from `6.375` to
+`11.375` tiles (`3.642857` to `6.5` metres) around a base centre. Each cabin
+cone is `+/-30` degrees (60 degrees total). This envelope is not the exact
+action mask: the validator must call or bit-match Terra's cartesian body
+exclusion, inner-tooth cleanup, obstacle veto, and all dig/dump filters for
+each base/cabin orientation.
+
+A base pose is `(row, column, angle_base)`. It is reachable only if Terra's
+frozen empty-excavator forward, backward, and collision-checked base-rotation
+transitions can reach it from the explicit initial pose. An 8-connected
+base-centre component is not accepted as a substitute because movement is in
+five-tile rounded steps.
+
+A direct transfer is an exact runtime replay from one fixed reachable base
+pose: a legal dig of positive target volume, cabin-only rotations if needed,
+then a legal complete-load dump into the exact accepted mask with sufficient
+headroom. The replay includes the dig-induced hole dilation, traversability,
+load, integer-capacity, and contained-pile updates. Direct-service coverage is
+the fraction of required excavation volume for which at least one such
+sequence exists in the initial scenario. The boolean
+`any_direct_transfer_pose_exists_initial` means that fraction is nonzero; it
+does not claim that one pose serves the whole map.
+
+The static validator reports this boolean and fraction plus initial exact-cone
+workspace coverage and reachable admissible-pose count. A `d02`-`d08` pair can
+often have direct service, so separation alone is not transport difficulty.
+The tracked excavator cannot move or rotate its base while loaded.
+
+There is no generator-defined generic "post-dig" state. After S3, replay of the
+canonical witness defines an exact terminal state and reports workspace
+coverage and reachable admissible-pose count there plus the minimum count
+encountered during the trace. Terminal direct-service coverage is undefined
+because no target volume remains. Witness-derived values are keyed by the
+terminal semantic-state hash and cannot be used as S1 static-validation
+inputs.
+
+Separation remains a useful policy diagnostic. The conservative
+`forced_rehandling` label is allowed only when initial direct-service coverage
+is exactly zero and an action-level witness proves completion within the
+frozen horizon. Coverage strictly between zero and one is labeled
+`mixed_service`; a witness that happens to rehandle soil does not prove that
+rehandling was necessary.
+
+Minimum relay hops remains a possible later witness-derived diagnostic. It is
+not a v1 S1 field or Static-valid gate until its temporary-spoil nodes,
+headroom, transition, and cost semantics are separately frozen.
+
 The dense-reward distance sidecar remains separately hashed because changing
 it changes training reward semantics.
 
@@ -439,12 +577,18 @@ object, road, wall, or combined-site generalization.
 ### 6.5 Work amount
 
 Every scenario records exact required excavation volume, dig cells, remaining
-volume, and a transport-work proxy. A release defines its volume-band
-boundaries in `conditions.jsonl`; labels such as `low` and `normal` are not
-global constants.
+volume, and a separation/rehandling work proxy. Global family-wide `low` and
+`normal` bands are forbidden: they created structurally empty segmented-trench
+cells.
 
-The transport-work proxy is diagnostic. It must not be used as a reward or
-success substitute.
+Dump, capacity, side, site, and separation counterfactuals reuse the exact dig
+raster and therefore exact work volume. Geometry-source and topology
+comparisons use matched overlapping volume distributions. Volume becomes a
+separate later one-axis condition only after a supported matched pair and a
+450-step witness exist.
+
+Work proxies are diagnostic. They must not be used as reward or success
+substitutes.
 
 ### 6.6 Reset state
 
@@ -459,10 +603,10 @@ score.
 `condition_id` is generated mechanically from normalized fields. For example:
 
 ```text
-trench.straight.s1.j0.c1
-__sidecast.both.dnear.cap3plus
+trench.straight.c1.j0
+__source.procedural
+__sidecast.both.sep02.slcap03_04.v65_74
 __site.none
-__vol.normal
 __reset.full
 ```
 
@@ -473,93 +617,166 @@ a condition registry that defines:
 - numeric bands and closed/open boundaries;
 - expected scenario and source-group counts per split;
 - cell evaluation weight; and
-- derived `M0`-`M5` tier membership.
+- display depth and explicit prerequisite condition IDs.
 
-No generator may hand-author only a tier label and omit its factor vector.
-Every condition belongs to exactly one progression tier. A control condition
-may be evaluated in several suites, but its canonical `tier_id` does not
-change.
+No generator may hand-author only a display depth and omit its factor vector.
+A control condition may be evaluated in several suites, but its physical
+condition identity does not change.
 
-## 8. Progression-tier rules
+The initial pilot uses closed single-layer accepted-area capacity bands:
 
-The first release should use the following intent:
+| Token | Validator metric and closed interval |
+|---|---|
+| `slcap03_04` | `single_layer_area_ratio in [3, 4]` |
+| `slcap07_10` | `single_layer_area_ratio in [7, 10]` |
+| `slcap20_45` | `single_layer_area_ratio in [20, 45]` |
 
-| Tier | Geometry | Dump/access | Site | Admission intent |
-|---|---|---|---|---|
-| `M0 Nearby Generous` | OSM/simple foundation; straight trench | All-around/apron foundation; large both-side or one-side trench zones | None | Establish full-task anchors |
-| `M1 Nearby Geometry` | Connected procedural foundation; two/three end-to-end trench segments | Same generous nearby access as M0 | None | Change geometry only |
-| `M2 Nearby Dump Constraints` | Geometry already witnessed in M0/M1 | One-side, irregular, or separated but generous and nearby | None | Change dump access only |
-| `M3 Complex Geometry` | Structural/disconnected foundation; T, X, multi-junction, or disconnected trench | Nearby and generous | None | Change complex topology only |
-| `M4 Site Access` | Previously witnessed geometry | Nearby and capacity-matched | Objects, road, barrier, then combined | Change site access only |
-| `M5 Remote Hauling` | Previously witnessed geometry/site | Medium/far/haul; capacity matched first, tight capacity later | Qualified site classes | Isolate distance before combining distance and capacity |
+`sep02` means achieved dig/dump-separation p50 in `[1.25, 2.75]` tiles;
+`sep00_02` means `[0, 2]`. Capacity tokens always name their metric: the
+historical B0 value `3.25` is the single-layer area ratio and must not be
+silently substituted for reachable representable capacity.
 
-`D0 Deployment Mix` is a frozen realistic cross-product of already witnessed
-conditions. It has no tier membership and introduces no new primitive factor.
+OSM/procedural provenance, orientation, and aspect remain audit/slicing fields
+unless a matched experiment establishes a residual source condition. Until
+then, the pilot keeps OSM/procedural source cells separately gated rather than
+pooling their `6/8` result.
 
-### 8.1 Proposed initial M0-M2 condition registry
+## 8. Admission graph and map-curriculum rules
 
-This is the concrete candidate registry for the first local inspector. It is
-specific enough to build without silently inventing new research choices, but
-does not become normative until its candidate gallery is approved.
+The curriculum has four measured controls:
 
-All cells use full resets, no site obstacles, reachable capacity ratio at least
-3, and the nearby path envelope below. For the one-layer-deep M0-M2 target,
-required excavation volume equals the number of dig cells. The candidate
-volume bands are frozen as:
+1. work volume;
+2. geometry/topology;
+3. dump access, capacity, separation, and rehandling burden; and
+4. site access.
 
-| Family | `low` | `normal` |
-|---|---:|---:|
-| foundation | 90-160 cell-volumes, inclusive | 161-190 cell-volumes, inclusive |
-| trench | 55-110 cell-volumes, inclusive | 111-155 cell-volumes, inclusive |
+`Anchor`, `One-axis`, and `Composed` are display depths over an admission graph,
+not three monolithic Terra levels. Each condition has a small literal
+`requires` list. A one-axis condition changes exactly one control relative to
+its direct parent. A composed condition becomes eligible only when every
+primitive parent has passed.
 
-A candidate outside these closed intervals is rejected rather than silently
-rebinned. Variable-depth targets require a new condition registry based on
-exact volume rather than cell count.
+Sibling axes may be witnessed independently. Their policies or optimizer
+states are not merged: a generalist still adds admitted conditions
+sequentially to one cumulative recorded lineage.
 
-| Tier | Condition ID | Geometry | Dump access | Volume |
-|---|---|---|---|---|
-| M0 | `f.osm.all.low` | OSM connected foundation | all-around | low |
-| M0 | `f.osm.all.normal` | OSM connected foundation | all-around | normal |
-| M0 | `f.osm.apron.near.low` | OSM connected foundation | large nearby apron | low |
-| M0 | `f.osm.apron.near.normal` | OSM connected foundation | large nearby apron | normal |
-| M0 | `t.straight.both.near.low` | straight trench | large both-side | low |
-| M0 | `t.straight.both.near.normal` | straight trench | large both-side | normal |
-| M0 | `t.straight.one.near.low` | straight trench | large one-side | low |
-| M0 | `t.straight.one.near.normal` | straight trench | large one-side | normal |
-| M1 | `f.procedural.all.normal` | connected procedural foundation | all-around | normal |
-| M1 | `f.procedural.apron.near.normal` | connected procedural foundation | large nearby apron | normal |
-| M1 | `t.segmented2.both.near.normal` | two end-to-end segments | large both-side | normal |
-| M1 | `t.segmented3.both.near.normal` | three end-to-end segments | large both-side | normal |
-| M2 | `f.osm.one.near.normal` | OSM connected foundation | large one-side | normal |
-| M2 | `f.osm.separated.near.normal` | OSM connected foundation | separated nearby | normal |
-| M2 | `f.procedural.one.near.normal` | qualified procedural foundation | large one-side | normal |
-| M2 | `f.procedural.separated.near.normal` | qualified procedural foundation | separated nearby | normal |
-| M2 | `t.straight.irregular_one.near.normal` | qualified straight trench | irregular large one-side | normal |
-| M2 | `t.straight.separated.near.normal` | qualified straight trench | separated nearby | normal |
-| M2 | `t.segmented2.one.near.normal` | qualified two-segment trench | large one-side | normal |
-| M2 | `t.segmented3.one.near.normal` | qualified three-segment trench | large one-side | normal |
+### 8.1 Frozen map-curriculum protocol
 
-M1 geometry candidates reuse the M0 dump contracts. M2 candidates use only
-geometry classes that have already produced M0/M1 witnessed cases. T/X and
-disconnected trenches do not enter M2; they begin at M3.
+Every matched map-curriculum run uses:
 
-Recommended quantitative local-anchor envelope:
+- untouched full resets with `env_steps == 0`;
+- `max_steps_in_episode = 450`;
+- `rewards_type = DENSE`;
+- `apply_trench_rewards = false`;
+- the same `corrected_dense_v1` coefficients and reward hash;
+- the same action, observation, dynamics, exact-dump, and completion contract;
+  and
+- one immutable materialized map level per recorded run.
 
-- path-distance p50 at most 6 tiles;
-- p95 at most 10 tiles;
-- maximum at most 12 tiles; and
-- reachable representable capacity ratio at least 3.
+Map, reward, reset, and architecture curricula are separate named treatments.
+Partial resets are excluded from this comparison. PR0 later compares 100% full
+resets against a declared partial-reset mixture after the map sampler is
+selected.
 
-Recommended local-constraint envelope:
+### 8.2 Promotion, retention, and recovery
 
-- path-distance p50 at most 10 tiles;
-- p95 at most 14 tiles;
-- maximum at most 18 tiles; and
-- reachable representable capacity ratio at least 3.
+Promotion uses a separate frozen source-disjoint bank every 100 updates:
 
-These values are release parameters and candidate rejection gates, not reward
-terms. M5 defines separate medium/far bands from measured geodesic distance
-rather than names such as `d08` alone.
+- each new condition and its direct parent require at least `6/8` successes at
+  two consecutive checkpoints;
+- a four-cell family qualification additionally requires at least `26/32` in
+  that family at both checkpoints;
+- every separately gated source slice must pass rather than being hidden by a
+  pooled cell;
+- every previously mastered condition must remain within five percentage
+  points of its recorded mastery; and
+- every gate requires zero integrity failures.
+
+There is no per-environment promotion or automatic demotion. Promotion starts
+a new recorded run at a checkpoint boundary. If a mastered condition fails
+retention twice:
+
+1. stop the current run;
+2. restore the last checkpoint that passed all prior gates;
+3. relaunch the previous mixture as a new recorded treatment; and
+4. do not call that relaunch an exact continuation unless model, optimizer,
+   schedule, RNG, environment, and action-history state are all restored.
+
+Development is diagnostic and cannot drive promotion. The sealed split is
+opened once after model selection.
+
+### 8.3 Family balance and rehearsal treatment
+
+Sampling is hierarchical so a generalist never loses the accepted `50%`
+foundation / `50%` trench balance:
+
+1. a specialist fixes its one family; a generalist samples foundation/trench
+   `50/50`;
+2. inside the sampled family, if that family has an active frontier, sample
+   `50%` from its frontier and `50%` uniformly from its admitted conditions;
+3. if that family has no active frontier, sample uniformly from its admitted
+   conditions; and
+4. while bootstrapping the first anchor, sample that frontier at `100%` because
+   no admitted parent exists.
+
+Multiple frontier or admitted conditions are uniform within their bucket. The
+resulting global frontier share may be below `50%` when only one family is
+advancing; it is receipted rather than disguised by breaking family balance.
+Exact weights, slot multiplicities, unique identities, and realized exposure
+are frozen per run.
+
+Uniform per-condition replay decays as more conditions are admitted; that
+arithmetic is reported but is not itself evidence of failure. Two retention
+failures invoke the rollback contract in Section 8.2. Any alternative replay
+treatment requires a new explicit spec row and causal comparison; v1 does not
+pre-authorize an ambiguous "recent" bucket or an adaptive priority sampler.
+
+### 8.4 Eight-condition local pilot
+
+The first S2 review bank is deliberately small: `32` public-train, `8`
+promotion, `8` public-development, and `8` sealed scenarios per condition,
+for 448 scenarios total. All counterfactual variants from a source group stay
+in one split.
+
+These labels are candidate aliases. S1 expands every alias into the full
+mechanical `condition_id`; no S2 record may retain `vmatch`. The trench pilot
+freezes `v65_74`, a closed 65-74 required-cell interval supported by straight,
+segmented-2, and segmented-3 generation. Before S2, a train-only support audit
+must freeze the overlapping foundation volume interval and compactness
+tolerance, then replace `vmatch` with those numeric tokens.
+
+| Candidate alias | Controlled purpose |
+|---|---|
+| `f.all.osm.sep00_02.slcap20_45.vmatch` | OSM all-around source slice at matched volume |
+| `f.all.procedural.sep00_02.slcap20_45.vmatch` | procedural all-around source slice matched in volume and compactness |
+| `f.apron.osm.sep02.slcap07_10.vmatch` | new moderate-capacity OSM apron capability |
+| `f.apron.osm.sep02.slcap03_04.vmatch` | exact-dig paired constrained-capacity OSM counterfactual |
+| `t.straight.both.sep02.slcap03_04.v65_74` | straight, both-side local trench candidate |
+| `t.straight.one.sep02.slcap03_04.v65_74` | exact-dig one-side counterfactual |
+| `t.segmented2.both.sep02.slcap03_04.v65_74` | no-junction geometry counterfactual |
+| `t.segmented3.both.sep02.slcap03_04.v65_74` | three-segment no-junction geometry counterfactual |
+
+`slcap07_10` and the generous apron are new generator work; the current bank
+jumps from `3.25x` constrained capacity to roughly `20.6x`-`41.2x`
+all-around capacity. The moderate apron must be visually reviewed and must
+match the constrained pair's dig raster and separation distribution.
+
+The completed B0-GEO-F run remains evidence against pooling the two source
+cells today: both held-out cells stayed `0/8` across all 50 checkpoints, while
+training support differed. A later matched and diverse source experiment may
+retire the separate cells.
+
+The existing `d02`-`d08` panels remain useful separation diagnostics but do
+not occupy a pilot curriculum rung. A forced-rehandling candidate is added
+only after the exact direct-service validator exists and an action witness
+fits the horizon.
+
+Segmented-2/3 have no branch junction and remain one-axis geometry; their
+comparisons use a frozen overlapping volume interval rather than the rejected
+global trench volume bands. T, X, multi-junction, disconnected,
+site-constrained, combined, and forced-rehandling cases are later candidate
+nodes. T/X and disconnected cases are Composed/complex geometry and are never
+introduced together with a new dump or site constraint.
 
 ## 9. Suites
 
@@ -571,9 +788,9 @@ bank.
 Axis panels hold a base source group fixed and vary one factor. They are the
 main causal diagnostic for current policies:
 
-- foundation source geometry;
-- foundation dump layout/distance;
-- trench dump distance;
+- matched foundation source coverage;
+- foundation dump layout/capacity;
+- dig/dump separation and direct-service coverage;
 - trench one-side versus both-side access;
 - trench topology;
 - site constraint;
@@ -584,34 +801,36 @@ The current B0 builder already contains 16 unique foundation/trench cells
 covering the first five items, but lacks site and reset panels. It becomes a
 pilot input, not the final benchmark.
 
-### 9.2 Tier suites
+### 9.2 Display-depth suites
 
-Each `M0`-`M5` suite contains all admitted cells for that progression tier and
-is reported separately. A curriculum can train on these tiers in order, mix
-them, or ignore the tiering; evaluation remains fixed.
+Anchor, One-axis, and Composed views contain all admitted conditions at that
+display depth and are reported separately. They are review views, not a
+required total-order training schedule.
 
 ### 9.3 Core leaderboard
 
-The proposed v1 Core score covers full-reset, dynamically witnessed cells from
-`M0` through `M4`. `M5 Remote Hauling` has its own leaderboard until enough
-methods establish that it is a useful solved-but-difficult regime.
+The proposed v1 Core score covers full-reset, dynamically witnessed Anchor,
+One-axis, and admitted Composed conditions. Forced-rehandling maps have their
+own leaderboard until enough methods establish that they are a useful
+solved-but-difficult regime.
 
-`D0 Deployment Mix` is a separate realistic-mixture score. It must not replace
+The Deployment Mix is a separate realistic-mixture score. It must not replace
 the balanced per-cell Core result.
 
 ### 9.4 Compositional transfer
 
 Source-disjoint maps within familiar cells test new geometry sources, not
 unseen combinations. A separate compositional suite therefore holds out entire
-factor combinations from every model-selection-visible split (`public_train`
-and `public_dev`) while keeping every primitive factor represented in public
-training.
+factor combinations from every model-selection-visible split (`public_train`,
+`promotion`, and `public_dev`) while keeping every primitive factor
+represented in public training.
 
 Example: public training includes procedural-foundation x all-around and
 OSM-foundation x separated, while compositional test contains
 procedural-foundation x separated. The split registry must prove:
 
-- the held-out combination is absent from public training and development;
+- the held-out combination is absent from public training, promotion, and
+  development;
 - each constituent factor has public-training support;
 - source groups remain disjoint;
 - no condition is simultaneously in within-cell and compositional test; and
@@ -632,14 +851,21 @@ evidence of policy failure.
 
 ## 10. Split and diversity standard
 
-The local pilot uses the already motivated 256-source training diversity while
-keeping evaluation small enough to iterate:
+The S2 toolchain/visual pilot uses:
 
 | Split | Unique source groups per cell | Visibility |
 |---|---:|---|
-| `public_train` | 256 | Maps, seeds, metadata, and examples public |
-| `public_dev` | 32 | Maps and per-map diagnostics public |
-| `sealed_pilot` | 64 | Held-out local maps; no public-server claim |
+| `public_train` | 32 | Maps, seeds, metadata, and examples public |
+| `promotion` | 8 | Frozen local gate; never used for gradients or public model selection |
+| `public_dev` | 8 | Maps and per-map diagnostics public |
+| `sealed_pilot` | 8 | Held-out local maps; opened once |
+
+After schema, validator, live-geometry revalidation, and human review pass,
+only active training conditions initially expand to 256 unique
+public-training source groups. Promotion remains separate; public development
+expands to 32 and sealed pilot to 64 only for a selected larger treatment.
+This avoids generating roughly 7,000 witnessed scenarios before the small
+toolchain and condition definitions are accepted.
 
 A publishable private-test size is selected only after the pilot records
 evaluation cost and preregisters a target cell-success confidence width and
@@ -660,7 +886,8 @@ independent sources.
 
 A release is invalid unless:
 
-1. source groups are disjoint across all splits;
+1. source groups are disjoint across train, promotion, development, sealed,
+   private-test, and compositional splits;
 2. geometry, map, and scenario hashes are disjoint across splits;
 3. all counterfactual variants from one source group remain in one split;
 4. OSM derivatives are grouped by underlying footprint, not transform or
@@ -693,6 +920,12 @@ Every scenario receives one of three plainly named badges:
 
 Only `Witnessed` scenarios count in a ranked suite.
 
+Pilot admission requires `witness_steps <= 450`, matching the frozen horizon.
+`witness_step_fraction` and the distribution of remaining horizon margin are
+reported. A stricter publication-Core anti-censoring margin, such as `225`
+steps, is not a ratified gate and must be chosen from S3 evidence in a later
+spec revision.
+
 For a publication-ranked suite, the witness must come from constructive
 generation or a frozen method-neutral planner. The validator replays the
 certificate from the exact initial state. A learned-policy witness may qualify
@@ -709,14 +942,40 @@ policy's score or leaked as a sealed-test demonstration.
 Static validation includes:
 
 - exact-loader contract, shape, dtype, finite, and layer consistency;
+- the live `0.571428571428125` m/tile scale, runtime-derived `7 x 11`
+  footprint, `6.375`-`11.375` tile annulus, and twelve base/cabin
+  orientations;
 - target/obstacle/road/dump-mask disjointness and semantics;
 - exact accepted-mask capacity and integer headroom;
 - traversable access and reachable accepted dump components;
-- valid spawn, base-centre connectivity, and pre/post-dig workspace coverage;
+- valid spawn, exact action-reachable base-pose graph, per-volume initial
+  workspace coverage, and direct-service replay;
 - declared geometry components, axes, segments, junctions, and degrees;
 - mass balance;
 - split, hash, source, pair, and near-duplicate audits; and
 - deterministic rejection reasons.
+
+The frozen B0a rasters were generated for the live Terra runtime, but their
+metre fields and static audit were computed with stale `0.6875` m/tile,
+`5 x 9` footprint assumptions. Repair does not change Terra
+`edge_length_m` and does not invalidate F0/F0R runtime witnesses. S1 must
+recompute metre fields and every static receipt over unchanged rasters using
+live geometry, preserve identities that pass, replace only failures, and
+refresh affected hashes/manifests. Editing metre labels without revalidation
+is insufficient.
+
+A 2026-07-27 read-only probe that replaced only the static-validator geometry
+with the live scale/footprint marked 23 of 256 current B0a identities with the
+legacy reason `dig_not_reachable_post`. This shows that stale geometry can
+materially alter receipts, but the legacy list is only a migration diagnostic:
+S1 compares and archives it, then adjudicates Static-valid status using the
+newly defined initial-state metrics. It must not recreate an undefined generic
+post-dig state merely to reproduce the count.
+
+Plan-first constructive generation is one candidate witness supplier for
+procedural maps, not a universal requirement. Its traces require exact replay
+and distribution-bias audit. OSM cases without a method-neutral witness remain
+unranked rather than being selected by one learned policy.
 
 If a released map later fails integrity or feasibility, it is removed only in
 a new scored release. Existing results remain archived with the original
@@ -728,10 +987,11 @@ Every release automatically exports:
 
 - exact scenario, map, source-group, and slot counts;
 - weights and effective sample size per condition;
-- geometry x dump, dump x site, family x reset, and tier x family heatmaps;
-- distributions of dig volume, distance p50/p95/max, capacity, dump
-  components, side balance, angles, aspect ratio, obstacle fraction, legal
-  dump coverage, and transport work;
+- geometry x dump, dump x site, family x reset, and display-depth x family
+  heatmaps;
+- distributions of dig volume, separation p50/p95/max, direct-service
+  coverage, capacity, dump components, side balance, angles,
+  aspect ratio, obstacle fraction, legal dump coverage, and work;
 - paired-group completeness;
 - exact and near-duplicate reports;
 - train/development/sealed support overlap without revealing sealed identities;
@@ -747,9 +1007,13 @@ declared mixture JSON and compares it to a chosen benchmark suite. It shows:
 - expected exposures per cell;
 - unique sources and repeat concentration;
 - missing and overrepresented cells;
-- progression-tier coverage;
+- prerequisite/display-depth coverage;
 - train-to-evaluation support gaps; and
 - current-policy success/completion by cell, when receipts are supplied.
+
+It also verifies that train, promotion, development, and sealed source groups
+are disjoint; promotion uses full resets; and every materialized map level has
+the frozen horizon/reward/action/observation/dynamics contract.
 
 Training balance is not required to be uniform: curricula intentionally change
 weights. The tool reports the declared target, actual exposure, and mismatch
@@ -783,8 +1047,10 @@ The site may flag:
   feasibility;
 - **curriculum cliff**: most new exposure is on cells far below the current
   policy's prerequisite-cell performance; and
-- **non-monotonic tier**: a later named tier is empirically easier than an
-  earlier one for the selected policy.
+- **unsupported prerequisite**: a composed cell is exposed before one or more
+  required one-axis parents has passed; and
+- **source-slice gap**: matched OSM/procedural or other provenance slices have
+  materially different performance.
 
 These are review warnings, not automatic map deletion or promotion rules.
 
@@ -794,8 +1060,8 @@ The primary v1 protocol freezes:
 
 - one tracked excavator;
 - the official observation schema and action values `0..7`;
-- one untouched full-task reset from the scenario's serialized initial agent
-  and soil state;
+- one untouched full-task reset from the scenario's explicit validated initial
+  agent and soil state;
 - a separately named environment reset seed and policy seed;
 - at most 450 calls to `step_no_reset`, numbered 1 through 450;
 - exact manifest enumeration;
@@ -823,17 +1089,14 @@ Reward and online training return are never benchmark ranking metrics.
 
 ### 13.1 Primary metrics
 
-The release freezes a hierarchy of semantic weights rather than allowing cell
-proliferation to change the score. Core uses equal family weight, equal
-progression-tier weight within family, and equal condition weight within each
-family x tier group:
+The release freezes a hierarchy of semantic weights rather than allowing
+scenario counts to change the score. Core uses equal family weight and equal
+condition weight within family:
 
 ```text
 Balanced Condition Success
   = mean_family(
-      mean_tier_in_family(
-        mean_condition_in_family_tier(success_rate)
-      )
+      mean_condition_in_family(success_rate)
     )
 ```
 
@@ -859,7 +1122,7 @@ The leaderboard displays, at minimum:
 - every cell success;
 - worst-quartile cell success;
 - minimum family success;
-- full success/completion heatmaps by declared factor and tier; and
+- full success/completion heatmaps by declared factor and display depth; and
 - evaluated, valid, censored, and expected counts.
 
 Default tie-break order:
@@ -887,7 +1150,7 @@ Per scenario:
 - slot/hash mismatch.
 
 Public-development results may expose per-map diagnostics and trajectories.
-Sealed-test results expose only family, cell, tier, and declared-axis
+Sealed-test results expose only family, cell, display depth, and declared-axis
 aggregates.
 
 ### 13.3 Uncertainty
@@ -1019,9 +1282,10 @@ and exports public-safe receipts; the website never executes submitted models.
 The first deliverable is one local `index.html`, not a web service. It shows:
 
 - the condition x policy heatmap with worst cells first;
-- ordered `M0` through `M5` review;
+- Anchor, One-axis, and Composed review with prerequisite links;
 - click-through stratified galleries;
-- distance, capacity, uniqueness, format/static/witness warnings; and
+- separation, direct-service, capacity, uniqueness, and
+  format/static/witness warnings; and
 - training exposure versus benchmark exposure.
 
 The separate pages below are the publication phase. Browser uploads, persistent
@@ -1036,17 +1300,17 @@ Show:
 - format/static/witness status;
 - Terra and evaluator revisions;
 - download links, checksum, license, changelog, and sealed commitment; and
-- clear labels for Core, Remote Hauling, Deployment Mix, and Unverified
+- clear labels for Core, Forced Rehandling, Deployment Mix, and Unverified
   Challenge.
 
 ### 16.2 Map Explorer
 
 Filters:
 
-- family and `M0`-`M5` tier;
+- family and Anchor/One-axis/Composed display depth;
 - foundation source/structure;
 - trench topology, segments, components, junctions, and junction degree;
-- dump layout, side access, components, distance, and capacity;
+- dump layout, side access, components, dig/dump separation, and capacity;
 - site class and quantitative obstacle/access ranges;
 - work volume;
 - reset mode;
@@ -1056,11 +1320,12 @@ Filters:
 Each card shows:
 
 - a colored composite;
-- target, occupancy, dumpability, initial-soil, and distance layer toggles;
+- target, occupancy, dumpability, initial-soil, and reward-distance layer
+  toggles;
 - complete factor vector and exact measurements;
-- capacity, distance, and format/static/witness badges;
+- capacity, dig/dump-separation, and format/static/witness badges;
 - source/generator provenance and nearest-neighbour audit;
-- cell/tier membership; and
+- condition/display-depth membership and prerequisites; and
 - public submission outcomes when available.
 
 Recommended colors:
@@ -1082,7 +1347,7 @@ Show exact counts and weights, not only normalized bars:
 - train/development/sealed aggregate histograms;
 - source-group and effective-sample-size counts;
 - paired-condition coverage;
-- distance, capacity, volume, topology, obstacle, and dump-coverage
+- dig/dump-separation, capacity, volume, topology, obstacle, and dump-coverage
   distributions;
 - near-duplicate and split-leakage audit;
 - rejection reasons; and
@@ -1096,7 +1361,7 @@ benchmark target.
 Show:
 
 - normative condition definition and numeric bands;
-- tier and suite membership;
+- display-depth, prerequisite, and suite membership;
 - split counts and source-group counts;
 - feasibility requirements and witness coverage;
 - fixed stratified public gallery;
@@ -1108,7 +1373,7 @@ Show:
 
 Accept a bank manifest or mixture JSON. Show:
 
-- progression-level exposure;
+- condition and display-depth exposure;
 - expected repeats per identity/source;
 - declared versus actual weights;
 - missing and overrepresented conditions;
@@ -1126,12 +1391,12 @@ Leaderboard columns:
 - Balanced Condition Success with confidence interval;
 - worst-quartile success;
 - foundation and trench macros;
-- Remote Hauling and Deployment Mix scores when present;
+- Forced Rehandling and Deployment Mix scores when present;
 - deterministic/sampled mode;
 - data track; and
 - integrity badge.
 
-Expanding a row shows the full cell/tier heatmap. The Compare page shows two
+Expanding a row shows the full condition/display-depth heatmap. The Compare page shows two
 submissions' paired cell delta heatmap, factor marginals, clustered uncertainty,
 and worst-regressed/worst-improved public cells.
 
@@ -1148,12 +1413,14 @@ Before freezing a release:
 1. Generate a large candidate pool by source group.
 2. Run format/static validation and duplicate/leakage audits.
 3. Export a local static review site and fixed galleries.
-4. Review `M0 Nearby Generous` first, then change one axis at a time.
+4. Review Anchor candidates first, then each one-axis counterfactual and its
+   direct parent side by side.
 5. Inspect distribution tails and all rejected/quarantined candidates.
 6. Reject semantic errors; record aesthetic preferences separately.
 7. Produce and replay exact-initial-state witnesses.
 8. Select balanced source groups without moving variants across splits.
-9. Freeze public train/development and commit the sealed split.
+9. Freeze source-disjoint train/promotion/development splits and commit the
+   sealed split.
 10. Evaluate frozen reference methods and publish the first receipts.
 
 The publication site may later add a "review queue" mode with:
@@ -1162,7 +1429,7 @@ The publication site may later add a "review queue" mode with:
 - next/previous cell and keyboard navigation;
 - approve, reject, quarantine, and note export;
 - deterministic ordering and stable URLs; and
-- an outlier queue for extreme distance, capacity, volume, obstacle, or
+- an outlier queue for extreme separation, capacity, volume, obstacle, or
   similarity values.
 
 Human review decisions are exported as data. They are not stored only in a
@@ -1175,7 +1442,7 @@ command:
 
 ```bash
 python tools/build_map_review.py \
-  --conditions benchmark/m0_m2_v1.json \
+  --conditions benchmark/pilot_v03.json \
   --out .artifacts/terramap_bench_v1
 
 xdg-open .artifacts/terramap_bench_v1/site/index.html
@@ -1195,19 +1462,22 @@ Required outputs:
 ```
 
 The script must fail before exporting the site when a format, identity, split,
-capacity, or declared-condition check fails. It is a thin orchestration entry
-point over two immediate tools, not a general framework:
+live-geometry workspace, direct-service, capacity, or declared-condition check
+fails. It is a thin orchestration entry point, not a general framework:
 
 1. `build_benchmark_bank.py`
    - wraps existing generators;
    - writes exact-loader data and normalized scenario records.
 2. `validate_benchmark_bank.py`
    - recomputes `audit.jsonl`;
-   - validates format, semantics, capacity, splits, similarity, and checksums.
+   - derives scale/footprint/workspace from the frozen runtime protocol;
+   - validates format, semantics, capacity, splits, similarity, exact
+     direct-service fields, and checksums.
 3. `export_benchmark_site.py`
    - creates static JSON, thumbnails, galleries, dashboards, and result pages.
 
-S1-S2 stop here. Dynamic witness replay, policy evaluation, safe model
+S1-S2 stop here. The local site labels maps Format-valid or Static-valid but
+does not rank them. Dynamic witness replay, policy evaluation, safe model
 submission, uncertainty, sealed-server operation, and leaderboard publication
 are S3-S5 work. Later tools are:
 
@@ -1229,21 +1499,25 @@ Repository ownership stays narrow:
 
 Suggested delivery gates:
 
-| Gate | Deliverable | Pass condition |
-|---|---|---|
-| `S0 Spec` | This document and reviewed tier/cell registry | All normative/open choices resolved |
-| `S1 Schema` | Manifest v2 normalizer and validator | Existing B0 bank round-trips without semantic loss |
-| `S2 Review` | Candidate pools and local static site | Counts, distributions, pairs, and maps are human-reviewed |
-| `S3 Feasibility` | Witness store and replay | Every ranked scenario replays from its exact initial state within horizon |
-| `S4 Evaluation` | Native bundle, evaluator, uncertainty, receipt | Reference submissions reproduce byte-identical receipts |
-| `S5 Publication` | Versioned data, docs, static site, sealed commitment | Downloads and leaderboard independently verifiable |
+| Status | Gate | Deliverable | Pass condition |
+|---|---|---|---|
+| `[x]` | `S0 Spec` | v0.3 accepted plan and reviewer-decision log | No stale M0-M5 or protocol claim is normative |
+| `[ ]` | `S1 Schema` | Manifest normalizer, explicit initial-state reset, live validator, and support audit | Existing rasters are re-audited at 0.5714 m/tile; full factor IDs and numeric volume/compactness support freeze before S2; failures are listed, not hidden |
+| `[ ]` | `S1 Capacity` | adjustable apron generator | Exact-dig `slcap03_04`/`slcap07_10` pair matches separation and passes visual/static review |
+| `[ ]` | `S2 Review` | 448-scenario eight-condition pool and local site | Counts, splits, pairs, distributions, and maps are human-reviewed |
+| `[ ]` | `S3 Feasibility` | witness store and replay | Every pilot-ranked scenario replays from explicit initial state in at most 450 steps; margin is reported |
+| `[ ]` | `S4 Evaluation` | Native bundle, evaluator, uncertainty, receipt | Reference submissions reproduce byte-identical receipts |
+| `[ ]` | `S5 Publication` | Versioned data, docs, static site, sealed commitment | Downloads and leaderboard are independently verifiable |
 
 ## 19. Explicit non-goals for v1
 
 - A generic adaptive curriculum framework.
+- A generic learned admission-graph scheduler.
 - PLR, ALP-GMM, PAIRED, ACCEL, or learned adversarial generation.
 - Automatic promotion/demotion policy.
 - A single learned scalar map-difficulty predictor.
+- Partial resets inside the map-curriculum causal comparison.
+- Changing Terra `edge_length_m` to repair stale benchmark metadata.
 - Curved trenches.
 - Arbitrary `N`-axis runtime support without a metadata-contract change.
 - A database-backed web application.
@@ -1251,35 +1525,49 @@ Suggested delivery gates:
 - Mixing reward-curriculum claims with map-curriculum claims.
 - Calling static validity proof of dynamic feasibility.
 
-## 20. Decisions to review before implementation
+## 20. Reviewer decision log and remaining choices
 
-Recommended defaults:
+This table is append-only. A future review change must add a row and update the
+normative section in the same commit. `Accepted with correction` records the
+part that was retained and the factual correction, so stale reviewer text
+cannot silently regain authority.
 
-1. Public name: `TerraMap-Bench`.
-2. Retain `M0`-`M5` with the single-axis descriptive names in Section 2, and
-   keep `D0 Deployment Mix` separate.
-3. Build the local pilot with 256 public-train, 32 public-development, and 64
-   sealed source groups per admitted cell; select publication test size from a
-   preregistered precision/cost target.
-4. Rank Core by deterministic Balanced Condition Success; expose every cell and
-   worst-quartile performance.
-5. Keep `M5 Remote Hauling` separately ranked for v1.
-6. Require exact-initial-state replay witnesses for ranked maps.
-7. Label the native safe-weight board a Reference Pilot; require an
-   architecture-neutral adapter before claiming a general method leaderboard.
-8. Generate a static local/public website from the same manifests and receipts.
+| ID | Disposition | Durable decision |
+|---|---|---|
+| `R-20260727-01` | Accepted | Freeze the map/scenario/protocol/result identity split, source-group atomicity, validator-owned audit, balanced per-condition score, deterministic/sampled separation, and v1 non-goals. |
+| `R-20260727-02` | Accepted | Delete the M0-M5 total order and unsupported 20-cell registry. Use Anchor/One-axis/Composed display depths plus literal per-condition prerequisites. |
+| `R-20260727-03` | Accepted with correction | Live Terra is self-consistent at 36.5714285714 m / 64 = 0.571428571428125 m/tile and must not change. Correct metre metadata without regenerating rasters solely for scale; F0/F0R runtime witnesses remain valid. |
+| `R-20260727-04` | Accepted with correction | d02-d08 is dig/dump separation, not loaded transport. Add action-reachable exact direct-service coverage. Defer relay-hop scoring until its state graph is defined. The predicted flat effect is not accepted as fact: existing foundation and trench results decline with separation. |
+| `R-20260727-05` | Accepted | Map-curriculum runs use 100% untouched full resets. The 25% partial-reset mixture remains the separate PR0 treatment after map-sampler selection. |
+| `R-20260727-06` | Accepted | Promotion uses a separate source-disjoint bank, 6/8 per new/direct-parent cell twice, 26/32 for a four-cell family panel, zero integrity failures, retention, checkpoint-bounded promotion, and stop/restore/relaunch recovery. |
+| `R-20260727-07` | Accepted with current evidence | OSM/procedural is provenance in principle, but cells stay separately matched and gated. B0-GEO-F has completed, contrary to the stale review: both held-out cells remained 0/8 across all 50 checkpoints and their training support differed. |
+| `R-20260727-08` | Accepted | Segmented-2/3 have no junction and are one-axis geometry. T, X, multi-junction, and disconnected cases are later complex/composed nodes. |
+| `R-20260727-09` | Accepted | Adjustable moderate apron capacity is the first new generator capability. Build an exact-dig, separation-matched `slcap03_04` versus `slcap07_10` pair before defining capacity progression. These tokens name single-layer accepted-area ratio. Capacity is a high-value missing causal axis, not a proven sole cause. |
+| `R-20260727-10` | Accepted with restraint | Preserve 50/50 foundation/trench sampling for a generalist, then use 50% frontier / 50% uniform-admitted within each active family. Uniform-share decay is reported but not presumed harmful. Retention failure rolls back; no ambiguous recent-cell or adaptive replay treatment is pre-authorized. |
+| `R-20260727-11` | Accepted | Hold exact volume fixed for dump/capacity/site counterfactuals and match overlapping volume support for source/topology comparisons. Do not revive global family low/normal bands. |
+| `R-20260727-12` | Accepted | Train, promotion, development, and sealed splits are source-disjoint; counterfactual variants stay in one split. Every run pins horizon 450, DENSE rewards, trench absolute shaping off, and one protocol hash. |
+| `R-20260727-13` | Accepted with restraint | Pilot-ranked scenarios require exact initial-state replay within the frozen 450-step horizon. Record witness margin; a 225-step publication-Core gate remains unratified until S3 evidence. Forced-rehandling and unwitnessed cases remain separately labeled Challenge cases. |
+| `R-20260727-14` | Accepted with simplification | Start with a balanced four-foundation/four-trench, 448-scenario review pilot. Replace the unsupported `vhigh` cell with volume-matched segmented-3; add a work-volume cell only after numeric support and witness gates pass. Expand only active accepted training conditions to 256 identities after schema/static/human review. |
+| `R-20260727-15` | Accepted implementation-audit amendment | Keep every raster unchanged initially, but recompute static receipts because the old validator used the stale 5 x 9 footprint. Preserve passing identities and replace only proven failures; do not attribute this stronger revalidation rule to the original metadata-only review. |
+| `R-20260727-16` | Accepted implementation-audit correction | Exact initial state means the versioned canonical bytes of every reset-consumed Agent and AgentState field, not a partial pose tuple or a reset seed. |
+| `R-20260727-17` | Accepted implementation-audit correction | S1 workspace/direct-service metrics describe the exact initial scenario using reachable Terra action transitions and runtime dig/dump masks. There is no undefined generic post-dig state; terminal and during-trace access metrics are derived only by canonical S3 witness replay. |
+| `R-20260727-18` | Accepted implementation-audit correction | Full condition IDs include source, achieved separation, explicitly named capacity metric/band, and numeric volume support. Freeze trench `v65_74`; a train-only audit must replace every foundation `vmatch` alias before S2. |
 
-Still to decide:
+Still to decide through S1-S2 evidence:
 
-- the M3-M5 and compositional condition registries after candidate galleries
-  are reviewed;
-- the family-specific cross-split similarity thresholds;
+- the exact moderate-apron construction that changes capacity without changing
+  the dig raster or separation distribution;
+- the explicit batched initial-agent-state reset API and admissibility record;
+- the conservative relay-hop algorithm and method-neutral witness supplier;
+- whether S3 evidence supports a stricter publication-Core witness margin than
+  the frozen 450-step pilot horizon;
+- numeric matched-volume/compactness tolerances and family-specific
+  cross-split similarity thresholds;
+- whether a future matched, diverse OSM/procedural experiment permits pooling;
 - the publication test confidence/effect target and number of fixed initial
   states per map;
-- which current official architecture configurations are allowlisted;
-- benchmark data and submission licenses; and
-- public hosting and sealed-evaluator ownership.
+- benchmark data/submission licenses, public hosting, and sealed-evaluator
+  ownership.
 
-These decisions do not require changing Terra dynamics or launching PPO. The
-next step after spec approval is `S1 Schema`, followed by a local review site
-over candidate maps before any benchmark release is frozen.
+No open choice authorizes PPO. The next implementation is S1 Schema/live
+revalidation and S1 Capacity, followed by the S2 local review site.

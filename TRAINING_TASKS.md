@@ -12,6 +12,9 @@
   `gpuhe.120h` run is qualified.
 - Date: 2026-07-27 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+- Canonical current map-benchmark/curriculum specification:
+  [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), especially the v0.3
+  reviewer decision log in Section 20
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
 - Historical reference: E8 `resnet_spatial_8x8_se`
 - Recovery scratch topology: base `resnet_spatial_8x8`, approximately 994,825
@@ -19,36 +22,34 @@
 - Production training authorized by this document: yes, only for declared
   tasks whose gates pass; independent declared arms may run concurrently
 
+The latest accepted map-curriculum design must be written into
+`MAP_BENCHMARK_SPEC.md` in the same change that records its reviewer
+disposition. This execution ledger may summarize that design but must not
+silently override it. Chat history is not an execution dependency.
+
 ## 1. Current decision
 
-The first paired map-curriculum screen is complete. Neither treatment is
-selected:
+As of 2026-07-27, the task-semantics recovery is complete but no broad map
+curriculum is selected. Corrected foundation and trench runs are numerically
+healthy and prove partial feasibility; their source-disjoint evaluations show
+memorization, non-monotonic cell difficulty, and regression. More unchanged
+PPO is not justified.
 
-| Treatment | Best M0 | Best M1 | Best M2 | Decision |
-|---|---:|---:|---:|---|
-| flat terminal mixture | 24/64 | 7/64 | 1/64 at any one checkpoint | reject |
-| per-environment `3/3` staged | 13/64 | 2/64 | 0/64 | reject |
+The live plan is the factorized admission graph in
+[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), with its accepted-review
+log in Section 20. The immediate order is:
 
-The flat policy learned useful source-disjoint M0 behavior and then regressed
-from 24/64 at update 1,000 to 11/64 at update 4,000. The staged policy promoted
-most training environments to M1 but never demonstrated held-out M1
-competence. This is evidence against the tested exposure scheduler, not
-evidence that curriculum learning in general is ineffective.
+1. S1: complete state/condition schema, live-geometry revalidation,
+   exact direct-service metric, train-only support audit, and adjustable apron
+   capacity;
+2. S2: build and visually review the balanced 448-scenario pilot;
+3. S3: replay exact witnesses within 450 steps; and
+4. only then materialize selected active cells and resume specialist/generalist
+   PPO under source-disjoint promotion gates.
 
-Do not launch another broad M0-M2 generalist, reward-curriculum run, partial
-reset treatment, or architecture sweep yet. The next work must answer, in
-order:
-
-1. Is the current task/reward contract internally consistent?
-2. Are existing policies memorizing training identities or merely evaluated
-   differently online and offline?
-3. Can the current action and observation contract learn one easy foundation
-   and one easy trench?
-4. Can each regenerated quantitative easy family generalize when trained
-   alone?
-5. Does heterogeneous exposure cause the observed M0 regression?
-6. Only then: what global map curriculum and observation/model treatment
-   should be tested?
+The rejected flat M0-M2 and per-environment 3/3 treatments and all completed
+B0 evidence remain below as historical receipts. They do not authorize their
+old forward-looking ladders.
 
 ### 1.1 Ratified decisions from the design review
 
@@ -66,6 +67,16 @@ These decisions supersede stale choices later in the historical v4 design:
 | Scratch budget | Treat 500/1,000/2,000/5,000 updates as review milestones, not hard ceilings. Any integrity-clean recipe that shows even slight preregistered fixed-bank improvement receives the next meaningful budget; use an exact continuation only when the checkpoint contract preserves all process state, otherwise run the full higher milestone continuously from a declared fresh start. |
 | Qualified long runs | Each family specialist independently earns long training as soon as its own recipe clears the twice-observed source-disjoint gate; a qualified foundation recipe does not wait for trench, or vice versa. Run selected F1/G0/S0/K0 treatments for at least 20,000 continuous updates on `gpuhe.120h` with a five-day wall-time request. Grant more compute while the fixed bank improves, using exact 20,000-update extensions when available or a fresh continuous run at the full higher budget. A short-run wall-clock limit must never stop a recipe that has cleared this qualification. |
 | Curriculum separation | Map, dense-reward, dense-to-terminal reward, and partial-reset treatments never advance in the same causal comparison. |
+| Map display depths | Use Anchor, One-axis, and Composed with literal prerequisite condition IDs. Retire M0-M5 as an active total order. |
+| Runtime geometry | Keep live `36.5714285714 / 64 = 0.571428571428125` m/tile, the derived `7 x 11` footprint, and current action workspace. Recompute stale B0 static receipts; never change `edge_length_m` to fit old metadata. |
+| Separation versus rehandling | `d02`-`d08` is dig/dump separation, not loaded transport. Add action-reachable exact dig-to-dump direct-service coverage before admitting forced-rehandling maps; defer relay hops until their graph is defined. |
+| Map-curriculum reset | Use 100% untouched 450-step full resets. The 25% partial-reset hypothesis remains PR0 after sampler selection. |
+| Source handling | OSM/procedural is provenance conceptually but remains separately matched and gated until both source slices pass; B0-GEO-F completed with 0/8 in both cells at all 50 checkpoints. |
+| First new generator | Build an exact-dig `slcap03_04` versus `slcap07_10` nearby-apron pair with matched separation before defining capacity progression; the token names single-layer accepted-area ratio. |
+| Pilot scale | S2 uses four foundation and four trench conditions x `32 train + 8 promotion + 8 development + 8 sealed = 448` scenarios. The eighth cell is volume-matched segmented-3, not an unsupported high-volume candidate. Expand only selected active training conditions afterward. |
+| Family/rehearsal sampling | Generalists preserve 50/50 foundation/trench sampling, then use 50% frontier/50% admitted rehearsal inside an active family. Specialists remain single-family. |
+| Feasibility horizon | Pilot-ranked maps need an exact replay witness within 450 steps. Record margin; do not silently enforce an unratified 225-step Core gate. |
+| Exact reset state | Hash every reset-consumed `Agent`/`AgentState` field. A seed or partial pose tuple is not a portable scenario state. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -1721,6 +1732,13 @@ compare architectures. A scratch-medium control is conditional on failed
 growth/qualification evidence; it is not part of the minimal first set.
 
 ## 11. Phase B — increase procedural diversity
+
+> **Historical evidence block.** B0a/B0b results and receipts below remain
+> authoritative evidence, but their forward-looking cell names, 64-map B0c
+> contract, and "near/far distance ladder" are superseded by K0 and
+> `MAP_BENCHMARK_SPEC.md` v0.3. Historical `distance` labels mean measured
+> dig/dump separation; they do not prove loaded transport or forced
+> rehandling. Nothing in this block authorizes a new launch.
 
 ### B0 — Rebuild quantitative cells, then expand source-disjoint banks
 
@@ -3501,6 +3519,11 @@ ablations remain deferred.
 
 #### B0c — Expand only witnessed easy cells
 
+> **Superseded proposal.** The 64-identities-per-cell B0c bank below was never
+> the v0.3 release contract. The live path is S1 support audit, S2 448-scenario
+> review, S3 witnesses, then expansion of only selected active cells to
+> 256 independent training identities per cell.
+
 The primary easy bank required by F1 is:
 
 ```text
@@ -3550,92 +3573,69 @@ silently reduce diversity after launch.
 
 ## 12. Phase K — global quantitative map curriculum
 
-### K0 — Implement checkpoint-bounded family/cell stages
+### K0 — Execute the accepted v0.3 admission plan
 
-Do not reuse the historical M0-M2 directories or labels as the active ladder.
-Do not add a learned teacher or generic adaptive scheduler. Materialize one
-immutable directory per declared stage and start a new recorded run at each
-promotion boundary.
+The normative map definitions, eight-condition pilot, accepted reviewer
+comments, and open choices now live in
+[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md). The older OSM-to-procedural
+and d02-to-d08 linear ladder is superseded: source is separately gated
+provenance, and d02-d08 measures separation rather than loaded transport.
 
-The admitted axes progress independently:
+Current implementation checklist:
 
-```text
-foundation:
-  all-around OSM
-  -> all-around procedural
-  -> broad apron at 2, 4, 6, then 8 path-distance tiles
-  -> broad one-side and separated nearby zones
-  -> internal holes/strips/pads
-  -> one site constraint
+- [x] S0 records the accepted three-depth design and append-only reviewer
+  decision log.
+- [ ] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
+  radial envelope, exact runtime cone masks, and protocol hash from Terra
+  rather than duplicated constants.
+- [ ] S1 revalidates unchanged B0 rasters, rewrites metre/static receipts,
+  preserves identities that pass, and lists/replaces only failures.
+- [ ] S1 adds explicit batched complete-agent-state reset plus admissibility
+  validation and hashes every reset-consumed `Agent`/`AgentState` field.
+- [ ] S1 implements action-reachable exact dig-to-dump direct-service fields
+  for the initial scenario before any map is described as forced rehandling;
+  terminal/during-trace access fields wait for canonical witness replay, and
+  relay-hop scoring is deferred until its graph is specified.
+- [ ] S1 freezes full condition IDs: source, achieved separation, named
+  capacity metric/band, trench `v65_74`, and train-only audited numeric
+  foundation volume/compactness support. No S2 record retains `vmatch`.
+- [ ] S1 Capacity builds and visually verifies one exact-dig,
+  separation-matched `slcap03_04`/`slcap07_10` apron pair.
+- [ ] S2 builds the eight-condition 448-scenario train/promotion/development/
+  sealed pilot and local review site.
+- [ ] S2 records Lorenzo's per-condition visual decisions before expanding an
+  active training cell to 256 identities.
+- [ ] S3 supplies exact replay witnesses within the 450-step protocol and
+  reports witness margin; any stricter publication-Core cutoff requires an
+  evidence-backed spec revision.
 
-trench:
-  straight, broad both-side
-  -> straight, broad one-side
-  -> two then three end-to-end segments
-  -> one T then one X junction
-  -> N-junction and disconnected groups
-  -> one site constraint
-```
+Admission remains deliberately small:
 
-Each arrow is shorthand for a separately admitted quantitative cell, not an
-automatic bundled stage. A geometry/topology step holds dump layout easy; a
-dump-distance or side-access step holds geometry and site fixed; a site step
-uses a previously mastered geometry/dump pair. Combined constraints, tight
-capacity, remote haul, and physical boundary spill remain later tracks.
+- each condition declares literal direct prerequisites;
+- sibling one-axis conditions are independently witnessed rather than joined
+  in a stage-wide AND;
+- generalist optimizer lineages are still cumulative and sequential; sibling
+  policies are never merged;
+- promotion requires `6/8` per new/direct-parent cell twice, and a four-cell
+  family panel additionally requires `26/32` twice;
+- OSM/procedural source cells cannot hide one another;
+- every prior condition must retain within five percentage points with zero
+  integrity failures; and
+- two retention failures stop the run, restore the last passing checkpoint,
+  and relaunch the previous mixture as a new recorded treatment.
 
-At each frontier, compare only if needed:
+Generalists first sample foundation/trench 50/50. Within a family that has an
+active frontier, the first rehearsal treatment samples 50% frontier and 50%
+uniformly over that family's admitted cells; a family without a frontier
+samples its admitted cells uniformly. Specialists apply the same rule inside
+their one family. Two retention failures invoke rollback. No ambiguous
+recent-cell bucket or learned/adaptive scheduler is authorized without a new
+named causal treatment.
 
-```text
-qualified parent
-  +-- cumulative flat control over all admitted cells
-  `-- staged frontier mixture with declared earlier-cell rehearsal
-```
-
-The rehearsal fraction is a treatment, not a fact. Select one value from G0/S0
-retention evidence and R0 only if R0 is actually run. Do not inherit the
-unproven historical 20-30% value.
-
-Promotion:
-
-- evaluate a separate fixed promotion bank every 100 updates;
-- require at least 26/32 successes in each included family and at least 6/8 in
-  every included cell at two consecutive evaluations;
-- require zero integrity failures;
-- require every previously mastered cell to remain within five percentage
-  points of its recorded mastery value; and
-- promote only at a checkpoint/run boundary with a new run identity and
-  immutable mixture receipt.
-
-Carry the full model and optimizer state and preserve schedule position at a
-promotion. Restart environment, RNG, and history identically for any matched
-control and treatment.
-
-Demotion/recovery:
-
-- if an earlier cell fails retention twice, stop the current stage;
-- restore the last checkpoint that passed all earlier gates;
-- relaunch the previous mixture as a new recorded treatment; and
-- never mutate exposure silently inside the compiled PPO run.
-
-Development evaluation remains every 500 updates and does not drive
-promotion. The sealed bank is opened once after model selection.
-
-Required logging:
-
-- stage, family/cell frontier, and mixture weights;
-- unique map IDs and per-cell exposure;
-- promotion-bank results;
-- residence updates in the stage;
-- promotion/recovery events; and
-- fixed development retention.
-
-Acceptance:
-
-- no per-environment `3/3` promotion remains in the selected treatment;
-- no promotion can occur from pooled success alone;
-- gate, development, and sealed sources are disjoint;
-- a failed family or cell cannot be hidden by a pooled score; and
-- only one declared difficulty axis changes at a promotion.
+Every map-curriculum run uses one immutable materialized map level, 100% full
+resets, horizon 450, DENSE rewards, `apply_trench_rewards=false`, and the
+frozen corrected reward/action/observation/dynamics hashes. Development never
+drives promotion; sealed evaluation opens once after model selection.
 
 ## 13. Conditional architecture work
 
@@ -3783,14 +3783,18 @@ Admit one axis at a time after the applicable K0 quantitative cells pass:
 1. disconnected structural foundations and multi-junction trenches;
 2. stronger single obstacles;
 3. combined road/wall/object sites;
-4. medium then far dump distance with matched capacity;
-5. tight natural capacity only after distance is solved; and
-6. physical boundary-spill dynamics; and
-7. the final realistic deployment mixture.
+4. increased dig/dump separation at matched capacity and direct-service
+   coverage;
+5. reduced direct-service coverage and finally witnessed forced rehandling;
+6. tight natural capacity as its own matched axis;
+7. physical boundary-spill dynamics; and
+8. the final realistic deployment mixture.
 
-For remote dumping, first create a paired near/far identity that changes only
-traversable dump distance. A successful near map is a prerequisite. One far
-identity must pass the F0 gate before generating a far family.
+For a separation or rehandling axis, create an exact-geometry pair that holds
+capacity and site access fixed. A passed local/direct-service parent is a
+prerequisite. Separation labels come from achieved validator bands;
+forced-rehandling requires zero initial direct-service coverage plus a
+450-step completion witness.
 
 Unsolved or statically valid but dynamically unproven families remain in a
 named challenge bank; they are not mixed into training and called curriculum
@@ -3830,24 +3834,23 @@ acceptance evidence in the corresponding section passes.
     retained foundation update-900 witness, this authorizes B0 to build and
     validate the orthogonal feasibility panels and admit only dynamically
     witnessed cells.
-11. [ ] Complete B0a/B0b/B0c per family: seal the paired static panels, obtain
-    all four family-cell witnesses (plus only conditionally needed isolates),
-    expand that family's declared primary easy cells, and pass its
-    loader/memory/update-1 gates. A completed family advances without waiting
-    for the other; the combined eight-cell bank waits for both.
-12. [ ] Run each unlocked scratch F1 family specialist; require family and
-    per-cell gates twice with zero integrity failures. As soon as either
-    independently qualifies, implement the narrow manifest-sealed production
-    launcher against that exact recipe and start its fresh 20,000-update
-    `gpuhe.120h` run without waiting for the other family.
-13. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
-    new-distribution small multitask teacher.
-14. [ ] Grow and qualify S0 from G0, then begin the checkpoint-bounded K0 map
-    ladder one isolated difficulty axis at a time.
-15. [ ] After S0 qualification, execute the separate W1/W2 reward experiment;
-    run PR0 only after the map sampler is selected.
-16. [ ] Open the sealed bank once after model/treatment selection and publish
-    the final causal, integrity, compute, and checkpoint receipts.
+11. [ ] Complete S1: canonical state/factor IDs, live-geometry revalidation,
+    action-reachable direct-service validation, train-only numeric support
+    audit, and the exact-dig `slcap03_04`/`slcap07_10` apron generator.
+12. [ ] Complete S2: build the balanced four-foundation/four-trench
+    448-scenario bank and record Lorenzo's visual decisions in the local site.
+13. [ ] Complete S3: replay exact, mass-conserving witnesses within 450 steps;
+    keep unsupported maps in the named Challenge rather than training on them.
+14. [ ] Expand only selected witnessed active cells to 256 independent
+    training identities per cell, then run each family specialist with the
+    source-disjoint promotion and retention gates. A qualified family earns
+    its fresh 20,000-update `gpuhe.120h` run without waiting for the other.
+15. [ ] If both specialists pass, run the 50/50-family generalist; only a
+    twice-qualified generalist becomes the new-distribution small teacher and
+    may start the admission graph one isolated axis at a time.
+16. [ ] Execute W1/W2 and PR0 only as separate treatments after map-sampler
+    selection. Open the sealed bank once after all model/treatment selection
+    and publish the final causal, integrity, compute, and checkpoint receipts.
 
 R0 is not in the default launch queue. Authorize it only if D2 confirms
 train-and-development regression and the result would change K0's rehearsal

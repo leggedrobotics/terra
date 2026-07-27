@@ -1,8 +1,8 @@
 # Terra Training Design
 
-- Status: first paired screen complete; recovery contract ratified
+- Status: historical paired-screen design; recovery contract ratified
 - Version: historical `training_design_v4` plus `recovery_v1`
-- Date: 2026-07-25 recovery update
+- Date: 2026-07-27 canonical-plan cross-reference update
 - First target: one 64 x 64 tracked-excavator policy for foundations and
   trenches
 - Production training authorized by this document: no
@@ -11,9 +11,11 @@ The original v4 sections below are retained as the preregistered experiment
 contract. The completed result, critical review, corrected decisions, and
 dependency-ordered backlog are in
 [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md) and
-[`TRAINING_TASKS.md`](TRAINING_TASKS.md). Those companion documents supersede
-the original map ladder and execution order for new work; they do not rewrite
-the historical treatment after seeing the result.
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md). The canonical current benchmark and
+map-curriculum design, including the accepted-reviewer decision log, is
+[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md). Those companion documents
+supersede the original map ladder and execution order for new work; they do
+not rewrite the historical treatment after seeing the result.
 
 Post-screen result:
 
@@ -26,7 +28,9 @@ Post-screen result:
 
 The original M0-M2 ladder below is retained only as the frozen description of
 the failed screen. It is outdated as a future map curriculum. The active
-dependency-ordered plan is in [`TRAINING_TASKS.md`](TRAINING_TASKS.md).
+dependency-ordered execution plan is in
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md), and the normative current map design
+is in [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md).
 
 The following decisions were ratified after reviewing the failure evidence:
 
