@@ -426,7 +426,11 @@ These decisions supersede stale choices later in the historical v4 design:
   revision-dependent protocol hashes to equal. Before publishing success,
   re-hash the R-58 authorization, CPU confirmation, B0a identities/checksum/
   source/provenance manifests, migration JSONL/summary, code, package versions,
-  and Python executable. This profile remains a non-Static sidecar.
+  and Python executable. Re-verify every path named by frozen `files.sha256`
+  against its recorded digest and reject missing, changed, or unmanifested
+  consumed files; matching the manifest bytes alone is insufficient. Atomic
+  no-replace publication requires file fsync before linking and directory fsync
+  afterward. This profile remains a non-Static sidecar.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
