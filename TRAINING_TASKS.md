@@ -381,6 +381,19 @@ These decisions supersede stale choices later in the historical v4 design:
   `3,600 s`. Do not sweep worker counts or retry a failed cohort. A pass
   authorizes only one four-worker 256-identity exact profile, not Static,
   admission, or PPO.
+  The first service bootstrap is execution-null: all four workers failed
+  module resolution before readiness, the start barrier, state materialization,
+  or any exact call. Preserve its receipt at
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cpu_process_probe_20260727_v1/cpu_process_probe.json`
+  (SHA-256
+  `e09bb9719039754a64e8ca50286d2b1cbfd24d55334fe38c3f2f395bb1d8ce21`)
+  and exclude its `0.417 s` coordinator lifetime
+  from every timing or resource projection. This explicitly overrides only
+  that receipt's mechanical `authorizes_retry: false`: one corrected v2 may
+  launch workers as repository modules from the already pinned clean worktree,
+  after asserting the imported Terra/profile/confirmation files originate
+  there. If any corrected worker reaches readiness, no further cohort rerun is
+  allowed.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
