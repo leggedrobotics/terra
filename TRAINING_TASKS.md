@@ -40,8 +40,8 @@ The live plan is the factorized admission graph in
 log in Section 20. The immediate order is:
 
 1. S1: complete state/condition schema, live-geometry revalidation,
-   exact direct-service metric, train-only support audit, and adjustable apron
-   capacity;
+   exact direct-service metric and cost receipt, pair-specific foundation
+   support, topology-aware trench support, and adjustable apron capacity;
 2. S2: build and visually review the balanced 448-scenario pilot;
 3. S3: replay exact witnesses within 450 steps; and
 4. only then materialize selected active cells and resume specialist/generalist
@@ -77,6 +77,10 @@ These decisions supersede stale choices later in the historical v4 design:
 | Family/rehearsal sampling | Generalists preserve 50/50 foundation/trench sampling, then use 50% frontier/50% admitted rehearsal inside an active family. Specialists remain single-family. |
 | Feasibility horizon | Pilot-ranked maps need an exact replay witness within 450 steps. Record margin; do not silently enforce an unratified 225-step Core gate. |
 | Exact reset state | Hash every reset-consumed `Agent`/`AgentState` field. A seed or partial pose tuple is not a portable scenario state. |
+| Trench volume support | Withdraw `v65_74`. Audit candidate topology-specific length ranges on train-only proposals, then freeze a supported volume-conditioned band; existing B0 trench identities do not carry into the pilot. |
+| Foundation volume support | Match OSM/procedural all-around through a source-pair interval after retuning procedural generation toward OSM. Match the apron capacity pair separately by exact OSM dig identity. |
+| Retention arithmetic | Freeze the lower of two passing counts. Retain an 8-map condition at `max(6, reference-1)` and the fixed 32-map family panel at `max(26, reference-1)`; only consecutive complete integrity-valid failures count toward rollback. |
+| Migration/cost evidence | Withdraw the unreceipted 23/256 probe count. S1 writes a hashed per-identity migration receipt and an exact direct-service validation cost profile before S2. |
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -877,7 +881,8 @@ Verified implementation receipt, 2026-07-25:
   environments remain labeled and cannot earn corrected-contract mastery
   without the integrity fields;
 - `aggregate_fixed_bank_history.py` requires two adjacent passing
-  checkpoints and evaluates the five-percentage-point family retention rule;
+  checkpoints and currently evaluates the historical five-percentage-point
+  family retention rule;
 - focused fixtures prove that one perfect-performing map with a mass error
   cannot pass and that one checkpoint cannot claim consecutive mastery;
 - all 111 baseline tests pass; and
@@ -900,6 +905,10 @@ Keep one direct fixed-bank evaluator and add:
 - non-finite state;
 - environment/evaluator termination disagreement; and
 - an offline history aggregator for two-consecutive mastery and retention.
+
+Before the next promotion run, replace the historical continuous-percentage
+retention comparison with the count-based v0.3 contract in K0 and add focused
+fixtures for its `n=8`, `n=32`, invalid-evaluation, and streak-reset cases.
 
 Do not turn this into a generic evaluation framework. The output remains one
 versioned JSON record per checkpoint and stratum.
@@ -3589,18 +3598,32 @@ Current implementation checklist:
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.
 - [ ] S1 revalidates unchanged B0 rasters, rewrites metre/static receipts,
-  preserves identities that pass, and lists/replaces only failures.
+  preserves identities that pass, and lists/replaces only failures in one
+  hashed per-identity migration receipt. The old unreceipted probe count is
+  not a target.
 - [ ] S1 adds explicit batched complete-agent-state reset plus admissibility
   validation and hashes every reset-consumed `Agent`/`AgentState` field.
 - [ ] S1 implements action-reachable exact dig-to-dump direct-service fields
   for the initial scenario before any map is described as forced rehandling;
   terminal/during-trace access fields wait for canonical witness replay, and
   relay-hop scoring is deferred until its graph is specified.
+- [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
+  identities, receipts cold/steady runtime, replay counts, peak memory, and
+  projected 448-scenario cost, and reviews that receipt before S2.
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
-  capacity metric/band, trench `v65_74`, and train-only audited numeric
-  foundation volume/compactness support. No S2 record retains `vmatch`.
+  capacity metric/band, and pair-specific train-only audited numeric
+  volume/compactness support. No S2 record retains `vmatch`.
+- [ ] S1 Foundation retunes procedural all-around generation toward fixed OSM
+  support and freezes one source-pair interval/tolerance; the apron capacity
+  pair instead shares exact OSM dig identities and volumes.
+- [ ] S1 Trench keeps straight fixed, audits candidate segmented-2
+  `U[10,13)` and segmented-3 `U[7,9.5)` length ranges, freezes only a
+  well-supported common band, and receipts lengths, turns, conditioning, and
+  rejection histograms. Pilot trench identities are fresh.
 - [ ] S1 Capacity builds and visually verifies one exact-dig,
   separation-matched `slcap03_04`/`slcap07_10` apron pair.
+- [ ] S1 updates the history aggregator to the integer retention gates and
+  focused `n=8`/`n=32`/invalid-evaluation/streak-reset tests.
 - [ ] S2 builds the eight-condition 448-scenario train/promotion/development/
   sealed pilot and local review site.
 - [ ] S2 records Lorenzo's per-condition visual decisions before expanding an
@@ -3619,10 +3642,13 @@ Admission remains deliberately small:
 - promotion requires `6/8` per new/direct-parent cell twice, and a four-cell
   family panel additionally requires `26/32` twice;
 - OSM/procedural source cells cannot hide one another;
-- every prior condition must retain within five percentage points with zero
-  integrity failures; and
-- two retention failures stop the run, restore the last passing checkpoint,
-  and relaunch the previous mixture as a new recorded treatment.
+- each mastery reference is the lower count from its two passing evaluations;
+- each prior 8-map condition retains at `max(6, reference-1)`, and the fixed
+  32-map family panel retains at `max(26, reference-1)`; and
+- two consecutive complete integrity-valid retention failures stop the run,
+  restore the last passing checkpoint, and relaunch the previous mixture as a
+  new recorded treatment. A pass resets the streak; invalid/incomplete
+  evaluations block promotion but do not diagnose policy regression.
 
 Generalists first sample foundation/trench 50/50. Within a family that has an
 active frontier, the first rehearsal treatment samples 50% frontier and 50%
@@ -3835,8 +3861,10 @@ acceptance evidence in the corresponding section passes.
     validate the orthogonal feasibility panels and admit only dynamically
     witnessed cells.
 11. [ ] Complete S1: canonical state/factor IDs, live-geometry revalidation,
-    action-reachable direct-service validation, train-only numeric support
-    audit, and the exact-dig `slcap03_04`/`slcap07_10` apron generator.
+    migration/cost receipts, action-reachable direct-service validation,
+    pair-specific foundation/trench support audits and generator retunes,
+    integer retention gates, and the exact-dig
+    `slcap03_04`/`slcap07_10` apron generator.
 12. [ ] Complete S2: build the balanced four-foundation/four-trench
     448-scenario bank and record Lorenzo's visual decisions in the local site.
 13. [ ] Complete S3: replay exact, mass-conserving witnesses within 450 steps;

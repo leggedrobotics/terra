@@ -1,6 +1,6 @@
 # TerraMap-Bench specification
 
-Status: proposed v0.3, accepted design recorded before implementation
+Status: design-frozen v0.3; S1 implementation pending
 
 Last accepted-review update: 2026-07-27
 
@@ -605,7 +605,7 @@ score.
 ```text
 trench.straight.c1.j0
 __source.procedural
-__sidecast.both.sep02.slcap03_04.v65_74
+__side_cast.both.sep02.slcap03_04.vmatch
 __site.none
 __reset.full
 ```
@@ -640,6 +640,11 @@ OSM/procedural provenance, orientation, and aspect remain audit/slicing fields
 unless a matched experiment establishes a residual source condition. Until
 then, the pilot keeps OSM/procedural source cells separately gated rather than
 pooling their `6/8` result.
+
+Legacy generator metadata value `broad_side_cast` is retained only in raw
+provenance. The S1 normalizer maps it to the one canonical taxonomy token
+`side_cast`; no benchmark condition ID uses `sidecast` or
+`broad_side_cast`.
 
 ## 8. Admission graph and map-curriculum rules
 
@@ -688,13 +693,33 @@ Promotion uses a separate frozen source-disjoint bank every 100 updates:
   that family at both checkpoints;
 - every separately gated source slice must pass rather than being hidden by a
   pooled cell;
-- every previously mastered condition must remain within five percentage
-  points of its recorded mastery; and
+- every previously mastered condition and qualified family panel must pass the
+  count-based retention rule below; and
 - every gate requires zero integrity failures.
 
+At admission, freeze each panel's mastery reference as the lower success count
+from its two consecutive passing evaluations. Retention is evaluated only on
+unique identities in the same frozen panel version:
+
+- an eight-map condition retains at
+  `successes >= max(6, reference_successes - 1)`; and
+- a fixed 32-map four-cell family panel retains at
+  `successes >= max(26, reference_successes - 1)`.
+
+This makes the evaluation quantum explicit: one map is `12.5` percentage
+points for a condition and `3.125` points for a family panel. Slot duplicates
+never increase either denominator. A separately gated source slice must
+declare its own fixed `n` and integer threshold before use. Later peaks do not
+ratchet the frozen mastery reference upward, and success-set Jaccard remains a
+diagnostic rather than another gate.
+
 There is no per-environment promotion or automatic demotion. Promotion starts
-a new recorded run at a checkpoint boundary. If a mastered condition fails
-retention twice:
+a new recorded run at a checkpoint boundary. Two consecutive scheduled,
+complete, integrity-valid retention failures for any condition or qualified
+family panel trigger recovery; a passing evaluation resets that panel's
+failure streak. An incomplete or integrity-invalid evaluation blocks
+promotion and is repaired, but does not count as evidence of policy
+regression. On a retention trigger:
 
 1. stop the current run;
 2. restore the last checkpoint that passed all prior gates;
@@ -739,11 +764,8 @@ for 448 scenarios total. All counterfactual variants from a source group stay
 in one split.
 
 These labels are candidate aliases. S1 expands every alias into the full
-mechanical `condition_id`; no S2 record may retain `vmatch`. The trench pilot
-freezes `v65_74`, a closed 65-74 required-cell interval supported by straight,
-segmented-2, and segmented-3 generation. Before S2, a train-only support audit
-must freeze the overlapping foundation volume interval and compactness
-tolerance, then replace `vmatch` with those numeric tokens.
+mechanical `condition_id`; no S2 record may retain `vmatch`. Numeric volume
+bands are frozen only after the pair-specific train-only support audits below.
 
 | Candidate alias | Controlled purpose |
 |---|---|
@@ -751,10 +773,10 @@ tolerance, then replace `vmatch` with those numeric tokens.
 | `f.all.procedural.sep00_02.slcap20_45.vmatch` | procedural all-around source slice matched in volume and compactness |
 | `f.apron.osm.sep02.slcap07_10.vmatch` | new moderate-capacity OSM apron capability |
 | `f.apron.osm.sep02.slcap03_04.vmatch` | exact-dig paired constrained-capacity OSM counterfactual |
-| `t.straight.both.sep02.slcap03_04.v65_74` | straight, both-side local trench candidate |
-| `t.straight.one.sep02.slcap03_04.v65_74` | exact-dig one-side counterfactual |
-| `t.segmented2.both.sep02.slcap03_04.v65_74` | no-junction geometry counterfactual |
-| `t.segmented3.both.sep02.slcap03_04.v65_74` | three-segment no-junction geometry counterfactual |
+| `t.straight.both.sep02.slcap03_04.vmatch` | straight, both-side local trench candidate |
+| `t.straight.one.sep02.slcap03_04.vmatch` | exact-dig one-side counterfactual |
+| `t.segmented2.both.sep02.slcap03_04.vmatch` | no-junction, volume-conditioned topology comparison |
+| `t.segmented3.both.sep02.slcap03_04.vmatch` | three-segment no-junction, volume-conditioned topology comparison |
 
 `slcap07_10` and the generous apron are new generator work; the current bank
 jumps from `3.25x` constrained capacity to roughly `20.6x`-`41.2x`
@@ -765,6 +787,46 @@ The completed B0-GEO-F run remains evidence against pooling the two source
 cells today: both held-out cells stayed `0/8` across all 50 checkpoints, while
 training support differed. A later matched and diverse source experiment may
 retire the separate cells.
+
+Foundation matching uses two contracts, not one global four-cell interval:
+
+1. the OSM/procedural all-around source pair freezes a shared numeric volume
+   interval and compactness tolerance after regenerating the parameterized
+   procedural source toward the fixed OSM support; and
+2. the `slcap03_04`/`slcap07_10` apron pair reuses the exact same OSM dig
+   raster within each source group, so pairwise target identity and volume
+   equality are the gate.
+
+The frozen B0 train support is too thin to materialize the source pair at the
+new counts, so foundation pilot identities are freshly generated. The apron
+pair need not share the all-around source-pair volume interval.
+
+The existing B0 trench identities also do not support a common frozen volume
+band: only `2/16` straight, `2/16` segmented-2, and `0/16` segmented-3
+identities fall in the previously proposed `65-74` interval. This is evidence
+against carrying over that bank, not proof that the current raster generator
+has zero support.
+
+S1 therefore adds one narrow trench-support deliverable:
+
+- keep the straight generator fixed;
+- audit candidate segmented-length ranges, beginning with approximately
+  `U[10, 13)` tiles for segmented-2 and `U[7, 9.5)` for segmented-3;
+- use one fixed train-only seed namespace and at least 20,000 raster-valid
+  proposals per topology;
+- freeze a single closed required-volume interval only if it contains at least
+  10% of proposals from each topology and its midpoint lies inside each
+  topology's empirical 10th-90th-percentile range; and
+- receipt raw and accepted segment lengths, turn angles, achieved volumes,
+  uniqueness, and every rejection category.
+
+The proposed length ranges are starting values, not frozen parameters. After
+S1 selects the sampler and band, S2 materializes fresh source-disjoint
+`32/8/8/8` splits without retuning on promotion, development, or sealed
+identities. Volume conditioning inherently shifts segmented-2 toward longer
+segments and segmented-3 toward shorter segments; the website must show those
+covariates, and the result is named a volume-conditioned topology comparison,
+not a pure geometry-only causal estimate.
 
 The existing `d02`-`d08` panels remain useful separation diagnostics but do
 not occupy a pilot curriculum rung. A forced-rehandling candidate is added
@@ -964,13 +1026,14 @@ live geometry, preserve identities that pass, replace only failures, and
 refresh affected hashes/manifests. Editing metre labels without revalidation
 is insufficient.
 
-A 2026-07-27 read-only probe that replaced only the static-validator geometry
-with the live scale/footprint marked 23 of 256 current B0a identities with the
-legacy reason `dig_not_reachable_post`. This shows that stale geometry can
-materially alter receipts, but the legacy list is only a migration diagnostic:
-S1 compares and archives it, then adjudicates Static-valid status using the
-newly defined initial-state metrics. It must not recreate an undefined generic
-post-dig state merely to reproduce the count.
+An exploratory 2026-07-27 live-geometry probe was not saved with a versioned
+script, output, or failing-identity list, so its numerical count is withdrawn
+and is not benchmark evidence. S1 must instead write one migration receipt
+over the unchanged frozen B0a inputs containing input, validator, protocol,
+and script hashes plus every per-identity old/new outcome and rejection
+reason. Static-valid status is adjudicated only by the new initial-state
+metrics; S1 must not recreate an undefined generic post-dig state merely to
+match an unreceipted count.
 
 Plan-first constructive generation is one candidate witness supplier for
 procedural maps, not a universal requirement. Its traces require exact replay
@@ -1046,7 +1109,7 @@ The site may flag:
   `Witnessed`
   feasibility;
 - **curriculum cliff**: most new exposure is on cells far below the current
-  policy's prerequisite-cell performance; and
+  policy's prerequisite-cell performance;
 - **unsupported prerequisite**: a composed cell is exposed before one or more
   required one-axis parents has passed; and
 - **source-slice gap**: matched OSM/procedural or other provenance slices have
@@ -1455,6 +1518,8 @@ Required outputs:
   manifest.jsonl
   audit.jsonl
   summary.json
+  migration_validation.jsonl
+  validation_cost.json
   review_decisions.jsonl
   thumbnails/
   site/index.html
@@ -1489,6 +1554,17 @@ Reuse current capacity validation, exact-dataset validation, B0 generation,
 fixed-bank evaluation, receipts, and trajectory replay. Do not create a
 parallel environment implementation.
 
+Before exact direct service becomes a universal 448-scenario export gate, S1
+profiles it over all 256 frozen B0a identities and writes
+`validation_cost.json`. The receipt records the named machine, software and
+input/protocol/validator hashes, cold compile separately from steady-state
+time, candidate-pose and replay-attempt counts, per-scenario p50/p95/max and
+total wall time, peak memory, and projected 448-scenario cost. Review that
+receipt before S2. If cost is prohibitive, optimize the one exact validator
+path or revise the spec explicitly; never substitute an unreceipted geometric
+approximation. Content-addressed caching is added only if this profile shows
+it is needed.
+
 Repository ownership stays narrow:
 
 - Terra owns conditions, generators, exact map/scenario manifests, validation,
@@ -1502,8 +1578,9 @@ Suggested delivery gates:
 | Status | Gate | Deliverable | Pass condition |
 |---|---|---|---|
 | `[x]` | `S0 Spec` | v0.3 accepted plan and reviewer-decision log | No stale M0-M5 or protocol claim is normative |
-| `[ ]` | `S1 Schema` | Manifest normalizer, explicit initial-state reset, live validator, and support audit | Existing rasters are re-audited at 0.5714 m/tile; full factor IDs and numeric volume/compactness support freeze before S2; failures are listed, not hidden |
+| `[ ]` | `S1 Schema` | Manifest normalizer, explicit initial-state reset, live validator, migration receipt, and cost profile | Existing rasters are re-audited at 0.5714 m/tile; full hashes/outcomes and projected 448-scenario validation cost are reviewed; failures are listed, not hidden |
 | `[ ]` | `S1 Capacity` | adjustable apron generator | Exact-dig `slcap03_04`/`slcap07_10` pair matches separation and passes visual/static review |
+| `[ ]` | `S1 Support` | pair-specific foundation matching and topology-aware trench length sampler | Train-only audits freeze supported numeric bands/covariates; no `vmatch` reaches S2 |
 | `[ ]` | `S2 Review` | 448-scenario eight-condition pool and local site | Counts, splits, pairs, distributions, and maps are human-reviewed |
 | `[ ]` | `S3 Feasibility` | witness store and replay | Every pilot-ranked scenario replays from explicit initial state in at most 450 steps; margin is reported |
 | `[ ]` | `S4 Evaluation` | Native bundle, evaluator, uncertainty, receipt | Reference submissions reproduce byte-identical receipts |
@@ -1552,6 +1629,10 @@ cannot silently regain authority.
 | `R-20260727-16` | Accepted implementation-audit correction | Exact initial state means the versioned canonical bytes of every reset-consumed Agent and AgentState field, not a partial pose tuple or a reset seed. |
 | `R-20260727-17` | Accepted implementation-audit correction | S1 workspace/direct-service metrics describe the exact initial scenario using reachable Terra action transitions and runtime dig/dump masks. There is no undefined generic post-dig state; terminal and during-trace access metrics are derived only by canonical S3 witness replay. |
 | `R-20260727-18` | Accepted implementation-audit correction | Full condition IDs include source, achieved separation, explicitly named capacity metric/band, and numeric volume support. Freeze trench `v65_74`; a train-only audit must replace every foundation `vmatch` alias before S2. |
+| `R-20260727-19` | Accepted with factual correction; supersedes R-18's trench band | Withdraw frozen trench `v65_74`: the existing bank has only 2/16 straight, 2/16 segmented-2, and 0/16 segmented-3 identities in that band. Raster sampling shows nonzero generator support, so "structurally impossible" is too strong. S1 audits candidate topology-specific length ranges, then freezes one supported volume-conditioned comparison; all trench pilot identities are fresh. |
+| `R-20260727-20` | Accepted | Replace the unquantized five-percentage-point retention rule with integer gates. Freeze the lower of two passing counts; retain at `max(6, reference-1)` on 8-map cells and `max(26, reference-1)` on the fixed 32-map family panel. Only two consecutive complete integrity-valid failures trigger rollback. |
+| `R-20260727-21` | Accepted | Foundation volume matching is pair-specific: retune procedural all-around generation toward fixed OSM support for the source comparison, while the apron capacity pair shares exact OSM dig rasters and pairwise volume. No single interval spans all four foundation cells. |
+| `R-20260727-22` | Accepted | Remove the unreceipted 23/256 probe count. S1 emits a hashed per-identity migration receipt and profiles exact direct-service validation before S2. Normalize legacy `broad_side_cast` provenance to canonical `side_cast`. |
 
 Still to decide through S1-S2 evidence:
 
@@ -1561,8 +1642,8 @@ Still to decide through S1-S2 evidence:
 - the conservative relay-hop algorithm and method-neutral witness supplier;
 - whether S3 evidence supports a stricter publication-Core witness margin than
   the frozen 450-step pilot horizon;
-- numeric matched-volume/compactness tolerances and family-specific
-  cross-split similarity thresholds;
+- numeric pair-specific volume/compactness tolerances, the frozen trench
+  volume interval, and family-specific cross-split similarity thresholds;
 - whether a future matched, diverse OSM/procedural experiment permits pooling;
 - the publication test confidence/effect target and number of fixed initial
   states per map;
@@ -1570,4 +1651,5 @@ Still to decide through S1-S2 evidence:
   ownership.
 
 No open choice authorizes PPO. The next implementation is S1 Schema/live
-revalidation and S1 Capacity, followed by the S2 local review site.
+revalidation, S1 Capacity, and S1 Support, followed by the S2 local review
+site.
