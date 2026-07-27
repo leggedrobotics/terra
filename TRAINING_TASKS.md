@@ -170,6 +170,24 @@ These decisions supersede stale choices later in the historical v4 design:
   `2dc3a7bb856240ff731ac976bd817f438db4cdb7668632e769359e972efbba15`.
   This closes the semantic implementation gate only; it is not the required
   64 x 64 cost receipt.
+- [x] The fixed non-admission 64 x 64 cost probe completed on
+  `b0a-train-f_apron_d02-00` from source group `osm-foundation:108`, with the
+  four distance counterfactuals sharing explicit state SHA-256
+  `225ad1df2a48a1b098fb2a095e9382185dded7516e2b79d5b98c7b70e7137c02`.
+  It found 31,366 reachable base poses, 376,392 pose/cabin rows, and 39,606
+  exact-service candidate rows. Cold/warm graph-plus-prefilter cost was
+  `190.440/115.293 s`; service lowering/compile was `128.369/13.781 s`; and
+  warmed four-row batch p50/p95 was `0.072704/0.073481 s`. The one-scenario
+  p50/p95 projection is `1,052.509/1,060.204 s`, with process peak
+  `2,946,580 KiB`, so the preregistered 60-minute and memory gates pass and
+  authorize exactly one complete-scenario confirmation. The provisional
+  256/448 p95 projections are `216,001/377,839 s` (about `60.0/105.0 h`), so
+  neither larger run is authorized without calibration and likely
+  optimization. The clean-worktree receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_probe_20260727_v1/validation_cost_probe.json`
+  at SHA-256
+  `d283351640e5eaf2cc2ac5734766175a9863dc749bd4067a6c88c94f3d72e110`;
+  it emits no admission or feasibility outcome.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3696,11 +3714,12 @@ Current implementation checklist:
   for the initial scenario before any map is described as forced rehandling;
   terminal/during-trace access fields wait for canonical witness replay, and
   relay-hop scoring is deferred until its graph is specified.
-- [ ] S1 runs the fixed one-identity non-admission direct-service cost probe,
+- [x] S1 runs the fixed one-identity non-admission direct-service cost probe,
   separating logical attempts from padded kernel execution and emitting no
-  subset feasibility result. It advances only under the frozen 60-minute p95
-  and 20%-memory-headroom gate; if viable, it confirms the estimate on one
-  complete 64 x 64 scenario.
+  subset feasibility result. It passed the frozen 60-minute p95 and
+  20%-memory-headroom gate.
+- [ ] S1 confirms the probe estimate on one complete exact 64 x 64 scenario
+  before any 256-identity profile.
 - [ ] S1 profiles exact direct-service validation on all 256 frozen B0a
   identities, receipts cold/steady runtime, replay counts, peak memory, and
   projected 448-scenario cost, and reviews that receipt before S2. The
