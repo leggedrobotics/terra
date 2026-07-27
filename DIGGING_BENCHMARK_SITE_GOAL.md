@@ -1,8 +1,9 @@
 # Terra Digging Benchmark Review goal
 
 - Goal ID: `terra-digging-benchmark-review-v1`
-- Status: local controlled-capacity and B0a previews complete; owner review
-  and S1-S2 admission remain active inside the Terra curriculum-recovery goal
+- Status: local controlled-capacity, large-foundation-tail, and B0a previews
+  complete; owner review and S1-S2 admission remain active inside the Terra
+  curriculum-recovery goal
 - Owner-facing outcome: Lorenzo can inspect, compare, and record decisions on
   the actual training-map distribution through a graphical review site while
   benchmark admission work continues.
@@ -109,6 +110,8 @@ deploying a production version is deferred until Lorenzo asks.
 - [x] Record implementation evidence in both canonical documents.
 - [x] Add the fresh controlled-capacity bank without upgrading its
   exact-loader-only, Static-pending status.
+- [x] Add the fresh narrow large-foundation review bank without calling the
+  unpaired visual slice an admitted curriculum level.
 - [ ] Record Lorenzo's actual approve/reject/quarantine decisions and notes as
   deterministic JSONL and in both canonical documents.
 - [ ] Swap in the source-disjoint 448-scenario S2 bank after all prerequisite
@@ -204,6 +207,49 @@ deploying a production version is deferred until Lorenzo asks.
   policy results are absent, and no benchmark or PPO gate is satisfied. The
   `140-189`-cell targets occupy only `3.42%-4.61%` of the map, so this surface
   isolates dump capacity and does not claim broad foundation-size coverage.
+
+## Local narrow large-foundation review receipt
+
+- Site source:
+  `/home/lorenzo/moleworks/terra-digging-benchmark-site` at commit
+  `21d55263f4e1746f2a57cfc1af7157dad560df49`.
+- Input:
+  `/home/lorenzo/moleworks/.artifacts/terra_pilot_large_foundation_review_20260727_v1/`
+  with source `files.sha256` SHA-256
+  `1829c92b13119fcf726a1f572b87bf6096fdb5b7819eeabb191043b59a6febda`.
+  The site exporter verifies all `123` registered source files before
+  rendering.
+- Export: `16` public-train scenarios, `16` unique source groups, one
+  provisional visual-review cell, `96` layer PNGs, and zero sealed assets.
+  `large-foundation-review-data.json` has SHA-256
+  `e3cf3cf817cef0ea28e144f838f16c979d375028219279eee338bd63cf67e59e`;
+  its review-manifest, release, scenario-manifest, and complete layer-tree
+  SHA-256 values are respectively
+  `36835be812cd0469550225c34c14be9446993a00661593e79e7a3b1b1b738db7`,
+  `6394895f5aec4f5b7f1978f6347387ae7ec0525c53fce0f8876046e3964a648d`,
+  `57dbef9a4eacf5cc34f695a0bd8fe6d81576434ead949ba3250073500c2dea8e`,
+  and
+  `cf341e4a13cc089fb5410886eee3b68c76ea368e82d3564e8a16e925ed1c0a19`.
+- Verification passed: source/export verification, nine Python tests,
+  TypeScript checking, the production build, and four Playwright workflows
+  with four intended project-specific skips. The browser test covers
+  comment-before-decision persistence plus exact-hash JSONL export/import.
+  Independent review found no blocker and confirmed the prior B0a and capacity
+  JSON releases remain byte-identical.
+- Local review URL: `http://127.0.0.1:4173`. The committed build is served by
+  active user unit `terra-digging-benchmark-review.service`, bound only to
+  `127.0.0.1:4173`; both the page and new review-data endpoint return HTTP
+  `200`.
+- Scientific status: the `328-339`-cell targets cover only `8.01%-8.28%` of
+  the site, use all-around dumping with `11.08-11.49x` single-layer capacity,
+  and are not source-matched to OSM. The UI therefore says
+  **Provisional work-size review candidate (not a level)**. Static validation,
+  a 450-step witness, broad `8-12%` support, the true `>=10%` slice, and
+  benchmark admission remain pending.
+- The source artifact inherits stale metre separation fields computed with
+  `0.6875` m/tile even though its protocol pins live
+  `0.571428571428125` m/tile. The site exposes the correct tile measurements
+  only. Regenerate the metre fields before any admission claim.
 
 ## Stop conditions
 

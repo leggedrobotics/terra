@@ -323,13 +323,39 @@ These decisions supersede stale choices later in the historical v4 design:
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_gpu_parity_20260727_v1/direct_service_gpu_parity.json`
   at SHA-256
   `6eee6e354c77924867a43f5311cabd029cc50e736f2ebd3360e25a0aea9baef1`.
-- [ ] Run the single authorized unchanged GPU batch-4 non-admission cost probe
-  only after the RTX 4090 is uncontended, on the same identity, source group,
-  state, and inputs. It must project one-scenario p95 at `<=3600 s`,
-  sequential `256/448` p95 at `<=24/48 h`, and keep host plus normalized GPU
-  peak memory at `<=80%`. A pass authorizes only the existing complete-scenario
-  R-32 confirmation. The parity result authorizes no complete confirmation,
-  bank profile, Static admission, or PPO by itself.
+- [x] The single authorized unchanged GPU batch-4 non-admission cost probe used
+  the same identity, source group, inputs, protocol, stable initial state, and
+  twelve core validator dependency hashes as the pinned CPU probe. Its timing and
+  memory gates passed: one-scenario p95 was `315.702 s`, sequential `256/448`
+  p95 was `25,179.938/43,901.244 s` (`6.99/12.19 h`), and normalized
+  GPU/host peaks were `0.8653%/4.5182%`; the host normalization uses the
+  physical-memory denominator recorded by the same-host parity receipt.
+  However, the complete graph/prefilter population was not device-identical:
+  CPU/GPU enumerated `31,366/31,418` reachable poses, `376,392/377,016`
+  pose/cabin rows, and `39,606/39,520` exact-service candidates. Padding cannot
+  explain the difference because padded rows are introduced only after graph
+  expansion and acceptance. The first `18` rows therefore under-specified
+  parity. Reject the pure-GPU exact validator path and do not run the R-32
+  confirmation, bank profile, Static admission, or PPO from this result. The
+  non-admission receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_gpu_cost_probe_20260727_v1/validation_cost_probe.json`
+  at SHA-256
+  `1250bdf0a723f5d739fce1dd6ccf90c9ea4eece5ece580da08fd3fd18e2971e1`.
+  Any next validator treatment must preserve the CPU candidate population or
+  demonstrate full-population parity before timing.
+- [ ] Test one bounded hybrid exact-validator treatment. Keep graph traversal
+  and the dig prefilter on the canonical CPU, hash the resulting ordered
+  unpadded `int32` candidate rows, transfer those rows unchanged, and run only
+  `_service_batch` on the GPU. Before timing, require one full-population replay
+  on the confirmed scenario to match the CPU candidate hash, every population
+  counter, ordered unpadded output hashes, and final result from confirmation
+  receipt
+  `f4bc393a7eabcdc058eb5f4de69281c5e1bed9feef275f9f75833f3f3c4aaae7`.
+  The receipt must explicitly hash `terra/benchmark_protocol.py` in addition
+  to the existing dependency bundle. Only exact full-population parity
+  authorizes profiling the hybrid path. If parity fails, retain the CPU exact
+  path and evaluate process-level CPU scenario parallelism; do not change
+  geometry, weaken the gate, run bank admission, or launch PPO.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3858,7 +3884,12 @@ Current implementation checklist:
   decision or S2 admission is claimed. Site commit `91ccf87` additionally
   exposes the verified `64`-map/`32`-pair capacity bank as the default review
   dataset, keeps B0a selectable, and passes comment-before-decision
-  persistence plus exact-hash JSONL round-trip on live port `4173`.
+  persistence plus exact-hash JSONL round-trip on live port `4173`. Site
+  commit `21d5526` adds a separate `16`-map narrow large-foundation bank,
+  retains both earlier releases byte-identically, and explicitly labels the
+  unpaired work-size slice as a review candidate rather than a curriculum
+  level. Its exact source/export hashes, tests, and unresolved
+  Static/Witness/metre-field limitations are recorded in the site goal.
 - [x] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.
@@ -3916,6 +3947,17 @@ Current implementation checklist:
   preview is not evidence of broad work-volume coverage. Admission as a
   work-volume condition still requires train-only numeric support and a
   450-step witness.
+  - [x] A train-only visual candidate now covers `328-339` cells
+    (`8.01-8.28%` of the site) with all-around dumping, no obstacles, and
+    `11.08-11.49x` single-layer capacity. Its deterministic full-tree rebuild
+    and exact-loader checks pass. This closes the requested larger-footprint
+    visual slice only: it is a narrow generator tail, is not source-matched to
+    OSM, does not establish broad `8-12%` support, and remains Static/witness
+    pending and non-admitted.
+  - [ ] Before this slice can support admission, regenerate its inherited
+    separation-in-metres fields with live
+    `0.571428571428125` m/tile instead of stale `0.6875`; the current review
+    site intentionally exports tile separation only.
 - [ ] S3 supplies exact replay witnesses within the 450-step protocol and
   reports witness margin; any stricter publication-Core cutoff requires an
   evidence-backed spec revision.
