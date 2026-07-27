@@ -343,7 +343,7 @@ These decisions supersede stale choices later in the historical v4 design:
   `1250bdf0a723f5d739fce1dd6ccf90c9ea4eece5ece580da08fd3fd18e2971e1`.
   Any next validator treatment must preserve the CPU candidate population or
   demonstrate full-population parity before timing.
-- [ ] Test one bounded hybrid exact-validator treatment. Keep graph traversal
+- [x] Test one bounded hybrid exact-validator treatment. Keep graph traversal
   and the dig prefilter on the canonical CPU, hash the resulting ordered
   unpadded `int32` candidate rows, transfer those rows unchanged, and run only
   `_service_batch` on the GPU. Before timing, require one full-population replay
@@ -356,6 +356,18 @@ These decisions supersede stale choices later in the historical v4 design:
   authorizes profiling the hybrid path. If parity fails, retain the CPU exact
   path and evaluate process-level CPU scenario parallelism; do not change
   geometry, weaken the gate, run bank admission, or launch PPO.
+  The clean `d66969fc` run reached the final comparator after both complete
+  replays. CPU outcome, all population counters, candidate order, dispatch,
+  and round-trip matched; ordered GPU service outputs and the hybrid final
+  outcome did not. It exited `1` after `1,328 s` wall with no OOM. The
+  success-only harness emitted no validator receipt, so the timestamped
+  journal-derived failure record explicitly lists the evidence that was not
+  persisted. Its path is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_hybrid_parity_20260727_v1/hybrid_parity_failure.json`,
+  SHA-256
+  `49638f9b48fdc479cba5a01554c0afdbd71c6429886bacc33c877d883b1bc110`.
+  Reject hybrid timing and retain exact CPU execution; only external
+  scenario-level CPU process parallelism is eligible next.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3922,9 +3934,11 @@ Current implementation checklist:
   The first confirmation agrees at `1.0324x` but fails both time limits, so
   this item is blocked on exact-path optimization and a new staged receipt.
   The pure-GPU ladder was rejected because graph/prefilter populations differ
-  by device. The next treatment is the preregistered CPU-graph/prefilter plus
-  GPU-service hybrid parity/cost gate above; scenario sharding and
-  heading-vectorization remain unauthorized.
+  by device, and the CPU-graph/GPU-service hybrid was rejected because its
+  full-population service outputs and final result differ. The next bounded
+  treatment may change only external scenario-level CPU process concurrency;
+  validator semantics, scenario identity, and per-scenario outputs stay
+  unchanged. Heading-vectorization remains unauthorized.
 - [x] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`. Commit
