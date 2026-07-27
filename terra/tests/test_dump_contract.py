@@ -307,6 +307,67 @@ class ExactDumpContractTest(unittest.TestCase):
             int(new_map.sum()) + int(dumped._get_current_agent_state().loaded[0]),
         )
 
+    def test_truck_transfer_fast_exit_and_active_transfer_preserve_semantics(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        state = self._state(target, loaded=11)
+
+        no_truck = state._try_truck_transfer_on_excavator_dump()
+        np.testing.assert_array_equal(
+            np.asarray(no_truck.world.action_map.map),
+            np.asarray(state.world.action_map.map),
+        )
+        self.assertEqual(
+            int(no_truck._get_current_agent_state().loaded[0]),
+            11,
+        )
+        compiled_no_truck = jax.jit(
+            lambda candidate: candidate._try_truck_transfer_on_excavator_dump()
+        )(state)
+        self.assertEqual(
+            int(compiled_no_truck._get_current_agent_state().loaded[0]),
+            11,
+        )
+
+        truck_coordinate = self._workspace_coordinates()[0]
+        truck = state.agent.agent_states[1]._replace(
+            pos_base=jnp.asarray(truck_coordinate, dtype=jnp.int16),
+            loaded=jnp.zeros((1,), dtype=jnp.int8),
+            agent_type=jnp.ones((1,), dtype=jnp.int8),
+        )
+        with_truck = state._replace(
+            agent=state.agent._replace(
+                agent_states=(
+                    state.agent.agent_states[0],
+                    truck,
+                    state.agent.agent_states[2],
+                    state.agent.agent_states[3],
+                ),
+                agent_active=jnp.asarray([1, 1, 0, 0], dtype=jnp.int8),
+                num_agents=jnp.int32(2),
+            )
+        )
+
+        transferred = with_truck._try_truck_transfer_on_excavator_dump()
+        self.assertEqual(
+            int(transferred.agent.agent_states[0].loaded[0]),
+            0,
+        )
+        self.assertEqual(
+            int(transferred.agent.agent_states[1].loaded[0]),
+            11,
+        )
+        compiled_transfer = jax.jit(
+            lambda candidate: candidate._try_truck_transfer_on_excavator_dump()
+        )(with_truck)
+        self.assertEqual(
+            int(compiled_transfer.agent.agent_states[0].loaded[0]),
+            0,
+        )
+        self.assertEqual(
+            int(compiled_transfer.agent.agent_states[1].loaded[0]),
+            11,
+        )
+
     def test_legal_dump_contains_relaxation_that_would_cross_boundary(self):
         legal_coordinate = self._workspace_coordinates()[0]
         target = np.zeros(self.SHAPE, dtype=np.int8)

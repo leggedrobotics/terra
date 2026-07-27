@@ -2298,13 +2298,20 @@ class State(NamedTuple):
         Attempt to transfer excavator load into any truck whose base center lies in the dump cone.
         Returns a potentially updated State; caller can compare loaded before/after to detect transfer.
         """
-        # Use excavator's dump cone for truck transfer
-        dump_mask = self._build_dig_dump_cone()
         curd = self._get_current_agent_state()
-        is_excavator = (curd.agent_type[0] == 0)
-        is_loaded = (curd.loaded[0] > 0)
+        is_excavator = curd.agent_type[0] == 0
+        is_loaded = curd.loaded[0] > 0
+        current_idx = self.agent.current_agent
+        active = self.agent.agent_active.astype(jnp.bool_)
+        types = self._agent_types_vec()
+        not_current = jnp.arange(4, dtype=jnp.int32) != current_idx
+        has_other_active_truck = jnp.any(active & (types == 1) & not_current)
 
         def _attempt_transfer():
+            # Build and dilate the transfer cone only when another active truck
+            # exists. Single-excavator benchmark replay otherwise paid for a
+            # second cone on every dump before falling through to _handle_dump.
+            dump_mask = self._build_dig_dump_cone()
             map_shape = self.world.action_map.map.shape
             dump_mask_map = dump_mask.reshape(map_shape)
             # Keep transfer geometry strictly 2D for position indexing.
@@ -2335,20 +2342,6 @@ class State(NamedTuple):
             flat_idx = pos_x * dump_mask_2d_dilated.shape[1] + pos_y
             base_in = dump_mask_2d_dilated.reshape(-1)[flat_idx]
 
-            current_idx = self.agent.current_agent
-            active = self.agent.agent_active.astype(jnp.bool_)
-            types = jnp.array([
-                self.agent.agent_states[0].agent_type[0],
-                self.agent.agent_states[1].agent_type[0],
-                self.agent.agent_states[2].agent_type[0],
-                self.agent.agent_states[3].agent_type[0],
-            ])
-            not_current = jnp.array([
-                0 != current_idx,
-                1 != current_idx,
-                2 != current_idx,
-                3 != current_idx,
-            ])
             is_truck_vec = (types == 1)
             candidates = jnp.logical_and(active, jnp.logical_and(is_truck_vec, jnp.logical_and(base_in, not_current)))
 
@@ -2398,7 +2391,11 @@ class State(NamedTuple):
 
             return jax.lax.cond(any_candidate, _do_transfer, lambda: self)
 
-        return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt_transfer, lambda: self)
+        return jax.lax.cond(
+            is_excavator & is_loaded & has_other_active_truck,
+            _attempt_transfer,
+            lambda: self,
+        )
 
     def _handle_dump(self) -> "State":
         """Deposit a complete load without using reward potential as an action veto."""
