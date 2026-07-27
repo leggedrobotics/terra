@@ -197,6 +197,11 @@ def test_selection_is_train_only_fresh_and_outcome_independent(monkeypatch):
 def test_materialized_review_loads_and_rebuild_verifies(tmp_path: Path, monkeypatch):
     data = _synthetic_review(tmp_path, monkeypatch)
     result = _verify(data)
+    provenance = json.loads((data["output"] / "provenance.json").read_text())
+    map_protocol = provenance["environment_protocol"]["map"]
+    env_receipt = provenance["env_config_receipt"]
+    tile_size_m = map_protocol["tile_size_m_derived_float64"]
+    identities = review.load_jsonl(data["output"] / "identities.jsonl")
 
     assert data["summary"]["status"] == review.EXACT_LOADER_STATUS
     assert data["summary"]["canonical_benchmark_format_admitted"] is False
@@ -207,6 +212,42 @@ def test_materialized_review_loads_and_rebuild_verifies(tmp_path: Path, monkeypa
     assert result["status"] == "passed"
     assert result["map_count"] == 2
     assert len(list((data["output"] / "examples").glob("*.png"))) == 2
+    assert map_protocol == {
+        key: env_receipt[key]
+        for key in (
+            "edge_length_px",
+            "edge_length_m",
+            "tile_size_m_derived_float64",
+            "tile_size_m_runtime_float32",
+        )
+    }
+    assert tile_size_m == 36.5714285714 / 64
+    assert tile_size_m != 0.6875
+    for record in identities:
+        for statistic in ("p50", "p95", "max"):
+            assert record["separation"][f"{statistic}_metres"] == (
+                record["separation"][f"{statistic}_tiles"] * tile_size_m
+            )
+
+
+def test_materialization_rejects_disagreeing_protocol_receipts(
+    tmp_path: Path,
+    monkeypatch,
+):
+    frozen_environment_protocol = review.frozen_environment_protocol
+
+    def disagreeing_environment_protocol(revision: str) -> dict:
+        receipt = frozen_environment_protocol(revision)
+        receipt["map"]["tile_size_m_derived_float64"] = 0.6875
+        return receipt
+
+    monkeypatch.setattr(
+        review,
+        "frozen_environment_protocol",
+        disagreeing_environment_protocol,
+    )
+    with pytest.raises(RuntimeError, match="map geometry receipts disagree"):
+        _synthetic_review(tmp_path, monkeypatch)
 
 
 def test_swapped_or_burned_selection_fails_frozen_rebuild(tmp_path: Path, monkeypatch):

@@ -258,6 +258,49 @@ def _expected_identity_record(
     }
 
 
+def _live_dump_distance_statistics(
+    dig: np.ndarray,
+    dump: np.ndarray,
+    *,
+    env_receipt: dict[str, Any],
+    environment_protocol: dict[str, Any],
+) -> dict[str, float]:
+    map_receipt = environment_protocol.get("map")
+    expected_map_receipt = {
+        key: env_receipt[key]
+        for key in (
+            "edge_length_px",
+            "edge_length_m",
+            "tile_size_m_derived_float64",
+            "tile_size_m_runtime_float32",
+        )
+    }
+    if map_receipt != expected_map_receipt:
+        raise RuntimeError(
+            "Frozen benchmark and environment protocol map geometry receipts "
+            "disagree."
+        )
+    tile_size_m = float(env_receipt["edge_length_m"]) / int(
+        env_receipt["edge_length_px"]
+    )
+    if tile_size_m != float(env_receipt["tile_size_m_derived_float64"]):
+        raise RuntimeError("Frozen benchmark tile-size derivation disagrees.")
+
+    legacy = b0.dump_distance_statistics(dig, dump)
+    tiles = {
+        statistic: float(legacy[f"{statistic}_tiles"])
+        for statistic in ("p50", "p95", "max")
+    }
+    return {
+        "p50_tiles": tiles["p50"],
+        "p95_tiles": tiles["p95"],
+        "max_tiles": tiles["max"],
+        "p50_metres": tiles["p50"] * tile_size_m,
+        "p95_metres": tiles["p95"] * tile_size_m,
+        "max_metres": tiles["max"] * tile_size_m,
+    }
+
+
 def _builder_receipt() -> dict[str, str]:
     builder = Path(__file__).resolve()
     repository = builder.parents[1]
@@ -898,7 +941,12 @@ def _materialize_from_selected(
             action,
             minimum_single_layer_ratio=MINIMUM_ALL_AROUND_CAPACITY_RATIO,
         )
-        separation = b0.dump_distance_statistics(dig, ~dig)
+        separation = _live_dump_distance_statistics(
+            dig,
+            ~dig,
+            env_receipt=env_receipt,
+            environment_protocol=environment_protocol,
+        )
 
         agent, seed_receipt = sample_benchmark_initial_agent(
             release_id=BENCHMARK_RELEASE_ID,
