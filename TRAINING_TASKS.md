@@ -304,20 +304,32 @@ These decisions supersede stale choices later in the historical v4 design:
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_probe_20260727_v3_no_truck_guard/validation_cost_probe.json`
   at SHA-256
   `cd5e60f9cfad0cb9e58a5112f9f87c9aa6701440b2fbc41e42bbe8f9ffdd810a`.
-- [ ] The next bounded treatment changes only the JAX execution device for the
-  unchanged exact service kernel. First replay the pinned first `18` accepted
-  rows (candidate SHA-256
-  `b19744abe759e0d229cc6a6d6095dd39beef3495311f10bb4ef7c2476438dd56`)
-  on the single RTX 4090 and require exact dtype, shape, leaf-count, and
-  content parity with the CPU output SHA-256
-  `fa8dd4f8d579cd1c08ffd64876117f6be3ab41b6164a9220eacb37f4f64e1106`.
-  If and only if parity passes, run one unchanged batch-4 non-admission cost
-  probe on the same identity/source group/state. It must project one-scenario
-  p95 at `<=3600 s`, sequential `256/448` p95 at `<=24/48 h`, and keep both
-  host and normalized GPU peak memory at `<=80%`. A pass authorizes only the
-  existing complete-scenario R-32 confirmation. Parity or cost failure rejects
-  the GPU path without modifying validator semantics or weakening the
-  sequential gate.
+- [x] The execution-device parity subgate passed for the unchanged exact
+  service kernel in tool commit `1856f92a`. The clean-worktree,
+  single-RTX-4090 run left
+  `JAX_PLATFORMS` unset and replayed the pinned first `18` accepted rows in
+  five batch-4 launches (`20` padded rows). Candidate SHA-256
+  `b19744abe759e0d229cc6a6d6095dd39beef3495311f10bb4ef7c2476438dd56`
+  and the three `int32` output leaves matched the CPU dtype/shape/leaf/content
+  SHA-256
+  `fa8dd4f8d579cd1c08ffd64876117f6be3ab41b6164a9220eacb37f4f64e1106`
+  exactly. Diagnostic process-lifetime peaks were `0.8653%` of normalized GPU
+  capacity and `5.0526%` of host memory, both below `80%`; these are parity
+  diagnostics, not cost evidence. The first interactive launch was externally
+  terminated with exit `143` before writing a receipt; the successful retry
+  ran under a user service. A Newton GPU benchmark began after the successful
+  parity launch, so the exact content result remains valid, but no timing may
+  be inferred from it. The non-admission receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_gpu_parity_20260727_v1/direct_service_gpu_parity.json`
+  at SHA-256
+  `6eee6e354c77924867a43f5311cabd029cc50e736f2ebd3360e25a0aea9baef1`.
+- [ ] Run the single authorized unchanged GPU batch-4 non-admission cost probe
+  only after the RTX 4090 is uncontended, on the same identity, source group,
+  state, and inputs. It must project one-scenario p95 at `<=3600 s`,
+  sequential `256/448` p95 at `<=24/48 h`, and keep host plus normalized GPU
+  peak memory at `<=80%`. A pass authorizes only the existing complete-scenario
+  R-32 confirmation. The parity result authorizes no complete confirmation,
+  bank profile, Static admission, or PPO by itself.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
