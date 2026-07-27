@@ -304,6 +304,20 @@ These decisions supersede stale choices later in the historical v4 design:
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_probe_20260727_v3_no_truck_guard/validation_cost_probe.json`
   at SHA-256
   `cd5e60f9cfad0cb9e58a5112f9f87c9aa6701440b2fbc41e42bbe8f9ffdd810a`.
+- [ ] The next bounded treatment changes only the JAX execution device for the
+  unchanged exact service kernel. First replay the pinned first `18` accepted
+  rows (candidate SHA-256
+  `b19744abe759e0d229cc6a6d6095dd39beef3495311f10bb4ef7c2476438dd56`)
+  on the single RTX 4090 and require exact dtype, shape, leaf-count, and
+  content parity with the CPU output SHA-256
+  `fa8dd4f8d579cd1c08ffd64876117f6be3ab41b6164a9220eacb37f4f64e1106`.
+  If and only if parity passes, run one unchanged batch-4 non-admission cost
+  probe on the same identity/source group/state. It must project one-scenario
+  p95 at `<=3600 s`, sequential `256/448` p95 at `<=24/48 h`, and keep both
+  host and normalized GPU peak memory at `<=80%`. A pass authorizes only the
+  existing complete-scenario R-32 confirmation. Parity or cost failure rejects
+  the GPU path without modifying validator semantics or weakening the
+  sequential gate.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3858,6 +3872,9 @@ Current implementation checklist:
   24/48 hours p95 for 256/448 sequential scenarios before this profile runs.
   The first confirmation agrees at `1.0324x` but fails both time limits, so
   this item is blocked on exact-path optimization and a new staged receipt.
+  The next treatment is the preregistered unchanged-kernel GPU parity/cost
+  ladder above; scenario sharding and heading-vectorization remain
+  unauthorized.
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`.
