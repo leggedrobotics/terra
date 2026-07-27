@@ -219,6 +219,19 @@ These decisions supersede stale choices later in the historical v4 design:
   `174e604c4c27bda0c73a3e2a9457b1060472e1e1f26139e80aebc9d9ed624f05`.
   The next bounded treatment is a fixed-row 4/8/16 service-batch sweep with
   exact output parity and honest padded counters.
+- [ ] The batch-size treatment is frozen before execution. It reuses the pinned
+  v1 probe identity, four-map source group, explicit initial state, protocol,
+  inputs, CPU host, and unchanged exact service kernel. It builds the graph and
+  prefilter once, hashes the first 16 accepted rows, and compares batch sizes
+  `4`, `8`, and `16` over five equal-logical-work warmed repeats. Concatenated
+  outputs must match batch 4 exactly; timing must count every padded launch and
+  memory is cumulative for the shared process, not attributed to an arm. The
+  smallest eligible arm with minimum projected 256-scenario p95 is selected,
+  but a change from 4 requires that p95 to be strictly below batch 4's projected
+  p50 and all memory gates to pass. The sweep never calls the complete validator
+  and never emits admission. A selected change authorizes only a fresh canonical
+  cost probe and, if its first gate passes, one complete confirmation; it does
+  not authorize the 256-scenario profile.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
