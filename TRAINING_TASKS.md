@@ -126,6 +126,19 @@ These decisions supersede stale choices later in the historical v4 design:
   pure constructor subtask only: S1 Capacity remains open until a new
   train-only materialized receipt, live static validation, and Lorenzo's
   visual review pass.
+- [x] The fresh train-only capacity review bank materializes `32` source-
+  disjoint OSM pairs (`64` maps) with one exact dig raster, required volume,
+  separation distribution, and reset state shared inside each pair. The low
+  band spans `3.2500-3.2547x`, the high band `8.5000-8.5035x`, and all p50/p95
+  high-minus-low separation deltas are exactly zero. All `427` manifested
+  files and the independent verifier pass; `files.sha256` has SHA-256
+  `03b5af27c3fc2acea05b6ecb001e4dcb7cdcbfe3f2677efa64ad2a6e3e7df80f`.
+  The visual receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_pilot_apron_capacity_review_20260727_v1/`.
+  Work is only `140-189` cells (`3.42%-4.61%` of the map), confirming R-42:
+  this is a controlled capacity slice, not broad foundation-size coverage.
+  Canonical Format admission, exact Static validation, Lorenzo's review
+  decision, and S1 Capacity completion remain open.
 - [x] Single and batched resets now accept a complete explicit `Agent` tree
   while preserving every leaf and the reset RNG. `terra_agent_state_v1`
   hashes all four live slots with path/dtype/rank/shape-prefixed canonical
@@ -141,8 +154,23 @@ These decisions supersede stale choices later in the historical v4 design:
   contract, and the receipt pins both seed and canonical state hashes. The
   golden namespace yields seed `1643655228` and digest
   `61f8303cdc0376bdf2d348c248f3cbd1a16678764f6e276affce135fa2463329`;
-  deterministic and shared-counterfactual tests pass. Per-bank
-  materialization remains part of the open migration gate.
+  deterministic and shared-counterfactual tests pass. B0a materialization is
+  receipted below; materialization for the fresh S2 bank remains open.
+- [x] The live B0a migration normalizer verifies all `3,392` frozen input
+  files, derives the protocol from Terra, normalizes all `256` design-input
+  identities, and materializes one exact serialized state for each of `144`
+  canonical source groups. The raw `int8` raster identity and the exact-
+  loader `int16` value view are checked separately after the first real run
+  exposed that dtype boundary. Two clean runs at commit `affc0d92` are byte-
+  identical: `migration_validation.jsonl` SHA-256
+  `ce14b52e330cd734997f3c269b85d58a93ab24f67fc1e3f1499af0ecc5228b37`
+  and `migration_summary.json` SHA-256
+  `7ec113fa87705c239819162ce954b8ead014bc6c8d1d11dd2fb3ed8e8a57300f`.
+  Every row passes affordable semantics, exact capacity, initial-state, and
+  migration-record checks with no errors. Every row deliberately remains
+  `benchmark_format_valid=false`, `static_valid=null`, and
+  `pending_exact_static`; the receipt does not satisfy the blocked exact
+  direct-service gate or admit an S2 condition.
 - [x] The train-only foundation source audit freezes `v140_189`,
   compactness `[0.30,0.65]`, and exact pairwise required volume plus exposed
   four-neighbour perimeter. In the fixed 256-group audit-train partition,
@@ -261,16 +289,21 @@ These decisions supersede stale choices later in the historical v4 design:
   `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_batch_sweep_20260727_v1/direct_service_batch_size_sweep.json`
   at SHA-256
   `727c358357a026ff75b9e8340d6cd117efff6c782d455eba82630fe8e9312db9`.
-- [ ] The next bounded exact-path candidate avoids building and dilating the
+- [x] The bounded exact-path candidate avoided building and dilating the
   truck-transfer cone when the frozen scenario has no other active truck.
   Commit `9f7b95fa` implements the empty-candidate early exit and preserves
   eager/JIT no-truck behavior plus the active-truck transfer path. It does not
-  alter dump physics or the direct-service algorithm. Run one cost-only probe
-  on the same pinned B0a identity/source group/state, CPU host, batch size, and
-  exact service kernel. Keep it only if both warmed batch p50 and p95 improve
-  by at least `5%` over the v1 control; otherwise revert it. A pass authorizes
-  only the ordinary staged R-32 confirmation, not the 256-scenario profile,
-  Static admission, or PPO.
+  alter dump physics or the direct-service algorithm. The controlled
+  cost-only probe reused the same pinned B0a identity/source group/state,
+  `39,606` candidate rows, CPU host, and batch size. Warm batch p50 worsened
+  from `0.072704` to `0.082937 s` (`+14.1%`) and p95 from `0.073481` to
+  `0.090367 s` (`+23.0%`), failing both preregistered `>=5%` improvement
+  gates. Commit `90c83808` reverts the candidate under the simplicity rule.
+  No confirmation, 256-scenario profile, Static admission, or PPO is
+  authorized. The non-admission receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cost_probe_20260727_v3_no_truck_guard/validation_cost_probe.json`
+  at SHA-256
+  `cd5e60f9cfad0cb9e58a5112f9f87c9aa6701440b2fbc41e42bbe8f9ffdd810a`.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3797,13 +3830,15 @@ Current implementation checklist:
   local URL, implementation commit, and unresolved Static/Witness/S2
   limitations are recorded in `DIGGING_BENCHMARK_SITE_GOAL.md`. No Lorenzo
   decision or S2 admission is claimed.
-- [ ] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
+- [x] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.
 - [ ] S1 revalidates unchanged B0 rasters, rewrites metre/static receipts,
   preserves identities that pass, and lists/replaces only failures in one
   hashed per-identity migration receipt. The old unreceipted probe count is
-  not a target.
+  not a target. Affordable live geometry, capacity, identity, split, and
+  state migration now pass deterministically for all `256`; exact
+  action-reachable Static fields remain blocked by the cost gate.
 - [x] S1 adds explicit batched complete-agent-state reset plus admissibility
   validation and hashes every reset-consumed `Agent`/`AgentState` field.
 - [x] S1 implements action-reachable exact dig-to-dump direct-service fields
@@ -3834,7 +3869,9 @@ Current implementation checklist:
   well-supported common band, and receipts lengths, turns, conditioning, and
   rejection histograms. Pilot trench identities are fresh.
 - [ ] S1 Capacity builds and visually verifies one exact-dig,
-  separation-matched `slcap03_04`/`slcap07_10` apron pair.
+  separation-matched `slcap03_04`/`slcap07_10` apron pair. The fresh
+  `32`-pair artifact and internal visual/integrity checks pass; exact Static
+  validation and Lorenzo's recorded review decision remain.
 - [x] S1 updates the history aggregator to the integer retention gates and
   focused `n=8`/`n=32`/invalid-evaluation/streak-reset tests.
 - [ ] S2 builds the eight-condition 448-scenario train/promotion/development/
