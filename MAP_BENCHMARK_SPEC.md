@@ -1719,6 +1719,20 @@ authority consumed by this profile. Its generic `authorizes_bank_profile:
 false` remains required and means that no reusable or alternate bank-profile
 authority was granted; it does not negate the named one-shot authorization.
 
+Migration and execution provenance remain separate. Each result preserves the
+frozen migration protocol at Terra revision `affc0d921...`, environment
+protocol SHA-256 `15e4d45f...`, and EnvConfig SHA-256 `02863f62...`. The
+profile separately derives the full execution protocol from its own clean
+committed Terra revision and receipts that revision, protocol hash, EnvConfig
+hash, and exact code bundle. The revision-dependent protocol hashes are not
+required to equal; the EnvConfig hash and all environment-consumed constants
+must. All workers must agree on both receipts. This distinction prevents the
+cost sidecar from silently rewriting migration identity or claiming Static
+validity. Before publishing success, re-hash the authorization and
+confirmation receipts plus the frozen B0a identities/checksum/source/provenance
+manifests and migration JSONL/summary and require exact equality with their
+pre-run values.
+
 Repository ownership stays narrow:
 
 - Terra owns conditions, generators, exact map/scenario manifests, validation,
@@ -1827,6 +1841,7 @@ cannot silently regain authority.
 | `R-20260727-59` | First R-58 service bootstrap classified execution-null; one corrected bootstrap allowed | Receipt `/home/lorenzo/moleworks/.artifacts/terra_b0a_direct_service_cpu_process_probe_20260727_v1/cpu_process_probe.json`, SHA-256 `e09bb9719039754a64e8ca50286d2b1cbfd24d55334fe38c3f2f395bb1d8ce21`, records all four workers exiting with the same `ModuleNotFoundError` because file-path execution placed `tools/` rather than the pinned worktree root first on `sys.path`. The coordinator stopped after `0.417 s`; there are no ready receipts, start barrier, call receipts, state/protocol/projection/gate/resource records, or exact entrypoint calls. Treat v1 as a null execution bootstrap, preserve it, and exclude all of its timing and memory values. This append-only decision overrides only v1's mechanical `authorizes_retry: false`: freeze module launch as `python -m tools.probe_b0a_direct_service_cpu_processes` from the same clean repository root, assert and receipt that direct-service, confirmation, and profile modules resolve to that root, and permit one fresh v2 output directory. Worker count, affinities, environment, state, exact entrypoint, timing equation, and gates remain unchanged. Once any corrected worker reaches readiness, no further cohort rerun is allowed. |
 | `R-20260727-60` | Preregistered conditional 256-identity CPU profile | Run only after a passing R-58 v2 receipt is hash-pinned. Consume the frozen live-migration rows in lexicographic `legacy_map_id` order, assign index `i` to worker `i % 4`, and keep four persistent fixed-affinity CPU workers with 64 identities each. Decode each row's explicit serialized state; never regenerate development states through a public-train namespace. Each identity gets one duration from exact load through synchronized outcome and atomic receipt rename, stored afterward in its final worker ledger. Report nearest-rank p50/p95/max across 256 durations. For worker `i`, exclude its first identity and define `Q95_warm_i` over its 63 warm durations; freeze `P_448 = observed_256_makespan + 48 * max_i(Q95_warm_i)`. Makespan runs from immediately before first spawn through successful worker exits, verification of all 256 receipts, and atomic canonical merge. Require all 256 identities exactly once, exact confirmation-sentinel equality, every identity <=3,600 s, observed makespan <=86,400 s, `P_448 <=172,800 s`, fixed CPU backend/affinity, zero swap/OOM, <=80% conservative memory, and unchanged code/input receipts. Consume only the named one-shot R-58 authorization; require generic `authorizes_bank_profile` to remain false. No retries, resume, cache, alternate worker count, Static claim, admission, witness, or PPO. A failure writes partial evidence but no merged success output; any corrected rerun needs a new append-only decision and output directory. |
 | `R-20260727-61` | Pre-execution persistence correction to R-60 | Replace R-60's imprecise word `rename` with the existing atomic no-replace hard-link publication primitive. Identity duration ends after the scenario receipt is durably published and is recorded later in the worker ledger. After all workers exit, write and verify a clearly named canonical candidate merge; include that work in observed makespan and compute every cost/resource/integrity gate before publishing the success filename. A failed profile may retain the candidate as partial evidence but must never emit `direct_service_results.jsonl`. This changes no population, timing equation, threshold, retry rule, or scientific authority. |
+| `R-20260727-62` | Pre-execution protocol-provenance clarification | Preserve the migration protocol receipt (`affc0d921...`, `15e4d45f...`, EnvConfig `02863f62...`) as historical identity provenance and separately derive the execution protocol from the profile's clean committed revision. Require all workers to agree and require the EnvConfig/constants, code, packages, executable, authorization, confirmation, B0a identities/checksum/source/provenance manifests, and migration JSONL/summary to remain exact pre/post. Do not require the revision-dependent migration and execution protocol hashes to equal and do not let this cost sidecar mark a migration row Static-valid. This changes no map, state, outcome, threshold, or authority. |
 
 Still to decide through S1-S2 evidence:
 
