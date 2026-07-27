@@ -3420,6 +3420,65 @@ The combined post-run belief update is:
   256-map distance-diversity treatment. More compute is justified only as a
   bounded preregistered continuation, not as proof that the recipe is ready.
 
+The read-only geometry-support audit narrows the next diagnostics:
+
+- foundation OSM/procedural train and development maps have the same easy
+  all-around dump regime, no obstacles, median dump distance one tile,
+  reachable-workspace coverage at least 0.9957, and capacity at least 20.56x.
+  Capacity, access, and dump distance do not explain zero held-out success;
+- the procedural split has a real eight-map geometry-support gap: train angles
+  are concentrated at 0/30/60/75/105/165 degrees, while development adds
+  45/90/120/135 degrees and higher aspect ratios. OSM development shapes are
+  moderately larger but overlap train more closely;
+- during updates 4,501-5,000, sampled training success is 60.88% OSM and
+  12.29% procedural, versus 0/400 fixed-development successes per cell. Every
+  development identity nevertheless reaches at least 0.897 completion at some
+  checkpoint, then coverage switches identities and regresses; and
+- failed action sequences were not persisted, so the accepted artifacts
+  cannot yet separate identity memorization from sampled action selection or
+  terminal cycling.
+
+Before another foundation-geometry PPO run, authorize one evaluator-only
+policy cross at updates 3,800, 4,800, and 5,000 on exact train16/development16
+maps, deterministic plus four frozen sampled-action seeds. It must produce 30
+records/480 rollouts, exact resets, all integrity fields, and failed
+action/effect/completion traces for selected high-completion and zero-progress
+identities. If every mode remains train-high/development-low, the next PPO
+treatment is geometry diversity only (at least 64 train identities per cell,
+balanced procedural angle/aspect and matched OSM volume). Sampled
+development successes instead select an action-selection diagnosis; neither
+train nor development success despite near completion selects a
+terminal-cleanup/cycle diagnosis. A longer unchanged geometry run waits for
+this cheaper cross.
+
+The trench support audit likewise rejects a longer unchanged isolate:
+
+- all eight development maps lie inside the 64-map training ranges for coarse
+  trench geometry, orientation, dump distance, capacity, and margins. They
+  share balanced sides, close dumping, no obstacles, and no disconnected
+  regions;
+- development success frequency still tracks local raster support:
+  Spearman rho is `-0.875` versus nearest-train raw-mask Hamming distance and
+  `+0.850` versus maximum dump-mask IoU (`n=8`, descriptive only). Three maps
+  never solve, while better-covered maps dominate successes;
+- best update 1,100 and final update 2,000 trajectories are legal and
+  effective, several failures reach 0.892-0.989 completion, and retained
+  checkpoints work. Reward integrity, primitive execution, and checkpoint
+  loss are therefore not the first explanations; and
+- the prior paired both/one-side run peaks at 5/8 on the exact one-side bank,
+  versus 4/8 for the isolate. Doubling isolated one-side exposure did not
+  help; paired both-side examples appear mildly regularizing.
+
+No trench PPO continuation is currently authorized. The smallest candidate
+new treatment, after a train-only static bank audit and explicit authorization,
+is the prior paired both/one-side recipe with training diversity alone raised
+from 64 to 256 independent maps per cell. Keep the close-straight generator,
+reward, architecture, PPO, reset, horizon, and evaluation cadence fixed.
+Generate without consulting development identities, retain the current bank
+only for diagnosis, and require a new untouched source-disjoint promotion/test
+bank before any future qualification. Reward, entropy, and architecture
+ablations remain deferred.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
