@@ -1,18 +1,16 @@
 # Terra Training Tasks
 
-- Status: active recovery execution; C0-C5 and C1b complete; D1 diagnosis
-  complete with a failed historical mass-integrity gate and material completion
-  mismatch; D2 diagnosis complete with memorization and action-mode evidence;
-  F0 foundation feasibility passed with a terminal retention failure; F0 trench
-  failed cleanly; bounded diagnosis selected F0R; F0R passed; B0a paired-panel
-  generation passed; the first B0b submission was stopped before production
-  after infrastructure and receipt-gate failures; all five corrected immutable
-  replacement update-1 and 500-update training gates passed; deterministic
-  development evaluation passed integrity and authorized a continuous
-  1,000-update confirmation for every panel; all five confirmations completed,
-  three 2,000-update panels are submitted while two require diagnosis, and no
-  B0 cell witness exists yet
-- Date: 2026-07-26 execution update
+- Status: active recovery execution; semantics and integrity gates C0-C5/C1b
+  are complete; F0/F0R established single-identity feasibility; B0a static
+  panels and all bounded-run integrity gates pass. B0 foundation-distance
+  diversity shows real source-disjoint progress and authorizes one fresh
+  5,000-update confirmation, but has no adjacent cell witness. Foundation
+  geometry remains 0/8 on both held-out cells after 5,000 updates despite one
+  small procedural-completion gain. The exhausted one-side trench isolate
+  reaches roughly 96% sampled-train success but peaks at only 4/8 held out and
+  ends 2/8, so it stops for generalization diagnosis. No family, B0c, F1, or
+  `gpuhe.120h` run is qualified.
+- Date: 2026-07-27 execution update
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Failure evidence: [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md)
 - Historical reference: E8 `resnet_spatial_8x8_se`
@@ -2589,6 +2587,52 @@ residual. Its read-only smoke-acceptance receipt SHA-256 is
 This admits the continuous 2,000-update body only; fixed-development learning
 evidence remains pending.
 
+The 2,000-update foundation-distance treatment is fully accepted:
+
+- train job `8681541` and evaluator `8681542` both completed with exit code
+  `0:0`. Training contains exactly 2,000 ordered aggregates and 20 numbered
+  checkpoints, with `FINAL == update 2,000` across 92 model and 185 optimizer
+  leaves, exact source/bank/config hashes, and zero hard integrity failures;
+- training-receipt, `eval.json`, independent evaluation-validation,
+  evaluation-receipt, and combined-receipt-manifest SHA-256 values are
+  `8589b0e905f87e408264949a6435f4cbbe77bd79933b0f94e85e10feaf8ee63a`,
+  `503b926d94ec09aa785144d5f20037c6db09df1ed780461d78aeb565392a9712`,
+  `0c8451ab5c59098c6f3e350584e1c2752affc5f273778164b8cf1f376223cfda`,
+  `1fb209a12805c585a1d258f686f61376f5d3ead1dbe5f753e47f281037e51047`,
+  and
+  `58536a680907220e88d3e5a542c52e650b0f33203dba550a6dac6d94f234895e`;
+- all 640 held-out episodes use exact resets and have zero mass, target,
+  obstacle, nonfinite, slot, or termination-integrity failures. Positive
+  illegal spill in 32 timeout records is valid under the approved cleanup
+  contract and retained as soil; exact-dump-mask integrity remains one;
+- overall held-out successes at updates 100 through 2,000 are:
+
+  ```text
+  0 0 0 0 0 1 4 2 1 12 12 4 11 13 17 10 12 9 13 10
+  ```
+
+- d02/d04/d06/d08 per-cell success curves are:
+
+  ```text
+  d02  0 0 0 0 0 1 1 0 0 4 2 0 2 3 4 1 4 2 6 3
+  d04  0 0 0 0 0 0 1 0 1 3 4 2 2 3 6 5 4 4 2 3
+  d06  0 0 0 0 0 0 1 1 0 3 5 0 5 4 4 2 3 3 3 2
+  d08  0 0 0 0 0 0 1 1 0 2 1 2 2 3 3 2 1 0 2 2
+  ```
+
+- the same-budget update-1,000 checkpoint improves from the old 6/32 to
+  12/32, and all four distance cells improve over the prior recipe. The
+  final-five rule passes through d02 at update 1,900: 6/8 successes, a
+  two-success gain over its prior best, with a clean saved trajectory; but
+- d02 reaches 6/8 only at update 1,900 and d04 only at update 1,500. No cell
+  has an adjacent 6/8 pair, so the panel witness and long-run qualification
+  both fail.
+
+The sealed decision is `continue_same_panel`. Exactly one fresh continuous
+5,000-update replication of the same diversity treatment is authorized under
+rules 13-14. It must not resume the 2,000-update process. B0c, F1, and
+`gpuhe.120h` remain unauthorized.
+
 Future B0 submissions use terra-baselines
 `588ee4585f8348b5d52c4ee6af6c2a0261b405d9` to make treatment provenance
 explicit. The submission wrapper now validates the declared
@@ -2772,6 +2816,41 @@ The geometry-only repeat independently passed its update-1 smoke:
 This authorizes the continuous 5,000-update body. It remains an integrity
 result only. The corresponding continuous-run W&B ID is `m0n2yngc`; it is an
 operational pointer, not task evidence.
+
+The geometry-only 5,000-update treatment is fully accepted, but it does not
+solve either held-out cell:
+
+- train job `8667019` completed with exit code `0:0` in `07:11:27`; evaluator
+  `8667022` completed with exit code `0:0` in `01:11:56`;
+- the run has exactly 5,000 ordered aggregates and 50 numbered checkpoints,
+  `FINAL == update 5,000` across all 92 model and 185 optimizer leaves, zero
+  hard integrity failures, maximum mass residual zero, and maximum
+  sub-threshold step-reward residual `4.76837158203125e-07`;
+- training-gate, checkpoint-manifest, aggregate-manifest, training-receipt,
+  `eval.json`, and evaluation-receipt SHA-256 values are
+  `e8410e9eaf63db1dadd9a49bef997207f59376712932e8a4e2fc8a7a389b3f5c`,
+  `1e1f8d1f268c60381f2be3c6efaa5bb50aa72b54f993c022b0333c1bc8ddc37b`,
+  `2b905c4795b8b3cbb4e6032d1dad7c87ace422fa5d5e47a7fa8052e774206437`,
+  `3c5ef5ef0c4363f0755d252c4bc5dc15b5a2d510f9da95634ac21e6bad391752`,
+  `3f76b5f1596498c8b57e8898e7b483ffffa808915a7bf78ba8a64c303f04435d`,
+  and
+  `815d1bcb09a9589f275d2b8b04aeb7eeaacc491201ac04dd619ea5cc2601f37f`;
+- all 800 held-out rollouts use exact 16/16 resets at `env_steps == 0` and
+  have zero integrity failures, but both OSM and procedural success curves
+  remain 0/8 at all 50 checkpoints. There is no successful held-out
+  trajectory and no cell witness;
+- OSM has no final-window progress. Procedural median completion improves from
+  its prior in-run best `0.8057184815406799` at update 2,400 to
+  `0.8233191668987274` at update 4,800, a preregistered gain of
+  `0.017600685358047485`; and
+- the frozen decision is therefore `continue_same_panel`, solely through the
+  procedural completion event. It is not a success, B0c promotion, family
+  qualification, or long-run authorization.
+
+This result weakens the belief that unchanged low-diversity geometry training
+is close to solved. Any same-recipe continuation must be declared as a new
+bounded milestone, remain separate from the diversity treatment, and cannot
+use `gpuhe.120h` until an actual repeated held-out witness exists.
 
 The trusted C5 population receipts materially narrow the stopped-trench
 interpretation:
@@ -3255,6 +3334,64 @@ The isolate update-1 smoke passed:
 This admits the continuous 2,000-update body only. The fixed eight-map
 development evaluation remains the one-shot learning decision.
 
+The one-shot isolate completed and its sealed decision is
+`stop_and_diagnose_panel`:
+
+- train job `8681252` completed with exit code `0:0` in `03:07:13`, with
+  exactly 2,000 aggregates and 20 checkpoints, exact
+  `FINAL == update 2,000`, finite model/optimizer state, intact 410-file
+  source and 1,753/1,752-file bank manifests, and zero hard integrity
+  failures;
+- terminal-training validator and read-only training-receipt SHA-256 values
+  are
+  `c21f9f2b4a10654ae4510ce7fd13c6e3ab3a01ef529d4c28321509a622c96ad1`
+  and
+  `3658b35f050081afa6cb82720146bcd842e5a6862dc2980ff0c970bfb20bcf8a`;
+- evaluator `8681256` completed with exit code `0:0` in `00:31:54`. All 160
+  episodes terminate, exact resets and slot coverage pass, and mass, target,
+  obstacle, nonfinite, termination, and reward-integrity failures are zero;
+- held-out successes at updates 100 through 2,000 are:
+
+  ```text
+  0 0 0 0 0 0 2 3 3 3 4 3 3 2 2 3 1 1 2 2
+  ```
+
+- the best checkpoint is only 4/8 at update 1,100; the final-five curve is
+  `3, 1, 1, 2, 2`. There is no 6/8 checkpoint, adjacent witness, or
+  final-window slight improvement. Fourteen clean successful trajectories
+  prove partial feasibility, not robust generalization; and
+- independent evaluator-validation and read-only evaluation-receipt SHA-256
+  values are
+  `784c4d548c0d163ff745f0a33d9ddaa1595541fda7076f58e8b945ca9925e8f0`
+  and
+  `2a90bd01a36585fd7592d6dcd6db09a8cf41349abfd3eae259968345deb51881`.
+
+The roughly 96% late sampled-training success against 25% final held-out
+success is direct overfitting evidence. Single-cell specialization did not
+repair source generalization, and performance regressed after the update-1,100
+held-out peak. The one permitted isolate is exhausted: no same-treatment
+continuation, full-panel 5,000 run, segmented-trench bank, B0c, F1, or
+`gpuhe.120h` run is authorized. Before choosing a new treatment, audit
+train/development geometry support and best-versus-final action trajectories;
+do not infer a reward or architecture change from this result alone.
+
+The combined post-run belief update is:
+
+- corrected task semantics, exact dump masks, spill cleanup, mass
+  conservation, and numerical stability are working; none explains the
+  remaining failures;
+- increasing source geometry diversity materially improves
+  foundation-distance transfer, including d06/d08, so far dumping is not
+  currently the primary blocker;
+- fixed-bank performance is highly non-monotonic. Promotion-bank checkpoint
+  selection and a separate untouched development bank are required before
+  long training;
+- one-side trench maps are feasible but the current generator/training
+  support does not generalize robustly; and
+- unchanged 16-map foundation-geometry training is much weaker than the
+  256-map distance-diversity treatment. More compute is justified only as a
+  bounded preregistered continuation, not as proof that the recipe is ready.
+
 #### B0c — Expand only witnessed easy cells
 
 The primary easy bank required by F1 is:
@@ -3268,22 +3405,26 @@ trench:
   t_segmented2_both_d02, t_segmented3_both_d02
 ```
 
-Every one of these eight cells must pass B0b before F1. Then regenerate each
-from the same frozen algorithm, but with disjoint identities:
+Each family unlocks B0c and its own F1 independently once all four of that
+family's easy cells pass B0b. Foundation must not wait for trench, or vice
+versa; this makes the B0c/F1 boundary consistent with rules 15-16. A combined
+generalist bank still waits for all eight cells. For each unlocked family,
+regenerate its four cells from the same frozen algorithm, but with disjoint
+identities:
 
 - 64 unique training identities per cell;
 - eight promotion identities per cell;
 - eight development identities per cell; and
 - eight sealed identities per cell.
 
-The resulting foundation and trench family banks contain 256 training maps and
-32 maps in each evaluation split; the combined easy bank contains 512
-training maps and 64 maps in each evaluation split. Use a new seed/map-ID
-namespace: no source, map, target, or identity from B0a or any diversity,
-repair, or diagnostic panel may appear in the expanded bank, and the four
-expanded splits must be mutually source-disjoint. The current B0a and
-trench-side-diversity builders deliberately preserve panel prefixes/identities
-and therefore cannot be reused unchanged.
+The resulting foundation and trench family banks each contain 256 training
+maps and 32 maps in each evaluation split; the later combined easy bank
+contains 512 training maps and 64 maps in each evaluation split. Use a new
+seed/map-ID namespace: no source, map, target, or identity from B0a or any
+diversity, repair, or diagnostic panel may appear in the expanded bank, and
+the four expanded splits must be mutually source-disjoint. The current B0a
+and trench-side-diversity builders deliberately preserve panel
+prefixes/identities and therefore cannot be reused unchanged.
 
 B0 is complete only after the expanded-bank exact-count loader,
 split/source/hash disjointness, C1a capacity, numeric-range, paired-geometry,
@@ -3582,14 +3723,15 @@ acceptance evidence in the corresponding section passes.
     retained foundation update-900 witness, this authorizes B0 to build and
     validate the orthogonal feasibility panels and admit only dynamically
     witnessed cells.
-11. [ ] Complete B0a/B0b/B0c: seal the paired static panels, obtain dynamic
-    witnesses from the five bounded panel runs (plus only conditionally needed
-    cell isolates), expand the eight declared primary easy cells, and pass the
-    loader/memory/update-1 gates.
-12. [ ] Run the two scratch F1 family specialists; require family and per-cell
-    gates twice with zero integrity failures. As soon as either independently
-    qualifies, implement the narrow manifest-sealed production launcher
-    against that exact recipe and start its fresh 20,000-update
+11. [ ] Complete B0a/B0b/B0c per family: seal the paired static panels, obtain
+    all four family-cell witnesses (plus only conditionally needed isolates),
+    expand that family's declared primary easy cells, and pass its
+    loader/memory/update-1 gates. A completed family advances without waiting
+    for the other; the combined eight-cell bank waits for both.
+12. [ ] Run each unlocked scratch F1 family specialist; require family and
+    per-cell gates twice with zero integrity failures. As soon as either
+    independently qualifies, implement the narrow manifest-sealed production
+    launcher against that exact recipe and start its fresh 20,000-update
     `gpuhe.120h` run without waiting for the other family.
 13. [ ] If both specialists pass, run G0; only a twice-qualified G0 becomes the
     new-distribution small multitask teacher.
