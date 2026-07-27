@@ -777,8 +777,8 @@ bands are frozen only after the pair-specific train-only support audits below.
 
 | Candidate alias | Controlled purpose |
 |---|---|
-| `f.all.osm.sep00_02.slcap20_45.vmatch` | OSM all-around source slice at matched volume |
-| `f.all.procedural.sep00_02.slcap20_45.vmatch` | procedural all-around source slice matched in volume and compactness |
+| `f.all.osm.sep00_02.slcap20_45.v140_189` | OSM/source-bank all-around slice in the frozen matched support |
+| `f.all.procedural.sep00_02.slcap20_45.v140_189` | procedural all-around slice paired at exact volume and perimeter |
 | `f.apron.osm.sep02.slcap07_10.vmatch` | new moderate-capacity OSM apron capability |
 | `f.apron.osm.sep02.slcap03_04.vmatch` | exact-dig paired constrained-capacity OSM counterfactual |
 | `t.straight.both.sep02.slcap03_04.v68_77` | straight, both-side local trench candidate |
@@ -798,16 +798,41 @@ retire the separate cells.
 
 Foundation matching uses two contracts, not one global four-cell interval:
 
-1. the OSM/procedural all-around source pair freezes a shared numeric volume
-   interval and compactness tolerance after regenerating the parameterized
-   procedural source toward the fixed OSM support; and
+1. the OSM/procedural all-around source pair uses the train-audited closed
+   `v140_189` interval and compactness support `[0.30, 0.65]`. Each matched
+   pair has identical required unit-depth volume and identical exposed
+   four-neighbour perimeter, so compactness
+   `4*pi*volume/perimeter_4_edges^2` is identical rather than merely close;
+   and
 2. the `slcap03_04`/`slcap07_10` apron pair reuses the exact same OSM dig
    raster within each source group, so pairwise target identity and volume
    equality are the gate.
 
-The frozen B0 train support is too thin to materialize the source pair at the
-new counts, so foundation pilot identities are freshly generated. The apron
-pair need not share the all-around source-pair volume interval.
+The fixed train-only source audit partitions canonical source groups before
+distribution measurement. It loads reserve masks only to canonicalize source
+identity and apply the fixed factory-eligibility rule; it computes no reserve
+distribution metrics and performs no reserve support or matching selection.
+From 256 audit-train source groups, 111 lie in the frozen support, 98 have at
+least two unique exact procedural candidates, and 32 unique exact pairs are
+materialized. The retuned procedural sampler changes only its main
+length/width ranges to `U[13,22)` and `U[7,13)` and yields 3,732 supported
+proposals (3,721 unique) from 20,000. The byte-reproduced receipt is
+`/home/lorenzo/moleworks/.artifacts/terra_pilot_foundation_source_support_20260727_v3/`
+(`support_summary.json` SHA-256
+`e0867f67669c5f7f2e6ce15890c2c824783666056ddb58ebe21e56107191261f`).
+The historical B0 builder remains byte-identical. The apron pair need not
+share this source-pair interval.
+
+Exact volume/perimeter matching does not equalize every shape descriptor:
+selected OSM/source-bank and procedural bbox-aspect medians are `1.065` and
+`1.125`, while moment-aspect medians are `1.231` and `1.344`. This is a
+volume/compactness-matched source-geometry comparison, not a source-only
+causal intervention. Those residual covariates remain website audit slices.
+
+This receipt proves raster-level train support, not publication provenance.
+The current source artifact does not preserve raw OSM feature IDs or an
+attribution manifest. Recover and pin those records, or rename the public
+slice as an unattributed source bank, before a downloadable benchmark release.
 
 The existing B0 trench identities also do not support a common frozen volume
 band: only `2/16` straight, `2/16` segmented-2, and `0/16` segmented-3
@@ -1686,6 +1711,8 @@ cannot silently regain authority.
 | `R-20260727-24` | Accepted and executed | Add an optional complete `Agent` input to single/batched reset, preserve the supplied tree and RNG exactly, and freeze `terra_agent_state_v1` as path/dtype/rank/shape-prefixed canonical bytes over every live field and all four slots. Admissibility remains a separate host-side gate. |
 | `R-20260727-25` | Accepted | Materialize one deterministic initial state per source group and split from a hash-derived seed and the live `Agent.new` sampler over the variants' intersected spawn contract. Share it across counterfactuals and never resample after seeing feasibility or policy outcomes. |
 | `R-20260727-26` | Accepted | Compute initial direct service by exact action replay from the serialized state. A complete off-zone wrong dump remains a valid C1a mistake but never counts as legal service. Union overlapping hypothetical digs by capped per-cell maximum progress before computing coverage. |
+| `R-20260727-27` | Accepted and executed | Freeze foundation source support at `v140_189` and compactness `[0.30,0.65]`; pair at exact required volume and four-neighbour perimeter. The audit uses a fixed 256-group train partition, leaves reserve groups identity-and-eligibility-only, retunes only procedural main length/width, and preserves distinct source IDs. Raw OSM attribution remains a publication gate rather than being inferred from raster filenames. |
+| `R-20260727-28` | Accepted implementation hardening | Treat the foundation result as a volume/compactness-matched source-geometry comparison, not source-only causal isolation. Reject cross-family canonical-raster collisions explicitly and receipt Python/NumPy/SciPy versions; tracked generator portability is required before S2 materialization. |
 
 Still to decide through S1-S2 evidence:
 
@@ -1694,11 +1721,15 @@ Still to decide through S1-S2 evidence:
 - the conservative relay-hop algorithm and method-neutral witness supplier;
 - whether S3 evidence supports a stricter publication-Core witness margin than
   the frozen 450-step pilot horizon;
-- numeric foundation-pair volume/compactness tolerances and family-specific
-  cross-split similarity thresholds;
+- family-specific cross-split similarity thresholds;
 - whether a future matched, diverse OSM/procedural experiment permits pooling;
 - the publication test confidence/effect target and number of fixed initial
   states per map;
+- recovery of raw source feature IDs and attribution for the current
+  OSM-labeled raster bank, or a public rename that makes the missing
+  provenance explicit;
+- migration of the currently hash-pinned generator helpers out of local
+  `.artifacts` into the tracked S2 builder/release source;
 - benchmark data/submission licenses, public hosting, and sealed-evaluator
   ownership.
 

@@ -78,7 +78,7 @@ These decisions supersede stale choices later in the historical v4 design:
 | Feasibility horizon | Pilot-ranked maps need an exact replay witness within 450 steps. Record margin; do not silently enforce an unratified 225-step Core gate. |
 | Exact reset state | Hash every reset-consumed `Agent`/`AgentState` field. A seed or partial pose tuple is not a portable scenario state. |
 | Trench volume support | `v68_77` is frozen from the train-only S1 audit using fixed radius-one straight, segmented-2 `U[10,13)`, and segmented-3 `U[7,9.5)` generation. Existing B0 trench identities do not carry into the pilot. |
-| Foundation volume support | Match OSM/procedural all-around through a source-pair interval after retuning procedural generation toward OSM. Match the apron capacity pair separately by exact OSM dig identity. |
+| Foundation volume support | Freeze OSM/procedural all-around at train-audited `v140_189`, compactness `[0.30,0.65]`, and exact pairwise volume/perimeter after retuning only procedural main length/width. Match the apron capacity pair separately by exact OSM dig identity. |
 | Retention arithmetic | Freeze the lower of two passing counts. Retain an 8-map condition at `max(6, reference-1)` and the fixed 32-map family panel at `max(26, reference-1)`; only consecutive complete integrity-valid failures count toward rollback. |
 | Migration/cost evidence | Withdraw the unreceipted 23/256 probe count. S1 writes a hashed per-identity migration receipt and an exact direct-service validation cost profile before S2. |
 | Pilot initial states | Materialize one hash-seeded live `Agent.new` result per source group and split over the variants' intersected spawn contract. Counterfactuals share the exact state; never resample after observing feasibility or policy performance. |
@@ -131,6 +131,27 @@ These decisions supersede stale choices later in the historical v4 design:
   `61f8303cdc0376bdf2d348c248f3cbd1a16678764f6e276affce135fa2463329`;
   deterministic and shared-counterfactual tests pass. Per-bank
   materialization remains part of the open migration gate.
+- [x] The train-only foundation source audit freezes `v140_189`,
+  compactness `[0.30,0.65]`, and exact pairwise required volume plus exposed
+  four-neighbour perimeter. In the fixed 256-group audit-train partition,
+  111 source-bank rasters are supported, 98 have at least two unique exact
+  procedural candidates, and 32 unique pairs were selected. The retuned
+  procedural sampler produced 3,732 supported proposals (3,721 unique) from
+  20,000 after changing only its main length/width ranges to `U[13,22)` and
+  `U[7,13)`. Reserve masks were used only for canonical identity and fixed
+  factory eligibility; no reserve distribution/support/matching selection
+  occurred. The byte-reproduced receipt is
+  `/home/lorenzo/moleworks/.artifacts/terra_pilot_foundation_source_support_20260727_v3/`;
+  `support_summary.json` has SHA-256
+  `e0867f67669c5f7f2e6ce15890c2c824783666056ddb58ebe21e56107191261f`
+  and `matched_train_pairs.jsonl` has SHA-256
+  `8c5528a2b43a485858df15acbca5835a41be8f9d3d8ab6159cf272c6f9d06688`.
+  Cross-family canonical-raster equality is a hard error and Python `3.12.11`,
+  NumPy `1.26.4`, and SciPy `1.12.0` are receipted. Residual bbox/moment aspect
+  differences remain explicit audit covariates, so this is not called a
+  source-only intervention. Raster support is closed; tracked generator
+  portability is required before S2, and raw OSM feature attribution is still
+  required before publication.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
@@ -3663,7 +3684,7 @@ Current implementation checklist:
 - [ ] S1 freezes full condition IDs: source, achieved separation, named
   capacity metric/band, and pair-specific train-only audited numeric
   volume/compactness support. No S2 record retains `vmatch`.
-- [ ] S1 Foundation retunes procedural all-around generation toward fixed OSM
+- [x] S1 Foundation retunes procedural all-around generation toward fixed OSM
   support and freezes one source-pair interval/tolerance; the apron capacity
   pair instead shares exact OSM dig identities and volumes.
 - [x] S1 Trench keeps straight fixed, audits candidate segmented-2
