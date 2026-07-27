@@ -46,8 +46,9 @@ log in Section 20. The benchmark/site goal in
 first delivery priority. The immediate order is:
 
 1. standardize the public review-data contract and deploy the graphical
-   inspector against current B0a data, explicitly labelled design input rather
-   than an admitted benchmark;
+   inspector locally against current B0a data, with separately browsable
+   depth/family/condition example folders and explicit design-input labels
+   rather than an admitted-benchmark claim;
 2. S1: complete state/condition schema, live-geometry revalidation,
    exact direct-service metric and cost receipt, pair-specific foundation
    support, topology-aware trench support, and adjustable apron capacity;
@@ -3776,8 +3777,9 @@ Current implementation checklist:
 - [ ] The active
   [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md)
   standardizes current B0a design-input records, exports map graphics and
-  distributions, supports data-backed human review, and deploys an owner-only
-  inspector before the admitted S2 bank is ready.
+  distributions, supports data-backed human review, and serves a local
+  inspector plus organized image folders before the admitted S2 bank is
+  ready. Production deployment is deferred by user choice.
 - [ ] S1 derives `0.571428571428125` m/tile, the live `7 x 11` footprint,
   radial envelope, exact runtime cone masks, and protocol hash from Terra
   rather than duplicated constants.

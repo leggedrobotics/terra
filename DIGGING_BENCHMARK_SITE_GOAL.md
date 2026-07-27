@@ -28,10 +28,11 @@ Deliver a versioned Terra digging benchmark inspector that:
    leakage, and distribution tails instead of only attractive galleries;
 5. exports Lorenzo's approve/reject/quarantine decisions and notes as
    deterministic data; and
-6. is available as both a reproducible local static build and an owner-only
-   deployed review site.
+6. is available through a reproducible local review server, with a separate
+   Nautilus-friendly example tree organized by provisional review depth,
+   family, and condition.
 
-The first deployed dataset is the current 256-row B0a bank and is visibly
+The first review dataset is the current 256-row B0a bank and is visibly
 labelled **design input, not a frozen benchmark release**. The accepted S2
 448-scenario pilot replaces this input only after its S1 schema, capacity,
 support, split, and validation gates pass. No sealed scenario raster or
@@ -67,6 +68,11 @@ identity is published.
   exposure and identifies missing or overrepresented conditions.
 - Deterministically ordered review queue with approve, reject, quarantine, and
   note actions plus JSONL export/import.
+- A standalone `examples/` tree with Anchor/One-axis/Composed preview folders,
+  then family and condition folders, each containing a fixed overview sheet
+  plus individual composites and a short README. Because B0a predates the
+  canonical admission graph, every such depth label is explicitly
+  provisional.
 - Clear empty states for policy heatmaps, witnesses, and leaderboard data that
   are intentionally unavailable before S3-S5.
 
@@ -82,13 +88,14 @@ The primary verifier is a clean rebuild from pinned input hashes followed by:
 5. responsive screenshots of overview, explorer, comparison, distribution,
    curriculum, and review-queue states;
 6. a production build with no missing assets or browser errors; and
-7. an owner-only deployment whose saved version references the exact pushed
-   source commit.
+7. a locally served build whose URL, process receipt, and review paths are
+   recorded.
 
 The final proof recorded in both canonical documents includes the input
 receipt, exporter/site commits, build and test commands, screenshot paths,
-deployment version/status, and a list of limitations still blocking S2
-admission.
+local server and example-folder paths, and a list of limitations still
+blocking S2 admission. A Sites project may be reserved, but saving or
+deploying a production version is deferred until Lorenzo asks.
 
 ## Execution checklist
 
@@ -97,7 +104,7 @@ admission.
 - [ ] Export the current B0a design-input bank and deterministic graphics.
 - [ ] Build the required review surfaces and decision-data workflow.
 - [ ] Run data, UI, visual, and production-build verification.
-- [ ] Save and deploy an owner-only version from the exact pushed source.
+- [ ] Start and verify the local review server and organized example tree.
 - [ ] Record review decisions and implementation evidence in both canonical
   documents.
 - [ ] Swap in the source-disjoint 448-scenario S2 bank after all prerequisite
@@ -113,4 +120,3 @@ Pause and revise the canonical spec rather than hiding the problem if:
 - the UI needs to infer a scientific field not present in a receipt; or
 - the site architecture starts duplicating Terra generation or validation
   logic.
-
