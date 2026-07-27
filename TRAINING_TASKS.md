@@ -222,16 +222,21 @@ These decisions supersede stale choices later in the historical v4 design:
 - [ ] The batch-size treatment is frozen before execution. It reuses the pinned
   v1 probe identity, four-map source group, explicit initial state, protocol,
   inputs, CPU host, and unchanged exact service kernel. It builds the graph and
-  prefilter once, hashes the first 16 accepted rows, and compares batch sizes
-  `4`, `8`, and `16` over five equal-logical-work warmed repeats. Concatenated
-  outputs must match batch 4 exactly; timing must count every padded launch and
-  memory is cumulative for the shared process, not attributed to an arm. The
-  smallest eligible arm with minimum projected 256-scenario p95 is selected,
-  but a change from 4 requires that p95 to be strictly below batch 4's projected
-  p50 and all memory gates to pass. The sweep never calls the complete validator
-  and never emits admission. A selected change authorizes only a fresh canonical
-  cost probe and, if its first gate passes, one complete confirmation; it does
-  not authorize the 256-scenario profile.
+  prefilter once, hashes the first 16 accepted timing rows and the first 18
+  accepted parity rows, and compares batch sizes `4`, `8`, and `16`. Every arm
+  receives one untimed complete 16-row warmup followed by 12 equal-logical-work
+  timed repeats; the 18-row pass forces tail padding for all three sizes.
+  Dtype/shape/content-sensitive concatenated-output hashes must match batch 4
+  exactly. A closing batch-4 control brackets the sweep and its complete-16-row
+  p50 must stay within 5% of the opening control. Timing counts every padded
+  launch; memory is cumulative for the shared process, not attributed to an
+  arm; and a persistent compilation cache fails closed. The smallest eligible
+  arm with minimum projected 256-scenario p95 is selected, but a change from 4
+  requires that p95 to be strictly below the smaller opening/closing batch-4
+  projected p50 and all memory/drift gates to pass. The sweep never calls the
+  complete validator and never emits admission. A selected change authorizes
+  only a fresh canonical cost probe and, if its first gate passes, one complete
+  confirmation; it does not authorize the 256-scenario profile.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving
