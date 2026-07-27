@@ -16,6 +16,7 @@ import heapq
 import json
 import math
 import os
+import subprocess
 import sys
 from collections import Counter
 from contextlib import contextmanager
@@ -51,6 +52,9 @@ DIRECT_SERVICE_STATUS = "direct_service_blocked_by_cost_gate"
 EXPECTED_IDENTITY_COUNT = 256
 EXPECTED_SOURCE_GROUP_COUNT = 144
 EXPECTED_SOURCE_GROUP_SIZE_COUNTS = {1: 112, 4: 16, 5: 16}
+EXPECTED_B0A_FILES_SHA256 = (
+    "89a5b5325e4e6872f7899b087ac5d0a8cd444dac30315feee4f342f8e532a347"
+)
 
 SPLIT_MAP = {
     "train": "public_train",
@@ -87,6 +91,22 @@ FOUR_CONNECTED = np.asarray(
     [[0, 1, 0], [1, 1, 1], [0, 1, 0]],
     dtype=np.uint8,
 )
+SHORTEST_PATH_MOVES = (
+    (-1, 0, 1.0),
+    (1, 0, 1.0),
+    (0, -1, 1.0),
+    (0, 1, 1.0),
+    (-1, -1, math.sqrt(2.0)),
+    (-1, 1, math.sqrt(2.0)),
+    (1, -1, math.sqrt(2.0)),
+    (1, 1, math.sqrt(2.0)),
+)
+
+
+@dataclass(frozen=True)
+class VerifiedInputIntegrity:
+    receipt: dict[str, Any]
+    verified_relative_paths: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -137,6 +157,114 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def verify_input_integrity(
+    input_root: Path,
+    *,
+    expected_files_sha256: str = EXPECTED_B0A_FILES_SHA256,
+) -> VerifiedInputIntegrity:
+    """Verify the frozen B0a checksum tree before any dataset is loaded."""
+
+    input_root = input_root.resolve()
+    manifest_path = input_root / "files.sha256"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(manifest_path)
+    manifest_sha256 = sha256_file(manifest_path)
+    if manifest_sha256 != expected_files_sha256:
+        raise ValueError(
+            "Frozen B0a files.sha256 changed: "
+            f"{manifest_sha256} != {expected_files_sha256}."
+        )
+
+    entries: dict[str, str] = {}
+    for line_number, line in enumerate(
+        manifest_path.read_text().splitlines(),
+        start=1,
+    ):
+        parts = line.split("  ", maxsplit=1)
+        if (
+            len(parts) != 2
+            or len(parts[0]) != 64
+            or any(character not in "0123456789abcdef" for character in parts[0])
+        ):
+            raise ValueError(
+                f"Malformed checksum entry at {manifest_path}:{line_number}."
+            )
+        expected_sha256, relative_text = parts
+        relative = Path(relative_text)
+        if (
+            not relative_text
+            or relative.is_absolute()
+            or ".." in relative.parts
+            or relative.as_posix() != relative_text
+        ):
+            raise ValueError(
+                f"Unsafe checksum path at {manifest_path}:{line_number}: "
+                f"{relative_text!r}."
+            )
+        if relative_text in entries:
+            raise ValueError(
+                f"Duplicate checksum path in {manifest_path}: {relative_text}."
+            )
+        entries[relative_text] = expected_sha256
+
+    required_paths = {
+        "identities.jsonl",
+        "provenance.json",
+        "source_registry.jsonl",
+        "validation.json",
+    }
+    missing_required = sorted(required_paths - set(entries))
+    if missing_required:
+        raise ValueError(
+            f"Frozen checksum manifest omits required files: {missing_required}."
+        )
+
+    for relative_text, expected_sha256 in sorted(entries.items()):
+        path = input_root / relative_text
+        resolved = path.resolve()
+        if not resolved.is_relative_to(input_root) or not path.is_file():
+            raise ValueError(
+                f"Checksum target is missing or leaves input root: {relative_text}."
+            )
+        actual_sha256 = sha256_file(path)
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                f"Frozen B0a checksum mismatch for {relative_text}: "
+                f"{actual_sha256} != {expected_sha256}."
+            )
+
+    provenance = _read_json(input_root / "provenance.json")
+    identity_sha256 = sha256_file(input_root / "identities.jsonl")
+    source_registry_sha256 = sha256_file(input_root / "source_registry.jsonl")
+    if provenance.get("identity_manifest_sha256") != identity_sha256:
+        raise ValueError(
+            "provenance.json identity_manifest_sha256 does not match "
+            "identities.jsonl."
+        )
+    if provenance.get("source_registry_sha256") != source_registry_sha256:
+        raise ValueError(
+            "provenance.json source_registry_sha256 does not match "
+            "source_registry.jsonl."
+        )
+    if entries["identities.jsonl"] != identity_sha256:
+        raise ValueError("files.sha256 and provenance disagree on identities.jsonl.")
+    if entries["source_registry.jsonl"] != source_registry_sha256:
+        raise ValueError(
+            "files.sha256 and provenance disagree on source_registry.jsonl."
+        )
+    return VerifiedInputIntegrity(
+        receipt={
+            "files_sha256_sha256": manifest_sha256,
+            "verified_file_count": len(entries),
+            "identity_manifest_sha256": identity_sha256,
+            "source_registry_sha256": source_registry_sha256,
+            "provenance_sha256": entries["provenance.json"],
+            "validation_sha256": entries["validation.json"],
+        },
+        verified_relative_paths=frozenset(entries),
+    )
 
 
 def sha256_array(array: Any) -> str:
@@ -250,21 +378,11 @@ def _shortest_paths(sources: np.ndarray, traversable: np.ndarray) -> np.ndarray:
         column_int = int(column)
         distance[row_int, column_int] = 0.0
         heapq.heappush(queue, (0.0, row_int, column_int))
-    moves = (
-        (-1, 0, 1.0),
-        (1, 0, 1.0),
-        (0, -1, 1.0),
-        (0, 1, 1.0),
-        (-1, -1, math.sqrt(2.0)),
-        (-1, 1, math.sqrt(2.0)),
-        (1, -1, math.sqrt(2.0)),
-        (1, 1, math.sqrt(2.0)),
-    )
     while queue:
         current, row, column = heapq.heappop(queue)
         if current != distance[row, column]:
             continue
-        for row_step, column_step, cost in moves:
+        for row_step, column_step, cost in SHORTEST_PATH_MOVES:
             next_row = row + row_step
             next_column = column + column_step
             if not (
@@ -566,6 +684,44 @@ def derive_content_ids(
         "map_id": map_id,
         "scenario_id": _content_id("scenario", scenario_payload),
         **layer_hashes,
+    }
+
+
+def reward_contract_sha256(
+    environment_protocol: Mapping[str, Any],
+) -> str:
+    episode = environment_protocol.get("episode")
+    if not isinstance(episode, Mapping):
+        raise ValueError("Environment protocol has no frozen episode contract.")
+    payload = {
+        "schema": "terra_reward_contract_v1",
+        "accepted_dump_contract": environment_protocol.get("accepted_dump_contract"),
+        "rewards_type": episode.get("rewards_type"),
+        "rewards_sha256": episode.get("rewards_sha256"),
+        "apply_trench_rewards": episode.get("apply_trench_rewards"),
+        "trench_shaping": episode.get("trench_shaping"),
+    }
+    if not isinstance(payload["rewards_sha256"], str) or not payload["rewards_sha256"]:
+        raise ValueError("Environment protocol has no frozen reward hash.")
+    return canonical_json_sha256(payload)
+
+
+def derive_reward_treatment(
+    *,
+    scenario_id: str,
+    reward_distance_sha256: str,
+    frozen_reward_contract_sha256: str,
+) -> dict[str, str]:
+    payload = {
+        "schema": "terra_reward_treatment_identity_v1",
+        "scenario_id": scenario_id,
+        "reward_distance_sha256": reward_distance_sha256,
+        "reward_contract_sha256": frozen_reward_contract_sha256,
+    }
+    return {
+        "treatment_id": _content_id("treatment", payload),
+        "reward_distance_sha256": reward_distance_sha256,
+        "reward_contract_sha256": frozen_reward_contract_sha256,
     }
 
 
@@ -883,6 +1039,7 @@ def migrate_loaded_scenarios(
         raise ValueError("Environment protocol has no canonical hash.")
     if not isinstance(map_protocol, Mapping):
         raise ValueError("Environment protocol has no map receipt.")
+    frozen_reward_hash = reward_contract_sha256(environment_protocol)
     tile_size_m = float(map_protocol["tile_size_m_derived_float64"])
     edge_length_m = float(map_protocol["edge_length_m"])
     edge_length_px = int(map_protocol["edge_length_px"])
@@ -939,8 +1096,13 @@ def migrate_loaded_scenarios(
                 state_sha256=state.state_sha256,
                 reset_seed_uint32=seed,
             )
+            reward_treatment = derive_reward_treatment(
+                scenario_id=ids["scenario_id"],
+                reward_distance_sha256=ids["reward_distance_sha256"],
+                frozen_reward_contract_sha256=frozen_reward_hash,
+            )
             scenario_record = {
-                "schema": "terra_benchmark_scenario_v1",
+                "schema": "terra_b0a_design_input_scenario_v1",
                 "release_id": BENCHMARK_RELEASE_ID,
                 "scenario_id": ids["scenario_id"],
                 "map_id": ids["map_id"],
@@ -961,7 +1123,6 @@ def migrate_loaded_scenarios(
                     "dumpability_sha256": ids["dumpability_sha256"],
                     "initial_soil_sha256": ids["initial_soil_sha256"],
                     "metadata_sha256": ids["metadata_sha256"],
-                    "reward_distance_sha256": ids["reward_distance_sha256"],
                     "shape": [edge_length_px, edge_length_px],
                     "edge_length_m": edge_length_m,
                     "tile_size_m": tile_size_m,
@@ -980,15 +1141,20 @@ def migrate_loaded_scenarios(
                     ],
                     "completion_fraction": audit["reset"]["completion_fraction"],
                 },
+                "reward_treatment": reward_treatment,
                 "environment_protocol_sha256": protocol_hash,
             }
             audit_record = {
-                "schema": "terra_benchmark_audit_v1",
+                "schema": "terra_b0a_design_input_audit_v1",
                 "release_id": BENCHMARK_RELEASE_ID,
                 "scenario_id": ids["scenario_id"],
                 **audit,
                 "validation": {
-                    "format_valid": True,
+                    "migration_record_valid": True,
+                    "benchmark_format_valid": False,
+                    "benchmark_format_status": (
+                        "partial_design_input_not_canonical_s2_scenario"
+                    ),
                     "affordable_semantics_valid": True,
                     "exact_capacity_valid": True,
                     "initial_state_valid": True,
@@ -1070,13 +1236,66 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _require_verified_paths(
+    input_root: Path,
+    paths: Iterable[Path],
+    verified_relative_paths: frozenset[str],
+) -> None:
+    missing = []
+    for path in paths:
+        try:
+            relative = path.resolve().relative_to(input_root).as_posix()
+        except ValueError as error:
+            raise ValueError(f"Consumed B0a path leaves input root: {path}.") from error
+        if relative not in verified_relative_paths:
+            missing.append(relative)
+    if missing:
+        raise ValueError(
+            "Consumed B0a files are absent from the frozen checksum manifest: "
+            f"{sorted(missing)}."
+        )
+
+
 def _load_dataset(
     directory: Path,
+    *,
+    input_root: Path,
+    verified_relative_paths: frozenset[str],
 ) -> tuple[list[dict[str, Any]], list[np.ndarray]]:
-    dataset = _read_json(directory / "dataset.json")
+    dataset_path = directory / "dataset.json"
+    manifest_path = directory / "manifest.jsonl"
+    _require_verified_paths(
+        input_root,
+        (dataset_path, manifest_path),
+        verified_relative_paths,
+    )
+    dataset = _read_json(dataset_path)
     slot_count = dataset.get("slot_count")
     if not isinstance(slot_count, int) or slot_count <= 0:
         raise ValueError(f"{directory}/dataset.json has invalid slot_count.")
+    source_registry = dataset.get("source_registry")
+    if not isinstance(source_registry, str) or not source_registry:
+        raise ValueError(f"{dataset_path} has no source_registry path.")
+    consumed = [
+        directory / source_registry,
+        *(
+            directory / subdirectory / f"{prefix}{index}{suffix}"
+            for index in range(1, slot_count + 1)
+            for subdirectory, prefix, suffix in (
+                ("images", "img_", ".npy"),
+                ("occupancy", "img_", ".npy"),
+                ("dumpability", "img_", ".npy"),
+                ("actions", "img_", ".npy"),
+                ("distance", "img_", ".npy"),
+                ("metadata", "trench_", ".json"),
+            )
+        ),
+    ]
+    _require_verified_paths(
+        input_root,
+        consumed,
+        verified_relative_paths,
+    )
     manifest, shape, _ = validate_exact_dataset_contract(directory, slot_count)
     if shape != (BENCHMARK_MAP_SIZE, BENCHMARK_MAP_SIZE):
         raise ValueError(
@@ -1091,12 +1310,22 @@ def _load_dataset(
     return manifest, [np.asarray(jax.device_get(array)) for array in loaded]
 
 
-def load_legacy_scenarios(input_root: Path) -> list[LoadedLegacyScenario]:
+def load_legacy_scenarios(
+    input_root: Path,
+    *,
+    verified_relative_paths: frozenset[str],
+) -> list[LoadedLegacyScenario]:
     """Join every legacy identity to the exact-loader result once per cell."""
 
+    input_root = input_root.resolve()
     identities_path = input_root / "identities.jsonl"
     if not identities_path.is_file():
         raise FileNotFoundError(identities_path)
+    _require_verified_paths(
+        input_root,
+        (identities_path,),
+        verified_relative_paths,
+    )
     identities = _read_jsonl(identities_path)
     if len(identities) != EXPECTED_IDENTITY_COUNT:
         raise ValueError(
@@ -1121,7 +1350,11 @@ def load_legacy_scenarios(input_root: Path) -> list[LoadedLegacyScenario]:
         key = (split, primary_cell)
         directory = input_root / "cells" / split / primary_cell
         if key not in datasets:
-            datasets[key] = _load_dataset(directory)
+            datasets[key] = _load_dataset(
+                directory,
+                input_root=input_root,
+                verified_relative_paths=verified_relative_paths,
+            )
         manifest, arrays = datasets[key]
         matches = [row for row in manifest if row["map_id"] == legacy_map_id]
         if len(matches) != 1:
@@ -1189,25 +1422,6 @@ def load_legacy_scenarios(input_root: Path) -> list[LoadedLegacyScenario]:
     return scenarios
 
 
-def _input_manifest_hash(
-    input_root: Path,
-    scenarios: Iterable[LoadedLegacyScenario],
-) -> tuple[str, int]:
-    paths = {
-        input_root / "identities.jsonl",
-        input_root / "provenance.json",
-        input_root / "validation.json",
-    }
-    for scenario in scenarios:
-        paths.update(scenario.source_files)
-    paths = {path for path in paths if path.is_file()}
-    lines = [
-        f"{sha256_file(path)}  {path.relative_to(input_root).as_posix()}"
-        for path in sorted(paths)
-    ]
-    return hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest(), len(paths)
-
-
 def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
@@ -1218,6 +1432,48 @@ def _write_jsonl(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
             stream.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
 
 
+def validate_checkout_state(
+    *,
+    requested_revision: str,
+    head_revision: str,
+    porcelain_status: str,
+) -> None:
+    if requested_revision != head_revision:
+        raise ValueError(
+            "Requested Terra revision does not match the executing checkout: "
+            f"{requested_revision} != {head_revision}."
+        )
+    if porcelain_status.strip():
+        raise ValueError("Refusing a real B0a migration from a dirty Terra worktree.")
+
+
+def verify_clean_checkout(repository: Path, requested_revision: str) -> None:
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"Could not verify Terra checkout state: {error.stderr.strip()}"
+        ) from error
+    validate_checkout_state(
+        requested_revision=requested_revision,
+        head_revision=head,
+        porcelain_status=status,
+    )
+
+
 def run_migration(
     *,
     input_root: Path,
@@ -1226,22 +1482,26 @@ def run_migration(
 ) -> dict[str, Any]:
     input_root = input_root.resolve()
     output = output.resolve()
+    verify_clean_checkout(REPOSITORY_ROOT, terra_revision)
+    verified_input = verify_input_integrity(input_root)
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"Refusing to write into non-empty {output}.")
     output.mkdir(parents=True, exist_ok=True)
 
     env_config, env_receipt = frozen_benchmark_protocol()
     environment_protocol = frozen_environment_protocol(terra_revision)
-    scenarios = load_legacy_scenarios(input_root)
+    scenarios = load_legacy_scenarios(
+        input_root,
+        verified_relative_paths=verified_input.verified_relative_paths,
+    )
     outcomes = migrate_loaded_scenarios(
         scenarios,
         environment_protocol=environment_protocol,
         env_config=env_config,
     )
-    input_hash, source_file_count = _input_manifest_hash(
-        input_root,
-        scenarios,
-    )
+    migration_validation_path = output / "migration_validation.jsonl"
+    _write_jsonl(migration_validation_path, outcomes)
+    migration_validation_sha256 = sha256_file(migration_validation_path)
     status_counts = Counter(row["migration_status"] for row in outcomes)
     group_sizes = Counter(len(rows) for rows in _source_groups(scenarios).values())
     scenario_ids = [
@@ -1303,11 +1563,7 @@ def run_migration(
         "migration_status_counts": dict(sorted(status_counts.items())),
         "direct_service_status": DIRECT_SERVICE_STATUS,
         "static_valid_claimed": False,
-        "source": {
-            "identity_manifest_sha256": sha256_file(input_root / "identities.jsonl"),
-            "input_file_manifest_sha256": input_hash,
-            "input_file_count": source_file_count,
-        },
+        "source": verified_input.receipt,
         "implementation": {
             "migration_script_sha256": sha256_file(Path(__file__).resolve()),
             "environment_protocol_sha256": environment_protocol[
@@ -1316,12 +1572,15 @@ def run_migration(
             "env_config_sha256": env_receipt["env_config_sha256"],
             "terra_revision": terra_revision,
         },
+        "output": {
+            "migration_validation_sha256": migration_validation_sha256,
+            "migration_validation_record_count": len(outcomes),
+        },
         "output_contract": [
             "migration_validation.jsonl",
             "migration_summary.json",
         ],
     }
-    _write_jsonl(output / "migration_validation.jsonl", outcomes)
     _write_json(output / "migration_summary.json", summary)
     return summary
 

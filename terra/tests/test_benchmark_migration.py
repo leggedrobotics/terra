@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 
 import numpy as np
 import pytest
 
+import tools.migrate_b0a_live_geometry as migration
+from tools.migrate_b0a_live_geometry import SHORTEST_PATH_MOVES
 from tools.migrate_b0a_live_geometry import CONDITION_STATUS
 from tools.migrate_b0a_live_geometry import DIRECT_SERVICE_STATUS
 from tools.migrate_b0a_live_geometry import MIGRATION_STATUS
 from tools.migrate_b0a_live_geometry import LoadedLegacyScenario
 from tools.migrate_b0a_live_geometry import MaterializedState
+from tools.migrate_b0a_live_geometry import VerifiedInputIntegrity
 from tools.migrate_b0a_live_geometry import derive_content_ids
+from tools.migrate_b0a_live_geometry import derive_reward_treatment
 from tools.migrate_b0a_live_geometry import migrate_loaded_scenarios
 from tools.migrate_b0a_live_geometry import normalize_factor_vector
 from tools.migrate_b0a_live_geometry import recompute_affordable_audit
+from tools.migrate_b0a_live_geometry import reward_contract_sha256
+from tools.migrate_b0a_live_geometry import sha256_file
+from tools.migrate_b0a_live_geometry import validate_checkout_state
+from tools.migrate_b0a_live_geometry import verify_input_integrity
 
 EDGE_LENGTH_M = 36.5714285714
 TILE_SIZE_M = EDGE_LENGTH_M / 64
@@ -130,10 +139,21 @@ def _state_record() -> dict:
 def _protocol() -> dict:
     return {
         "environment_protocol_sha256": "protocol-hash",
+        "accepted_dump_contract": "exact_visible_dump_v1",
         "map": {
             "edge_length_px": 64,
             "edge_length_m": EDGE_LENGTH_M,
             "tile_size_m_derived_float64": TILE_SIZE_M,
+        },
+        "episode": {
+            "rewards_type": "DENSE",
+            "rewards_sha256": "reward-hash",
+            "apply_trench_rewards": False,
+            "trench_shaping": {
+                "alignment_coefficient": 0.0,
+                "distance_coefficient": 0.0,
+                "cabin_alignment_coefficient": 0.0,
+            },
         },
     }
 
@@ -237,6 +257,18 @@ def test_content_ids_respect_geometry_map_and_scenario_boundaries():
     assert reward_ids["geometry_id"] == baseline["geometry_id"]
     assert reward_ids["map_id"] == baseline["map_id"]
     assert reward_ids["scenario_id"] == baseline["scenario_id"]
+    contract_sha256 = reward_contract_sha256(_protocol())
+    baseline_treatment = derive_reward_treatment(
+        scenario_id=baseline["scenario_id"],
+        reward_distance_sha256=baseline["reward_distance_sha256"],
+        frozen_reward_contract_sha256=contract_sha256,
+    )
+    changed_treatment = derive_reward_treatment(
+        scenario_id=reward_ids["scenario_id"],
+        reward_distance_sha256=reward_ids["reward_distance_sha256"],
+        frozen_reward_contract_sha256=contract_sha256,
+    )
+    assert changed_treatment["treatment_id"] != baseline_treatment["treatment_id"]
 
     changed_dumpability = scenario.dumpability.copy()
     changed_dumpability[0, 0] = False
@@ -346,8 +378,12 @@ def test_source_group_gets_one_shared_state_and_static_claim_stays_deferred():
     assert len({row["scenario"]["geometry_id"] for row in outcomes}) == 1
     assert len({row["scenario"]["map_id"] for row in outcomes}) == 2
     for row in outcomes:
+        assert row["scenario"]["schema"] == "terra_b0a_design_input_scenario_v1"
+        treatment = row["scenario"]["reward_treatment"]
+        assert treatment["treatment_id"].startswith("treatment:sha256:")
         validation = row["audit"]["validation"]
-        assert validation["format_valid"] is True
+        assert validation["migration_record_valid"] is True
+        assert validation["benchmark_format_valid"] is False
         assert validation["static_valid"] is None
         assert validation["static_status"] == MIGRATION_STATUS
         assert validation["direct_service_status"] == DIRECT_SERVICE_STATUS
@@ -374,3 +410,159 @@ def test_group_state_failure_is_listed_for_every_affected_identity():
     assert len(outcomes) == 2
     assert {row["migration_status"] for row in outcomes} == {"failed"}
     assert all("no shared spawn" in row["errors"][0] for row in outcomes)
+
+
+def _write_integrity_tree(root, *, wrong_provenance_identity=False):
+    identity_path = root / "identities.jsonl"
+    source_registry_path = root / "source_registry.jsonl"
+    identity_path.write_text('{"map_id":"one"}\n')
+    source_registry_path.write_text('{"source_id":"one"}\n')
+    identity_sha256 = sha256_file(identity_path)
+    provenance = {
+        "identity_manifest_sha256": (
+            "0" * 64 if wrong_provenance_identity else identity_sha256
+        ),
+        "source_registry_sha256": sha256_file(source_registry_path),
+    }
+    (root / "provenance.json").write_text(json.dumps(provenance, sort_keys=True) + "\n")
+    (root / "validation.json").write_text('{"status":"passed"}\n')
+    paths = [
+        identity_path,
+        root / "provenance.json",
+        source_registry_path,
+        root / "validation.json",
+    ]
+    lines = [
+        f"{sha256_file(path)}  {path.relative_to(root).as_posix()}"
+        for path in sorted(paths)
+    ]
+    manifest = root / "files.sha256"
+    manifest.write_text("\n".join(lines) + "\n")
+    return sha256_file(manifest)
+
+
+def test_input_integrity_verifies_root_manifest_and_provenance(tmp_path):
+    manifest_sha256 = _write_integrity_tree(tmp_path)
+    verified = verify_input_integrity(
+        tmp_path,
+        expected_files_sha256=manifest_sha256,
+    )
+    receipt = verified.receipt
+    assert receipt["files_sha256_sha256"] == manifest_sha256
+    assert receipt["verified_file_count"] == 4
+    assert verified.verified_relative_paths == frozenset(
+        {
+            "identities.jsonl",
+            "provenance.json",
+            "source_registry.jsonl",
+            "validation.json",
+        }
+    )
+    assert receipt["identity_manifest_sha256"] == sha256_file(
+        tmp_path / "identities.jsonl"
+    )
+
+
+def test_input_integrity_rejects_a_file_changed_after_manifest(tmp_path):
+    manifest_sha256 = _write_integrity_tree(tmp_path)
+    (tmp_path / "identities.jsonl").write_text('{"map_id":"tampered"}\n')
+    with pytest.raises(ValueError, match="checksum mismatch for identities.jsonl"):
+        verify_input_integrity(
+            tmp_path,
+            expected_files_sha256=manifest_sha256,
+        )
+
+
+def test_input_integrity_rejects_provenance_cross_hash_mismatch(tmp_path):
+    manifest_sha256 = _write_integrity_tree(
+        tmp_path,
+        wrong_provenance_identity=True,
+    )
+    with pytest.raises(ValueError, match="identity_manifest_sha256"):
+        verify_input_integrity(
+            tmp_path,
+            expected_files_sha256=manifest_sha256,
+        )
+
+
+def test_shortest_path_neighbour_set_has_eight_unique_edges():
+    offsets = [(row, column) for row, column, _cost in SHORTEST_PATH_MOVES]
+    assert len(offsets) == len(set(offsets)) == 8
+    assert offsets.count((1, -1)) == 1
+
+
+def test_real_migration_requires_matching_clean_checkout():
+    validate_checkout_state(
+        requested_revision="abc",
+        head_revision="abc",
+        porcelain_status="",
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        validate_checkout_state(
+            requested_revision="requested",
+            head_revision="actual",
+            porcelain_status="",
+        )
+    with pytest.raises(ValueError, match="dirty"):
+        validate_checkout_state(
+            requested_revision="abc",
+            head_revision="abc",
+            porcelain_status="?? untracked\n",
+        )
+
+
+def test_summary_receipts_already_written_migration_validation(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(migration, "verify_clean_checkout", lambda *_args: None)
+    monkeypatch.setattr(
+        migration,
+        "verify_input_integrity",
+        lambda _root: VerifiedInputIntegrity(
+            receipt={
+                "files_sha256_sha256": "f" * 64,
+                "verified_file_count": 4,
+            },
+            verified_relative_paths=frozenset(),
+        ),
+    )
+    monkeypatch.setattr(
+        migration,
+        "frozen_benchmark_protocol",
+        lambda: ("env", {"env_config_sha256": "e" * 64}),
+    )
+    monkeypatch.setattr(
+        migration,
+        "frozen_environment_protocol",
+        lambda revision: {
+            "terra_revision": revision,
+            "environment_protocol_sha256": "p" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        migration,
+        "load_legacy_scenarios",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        migration,
+        "migrate_loaded_scenarios",
+        lambda *_args, **_kwargs: [],
+    )
+
+    output = tmp_path / "output"
+    summary = migration.run_migration(
+        input_root=tmp_path,
+        output=output,
+        terra_revision="abc",
+    )
+    validation_path = output / "migration_validation.jsonl"
+    assert sorted(path.name for path in output.iterdir()) == [
+        "migration_summary.json",
+        "migration_validation.jsonl",
+    ]
+    assert summary["output"]["migration_validation_sha256"] == sha256_file(
+        validation_path
+    )
+    assert summary["output"]["migration_validation_record_count"] == 0
