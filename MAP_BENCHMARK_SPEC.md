@@ -1033,6 +1033,39 @@ Static validation includes:
 - split, hash, source, pair, and near-duplicate audits; and
 - deterministic rejection reasons.
 
+S1 materializes exactly one pilot initial state per source group and split. A
+counterfactual group shares one state across all of its variants; an unpaired
+map is its own group. The generator derives a `uint32` reset seed from the
+first four SHA-256 bytes in big-endian/network order:
+`SHA256("terra_initial_state_seed_v1\0" + release_id + "\0" + split + "\0" +
+source_group_id + "\0" + state_index)`, using `state_index=0` for the pilot.
+It calls the live one-tracked-agent `Agent.new` path once against the
+intersection of the variants' admissible spawn masks, then validates and
+serializes that exact state against every variant. The internal live spawn
+rejection sampler is part of this call. There is no resampling after observing
+workspace, direct-service, witness, or policy outcomes: a state or group that
+fails is listed and replaced under the ordinary admission rules. Promotion,
+development, and sealed namespaces are distinct.
+
+Initial direct service is an exact transition outcome, not an annulus
+approximation. Starting from the serialized state, the validator builds the
+reachable `(row, column, angle_base)` graph using the real unloaded forward,
+backward, clockwise, and anticlockwise transitions. For each reachable pose
+and all twelve cabin headings, it replays the real dig transition and all
+twelve loaded cabin headings. A dump is legal direct service only when the
+complete pre-dump load is unloaded, mass is conserved, the entire positive
+soil delta lies inside the exact accepted dump mask, and the off-mask delta is
+zero. The intentionally executable C1a wrong-dump transition is counted as
+`wrong_complete_dump_attempts` and never as legal service.
+
+Overlapping dig cones are unioned per required cell: for each cell, retain the
+maximum target progress from any legal dig, and separately the maximum from
+any dig followed by at least one legal complete dump. Cap both by that cell's
+initial remaining required volume before summing. These sums divided by total
+initial remaining required volume define `initial_workspace_coverage` and
+`direct_service_coverage_initial`. This prevents overlapping hypothetical
+digs from double-counting work.
+
 The frozen B0a rasters were generated for the live Terra runtime, but their
 metre fields and static audit were computed with stale `0.6875` m/tile,
 `5 x 9` footprint assumptions. Repair does not change Terra
@@ -1651,6 +1684,8 @@ cannot silently regain authority.
 | `R-20260727-22` | Accepted | Remove the unreceipted 23/256 probe count. S1 emits a hashed per-identity migration receipt and profiles exact direct-service validation before S2. Normalize legacy `broad_side_cast` provenance to canonical `side_cast`. |
 | `R-20260727-23` | Accepted and executed | Keep the proposed ten-integer-cell trench-band width fixed, audit only its location under the preregistered support/interior rule, and freeze `v68_77`. The tracked pilot sampler leaves the hash-pinned B0 builder unchanged and receipts generator retries, duplicates, and conditioning covariates. |
 | `R-20260727-24` | Accepted and executed | Add an optional complete `Agent` input to single/batched reset, preserve the supplied tree and RNG exactly, and freeze `terra_agent_state_v1` as path/dtype/rank/shape-prefixed canonical bytes over every live field and all four slots. Admissibility remains a separate host-side gate. |
+| `R-20260727-25` | Accepted | Materialize one deterministic initial state per source group and split from a hash-derived seed and the live `Agent.new` sampler over the variants' intersected spawn contract. Share it across counterfactuals and never resample after seeing feasibility or policy outcomes. |
+| `R-20260727-26` | Accepted | Compute initial direct service by exact action replay from the serialized state. A complete off-zone wrong dump remains a valid C1a mistake but never counts as legal service. Union overlapping hypothetical digs by capped per-cell maximum progress before computing coverage. |
 
 Still to decide through S1-S2 evidence:
 

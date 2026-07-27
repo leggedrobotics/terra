@@ -81,6 +81,8 @@ These decisions supersede stale choices later in the historical v4 design:
 | Foundation volume support | Match OSM/procedural all-around through a source-pair interval after retuning procedural generation toward OSM. Match the apron capacity pair separately by exact OSM dig identity. |
 | Retention arithmetic | Freeze the lower of two passing counts. Retain an 8-map condition at `max(6, reference-1)` and the fixed 32-map family panel at `max(26, reference-1)`; only consecutive complete integrity-valid failures count toward rollback. |
 | Migration/cost evidence | Withdraw the unreceipted 23/256 probe count. S1 writes a hashed per-identity migration receipt and an exact direct-service validation cost profile before S2. |
+| Pilot initial states | Materialize one hash-seeded live `Agent.new` result per source group and split over the variants' intersected spawn contract. Counterfactuals share the exact state; never resample after observing feasibility or policy performance. |
+| Direct-service union | Replay actual movement/dig/cabin/dump transitions. Off-zone complete dumps remain recoverable mistakes but do not count; overlapping hypothetical digs are unioned by capped per-cell maximum progress. |
 
 ### 1.2 First S1 execution receipts
 
@@ -121,6 +123,14 @@ These decisions supersede stale choices later in the historical v4 design:
   `debd22b6ff2c8b31d263ceb843e524d5bf9ae1ffe186e26291f1e5ec3d18fb1a`;
   eager/JIT/batched-vmap preservation and the existing dump contract pass
   together (`22 passed`).
+- [x] R-25's initial-state namespace and sampler are implemented: the first
+  four SHA-256 bytes are interpreted big-endian as a `uint32`, one live
+  tracked `Agent.new` call consumes the source-group-intersected spawn
+  contract, and the receipt pins both seed and canonical state hashes. The
+  golden namespace yields seed `1643655228` and digest
+  `61f8303cdc0376bdf2d348c248f3cbd1a16678764f6e276affce135fa2463329`;
+  deterministic and shared-counterfactual tests pass. Per-bank
+  materialization remains part of the open migration gate.
 
 The first recovery dense reward, named `corrected_dense_v1`, is the current
 dense reward with one exact completion contract, contained mass-conserving

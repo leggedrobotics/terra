@@ -10,6 +10,9 @@ from terra.agent import AgentState
 from terra.benchmark_state import agent_from_record
 from terra.benchmark_state import agent_state_sha256
 from terra.benchmark_state import agent_to_record
+from terra.benchmark_state import canonical_agent_bytes
+from terra.benchmark_state import derive_initial_state_seed
+from terra.benchmark_state import sample_benchmark_initial_agent
 from terra.benchmark_state import validate_benchmark_initial_agent
 from terra.config import EnvConfig
 from terra.env import TerraEnv
@@ -226,6 +229,115 @@ class BenchmarkAgentStateTest(unittest.TestCase):
                     agent_states=agent.agent_states[:3] + (noncanonical_slot,)
                 ),
                 env_cfg=env_cfg,
+                padding_mask=padding,
+                action_map=actions,
+                dumpability_mask=dumpability,
+            )
+
+    def test_initial_state_seed_has_golden_big_endian_namespace(self):
+        namespace = (
+            "terramap-bench-v1.0.0",
+            "public_train",
+            "source-group-0001",
+            0,
+        )
+        seed, digest = derive_initial_state_seed(*namespace)
+        self.assertEqual(seed, 1643655228)
+        self.assertEqual(
+            digest,
+            "61f8303cdc0376bdf2d348c248f3cbd1a16678764f6e276affce135fa2463329",
+        )
+        self.assertEqual(seed, int.from_bytes(bytes.fromhex(digest)[:4], "big"))
+
+        variants = (
+            ("terramap-bench-v1.0.1", namespace[1], namespace[2], namespace[3]),
+            (namespace[0], "promotion", namespace[2], namespace[3]),
+            (namespace[0], namespace[1], "source-group-0002", namespace[3]),
+            (namespace[0], namespace[1], namespace[2], 1),
+        )
+        derived = {derive_initial_state_seed(*namespace)}
+        derived.update(derive_initial_state_seed(*variant) for variant in variants)
+        self.assertEqual(len(derived), 5)
+
+    def test_live_initial_state_sample_is_byte_deterministic(self):
+        padding = np.zeros(self.SHAPE, dtype=np.int8)
+        actions = np.zeros(self.SHAPE, dtype=np.int8)
+        dumpability = np.ones(self.SHAPE, dtype=np.bool_)
+        arguments = {
+            "release_id": "terramap-bench-v1.0.0",
+            "split": "public_train",
+            "source_group_id": "source-group-0001",
+            "state_index": 0,
+            "env_cfg": self._env_config(),
+            "padding_mask": padding,
+            "action_map": actions,
+            "dumpability_mask": dumpability,
+        }
+
+        first_agent, first_receipt = sample_benchmark_initial_agent(**arguments)
+        second_agent, second_receipt = sample_benchmark_initial_agent(**arguments)
+        self.assertEqual(
+            canonical_agent_bytes(first_agent), canonical_agent_bytes(second_agent)
+        )
+        self.assertEqual(first_receipt, second_receipt)
+        self.assertEqual(first_receipt["seed_uint32"], 1643655228)
+        self.assertEqual(first_receipt["seed_byte_order"], "big")
+        self.assertEqual(
+            first_receipt["initial_agent_state_sha256"],
+            agent_state_sha256(first_agent),
+        )
+
+        changed_arguments = dict(arguments)
+        changed_arguments["source_group_id"] = "source-group-0002"
+        changed_agent, changed_receipt = sample_benchmark_initial_agent(
+            **changed_arguments
+        )
+        self.assertNotEqual(first_receipt, changed_receipt)
+        self.assertNotEqual(
+            canonical_agent_bytes(first_agent),
+            canonical_agent_bytes(changed_agent),
+        )
+
+    def test_shared_intersection_state_validates_for_both_counterfactuals(self):
+        padding_a = np.zeros(self.SHAPE, dtype=np.int8)
+        padding_b = np.zeros(self.SHAPE, dtype=np.int8)
+        padding_a[18:23, 18:23] = 1
+        padding_b[42:47, 42:47] = 1
+
+        actions_a = np.zeros(self.SHAPE, dtype=np.int8)
+        actions_b = np.zeros(self.SHAPE, dtype=np.int8)
+        actions_a[12:15, 46:49] = 1
+        actions_b[47:50, 12:15] = 1
+
+        dumpability_a = np.ones(self.SHAPE, dtype=np.bool_)
+        dumpability_b = np.ones(self.SHAPE, dtype=np.bool_)
+        dumpability_a[24:27, :] = False
+        dumpability_b[:, 36:39] = False
+
+        intersected_padding = np.maximum(padding_a, padding_b)
+        intersected_actions = np.where(
+            (actions_a != 0) | (actions_b != 0), 1, 0
+        ).astype(np.int8)
+        intersected_dumpability = dumpability_a & dumpability_b
+
+        agent, receipt = sample_benchmark_initial_agent(
+            release_id="terramap-bench-v1.0.0",
+            split="promotion",
+            source_group_id="paired-foundation-0001",
+            state_index=0,
+            env_cfg=self._env_config(),
+            padding_mask=intersected_padding,
+            action_map=intersected_actions,
+            dumpability_mask=intersected_dumpability,
+        )
+        self.assertEqual(receipt["split"], "promotion")
+        for padding, actions, dumpability in (
+            (padding_a, actions_a, dumpability_a),
+            (padding_b, actions_b, dumpability_b),
+        ):
+            validate_benchmark_initial_agent(
+                agent,
+                env_cfg=self._env_config(),
                 padding_mask=padding,
                 action_map=actions,
                 dumpability_mask=dumpability,

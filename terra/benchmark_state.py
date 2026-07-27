@@ -20,6 +20,7 @@ from terra.utils import get_agent_corners
 
 SCHEMA = "terra_agent_state_v1"
 MAX_AGENTS = 4
+INITIAL_STATE_SEED_SCHEMA = "terra_initial_state_seed_v1"
 
 _AGENT_FIELDS = (
     "width",
@@ -329,6 +330,102 @@ def canonical_agent_bytes(agent: Agent) -> bytes:
 def agent_state_sha256(agent: Agent) -> str:
     """Return the portable terra_agent_state_v1 digest."""
     return hashlib.sha256(canonical_agent_bytes(agent)).hexdigest()
+
+
+def derive_initial_state_seed(
+    release_id: str,
+    split: str,
+    source_group_id: str,
+    state_index: int,
+) -> tuple[int, str]:
+    """Derive R-25's big-endian uint32 seed and full namespace digest."""
+    namespace_fields = {
+        "release_id": release_id,
+        "split": split,
+        "source_group_id": source_group_id,
+    }
+    for name, value in namespace_fields.items():
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{name} must be a non-empty string.")
+        if "\0" in value:
+            raise ValueError(f"{name} cannot contain a NUL delimiter.")
+    if isinstance(state_index, bool) or not isinstance(state_index, int):
+        raise TypeError("state_index must be an integer.")
+    if not 0 <= state_index <= np.iinfo(np.uint32).max:
+        raise ValueError("state_index must fit uint32.")
+
+    payload = (
+        f"{INITIAL_STATE_SEED_SCHEMA}\0"
+        f"{release_id}\0{split}\0{source_group_id}\0{state_index}"
+    ).encode("utf-8")
+    digest = hashlib.sha256(payload).digest()
+    seed = int.from_bytes(digest[:4], byteorder="big", signed=False)
+    return seed, digest.hex()
+
+
+def sample_benchmark_initial_agent(
+    *,
+    release_id: str,
+    split: str,
+    source_group_id: str,
+    state_index: int,
+    env_cfg: EnvConfig,
+    padding_mask: Any,
+    action_map: Any,
+    dumpability_mask: Any,
+) -> tuple[Agent, dict[str, Any]]:
+    """Sample one shared tracked-agent state from an intersected spawn contract."""
+    seed, seed_digest = derive_initial_state_seed(
+        release_id,
+        split,
+        source_group_id,
+        state_index,
+    )
+    padding = jnp.asarray(padding_mask)
+    actions = jnp.asarray(action_map)
+    dumpability = jnp.asarray(dumpability_mask)
+    if (
+        padding.ndim != 2
+        or actions.shape != padding.shape
+        or dumpability.shape != padding.shape
+    ):
+        raise ValueError(
+            "padding_mask, action_map, and dumpability_mask must share one 2D shape."
+        )
+
+    max_traversable_x = jnp.sum(padding[:, 0] == 0, dtype=jnp.int32)
+    max_traversable_y = jnp.sum(padding[0] == 0, dtype=jnp.int32)
+    agent, _ = Agent.new(
+        jax.random.PRNGKey(seed),
+        env_cfg,
+        max_traversable_x,
+        max_traversable_y,
+        padding,
+        actions,
+        dumpability_map=dumpability,
+        agent_types=(0,),
+        action_types=(0,),
+    )
+    agent = jax.tree_util.tree_map(jnp.asarray, agent)
+    validate_benchmark_initial_agent(
+        agent,
+        env_cfg=env_cfg,
+        padding_mask=padding,
+        action_map=actions,
+        dumpability_mask=dumpability,
+    )
+    receipt = {
+        "schema": INITIAL_STATE_SEED_SCHEMA,
+        "release_id": release_id,
+        "split": split,
+        "source_group_id": source_group_id,
+        "state_index": state_index,
+        "seed_byte_order": "big",
+        "seed_uint32": seed,
+        "seed_digest_sha256": seed_digest,
+        "initial_agent_state_sha256": agent_state_sha256(agent),
+    }
+    return agent, receipt
 
 
 def validate_benchmark_initial_agent(
