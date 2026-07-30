@@ -1894,12 +1894,31 @@ def assert_unique_scenario_rows(rows: list[dict[str, Any]]) -> None:
         first_by_identity[identity] = map_id
 
 
-def write_condition(output, dataset, condition, condition_index, samples):
+def review_map_indices(map_count: int, example_count: int) -> frozenset[int]:
+    """Choose a deterministic, evenly spaced provisional review subset."""
+    if map_count <= 0 or example_count <= 0:
+        return frozenset()
+    count = min(map_count, example_count)
+    return frozenset(
+        int(index)
+        for index in np.linspace(0, map_count - 1, num=count, dtype=np.int32)
+    )
+
+
+def write_condition(
+    output,
+    dataset,
+    condition,
+    condition_index,
+    samples,
+    review_examples,
+):
     data = output / "dataset"
     folder = output / condition.id
     (folder / "previews").mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
     seen_scenarios: set[str] = set()
+    review_indices = review_map_indices(len(samples), review_examples)
     for sample in samples:
         map_index = int(sample.metadata["map_index"])
         sample_index = sample_index_of(condition_index, map_index)
@@ -1928,13 +1947,23 @@ def write_condition(output, dataset, condition, condition_index, samples):
         (output / "review_metadata" / f"img_{sample_index}.json").write_text(
             json.dumps(record, indent=2, sort_keys=True, default=str) + "\n"
         )
-        base.render_sample(
-            sample,
-            folder / "previews" / f"{map_index:02d}__{map_id}.png",
-            f"{condition.id} #{map_index:02d} ({map_id})",
+        if map_index in review_indices:
+            base.render_sample(
+                sample,
+                folder / "previews" / f"{map_index:02d}__{map_id}.png",
+                f"{condition.id} #{map_index:02d} ({map_id})",
+            )
+    review_samples = [
+        sample
+        for sample in samples
+        if int(sample.metadata["map_index"]) in review_indices
+    ]
+    if review_samples:
+        v6.render_condition_overview(
+            folder / "overview.png",
+            condition,
+            review_samples,
         )
-    if samples:
-        v6.render_condition_overview(folder / "overview.png", condition, samples)
     levels = _levels_of(condition)
     (folder / "manifest.json").write_text(
         json.dumps(
@@ -2106,6 +2135,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-attempts", type=int, default=v9.MAX_ATTEMPTS)
     parser.add_argument("--only", default="")
+    parser.add_argument(
+        "--review-examples",
+        type=int,
+        default=16,
+        help="evenly spaced provisional previews per condition; 0 disables rendering",
+    )
     return parser.parse_args()
 
 
@@ -2220,6 +2255,8 @@ def main() -> None:
         raise SystemExit("--maps must be in [1, 999]")
     if args.max_attempts <= 0:
         raise SystemExit("--max-attempts must be positive")
+    if args.review_examples < 0:
+        raise SystemExit("--review-examples must be nonnegative")
     source = args.source_foundations.resolve()
     try:
         source_sha256, source_count = source_pool_sha256(source)
@@ -2277,7 +2314,12 @@ def main() -> None:
         rejection_totals.update(rejections)
         unsatisfied.extend(failures)
         condition_rows = write_condition(
-            output, dataset, condition, condition_index, samples
+            output,
+            dataset,
+            condition,
+            condition_index,
+            samples,
+            args.review_examples,
         )
         rows.extend(condition_rows)
         counts[condition.id] = len(condition_rows)

@@ -70,6 +70,16 @@ def test_sample_indices_do_not_collide_at_large_bank_sizes():
         generator.sample_index_of(0, 1000)
 
 
+def test_review_subset_is_bounded_deterministic_and_spans_bank():
+    selected = generator.review_map_indices(64, 16)
+    assert len(selected) == 16
+    assert min(selected) == 0
+    assert max(selected) == 63
+    assert selected == generator.review_map_indices(64, 16)
+    assert generator.review_map_indices(4, 16) == frozenset(range(4))
+    assert generator.review_map_indices(64, 0) == frozenset()
+
+
 def test_scenario_identity_covers_every_reset_array():
     original = _sample()
     same = _sample()
