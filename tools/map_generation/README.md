@@ -23,6 +23,33 @@ spaced provisional review examples per condition. Set `--review-examples 0` for
 data-only generation. The later review exporter may replace this provisional
 subset with descriptor-selected examples without changing the bank.
 
+Each row carries two distinct identities:
+
+- `source_group_id` hashes the raw OSM footprint, or the realized procedural
+  dig mask when there is no raw source;
+- `pair_slot_id` is the declared counterfactual bank slot.
+
+Rerolls can change a condition's realized dig inside one pair slot.
+`materialize_splits.py` drops those non-identical pair slots, selects an exact
+deterministic set from an oversized candidate bank, keeps every retained pair
+slot in one split, and then fails if any realized source would leak across
+splits:
+
+```bash
+python tools/map_generation/materialize_splits.py \
+  --manifest /path/to/candidate/manifest.csv \
+  --dataset /path/to/candidate/dataset \
+  --output /path/to/new/split-bank \
+  --train 64 \
+  --promotion 16 \
+  --development 16 \
+  --sealed 32
+```
+
+Generate more than 128 candidate maps per condition so rerolled pair slots can
+be discarded without shrinking a split. The materializer does not search for a
+near-feasible allocation: it either meets the exact contract or fails.
+
 The `generate_prototypes*.py` modules are a private snapshot of the reviewed
 v6 generator lineage. They are retained to avoid changing validated geometry,
 capacity, lane, obstacle, and proximity semantics during the diversity repair.

@@ -748,6 +748,29 @@ def ring_gap_metrics(
 class GeometryFactoryV10(v9.GeometryFactoryV9):
     """v9 geometries plus the three short-extent mini junctions."""
 
+    @staticmethod
+    def _source_sha256(source: np.ndarray) -> str:
+        source = np.ascontiguousarray(source)
+        digest = hashlib.sha256()
+        digest.update(source.dtype.str.encode())
+        digest.update(np.asarray(source.shape, dtype=np.int64).tobytes())
+        digest.update(source.tobytes())
+        return digest.hexdigest()
+
+    def slab(self, rng, radius, angle):
+        placed, metadata = super().slab(rng, radius, angle)
+        if placed is not None:
+            source = self.slab_sources[metadata["foundation_source_index"]]
+            metadata["foundation_source_sha256"] = self._source_sha256(source)
+        return placed, metadata
+
+    def slab_lg(self, rng, radius, angle):
+        placed, metadata = super().slab_lg(rng, radius, angle)
+        if placed is not None:
+            source = self.scale_sources[metadata["foundation_source_index"]]
+            metadata["foundation_source_sha256"] = self._source_sha256(source)
+        return placed, metadata
+
     # ---- v6.2 R4: no shallow seg2 fold at the wide half_width ------------
 
     @staticmethod
@@ -1880,6 +1903,14 @@ def scenario_sha256(sample: base.Sample) -> str:
     return digest.hexdigest()
 
 
+def source_group_id(sample: base.Sample) -> str:
+    """Identity shared by every transform or counterfactual of one source."""
+    source_identity = sample.metadata.get("foundation_source_sha256")
+    if source_identity:
+        return f"foundation-source:{source_identity}"
+    return f"dig:{sample.metadata['dig_sha256']}"
+
+
 def assert_unique_scenario_rows(rows: list[dict[str, Any]]) -> None:
     """Fail if two manifest rows describe the same reset-consumed arrays."""
     first_by_identity: dict[str, str] = {}
@@ -1938,7 +1969,8 @@ def write_condition(
         record = {
             "sample_index": sample_index,
             "map_id": map_id,
-            "source_group_id": f"{condition.dig_bank_level}:{map_index}",
+            "pair_slot_id": f"{condition.dig_bank_level}:{map_index}",
+            "source_group_id": source_group_id(sample),
             "scenario_sha256": scenario_identity,
             **sample.metadata,
             **{f"gate_{k}": v for k, v in asdict(sample.gate).items()},
@@ -2018,6 +2050,7 @@ def write_condition(
                         "capacityRatio": row["dump_to_dig_area_ratio"],
                         "sharedDig": bool(row["shared_dig"]),
                         "digSha256": row["dig_sha256"],
+                        "pairSlotId": row["pair_slot_id"],
                         "sourceGroupId": row["source_group_id"],
                         "scenarioSha256": row["scenario_sha256"],
                     }
@@ -2168,6 +2201,50 @@ def _distribution(values: list[float]) -> dict[str, float]:
     }
 
 
+def _cropped_mask(mask: np.ndarray) -> np.ndarray:
+    coordinates = np.argwhere(mask)
+    if not len(coordinates):
+        return np.zeros((0, 0), dtype=np.bool_)
+    low = coordinates.min(axis=0)
+    high = coordinates.max(axis=0) + 1
+    return np.ascontiguousarray(mask[low[0] : high[0], low[1] : high[1]])
+
+
+def _mask_identity(mask: np.ndarray) -> str:
+    mask = np.ascontiguousarray(mask, dtype=np.bool_)
+    digest = hashlib.sha256()
+    digest.update(np.asarray(mask.shape, dtype=np.int64).tobytes())
+    digest.update(mask.tobytes())
+    return digest.hexdigest()
+
+
+def _translation_normalized_identity(mask: np.ndarray) -> str:
+    return _mask_identity(_cropped_mask(mask))
+
+
+def _dihedral_normalized_identity(mask: np.ndarray) -> str:
+    cropped = _cropped_mask(mask)
+    variants = []
+    for rotation in range(4):
+        rotated = np.rot90(cropped, rotation)
+        variants.append(_mask_identity(rotated))
+        variants.append(_mask_identity(np.fliplr(rotated)))
+    return min(variants)
+
+
+def _digital_perimeter(mask: np.ndarray) -> int:
+    """Four-neighbour perimeter in pixel-edge units."""
+    mask = np.asarray(mask, dtype=np.bool_)
+    return int(
+        np.count_nonzero(mask[:, 1:] != mask[:, :-1])
+        + np.count_nonzero(mask[1:, :] != mask[:-1, :])
+        + np.count_nonzero(mask[:, 0])
+        + np.count_nonzero(mask[:, -1])
+        + np.count_nonzero(mask[0, :])
+        + np.count_nonzero(mask[-1, :])
+    )
+
+
 def write_diversity_report(output: Path, rows: list[dict[str, Any]]) -> None:
     by_condition: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -2179,17 +2256,22 @@ def write_diversity_report(output: Path, rows: list[dict[str, Any]]) -> None:
         perimeters = []
         compactness = []
         aspects = []
+        placed_identities = []
+        translation_identities = []
+        dihedral_identities = []
         for row in condition_rows:
             target = np.load(
                 output / "dataset" / "images" / f"img_{row['sample_index']}.npy"
             )
             dig = np.asarray(target) < 0
             digs.append(dig)
-            boundary = dig & ~ndi.binary_erosion(dig)
-            perimeter = max(1, int(boundary.sum()))
+            perimeter = max(1, _digital_perimeter(dig))
             area = int(dig.sum())
             perimeters.append(float(perimeter))
             compactness.append(float(4.0 * math.pi * area / (perimeter**2)))
+            placed_identities.append(_mask_identity(dig))
+            translation_identities.append(_translation_normalized_identity(dig))
+            dihedral_identities.append(_dihedral_normalized_identity(dig))
             coordinates = np.argwhere(dig)
             height, width = coordinates.max(axis=0) - coordinates.min(axis=0) + 1
             aspects.append(float(max(height, width) / max(1, min(height, width))))
@@ -2209,6 +2291,12 @@ def write_diversity_report(output: Path, rows: list[dict[str, Any]]) -> None:
             "source_groups": len(
                 {row["source_group_id"] for row in condition_rows}
             ),
+            "pair_slots": len({row["pair_slot_id"] for row in condition_rows}),
+            "unique_placed_dig_rasters": len(set(placed_identities)),
+            "unique_translation_normalized_digs": len(
+                set(translation_identities)
+            ),
+            "unique_dihedral_normalized_digs": len(set(dihedral_identities)),
             "exact_scenario_duplicates": len(scenario_ids)
             - len(set(scenario_ids)),
             "nearest_neighbor_centered_iou": _distribution(nearest),
@@ -2240,7 +2328,15 @@ def write_diversity_report(output: Path, rows: list[dict[str, Any]]) -> None:
 
     payload = {
         "schema": "terra_map_bank_diversity_v1",
-        "admission_rule": "exact_full_scenario_duplicate_only",
+        "novelty_rules": {
+            "dig_bank": "reject_exact_dig_duplicates",
+            "full_bank": "reject_exact_full_scenario_duplicates",
+            "centered_iou": "diagnostic_only",
+        },
+        "physical_and_source_gates": (
+            "unchanged reviewed-v6 construction, capacity, proximity, lane, "
+            "obstacle, workspace, and within-level source-reuse gates"
+        ),
         "centered_iou_role": "diagnostic_only",
         "conditions": conditions,
     }
@@ -2269,6 +2365,11 @@ def main() -> None:
         map_id_prefix=f"curriculum-diverse-{args.maps}",
     )
     assert_conditions_match_taxonomy(dataset)
+    selected = set(filter(None, args.only.split(",")))
+    known = {condition.id for condition in dataset.conditions}
+    unknown = selected - known
+    if unknown:
+        raise SystemExit(f"unknown --only conditions: {sorted(unknown)}")
     output = args.output.resolve()
     if output.exists() and any(output.iterdir()):
         raise SystemExit(f"--output must be empty: {output}")
@@ -2281,11 +2382,6 @@ def main() -> None:
 
     factory = GeometryFactoryV10(source)
 
-    selected = set(filter(None, args.only.split(",")))
-    known = {condition.id for condition in dataset.conditions}
-    unknown = selected - known
-    if unknown:
-        raise SystemExit(f"unknown --only conditions: {sorted(unknown)}")
     bank_size = args.maps
     spec = tax.RELEASES[dataset.release]
     t0_levels = frozenset(
@@ -2402,7 +2498,11 @@ def main() -> None:
         "source_foundations": str(source),
         "source_foundations_images": source_count,
         "source_foundations_sha256": source_sha256,
-        "novelty_admission": "exact_dig_duplicate_only",
+        "novelty_rules": {
+            "dig_bank": "reject_exact_dig_duplicates",
+            "full_bank": "reject_exact_full_scenario_duplicates",
+            "centered_iou": "diagnostic_only",
+        },
         "centred_iou_role": "diagnostic_only",
         "condition_count": len(dataset.conditions),
         "maps_per_condition": counts,

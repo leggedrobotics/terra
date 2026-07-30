@@ -193,7 +193,7 @@ all later changes are explainable by this plan.
 
 Focused tests:
 
-1. [x] fixed seed reproduces the pinned reference scenario;
+1. [x] manual smoke receipt reproduces the pinned reference scenario;
 2. [x] 64 scenarios can be generated for a representative slab and trench
    condition without IoU exhaustion;
 3. [x] an exact duplicate scenario fails loudly; and
@@ -205,12 +205,22 @@ manifests. The first slab scenario is byte-identical to reviewed v6 across all
 five arrays. Receipt:
 [`tools/map_generation/SMOKE_RECEIPT_20260730.md`](tools/map_generation/SMOKE_RECEIPT_20260730.md).
 
-### P2 — 64-layout pilot
+### P2 — split-ready pilot
 
-- [ ] Generate `64/16/16/32` source groups for each active condition.
+- [x] Give every row a raw-source or realized-dig `source_group_id` and a
+  separate declared `pair_slot_id`.
+- [x] Drop a pair slot when condition-specific rerolls produce different dig
+  identities inside it.
+- [x] Implement exact deterministic `64/16/16/32`
+  train/promotion/development/sealed materialization.
+- [x] Fail instead of leaking one realized source across splits.
+- [ ] Generate an oversized candidate bank (initially 160 maps per condition)
+  so at least 128 exact pair slots remain after reroll drops.
+- [ ] Materialize `64/16/16/32` retained pair slots for each active condition.
 - [ ] Validate hard gates.
-- [ ] Write the per-condition diversity report.
-- [ ] Fail if any condition has fewer than its requested source groups.
+- [x] Write placed, translation-normalized, and dihedral-normalized dig counts
+  as diagnostics, not admission gates.
+- [ ] Fail if any condition has fewer than its requested retained pair slots.
 - [ ] Select 16 review examples per condition using descriptor coverage and
   nearest-neighbour diversity, without changing the training bank.
 - [ ] Export overview images and website data.
@@ -223,17 +233,26 @@ deferred review disposition.
 
 ### P3 — reward evidence harness
 
-- [ ] Revert conceptually to committed reward-v2 as the control; do not import
+- [x] Revert conceptually to committed reward-v2 as the control; do not import
   the dirty reward-v3 diff.
 - [ ] Add deterministic traces for:
-  1. excavator fresh dig and correct dump;
-  2. excavator dump/re-dig/dump closed cycle;
-  3. excavator-to-truck productive transfer and dump;
+  1. [x] excavator fresh dig and correct dump;
+  2. [x] excavator dump/re-dig/dump closed cycle;
+  3. [x] excavator-to-truck productive transfer and dump;
   4. skid-steer pickup of an excavator pile and correct dump; and
   5. transport pickup/drop/re-pickup closed cycle; and
-  6. a handoff and dump that proves load and carry credit move once.
-- [ ] Report extraction reward, relocation reward, other shaping, total return,
-  task progress, and conserved mass separately.
+  6. [x] a handoff and dump that exposes the current double payment and copied
+     carry caches.
+- [x] Report action reward, step-cost-adjusted reward, dig/dump progress,
+  potential, task completion, load, world mutation, and conserved mass.
+- [ ] After P4 separates the terms, report extraction and relocation reward
+  components independently.
+
+Evidence:
+[`terra/tests/test_relocation_reward_contract.py`](terra/tests/test_relocation_reward_contract.py).
+The committed control pays a terrain-unchanged excavator-to-truck handoff and
+then pays the truck's dump again. A no-progress excavator rehandle cycle is raw
+break-even (`+1/-1`) and becomes negative only through existence costs.
 
 Exit gate: the harness drives the real action paths and reproduces the current
 control numbers without hand-setting reward flags.
@@ -368,6 +387,10 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | D5/D7 plan linked to `$simple-research-code` | this document | complete |
 | 2026-07-30 | Generator implementation selection | reviewed v6 dependency closure, one public CLI | complete |
 | 2026-07-30 | Representative 64-map generation | [`SMOKE_RECEIPT_20260730.md`](tools/map_generation/SMOKE_RECEIPT_20260730.md) | complete |
-| 2026-07-30 | Generator unit contract | 5 focused tests pass | complete |
+| 2026-07-30 | Generator and split unit contract | 16 focused tests pass | complete |
+| 2026-07-30 | Source/pair identity repair | raw OSM hash, realized dig hash, pair-slot reroll audit | complete |
+| 2026-07-30 | Exact split materializer | pair-slot grouping plus realized-source leakage failure | complete |
 | 2026-07-30 | Reward semantic path audit | signed common potential plus one per-agent carry credit | complete |
-| 2026-07-30 | Split materializer and review export | P2 | in progress |
+| 2026-07-30 | Reward-v2 real-path control harness | 3 new + 7 existing focused tests pass | complete |
+| 2026-07-30 | 32-condition × 64 candidate review generation | local, review-only, not split authority | running |
+| 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |

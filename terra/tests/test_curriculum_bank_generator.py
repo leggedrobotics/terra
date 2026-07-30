@@ -14,7 +14,7 @@ def _dig(extra_cell=None):
     return dig
 
 
-def _sample():
+def _sample(**metadata):
     shape = (4, 4)
     return SimpleNamespace(
         target=np.zeros(shape, dtype=np.int8),
@@ -22,6 +22,7 @@ def _sample():
         dumpability=np.ones(shape, dtype=np.bool_),
         action=np.zeros(shape, dtype=np.int8),
         distance=np.zeros(shape, dtype=np.float32),
+        metadata=metadata,
     )
 
 
@@ -88,6 +89,54 @@ def test_scenario_identity_covers_every_reset_array():
 
     assert generator.scenario_sha256(original) == generator.scenario_sha256(same)
     assert generator.scenario_sha256(original) != generator.scenario_sha256(changed)
+
+
+def test_source_group_uses_raw_foundation_source_or_realized_dig():
+    raw_source = "b" * 64
+    assert (
+        generator.source_group_id(
+            _sample(
+                foundation_source_sha256=raw_source,
+                dig_sha256="c" * 64,
+            )
+        )
+        == f"foundation-source:{raw_source}"
+    )
+    assert (
+        generator.source_group_id(_sample(dig_sha256="d" * 64))
+        == f"dig:{'d' * 64}"
+    )
+
+
+def test_normalized_dig_identities_separate_translation_from_shape():
+    original = _dig()
+    translated = np.roll(original, shift=(2, 3), axis=(0, 1))
+    reflected = np.fliplr(original)
+    changed = _dig(extra_cell=(9, 8))
+
+    assert generator._mask_identity(original) != generator._mask_identity(translated)
+    assert (
+        generator._translation_normalized_identity(original)
+        == generator._translation_normalized_identity(translated)
+    )
+    assert (
+        generator._dihedral_normalized_identity(original)
+        == generator._dihedral_normalized_identity(reflected)
+    )
+    assert (
+        generator._dihedral_normalized_identity(original)
+        != generator._dihedral_normalized_identity(changed)
+    )
+
+
+def test_digital_perimeter_gives_bounded_compactness_for_square():
+    square = np.zeros((8, 8), dtype=np.bool_)
+    square[2:6, 2:6] = True
+    perimeter = generator._digital_perimeter(square)
+    compactness = 4.0 * np.pi * square.sum() / perimeter**2
+
+    assert perimeter == 16
+    assert 0.0 < compactness <= 1.0
 
 
 def test_exact_full_scenario_duplicate_fails_loudly():
