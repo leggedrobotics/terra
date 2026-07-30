@@ -50,6 +50,27 @@ Generate more than 128 candidate maps per condition so rerolled pair slots can
 be discarded without shrinking a split. The materializer does not search for a
 near-feasible allocation: it either meets the exact contract or fails.
 
+Convert the reviewed split bank into the one loader-ready training/evaluation
+layout:
+
+```bash
+python tools/map_generation/materialize_loader_bank.py \
+  --split-bank /path/to/split-bank \
+  --output /path/to/new/accepted-bank \
+  --terra-revision "$(git rev-parse HEAD)"
+```
+
+`accepted-bank/dataset.json` is the public bank index. Its `train` entries
+point to equal-size, per-condition Terra loader levels; `promotion`,
+`development`, and `sealed` are contiguous evaluation panels. Every level or
+panel contains contiguous arrays plus `manifest.jsonl`, and all of them bind to
+the same hashed `source_registry.jsonl`. Evaluation rows add a deterministic
+`reset_seed` that selects that row's exact contiguous map slot and
+`episode_id = hash(scenario_id, reset_seed, environment_protocol_sha256)`.
+`scenario_id` is recomputed from the five reset-consumed arrays. The command
+rejects review-only inputs, split leakage, count/support mismatches, identity
+collisions, and array/manifest hash disagreement before publishing the output.
+
 Create the human-review folder without mutating the bank:
 
 ```bash
