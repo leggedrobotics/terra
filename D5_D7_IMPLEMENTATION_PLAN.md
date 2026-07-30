@@ -111,9 +111,11 @@ change in common potential. A handoff pays no relocation reward by itself.
 Partial transfers are out of scope: the first implementation transfers the
 whole carried load and credit atomically.
 
-Map-curriculum and reward comparisons remain separate. The first map experiment
-uses the frozen committed reward-v2 contract. A corrected reward treatment is
-evaluated later on the same fixed maps.
+Map-curriculum and reward comparisons remain separate. Every initial map
+experiment uses the committed agent-neutral contract
+(`relocation_progress_mult=1.5`). Any later reward ablation is a separate,
+current-schema treatment on the selected fixed maps and sampler; historical
+reward-v1/v2 checkpoints are not resumed under the new environment schema.
 
 ## 4. Bank design
 
@@ -129,8 +131,9 @@ evaluated later on the same fixed maps.
 - `condition_id`: the human-readable factor combination.
 - `split`: one of `train`, `promotion`, `development`, or `sealed`.
 
-The split assignment is a deterministic hash of `source_group_id`. It is
-computed before policy evaluation and never changed to rescue a metric.
+Split assignment is deterministic from the atomic pair/source grouping and the
+frozen per-split target counts. Its complete assignment and hash are written
+before policy evaluation and never changed to rescue a metric.
 
 ### 4.2 Pilot sizes
 
@@ -151,7 +154,8 @@ After the pilot:
 
 - expand only accepted train conditions from 64 to 256 source groups;
 - keep promotion/development/sealed identities frozen;
-- assign every new source group by the same deterministic split rule; and
+- add only new source-disjoint groups to the train split under an expansion
+  receipt; and
 - never move a seen source group into evaluation.
 
 ### 4.3 Diversity report
@@ -376,16 +380,19 @@ exposure by branch depth.
 
 Before any submission:
 
-1. materialize loader-ready contiguous arrays plus `dataset.json`,
-   `manifest.jsonl`, and `source_registry.json`;
-2. pin `reset_seed` and `episode_id` on every promotion/development/sealed row;
-3. port and migrate the adaptive sampler from the isolated experimental
+1. [x] materialize loader-ready contiguous arrays plus `dataset.json`,
+   `manifest.jsonl`, and `source_registry.jsonl`
+   (`7f9fd4ee`, [`materialize_loader_bank.py`](tools/map_generation/materialize_loader_bank.py));
+2. [x] pin `reset_seed` and `episode_id` on every
+   promotion/development/sealed row through the live `MapsBuffer` selection
+   path;
+3. [ ] port and migrate the adaptive sampler from the isolated experimental
    worktree; it must use the sole agent-neutral reward API;
-4. report exact and condition-macro graded completion, micro p10, worst
+4. [ ] report exact and condition-macro graded completion, micro p10, worst
    condition, family, and cell metrics;
-5. use continuous promotion evidence rather than hard-coded counts from an old
+5. [ ] use continuous promotion evidence rather than hard-coded counts from an old
    panel size; and
-6. add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
+6. [ ] add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
    scripts are historical inputs, not submission authority.
 
 Execution:
