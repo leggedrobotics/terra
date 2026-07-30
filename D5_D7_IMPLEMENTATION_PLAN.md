@@ -245,6 +245,8 @@ all conditions still require visual acceptance before the curriculum is frozen.
 
 Visual review authority:
 
+- durable generation/site receipt:
+  [`FULL_REVIEW_RECEIPT_20260730.md`](tools/map_generation/FULL_REVIEW_RECEIPT_20260730.md);
 - image folders and editable index:
   [`terra_diverse64_full_review_20260730`](/home/lorenzo/moleworks/.artifacts/terra_diverse64_full_review_20260730);
 - local site: [http://127.0.0.1:4174/](http://127.0.0.1:4174/);

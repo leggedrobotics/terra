@@ -73,4 +73,7 @@ Implementation receipts:
   representative 64-map generation;
 - [`SPLIT_PILOT_RECEIPT_20260730.md`](SPLIT_PILOT_RECEIPT_20260730.md):
   final-code 32-condition acceptance plus real `160 -> 64/16/16/32`
-  materialization.
+  materialization;
+- [`FULL_REVIEW_RECEIPT_20260730.md`](FULL_REVIEW_RECEIPT_20260730.md):
+  the complete 32-condition visual bank, seven-branch gallery, and local-site
+  verification.
