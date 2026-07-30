@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 from pathlib import Path
 
@@ -9,6 +8,8 @@ import numpy as np
 import pytest
 
 from terra.maps_buffer import validate_exact_dataset_contract
+from terra.maps_buffer import RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT
+from terra.maps_buffer import reset_array_scenario_sha256
 from tools.map_generation import materialize_loader_bank as loader
 
 CONDITIONS = (
@@ -38,17 +39,6 @@ def _arrays(sample_index: int) -> dict[str, np.ndarray]:
         "actions": actions,
         "distance": distance,
     }
-
-
-def _scenario_sha256(arrays: dict[str, np.ndarray]) -> str:
-    digest = hashlib.sha256()
-    for name in loader.ARRAY_FOLDERS:
-        array = np.ascontiguousarray(arrays[name])
-        digest.update(name.encode())
-        digest.update(array.dtype.str.encode())
-        digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
-        digest.update(array.tobytes())
-    return digest.hexdigest()
 
 
 def _write_split_bank(root: Path) -> Path:
@@ -97,7 +87,7 @@ def _write_split_bank(root: Path) -> Path:
                         "map_id": f"map-{sample_index}",
                         "pair_slot_id": f"{condition}:{local_index}:{split}",
                         "sample_index": str(sample_index),
-                        "scenario_sha256": _scenario_sha256(arrays),
+                        "scenario_sha256": reset_array_scenario_sha256(arrays),
                         "source_group_id": f"source-{sample_index}",
                         "split": split,
                         "tier": tier,
@@ -115,6 +105,18 @@ def _jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
+def _csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
     split_bank = _write_split_bank(tmp_path / "split")
     output = tmp_path / "loader"
@@ -126,6 +128,9 @@ def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
     )
 
     assert receipt == json.loads((output / "dataset.json").read_text())
+    assert receipt["scenario_identity_contract"] == (
+        RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT
+    )
     assert [
         (row["condition_id"], row["family"], row["branch_depth"], row["map_count"])
         for row in receipt["train"]
@@ -137,6 +142,10 @@ def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
 
     for level in receipt["train"]:
         directory = output / level["maps_path"]
+        dataset = json.loads((directory / "dataset.json").read_text())
+        assert dataset["scenario_identity_contract"] == (
+            RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT
+        )
         rows, shape, _ = validate_exact_dataset_contract(
             directory,
             level["map_count"],
@@ -190,7 +199,7 @@ def test_materialization_is_deterministic(tmp_path):
         assert (first / relative).read_bytes() == (second / relative).read_bytes()
 
 
-def test_rejects_review_only_and_source_leaking_banks(tmp_path):
+def test_rejects_review_only_banks(tmp_path):
     review_only = tmp_path / "review"
     review_only.mkdir()
     with pytest.raises(ValueError, match="Review-only or unsplit"):
@@ -200,16 +209,26 @@ def test_rejects_review_only_and_source_leaking_banks(tmp_path):
             "terra-test-revision",
         )
 
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    (
+        ("source_group_id", "source leakage"),
+        ("pair_slot_id", "pair-slot leakage"),
+    ),
+)
+def test_rejects_cross_split_source_and_pair_leakage(
+    tmp_path,
+    field,
+    message,
+):
     split_bank = _write_split_bank(tmp_path / "split")
+    train_rows = _csv(split_bank / "train" / "manifest.csv")
     promotion_manifest = split_bank / "promotion" / "manifest.csv"
-    with promotion_manifest.open(newline="") as handle:
-        promotion_rows = list(csv.DictReader(handle))
-    promotion_rows[0]["source_group_id"] = "source-0"
-    with promotion_manifest.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(promotion_rows[0]))
-        writer.writeheader()
-        writer.writerows(promotion_rows)
-    with pytest.raises(ValueError, match="source leakage"):
+    promotion_rows = _csv(promotion_manifest)
+    promotion_rows[0][field] = train_rows[0][field]
+    _write_csv(promotion_manifest, promotion_rows)
+    with pytest.raises(ValueError, match=message):
         loader.materialize_loader_bank(
             split_bank,
             tmp_path / "leaking",
@@ -217,20 +236,42 @@ def test_rejects_review_only_and_source_leaking_banks(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "message"),
+    (
+        ("pair_slot_id", "observed distinct pair_slots=1"),
+        ("source_group_id", "observed distinct source_groups=1"),
+    ),
+)
+def test_rejects_duplicate_pair_or_source_with_unchanged_row_count(
+    tmp_path,
+    field,
+    message,
+):
+    split_bank = _write_split_bank(tmp_path / "split")
+    train_manifest = split_bank / "train" / "manifest.csv"
+    rows = _csv(train_manifest)
+    rows[1][field] = rows[0][field]
+    _write_csv(train_manifest, rows)
+
+    with pytest.raises(ValueError, match=message):
+        loader.materialize_loader_bank(
+            split_bank,
+            tmp_path / "duplicate-identity",
+            "terra-test-revision",
+        )
+
+
 def test_rejects_per_condition_count_mismatch(tmp_path):
     split_bank = _write_split_bank(tmp_path / "split")
     train_manifest = split_bank / "train" / "manifest.csv"
-    with train_manifest.open(newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _csv(train_manifest)
     rows = [
         row
         for row in rows
         if not (row["condition_id"] == "fnd-anchor" and row["map_id"] == "map-0")
     ]
-    with train_manifest.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    _write_csv(train_manifest, rows)
 
     with pytest.raises(ValueError, match="condition counts do not match"):
         loader.materialize_loader_bank(
@@ -249,10 +290,7 @@ def test_rejects_array_identity_and_truncated_seed_hash_collisions(
     with promotion_manifest.open(newline="") as handle:
         rows = list(csv.DictReader(handle))
     rows[0]["scenario_sha256"] = "b" * 64
-    with promotion_manifest.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    _write_csv(promotion_manifest, rows)
     with pytest.raises(ValueError, match="scenario hash mismatch"):
         loader.materialize_loader_bank(
             split_bank,
@@ -272,3 +310,36 @@ def test_rejects_array_identity_and_truncated_seed_hash_collisions(
             tmp_path / "seed-collision",
             "terra-test-revision",
         )
+
+
+def test_consumer_rejects_published_array_and_manifest_identity_mutation(
+    tmp_path,
+):
+    split_bank = _write_split_bank(tmp_path / "split")
+    array_output = tmp_path / "array-output"
+    loader.materialize_loader_bank(
+        split_bank,
+        array_output,
+        "terra-test-revision",
+    )
+    image_path = array_output / "promotion" / "images" / "img_1.npy"
+    target = np.load(image_path)
+    target[-1, -1] = -1
+    np.save(image_path, target)
+    with pytest.raises(RuntimeError, match="Scenario identity mismatch"):
+        validate_exact_dataset_contract(array_output / "promotion", 2)
+
+    manifest_output = tmp_path / "manifest-output"
+    loader.materialize_loader_bank(
+        split_bank,
+        manifest_output,
+        "terra-test-revision",
+    )
+    manifest_path = manifest_output / "promotion" / "manifest.jsonl"
+    rows = _jsonl(manifest_path)
+    rows[0]["scenario_id"] = "b" * 64
+    manifest_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+    )
+    with pytest.raises(RuntimeError, match="provenance does not match"):
+        validate_exact_dataset_contract(manifest_output / "promotion", 2)

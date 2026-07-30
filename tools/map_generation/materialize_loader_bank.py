@@ -38,23 +38,22 @@ import jax.numpy as jnp  # noqa: E402
 
 from terra.benchmark_protocol import canonical_json_sha256  # noqa: E402
 from terra.benchmark_protocol import frozen_environment_protocol  # noqa: E402
+from terra.config import EnvConfig  # noqa: E402
 from terra.maps_buffer import EXACT_DATASET_SCHEMA  # noqa: E402
 from terra.maps_buffer import MapsBuffer  # noqa: E402
+from terra.maps_buffer import RESET_ARRAY_FOLDERS  # noqa: E402
+from terra.maps_buffer import (  # noqa: E402
+    RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT,
+)
+from terra.maps_buffer import reset_array_scenario_sha256  # noqa: E402
 from terra.maps_buffer import validate_exact_dataset_contract  # noqa: E402
-from terra.config import EnvConfig  # noqa: E402
 
 SPLIT_BANK_SCHEMA = "terra_curriculum_split_bank_v1"
 LOADER_BANK_SCHEMA = "terra_curriculum_loader_bank_v1"
 EPISODE_ID_SCHEMA = "terra_episode_id_v1"
 SPLITS = ("train", "promotion", "development", "sealed")
 EVALUATION_SPLITS = SPLITS[1:]
-ARRAY_FOLDERS = (
-    "images",
-    "occupancy",
-    "dumpability",
-    "actions",
-    "distance",
-)
+ARRAY_FOLDERS = RESET_ARRAY_FOLDERS
 REQUIRED_COLUMNS = {
     "condition_id",
     "family",
@@ -124,8 +123,8 @@ def _sha256_file(path: Path) -> str:
 
 def _scenario_sha256(dataset: Path, sample_index: int) -> tuple[str, tuple[int, int]]:
     """Recompute the generator's identity from reset-consumed arrays."""
-    digest = hashlib.sha256()
     shape: tuple[int, int] | None = None
+    arrays = {}
     for folder in ARRAY_FOLDERS:
         path = dataset / folder / f"img_{sample_index}.npy"
         if not path.is_file():
@@ -140,12 +139,9 @@ def _scenario_sha256(dataset: Path, sample_index: int) -> tuple[str, tuple[int, 
             raise ValueError(
                 f"{path} has shape {current_shape}; expected {shape} for this scenario"
             )
-        digest.update(folder.encode())
-        digest.update(array.dtype.str.encode())
-        digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
-        digest.update(array.tobytes())
+        arrays[folder] = array
     assert shape is not None
-    return digest.hexdigest(), shape
+    return reset_array_scenario_sha256(arrays), shape
 
 
 def _sample_index(row: dict[str, str]) -> int:
@@ -262,7 +258,17 @@ def _validate_split_bank(
     rows_by_split: dict[str, list[dict[str, str]]] = {}
     all_map_ids: set[str] = set()
     all_scenario_ids: set[str] = set()
+    pair_slot_splits: dict[str, set[str]] = defaultdict(set)
     source_splits: dict[str, set[str]] = defaultdict(set)
+    observed: dict[str, dict[str, dict[str, set[str]]]] = defaultdict(
+        lambda: defaultdict(
+            lambda: {
+                "scenarios": set(),
+                "pair_slots": set(),
+                "source_groups": set(),
+            }
+        )
+    )
     condition_contracts: dict[str, tuple[str, str]] = {}
     conditions: set[str] | None = None
     common_shape: tuple[int, int] | None = None
@@ -316,7 +322,13 @@ def _validate_split_bank(
                 raise ValueError(f"scenario hash collision: {scenario_id}")
             all_map_ids.add(map_id)
             all_scenario_ids.add(scenario_id)
+            pair_slot_id = row["pair_slot_id"]
+            pair_slot_splits[pair_slot_id].add(split)
             source_splits[source_id].add(split)
+            observed_ids = observed[condition_id][split]
+            observed_ids["scenarios"].add(scenario_id)
+            observed_ids["pair_slots"].add(pair_slot_id)
+            observed_ids["source_groups"].add(source_id)
             counts[condition_id] += 1
 
             sample_index = _sample_index(row)
@@ -363,12 +375,30 @@ def _validate_split_bank(
     for condition in sorted(conditions):
         for split in SPLITS:
             declared = declared_conditions[condition].get(split, {})
-            if declared.get("scenarios") != requested[split]:
-                raise ValueError(
-                    f"{condition}/{split}: summary scenario count does not match "
-                    f"requested {requested[split]}"
-                )
+            for metric, values in observed[condition][split].items():
+                actual = len(values)
+                if declared.get(metric) != actual:
+                    raise ValueError(
+                        f"{condition}/{split}: summary {metric}="
+                        f"{declared.get(metric)!r}, observed distinct {metric}={actual}"
+                    )
+                if actual != requested[split]:
+                    raise ValueError(
+                        f"{condition}/{split}: distinct {metric}={actual}, "
+                        f"requested {requested[split]}"
+                    )
 
+    pair_overlaps = {
+        pair_slot_id: sorted(split_set)
+        for pair_slot_id, split_set in pair_slot_splits.items()
+        if len(split_set) > 1
+    }
+    if pair_overlaps:
+        pair_slot_id = sorted(pair_overlaps)[0]
+        raise ValueError(
+            f"pair-slot leakage: {pair_slot_id} appears in "
+            f"{pair_overlaps[pair_slot_id]}"
+        )
     overlaps = {
         source_id: sorted(split_set)
         for source_id, split_set in source_splits.items()
@@ -503,6 +533,7 @@ def _materialize_dataset(
             "distance_metric": DISTANCE_METRIC,
             "distance_normalization": DISTANCE_NORMALIZATION,
             "accepted_dump_contract": ACCEPTED_DUMP_CONTRACT,
+            "scenario_identity_contract": (RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT),
             "source_registry": os.path.relpath(source_registry, output),
             "source_registry_sha256": _sha256_file(source_registry),
         },
@@ -617,6 +648,7 @@ def materialize_loader_bank(
             "source_registry_sha256": _sha256_file(source_registry),
             "environment_protocol": "environment_protocol.json",
             "environment_protocol_sha256": protocol_hash,
+            "scenario_identity_contract": (RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT),
             "shape": list(shape),
             "train": training_levels,
             "evaluation_panels": evaluation_panels,

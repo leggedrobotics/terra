@@ -15,6 +15,7 @@ from terra.config import CurriculumGlobalConfig
 from terra.config import EnvConfig
 from terra.config import RewardsType
 from terra.maps_buffer import init_maps_buffer
+from terra.maps_buffer import LEGACY_SCENARIO_IDENTITY_CONTRACT
 from terra.maps_buffer import load_maps_from_disk
 from terra.maps_buffer import MapsBuffer
 
@@ -68,6 +69,7 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
                     "distance_metric": "fixture_geodesic",
                     "distance_normalization": "fixture_unit_interval",
                     "accepted_dump_contract": "exact_visible_dump_v1",
+                    "scenario_identity_contract": LEGACY_SCENARIO_IDENTITY_CONTRACT,
                     "source_registry": "source_registry.jsonl",
                     "source_registry_sha256": registry_sha256,
                 },
@@ -175,6 +177,25 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
             )
             with patch.dict(os.environ, {"DATASET_SIZE": "1"}):
                 with self.assertRaisesRegex(RuntimeError, "declares multiplicity"):
+                    load_maps_from_disk(str(root))
+
+    def test_exact_contract_requires_an_explicit_identity_contract(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_map(
+                root,
+                np.zeros((64, 64), dtype=np.float32),
+            )
+            metadata = json.loads((root / "dataset.json").read_text())
+            metadata.pop("scenario_identity_contract")
+            (root / "dataset.json").write_text(
+                json.dumps(metadata, sort_keys=True) + "\n"
+            )
+            with patch.dict(os.environ, {"DATASET_SIZE": "1"}):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "explicitly declare scenario_identity_contract",
+                ):
                     load_maps_from_disk(str(root))
 
     def test_exact_contract_rejects_cross_split_source_overlap(self):

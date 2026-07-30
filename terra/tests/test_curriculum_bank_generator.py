@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from terra.maps_buffer import reset_array_scenario_sha256
 from tools.map_generation import generate_curriculum_bank as generator
 
 
@@ -87,6 +88,13 @@ def test_scenario_identity_covers_every_reset_array():
     changed = _sample()
     changed.dumpability[0, 0] = False
 
+    canonical = reset_array_scenario_sha256(
+        {
+            name: getattr(original, attribute)
+            for name, attribute in generator.ARRAY_FOLDERS.items()
+        }
+    )
+    assert generator.scenario_sha256(original) == canonical
     assert generator.scenario_sha256(original) == generator.scenario_sha256(same)
     assert generator.scenario_sha256(original) != generator.scenario_sha256(changed)
 

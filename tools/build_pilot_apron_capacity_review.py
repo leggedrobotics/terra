@@ -614,6 +614,7 @@ def _write_dataset(
             "distance_metric": "8_connected_cardinal_1_diagonal_sqrt2",
             "distance_normalization": "per_map_max_to_1",
             "accepted_dump_contract": "exact_visible_dump_v1",
+            "scenario_identity_contract": "terra_legacy_map_id_v0",
             "minimum_dump_capacity_ratio": min(
                 band[0] for band in APRON_CAPACITY_BANDS.values()
             ),

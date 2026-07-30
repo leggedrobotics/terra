@@ -3,7 +3,7 @@ import json
 import os
 from functools import partial
 from pathlib import Path
-from typing import NamedTuple
+from typing import Mapping, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -382,6 +382,15 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
 EXACT_DATASET_SCHEMA = "terra_exact_map_dataset_v1"
 EXACT_DATASET_MANIFEST = "manifest.jsonl"
 EXACT_DATASET_METADATA = "dataset.json"
+RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT = "terra_reset_arrays_sha256_v1"
+LEGACY_SCENARIO_IDENTITY_CONTRACT = "terra_legacy_map_id_v0"
+RESET_ARRAY_FOLDERS = (
+    "images",
+    "occupancy",
+    "dumpability",
+    "actions",
+    "distance",
+)
 EXACT_DATASET_REQUIRED_ROW_FIELDS = (
     "slot_index",
     "map_id",
@@ -393,6 +402,23 @@ EXACT_DATASET_REQUIRED_ROW_FIELDS = (
     "slot_weight",
     "identity_slot_multiplicity",
 )
+
+
+def reset_array_scenario_sha256(arrays: Mapping[str, Any]) -> str:
+    """Hash the five arrays consumed by reset in one canonical order."""
+    if set(arrays) != set(RESET_ARRAY_FOLDERS):
+        raise ValueError(
+            "Scenario identity requires exactly "
+            f"{RESET_ARRAY_FOLDERS}; got {tuple(arrays)}."
+        )
+    digest = hashlib.sha256()
+    for name in RESET_ARRAY_FOLDERS:
+        array = np.ascontiguousarray(arrays[name])
+        digest.update(name.encode())
+        digest.update(array.dtype.str.encode())
+        digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
+        digest.update(array.tobytes())
+    return digest.hexdigest()
 
 
 def _sha256_file(path: Path) -> str:
@@ -432,10 +458,19 @@ def _indexed_sidecars(directory: Path, prefix: str, suffix: str) -> list[int]:
     return sorted(indices)
 
 
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _validate_source_registry(
     dataset_directory: Path,
     metadata: dict[str, Any],
     manifest_rows: list[dict[str, Any]],
+    identity_contract: str,
 ) -> None:
     relative_registry = metadata.get("source_registry")
     expected_sha256 = metadata.get("source_registry_sha256")
@@ -459,7 +494,7 @@ def _validate_source_registry(
 
     registry_rows = _load_json_lines(registry_path)
     source_splits: dict[str, set[str]] = {}
-    identities: dict[str, tuple[str, str]] = {}
+    identities: dict[str, tuple[str, ...]] = {}
     for row in registry_rows:
         for field in ("map_id", "source_id", "split"):
             if not isinstance(row.get(field), str) or not row[field]:
@@ -468,6 +503,13 @@ def _validate_source_registry(
                 )
         map_id = row["map_id"]
         identity = (row["source_id"], row["split"])
+        if identity_contract == RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT:
+            if not _is_sha256(row.get("scenario_id")):
+                raise RuntimeError(
+                    "Strict source registry row is missing a valid scenario_id: "
+                    f"{row}"
+                )
+            identity = (*identity, row["scenario_id"])
         if map_id in identities and identities[map_id] != identity:
             raise RuntimeError(
                 f"Source registry assigns conflicting provenance to {map_id}."
@@ -490,6 +532,8 @@ def _validate_source_registry(
     for row in manifest_rows:
         identity = identities.get(row["map_id"])
         expected = (row["source_id"], row["split"])
+        if identity_contract == RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT:
+            expected = (*expected, row["scenario_id"])
         if identity != expected:
             raise RuntimeError(
                 "Manifest provenance does not match source registry for "
@@ -513,6 +557,16 @@ def validate_exact_dataset_contract(
     if metadata.get("schema") != EXACT_DATASET_SCHEMA:
         raise RuntimeError(
             f"{metadata_path} must use schema {EXACT_DATASET_SCHEMA!r}."
+        )
+    identity_contract = metadata.get("scenario_identity_contract")
+    if identity_contract not in (
+        RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT,
+        LEGACY_SCENARIO_IDENTITY_CONTRACT,
+    ):
+        raise RuntimeError(
+            f"{metadata_path} must explicitly declare scenario_identity_contract "
+            f"as {RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT!r} for byte-verified "
+            f"banks or {LEGACY_SCENARIO_IDENTITY_CONTRACT!r} for legacy banks."
         )
     if metadata.get("slot_count") != expected_count:
         raise RuntimeError(
@@ -584,6 +638,14 @@ def validate_exact_dataset_contract(
                     f"Manifest slot {row['slot_index']} has invalid {field}."
                 )
         if (
+            identity_contract == RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT
+            and not _is_sha256(row.get("scenario_id"))
+        ):
+            raise RuntimeError(
+                f"Strict manifest slot {row['slot_index']} must declare a valid "
+                "scenario_id."
+            )
+        if (
             not isinstance(row["slot_weight"], (int, float))
             or not np.isfinite(row["slot_weight"])
             or row["slot_weight"] <= 0
@@ -628,7 +690,29 @@ def validate_exact_dataset_contract(
                 f"1..{expected_count}; got {observed_indices[:8]}."
             )
 
-    _validate_source_registry(directory, metadata, rows)
+    _validate_source_registry(
+        directory,
+        metadata,
+        rows,
+        identity_contract,
+    )
+    if identity_contract == RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT:
+        for row in rows:
+            slot = int(row["slot_index"])
+            arrays = {
+                folder: np.load(
+                    directory / folder / f"img_{slot}.npy",
+                    allow_pickle=False,
+                )
+                for folder in RESET_ARRAY_FOLDERS
+            }
+            actual_scenario_id = reset_array_scenario_sha256(arrays)
+            if actual_scenario_id != row["scenario_id"]:
+                raise RuntimeError(
+                    f"Scenario identity mismatch at slot {slot}: manifest "
+                    f"declares {row['scenario_id']}, published arrays hash to "
+                    f"{actual_scenario_id}."
+                )
     return rows, expected_shape, minimum_capacity_ratio
 
 

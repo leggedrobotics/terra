@@ -70,6 +70,10 @@ the same hashed `source_registry.jsonl`. Evaluation rows add a deterministic
 `scenario_id` is recomputed from the five reset-consumed arrays. The command
 rejects review-only inputs, split leakage, count/support mismatches, identity
 collisions, and array/manifest hash disagreement before publishing the output.
+Each published level declares `terra_reset_arrays_sha256_v1`; the live loader
+recomputes that identity and compares the arrays, manifest, and source registry.
+Historical exact datasets remain loadable only when explicitly labeled
+`terra_legacy_map_id_v0`.
 
 Create the human-review folder without mutating the bank:
 

@@ -99,11 +99,15 @@ from scipy import ndimage as ndi
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
+REPOSITORY_ROOT = SCRIPT_DIR.parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 import generate_prototypes_v9 as v9
 import terra_geom as tgeom  # noqa: F401  (kept for parity with v9's namespace)
 import terra_service as tsvc  # noqa: F401
 import turn_dump as tdump  # noqa: F401
+from terra.maps_buffer import reset_array_scenario_sha256
 
 v8 = v9.v8
 v7 = v9.v7
@@ -1893,14 +1897,12 @@ def sample_index_of(condition_index: int, map_index: int) -> int:
 
 
 def scenario_sha256(sample: base.Sample) -> str:
-    digest = hashlib.sha256()
-    for name, attribute in ARRAY_FOLDERS.items():
-        array = np.ascontiguousarray(getattr(sample, attribute))
-        digest.update(name.encode())
-        digest.update(array.dtype.str.encode())
-        digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
-        digest.update(array.tobytes())
-    return digest.hexdigest()
+    return reset_array_scenario_sha256(
+        {
+            name: getattr(sample, attribute)
+            for name, attribute in ARRAY_FOLDERS.items()
+        }
+    )
 
 
 def source_group_id(sample: base.Sample) -> str:
