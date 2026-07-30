@@ -1,0 +1,91 @@
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from tools.map_generation import generate_curriculum_bank as generator
+
+
+def _dig(extra_cell=None):
+    dig = np.zeros((16, 16), dtype=np.bool_)
+    dig[5:9, 5:9] = True
+    if extra_cell is not None:
+        dig[extra_cell] = True
+    return dig
+
+
+def _sample():
+    shape = (4, 4)
+    return SimpleNamespace(
+        target=np.zeros(shape, dtype=np.int8),
+        occupancy=np.zeros(shape, dtype=np.bool_),
+        dumpability=np.ones(shape, dtype=np.bool_),
+        action=np.zeros(shape, dtype=np.int8),
+        distance=np.zeros(shape, dtype=np.float32),
+    )
+
+
+def test_dig_admission_allows_similar_nonidentical_masks():
+    bank = object.__new__(generator.DigBankV10)
+    bank.t0_levels = frozenset()
+    candidate = _dig(extra_cell=(9, 8))
+    reference = _dig()
+
+    assert generator.centred_iou(candidate, reference) > 0.9
+    assert bank._acceptable("slab", candidate, {}, [(reference, {})]) == ""
+
+
+def test_dig_admission_rejects_exact_duplicate_and_source_reuse():
+    bank = object.__new__(generator.DigBankV10)
+    bank.t0_levels = frozenset()
+    dig = _dig()
+
+    assert (
+        bank._acceptable("slab", dig.copy(), {}, [(dig, {})])
+        == "dig_bank_exact_duplicate"
+    )
+    assert (
+        bank._acceptable(
+            "slab",
+            _dig(extra_cell=(9, 8)),
+            {"foundation_source_index": 7},
+            [(dig, {"foundation_source_index": 7})],
+        )
+        == "dig_bank_source_reuse"
+    )
+
+
+def test_sample_indices_do_not_collide_at_large_bank_sizes():
+    indices = {
+        generator.sample_index_of(condition_index, map_index)
+        for condition_index in range(32)
+        for map_index in range(256)
+    }
+    assert len(indices) == 32 * 256
+    assert generator.sample_index_of(1, 0) != generator.sample_index_of(0, 128)
+
+    with pytest.raises(ValueError):
+        generator.sample_index_of(-1, 0)
+    with pytest.raises(ValueError):
+        generator.sample_index_of(0, 1000)
+
+
+def test_scenario_identity_covers_every_reset_array():
+    original = _sample()
+    same = _sample()
+    changed = _sample()
+    changed.dumpability[0, 0] = False
+
+    assert generator.scenario_sha256(original) == generator.scenario_sha256(same)
+    assert generator.scenario_sha256(original) != generator.scenario_sha256(changed)
+
+
+def test_exact_full_scenario_duplicate_fails_loudly():
+    identity = "a" * 64
+    with pytest.raises(RuntimeError, match="map-a and map-b"):
+        generator.assert_unique_scenario_rows(
+            [
+                {"map_id": "map-a", "scenario_sha256": identity},
+                {"map_id": "map-b", "scenario_sha256": identity},
+            ]
+        )

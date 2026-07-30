@@ -88,14 +88,25 @@ The uncommitted reward-v3 patch in
 
 The intended rule is agent-neutral:
 
-- fresh target excavation can receive a one-time extraction reward;
-- merely picking up previously dumped soil receives no extraction reward;
-- every agent can receive relocation reward only for measured improvement in
-  the common relocation objective;
+- fresh target excavation receives the existing extraction bonus once, and
+  only when required dig depth actually decreases;
+- merely picking up previously dumped soil receives no extraction bonus;
+- every agent uses the same signed relocation progress:
+  `carry_credit + potential_before - potential_after`;
+- carry credit is stored once per carrying agent, moves rather than copies
+  during a handoff, and is cleared after a dump;
+- negative relocation progress is retained rather than clipped away;
 - required rehandling by a skid steer or truck is not multiplied by an
   arbitrary machine- or material-specific `0.2`; and
 - a closed dig/dump/reload cycle with no net task progress must have
   non-positive net shaped return.
+
+The common potential is the sum, over positive off-zone soil, of soil mass
+times normalized distance to the accepted dump mask. Fresh target extraction
+adds the corresponding source credit to the carrier. Rehandling adds only the
+change in common potential. A handoff pays no relocation reward by itself.
+Partial transfers are out of scope: the first implementation transfers the
+whole carried load and credit atomically.
 
 Map-curriculum and reward comparisons remain separate. The first map experiment
 uses the frozen committed reward-v2 contract. A corrected reward treatment is
@@ -109,6 +120,8 @@ evaluated later on the same fixed maps.
   counterfactual variants.
 - `scenario_id`: hash of every reset-consumed field: target, action state,
   dumpability, occupancy/obstacles, distance metadata, and initial agent state.
+  P1 currently hashes the five map arrays. P2 must add the explicit initial
+  state before any split is frozen.
 - `condition_id`: the human-readable factor combination.
 - `split`: one of `train`, `promotion`, `development`, or `sealed`.
 
@@ -159,34 +172,38 @@ imbalance, or unexpected generator behaviour.
 - [x] Create clean Terra worktree from `95252263`.
 - [x] Create clean terra-baselines worktree from `edd9827`.
 - [x] Preserve the dirty v5m reward worktree without copying its diff.
-- [ ] Link this plan from `TRAINING_TASKS.md` and `TRAINING_DESIGN.md`.
-- [ ] Record the exact generator source selected below.
+- [x] Link this plan from `TRAINING_TASKS.md` and `TRAINING_DESIGN.md`.
+- [x] Record the exact generator source selected below.
 
 Exit gate: both implementation worktrees are clean before the first edit, and
 all later changes are explainable by this plan.
 
 ### P1 — one generator path
 
-- [ ] Select the smallest current generator implementation that reproduces one
+- [x] Select the smallest current generator implementation that reproduces one
   v6 condition byte-for-byte for its first seed.
-- [ ] Put that path under version control.
-- [ ] Collapse the version-chain entry point to one supported command.
-- [ ] Make map count and split counts explicit required arguments.
-- [ ] Remove the bank-capacity-probe path and hard all-pairs IoU rejection from
+- [x] Put that path under version control.
+- [x] Collapse the version-chain entry point to one supported command.
+- [x] Make the bank map count an explicit required argument. Split counts are
+  a P2 materialization argument, not a geometry-generation concern.
+- [x] Remove the bank-capacity-probe path and hard all-pairs IoU rejection from
   normal generation.
-- [ ] Retain exact full-scenario duplicate rejection.
-- [ ] Emit one manifest and one rejection/diversity report.
+- [x] Retain exact full-scenario duplicate rejection.
+- [x] Emit one manifest and one rejection/diversity report.
 
 Focused tests:
 
-1. fixed seed reproduces the pinned reference scenario;
-2. 64 scenarios can be generated for a representative slab and trench
+1. [x] fixed seed reproduces the pinned reference scenario;
+2. [x] 64 scenarios can be generated for a representative slab and trench
    condition without IoU exhaustion;
-3. an exact duplicate scenario fails loudly; and
-4. variants of one source group cannot cross splits.
+3. [x] an exact duplicate scenario fails loudly; and
+4. [ ] variants of one source group cannot cross splits (P2).
 
-Exit gate: one command generates 64 valid slab and 64 valid trench scenarios
-twice with identical manifests.
+Exit gate: the representative two-condition command generated 64 valid slab
+and 64 valid trench scenarios. Two independent trench runs had identical
+manifests. The first slab scenario is byte-identical to reviewed v6 across all
+five arrays. Receipt:
+[`tools/map_generation/SMOKE_RECEIPT_20260730.md`](tools/map_generation/SMOKE_RECEIPT_20260730.md).
 
 ### P2 — 64-layout pilot
 
@@ -213,7 +230,8 @@ deferred review disposition.
   2. excavator dump/re-dig/dump closed cycle;
   3. excavator-to-truck productive transfer and dump;
   4. skid-steer pickup of an excavator pile and correct dump; and
-  5. transport pickup/drop/re-pickup closed cycle.
+  5. transport pickup/drop/re-pickup closed cycle; and
+  6. a handoff and dump that proves load and carry credit move once.
 - [ ] Report extraction reward, relocation reward, other shaping, total return,
   task progress, and conserved mass separately.
 
@@ -225,13 +243,19 @@ control numbers without hand-setting reward flags.
 - [ ] Pay the extraction bonus from fresh target progress, not merely a
   `0 -> loaded` transition.
 - [ ] Remove the transport-versus-excavator multiplier branch.
-- [ ] Use one relocation-progress scale for every agent.
+- [ ] Replace the three machine/material relocation multipliers with one
+  `relocation_progress_mult` for every agent.
 - [ ] Remove obsolete machine-specific multiplier arguments and update known
   presets directly.
-- [ ] Keep any carry-origin bookkeeping per carrying agent, or delete it if the
-  final equation does not require it.
+- [ ] Replace the global material flag and two carry-potential caches with one
+  per-agent `carry_relocation_credit`.
+- [ ] Pay signed relocation progress on dump; do not clip negative progress.
+- [ ] Transfer the whole load and carry credit atomically and never pay the
+  handoff itself as a dump.
 - [ ] Ensure skid-steer auto-load and truck transfer use the same mass and
   reward accounting as direct excavation.
+- [ ] Treat positive soil only as auto-loadable material; a negative target
+  hole is not a pile.
 
 Focused gates:
 
@@ -342,5 +366,8 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Clean Terra worktree | branch/base above | complete |
 | 2026-07-30 | Clean terra-baselines worktree | branch/base above | complete |
 | 2026-07-30 | D5/D7 plan linked to `$simple-research-code` | this document | complete |
-| 2026-07-30 | Generator implementation selection | pending P1 audit | in progress |
-| 2026-07-30 | Reward semantic path audit | pending P3 audit | in progress |
+| 2026-07-30 | Generator implementation selection | reviewed v6 dependency closure, one public CLI | complete |
+| 2026-07-30 | Representative 64-map generation | [`SMOKE_RECEIPT_20260730.md`](tools/map_generation/SMOKE_RECEIPT_20260730.md) | complete |
+| 2026-07-30 | Generator unit contract | 5 focused tests pass | complete |
+| 2026-07-30 | Reward semantic path audit | signed common potential plus one per-agent carry credit | complete |
+| 2026-07-30 | Split materializer and review export | P2 | in progress |
