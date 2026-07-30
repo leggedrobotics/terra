@@ -10,6 +10,8 @@
   [`$simple-research-code`](/home/lorenzo/git/codex_skills/skills/simple-research-code/SKILL.md)
 - Training authority: [`TRAINING_TASKS.md`](TRAINING_TASKS.md)
 - Design context: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+- Executable P5 baseline plan:
+  [`P5_ACCEPTED_BANK_EXPERIMENTS.md`](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
 - Local visual-review adapter:
   [`export_diverse64_gallery_review.py`](/home/lorenzo/moleworks/.worktrees/terra_digging_benchmark_diverse64_review_20260730/scripts/export_diverse64_gallery_review.py)
   (site commit `240f38f`)
@@ -134,6 +136,16 @@ reward-v1/v2 checkpoints are not resumed under the new environment schema.
 Split assignment is deterministic from the atomic pair/source grouping and the
 frozen per-split target counts. Its complete assignment and hash are written
 before policy evaluation and never changed to rescue a metric.
+
+For P5, the exact JAX/JAXlib lock is fixed and the allocation preflight must
+hash the reset agent state for every evaluation seed and compare CPU/GPU
+receipts before policy evaluation. If those hashes differ, seed-bound
+`episode_id` is not portable and evaluation stops until explicit initial-state
+injection is implemented. A public benchmark release remains gated on folding
+the verified initial-state hash into episode identity. Trench/foundation
+metadata is nonsemantic only under the frozen protocol's disabled absolute
+trench and foundation-border shaping; enabling either requires an identity
+schema bump.
 
 ### 4.2 Pilot sizes
 
@@ -355,6 +367,10 @@ does not authorize unplanned ablations or training on rejected/review-only maps.
 
 #### P5a Map sampler/curriculum
 
+Implementation:
+[terra-baselines P5 accepted-bank experiments](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
+(commit `64fc4a9`).
+
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
 - maps: the same accepted 64-layout-per-condition training bank;
@@ -382,17 +398,21 @@ Before any submission:
 
 1. [x] materialize loader-ready contiguous arrays plus `dataset.json`,
    `manifest.jsonl`, and `source_registry.jsonl`
-   (`7f9fd4ee`, [`materialize_loader_bank.py`](tools/map_generation/materialize_loader_bank.py));
+   (`7f9fd4ee`, strengthened by `c6d894cf` so published arrays are re-hashed
+   and exact scenario/pair/source counts are consumer-verified;
+   [`materialize_loader_bank.py`](tools/map_generation/materialize_loader_bank.py));
 2. [x] pin `reset_seed` and `episode_id` on every
    promotion/development/sealed row through the live `MapsBuffer` selection
    path;
-3. [ ] port and migrate the adaptive sampler from the isolated experimental
-   worktree; it must use the sole agent-neutral reward API;
-4. [ ] report exact and condition-macro graded completion, micro p10, worst
+3. [x] port and migrate the adaptive sampler from the isolated experimental
+   worktree onto the sole agent-neutral reward API (`64fc4a9`);
+4. [x] report exact and condition-macro graded completion, micro p10, worst
    condition, family, and cell metrics;
-5. [ ] use continuous promotion evidence rather than hard-coded counts from an old
-   panel size; and
-6. [ ] add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
+5. [x] use continuous promotion evidence rather than hard-coded counts from an
+   old panel size;
+6. [ ] compare CPU/GPU initial-agent-state hashes for every fixed evaluation
+   seed under the exact runtime lock; and
+7. [ ] add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
    scripts are historical inputs, not submission authority.
 
 Execution:
@@ -400,7 +420,8 @@ Execution:
 1. [complete] migrate terra-baselines to the sole
    `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
-2. CPU/config/manifest validation;
+2. [complete] CPU/config/manifest validation (201 full baseline tests and 34
+   focused accepted-bank tests at `64fc4a9`);
 3. CUDA conv/backward and NCCL preflight in the allocation;
 4. W&B-disabled first-update smoke for all four arms;
 5. one unblinded 2,000-update seed per arm
@@ -525,5 +546,7 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Euler curriculum-validation authorization | post-review/freeze smokes, 2k screens, gated 20k promotion | authorized, not yet launchable |
 | 2026-07-30 | Euler read-only readiness audit | no Terra jobs; invalid copied-worktree Git metadata; damaged venv; scratch soft inode quota exceeded | repair required |
 | 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
-| 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | frozen, implementation pending |
+| 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
+| 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
+| 2026-07-30 | Accepted-bank sampler/evaluator | baseline `64fc4a9`; 201 full + 34 focused tests | independent review complete; launch fixes pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
