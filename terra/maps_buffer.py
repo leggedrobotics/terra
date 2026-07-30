@@ -710,7 +710,7 @@ def load_single_map(map_path: str) -> Array:
     )
 
     # Try to load metadata
-    max_trench_type = 3
+    max_trench_type = 4
     max_foundation_border_type = 64
     trench_axes = -97.0 * np.ones((max_trench_type, 3))  # Default values
     trench_type = -1
@@ -724,6 +724,9 @@ def load_single_map(map_path: str) -> Array:
             metadata_sanity_check(trench_ax[0])
             trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
             trench_type = len(trench_ax)
+        if len(trench_ax) > max_trench_type:
+            trench_ax = trench_ax[:max_trench_type]
+            trench_type = max_trench_type
         while len(trench_ax) < max_trench_type:
             trench_ax.append([-97, -97, -97])
         trench_axes = np.array(trench_ax)
@@ -769,8 +772,11 @@ def load_maps_from_disk(
     require_trench_metadata: bool = False,
     require_exact_contract: bool = True,
 ) -> Array:
-    # Set the max number of branches the trench has
-    max_trench_type = 3
+    # Set the max number of branches the trench has. v5-main net4 trenches carry
+    # four axes, so this pads to 4 and truncates anything longer (the foundation
+    # border path below has always truncated; the trench path used to produce a
+    # ragged list and crash in jnp.array).
+    max_trench_type = 4
     max_foundation_border_type = 64
 
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
@@ -922,7 +928,11 @@ def load_maps_from_disk(
             else:
                 trench_ax = []
 
-            # Fill in with dummies the remaining metadata to reach the standard shape
+            # Fill in with dummies the remaining metadata to reach the standard
+            # shape; truncate if the map declares more axes than the buffer holds.
+            if len(trench_ax) > max_trench_type:
+                trench_ax = trench_ax[:max_trench_type]
+                trench_type = max_trench_type
             while len(trench_ax) < max_trench_type:
                 trench_ax.append([-97, -97, -97])
 
@@ -972,7 +982,7 @@ def load_maps_from_disk(
         trench_axes = -97.0 * jnp.ones(
             (
                 loaded_count,
-                3,
+                max_trench_type,
                 3,
             )
         )
