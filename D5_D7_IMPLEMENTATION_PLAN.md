@@ -1,0 +1,346 @@
+# Terra Map-Diversity and Reward-Semantics Implementation Plan
+
+- Status: active
+- Date: 2026-07-30
+- Terra branch: `experiment/simple-mapbank-reward-v3`
+- Terra base: `952522631104f1e051b8ea46963d305074437d28`
+- terra-baselines branch: `experiment/simple-mapbank-reward-v3`
+- terra-baselines base: `edd9827180a57d983f0d7633b8b0a9874bc86f7d`
+- Governing research-code workflow:
+  [`$simple-research-code`](/home/lorenzo/git/codex_skills/skills/simple-research-code/SKILL.md)
+- Training authority: [`TRAINING_TASKS.md`](TRAINING_TASKS.md)
+- Design context: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+
+## 1. Objective
+
+Deliver the shortest trustworthy path from the reviewed v6 map distribution to
+a larger, source-disjoint training bank and then to controlled PPO experiments.
+In parallel, replace the incomplete reward-v3 proposal with one clean,
+agent-neutral reward contract before interpreting multi-agent transport runs.
+
+The final sequence is:
+
+1. generate many valid maps without treating all-pairs centred IoU as an
+   admission wall;
+2. inspect a deliberately diverse visual subset;
+3. freeze train, promotion, development, and sealed splits by source group;
+4. run the map-curriculum experiment with one unchanged reward contract;
+5. validate any reward change separately on a fixed map bank; and
+6. promote a learning recipe to a long run as soon as fixed-bank task progress
+   is repeatable and integrity-clean.
+
+## 2. `$simple-research-code` constraints
+
+The linked skill is normative for this implementation:
+
+- one supported generator command, not another versioned generator chain;
+- one manifest schema for training and review;
+- loud failures for invalid masks, duplicate scenario identities, split
+  leakage, insufficient capacity, and missing files;
+- no all-pairs similarity admission rule;
+- no compatibility layer for the rejected reward-v3 API;
+- no new scheduler framework, planner, witness solver, or general validation
+  platform;
+- only focused deterministic tests that protect the experiment's conclusions;
+- diagnostics are written once to compact artifacts and are not recomputed by
+  several wrappers; and
+- stop each validation stage as soon as it answers its declared decision.
+
+## 3. Accepted decisions
+
+### 3.1 Map diversity
+
+1. The current `centred_iou < 0.60` foundation and `< 0.70` trench rule is not
+   a hard training-bank admission gate.
+2. Centred IoU remains a diagnostic and may be used to select a small visual
+   showcase.
+3. Similar excavation masks are allowed when the complete scenarios differ in
+   policy-relevant ways such as reset pose, dump geometry, capacity, distance,
+   obstacles, access, or local boundary variation.
+4. Reusing one base excavation across controlled counterfactual conditions is
+   intentional. Every variant of one base layout stays in the same split.
+5. The first scale target is 64 training layouts per active condition. The
+   accepted long-run bank target is 256 training layouts per active condition.
+6. The website and image folders show 16 deliberately diverse examples per
+   condition; the showcase is not the training bank.
+
+### 3.2 Hard map gates
+
+Only these properties block bank materialization:
+
+- generator output has the expected shapes and dtypes;
+- target, dump, obstacle, occupancy, and reset-state fields are internally
+  consistent;
+- accepted dump capacity is sufficient for the map's excavation volume under
+  the frozen contained-dump physics;
+- the initial state is admissible;
+- a full scenario identity is not duplicated within one condition and split;
+- no source group appears in more than one split; and
+- all controlled variants of a source group are assigned to the same split.
+
+Basic static workspace/reachability quantities remain reported. They are not
+promoted into a constructive 450-step solver in this task.
+
+### 3.3 Reward semantics
+
+The uncommitted reward-v3 patch in
+`terra_v5m_screen_20260730` is evidence only and is not a merge source.
+
+The intended rule is agent-neutral:
+
+- fresh target excavation can receive a one-time extraction reward;
+- merely picking up previously dumped soil receives no extraction reward;
+- every agent can receive relocation reward only for measured improvement in
+  the common relocation objective;
+- required rehandling by a skid steer or truck is not multiplied by an
+  arbitrary machine- or material-specific `0.2`; and
+- a closed dig/dump/reload cycle with no net task progress must have
+  non-positive net shaped return.
+
+Map-curriculum and reward comparisons remain separate. The first map experiment
+uses the frozen committed reward-v2 contract. A corrected reward treatment is
+evaluated later on the same fixed maps.
+
+## 4. Bank design
+
+### 4.1 Unit of identity
+
+- `source_group_id`: the base excavation/layout identity shared by deliberate
+  counterfactual variants.
+- `scenario_id`: hash of every reset-consumed field: target, action state,
+  dumpability, occupancy/obstacles, distance metadata, and initial agent state.
+- `condition_id`: the human-readable factor combination.
+- `split`: one of `train`, `promotion`, `development`, or `sealed`.
+
+The split assignment is a deterministic hash of `source_group_id`. It is
+computed before policy evaluation and never changed to rescue a metric.
+
+### 4.2 Pilot sizes
+
+For every active condition:
+
+| Split | Base layouts | Purpose |
+|---|---:|---|
+| train | 64 | first training/generalization pilot |
+| promotion | 16 | checkpoint promotion only |
+| development | 16 | diagnosis and design comparison |
+| sealed | 32 | final selected-policy evaluation |
+
+This is 128 source groups per condition. Counterfactual variants may share the
+same source groups, so this does not necessarily require 128 independent
+geometry builds for every condition.
+
+After the pilot:
+
+- expand only accepted train conditions from 64 to 256 source groups;
+- keep promotion/development/sealed identities frozen;
+- assign every new source group by the same deterministic split rule; and
+- never move a seen source group into evaluation.
+
+### 4.3 Diversity report
+
+For each condition and split, write:
+
+- number of files, scenarios, and source groups;
+- exact duplicate count;
+- nearest-neighbour centred-IoU p10/p50/p90/max;
+- dig area, perimeter, compactness, components, aspect, and width summaries;
+- dump area/capacity, distance, component count, and side/layout summaries;
+- obstacle count and blocked-area summaries; and
+- rejection counts by hard-gate reason.
+
+No diversity statistic decides policy success. It only exposes collapse,
+imbalance, or unexpected generator behaviour.
+
+## 5. Implementation tasks
+
+### P0 — isolate and freeze authority
+
+- [x] Create clean Terra worktree from `95252263`.
+- [x] Create clean terra-baselines worktree from `edd9827`.
+- [x] Preserve the dirty v5m reward worktree without copying its diff.
+- [ ] Link this plan from `TRAINING_TASKS.md` and `TRAINING_DESIGN.md`.
+- [ ] Record the exact generator source selected below.
+
+Exit gate: both implementation worktrees are clean before the first edit, and
+all later changes are explainable by this plan.
+
+### P1 — one generator path
+
+- [ ] Select the smallest current generator implementation that reproduces one
+  v6 condition byte-for-byte for its first seed.
+- [ ] Put that path under version control.
+- [ ] Collapse the version-chain entry point to one supported command.
+- [ ] Make map count and split counts explicit required arguments.
+- [ ] Remove the bank-capacity-probe path and hard all-pairs IoU rejection from
+  normal generation.
+- [ ] Retain exact full-scenario duplicate rejection.
+- [ ] Emit one manifest and one rejection/diversity report.
+
+Focused tests:
+
+1. fixed seed reproduces the pinned reference scenario;
+2. 64 scenarios can be generated for a representative slab and trench
+   condition without IoU exhaustion;
+3. an exact duplicate scenario fails loudly; and
+4. variants of one source group cannot cross splits.
+
+Exit gate: one command generates 64 valid slab and 64 valid trench scenarios
+twice with identical manifests.
+
+### P2 — 64-layout pilot
+
+- [ ] Generate `64/16/16/32` source groups for each active condition.
+- [ ] Validate hard gates.
+- [ ] Write the per-condition diversity report.
+- [ ] Fail if any condition has fewer than its requested source groups.
+- [ ] Select 16 review examples per condition using descriptor coverage and
+  nearest-neighbour diversity, without changing the training bank.
+- [ ] Export overview images and website data.
+- [ ] Record Lorenzo's comments/accept/reject decisions without changing
+  scenario identity.
+
+Exit gate: every selected condition has complete split counts, zero leakage,
+zero exact scenario duplicates, a visual subset, and an accepted or explicitly
+deferred review disposition.
+
+### P3 — reward evidence harness
+
+- [ ] Revert conceptually to committed reward-v2 as the control; do not import
+  the dirty reward-v3 diff.
+- [ ] Add deterministic traces for:
+  1. excavator fresh dig and correct dump;
+  2. excavator dump/re-dig/dump closed cycle;
+  3. excavator-to-truck productive transfer and dump;
+  4. skid-steer pickup of an excavator pile and correct dump; and
+  5. transport pickup/drop/re-pickup closed cycle.
+- [ ] Report extraction reward, relocation reward, other shaping, total return,
+  task progress, and conserved mass separately.
+
+Exit gate: the harness drives the real action paths and reproduces the current
+control numbers without hand-setting reward flags.
+
+### P4 — corrected agent-neutral reward
+
+- [ ] Pay the extraction bonus from fresh target progress, not merely a
+  `0 -> loaded` transition.
+- [ ] Remove the transport-versus-excavator multiplier branch.
+- [ ] Use one relocation-progress scale for every agent.
+- [ ] Remove obsolete machine-specific multiplier arguments and update known
+  presets directly.
+- [ ] Keep any carry-origin bookkeeping per carrying agent, or delete it if the
+  final equation does not require it.
+- [ ] Ensure skid-steer auto-load and truck transfer use the same mass and
+  reward accounting as direct excavation.
+
+Focused gates:
+
+- fresh target work retains positive incentive;
+- re-pickup alone receives no extraction bonus;
+- productive transport receives positive relocation credit;
+- every no-progress closed cycle is non-positive;
+- mass is conserved; and
+- the full focused Terra and preset suites pass.
+
+Exit gate: the five P3 traces satisfy the rule without an agent-type reward
+branch.
+
+### P5 — controlled experiments
+
+Map and reward treatments never change together.
+
+#### P5a Map sampler/curriculum
+
+- control: current committed reward-v2, uniform condition sampling;
+- treatment: current committed reward-v2, M3 deficit-aware scheduler;
+- maps: identical 64-layout training bank;
+- evaluation: identical frozen promotion/development panels;
+- reset, horizon, observation, action, dynamics, architecture, and PPO:
+  identical.
+
+Execution:
+
+1. CPU/config/manifest validation;
+2. CUDA conv/backward and NCCL preflight in the allocation;
+3. W&B-disabled first-update smoke for both arms;
+4. one unblinded 2,000-update seed per arm;
+5. promote a learning arm to one continuous 20,000-update `gpuhe.120h` run when
+   two fixed evaluations show either one additional exact success or at least
+   `+0.01` macro condition-balanced terminal completion without guard
+   regression; and
+6. use paired seeds for the final scheduler claim, not to decide whether a
+   clearly learning recipe deserves enough compute.
+
+#### P5b Reward comparison
+
+- maps and sampler: fixed to the selected P5a treatment;
+- control: reward-v2;
+- treatment: corrected agent-neutral reward;
+- evaluation: same fixed banks and checkpoints;
+- no map, reset, architecture, horizon, or PPO change.
+
+The first reward run is a bounded behavioural screen. It earns long compute
+only through the same fixed-bank task-progress rule as P5a.
+
+### P6 — 256-layout long-run bank
+
+- [ ] Expand selected training conditions to 256 source groups.
+- [ ] Re-run only hard validation and diversity reporting.
+- [ ] Keep the promotion/development/sealed banks unchanged.
+- [ ] Materialize exact sampler slots and record effective condition weights.
+- [ ] Launch the selected scratch specialist/generalist recipes independently.
+- [ ] Continue long runs while fixed-bank task metrics improve.
+
+## 6. Metrics and promotion
+
+Primary:
+
+- exact success within 450 steps;
+- macro condition-balanced terminal completion;
+- per-family and per-condition completion;
+- worst-condition completion; and
+- retention on previously passed conditions.
+
+Guards:
+
+- micro completion p10 does not regress by more than 0.05;
+- worst-condition completion does not regress by more than 0.05;
+- no source leakage or manifest mismatch;
+- finite parameters, optimizer state, losses, rollout tensors, and evaluation;
+- no change in reward/horizon/action/observation/dynamics inside a map
+  comparison; and
+- no change in maps/sampler/reset/architecture inside a reward comparison.
+
+Online return and pooled online success are diagnostics only.
+
+## 7. Stop conditions
+
+Stop and revise the generator if:
+
+- it cannot fill a requested condition after removing similarity rejection;
+- exact duplicates dominate;
+- descriptor distributions collapse to a small template set;
+- capacity, spawn, or static workspace validity repeatedly rejects one
+  condition; or
+- visual review identifies a systematic unrealistic pattern.
+
+Stop a training arm if:
+
+- fixed-bank macro completion is flat through the declared bounded screen;
+- task progress improves only on trained identities;
+- guard metrics regress persistently;
+- reward rises while task completion does not; or
+- integrity/provenance is invalid.
+
+Do not add a planner, learned curriculum teacher, partial resets, new encoder,
+or reward schedule to rescue the same run. Each is a separate named treatment.
+
+## 8. Execution log
+
+| Date | Item | Evidence | Status |
+|---|---|---|---|
+| 2026-07-30 | Clean Terra worktree | branch/base above | complete |
+| 2026-07-30 | Clean terra-baselines worktree | branch/base above | complete |
+| 2026-07-30 | D5/D7 plan linked to `$simple-research-code` | this document | complete |
+| 2026-07-30 | Generator implementation selection | pending P1 audit | in progress |
+| 2026-07-30 | Reward semantic path audit | pending P3 audit | in progress |

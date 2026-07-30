@@ -11,6 +11,9 @@
   ends 2/8, so it stops for generalization diagnosis. No family, B0c, F1, or
   `gpuhe.120h` run is qualified.
 - Date: 2026-07-27 execution update
+- Active D5/D7 implementation plan:
+  [`D5_D7_IMPLEMENTATION_PLAN.md`](D5_D7_IMPLEMENTATION_PLAN.md), governed by
+  the linked `$simple-research-code` workflow
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
 - Canonical current map-benchmark/curriculum specification:
   [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), especially the v0.3

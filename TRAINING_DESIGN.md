@@ -6,6 +6,9 @@
 - First target: one 64 x 64 tracked-excavator policy for foundations and
   trenches
 - Production training authorized by this document: no
+- Active implementation addendum:
+  [`D5_D7_IMPLEMENTATION_PLAN.md`](D5_D7_IMPLEMENTATION_PLAN.md), including
+  the explicit `$simple-research-code` constraint
 
 The original v4 sections below are retained as the preregistered experiment
 contract. The completed result, critical review, corrected decisions, and
