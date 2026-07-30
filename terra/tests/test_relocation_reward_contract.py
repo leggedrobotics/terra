@@ -31,7 +31,7 @@ CENTER = np.array([32, 32], dtype=np.int16)
 
 
 def _env_config(agent_types: tuple[int, ...] = (0,)) -> EnvConfig:
-    """Build the concrete 64x64 reward-v2 environment used by current runs."""
+    """Build the concrete 64x64 agent-neutral reward environment."""
     batch_env = object.__new__(TerraEnvBatch)
     batch_env.batch_cfg = BatchConfig()._replace(
         maps_dims=MapsDimsConfig(maps_edge_length=SHAPE[0])
@@ -286,7 +286,7 @@ def _foundation_geometry() -> tuple[np.ndarray, np.ndarray]:
     return target, distance
 
 
-def test_reward_v2_fresh_dig_and_correct_dump_use_real_do_actions():
+def test_fresh_dig_and_correct_dump_use_real_do_actions():
     target, distance = _foundation_geometry()
     state = _state(target, distance=distance)
     initial_mass = _mass(state)
@@ -314,7 +314,7 @@ def test_reward_v2_fresh_dig_and_correct_dump_use_real_do_actions():
     assert float(after_dump._get_current_agent_state().carry_relocation_credit) == 0
 
 
-def test_reward_v2_no_progress_redig_cycle_is_break_even_before_step_costs():
+def test_no_progress_redig_cycle_is_zero_before_step_costs():
     target, distance = _foundation_geometry()
     state = _state(target, distance=distance)
 

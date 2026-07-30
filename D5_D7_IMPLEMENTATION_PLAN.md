@@ -10,6 +10,9 @@
   [`$simple-research-code`](/home/lorenzo/git/codex_skills/skills/simple-research-code/SKILL.md)
 - Training authority: [`TRAINING_TASKS.md`](TRAINING_TASKS.md)
 - Design context: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+- Local visual-review adapter:
+  [`export_diverse64_gallery_review.py`](/home/lorenzo/moleworks/.worktrees/terra_digging_benchmark_diverse64_review_20260730/scripts/export_diverse64_gallery_review.py)
+  (site commit `240f38f`)
 
 ## 1. Objective
 
@@ -228,7 +231,8 @@ five arrays. Receipt:
 - [x] Export an image-folder gallery grouped by explicit sibling branches:
   anchor/easy, capacity, distance, dump layout, geometry/topology, site, and
   composed.
-- [ ] Export the accepted gallery into the local website.
+- [x] Export the full candidate gallery into the isolated local review website
+  on port `4174`.
 - [ ] Record Lorenzo's comments/accept/reject decisions without changing
   scenario identity.
 
@@ -238,6 +242,17 @@ The first real split-ready probe produced 160 candidates for one foundation
 anchor and one trench anchor, then materialized exact `64/16/16/32` splits with
 256/256 unique scenarios and zero source leakage. This validates the mechanism;
 all conditions still require visual acceptance before the curriculum is frozen.
+
+Visual review authority:
+
+- image folders and editable index:
+  [`terra_diverse64_full_review_20260730`](/home/lorenzo/moleworks/.artifacts/terra_diverse64_full_review_20260730);
+- local site: [http://127.0.0.1:4174/](http://127.0.0.1:4174/);
+- site branch/commit: `diverse64-gallery-review` at `4a1c1a2`.
+
+The visual source bank is explicitly review-only because its long process
+started before the final source/pair identity repair. Accepted conditions must
+be regenerated with the committed generator before split freezing.
 
 Exit gate: every selected condition has complete split counts, zero leakage,
 zero exact scenario duplicates, a visual subset, and an accepted or explicitly
@@ -251,13 +266,13 @@ deferred review disposition.
   1. [x] excavator fresh dig and correct dump;
   2. [x] excavator dump/re-dig/dump closed cycle;
   3. [x] excavator-to-truck productive transfer and dump;
-  4. skid-steer pickup of an excavator pile and correct dump;
-  5. transport pickup/drop/re-pickup closed cycle; and
+  4. [x] skid-steer pickup of an excavator pile and correct dump;
+  5. [x] transport pickup/drop/re-pickup closed cycle; and
   6. [x] a handoff and dump that exposes the current double payment and copied
      carry caches.
 - [x] Report action reward, step-cost-adjusted reward, dig/dump progress,
   potential, task completion, load, world mutation, and conserved mass.
-- [ ] After P4 separates the terms, report extraction and relocation reward
+- [x] After P4 separates the terms, report extraction and relocation reward
   components independently.
 
 Evidence:
@@ -271,21 +286,22 @@ control numbers without hand-setting reward flags.
 
 ### P4 — corrected agent-neutral reward
 
-- [ ] Pay the extraction bonus from fresh target progress, not merely a
+- [x] Pay the extraction bonus from fresh target progress, not merely a
   `0 -> loaded` transition.
-- [ ] Remove the transport-versus-excavator multiplier branch.
-- [ ] Replace the three machine/material relocation multipliers with one
+- [x] Remove the transport-versus-excavator multiplier branch.
+- [x] Replace the three machine/material relocation multipliers with one
   `relocation_progress_mult` for every agent.
 - [ ] Remove obsolete machine-specific multiplier arguments and update known
-  presets directly.
-- [ ] Replace the global material flag and two carry-potential caches with one
+  presets directly. Terra is complete; the matching terra-baselines migration
+  is a mandatory pre-training blocker.
+- [x] Replace the global material flag and two carry-potential caches with one
   per-agent `carry_relocation_credit`.
-- [ ] Pay signed relocation progress on dump; do not clip negative progress.
-- [ ] Transfer the whole load and carry credit atomically and never pay the
+- [x] Pay signed relocation progress on dump; do not clip negative progress.
+- [x] Transfer the whole load and carry credit atomically and never pay the
   handoff itself as a dump.
-- [ ] Ensure skid-steer auto-load and truck transfer use the same mass and
+- [x] Ensure skid-steer auto-load and truck transfer use the same mass and
   reward accounting as direct excavation.
-- [ ] Treat positive soil only as auto-loadable material; a negative target
+- [x] Treat positive soil only as auto-loadable material; a negative target
   hole is not a pile.
 
 Focused gates:
@@ -297,8 +313,17 @@ Focused gates:
 - mass is conserved; and
 - the full focused Terra and preset suites pass.
 
-Exit gate: the five P3 traces satisfy the rule without an agent-type reward
-branch.
+Implementation: Terra commit `64deed22` (`Implement agent-neutral relocation
+reward`) in
+[`terra/state.py`](terra/state.py),
+[`terra/agent.py`](terra/agent.py), and
+[`terra/config.py`](terra/config.py). The serialized agent state is intentionally
+`terra_agent_state_v2`; the benchmark release is `terramap-bench-v1.0.1`.
+Forty-seven focused reward, state-codec, protocol, and migration checks pass.
+
+Exit gate: the six P3 traces satisfy the rule without an agent-type reward
+branch. The Terra implementation gate is complete; baseline configuration and
+preset migration remains open before any training process may start.
 
 ### P5 — controlled experiments
 
@@ -315,15 +340,18 @@ Map and reward treatments never change together.
 
 Execution:
 
-1. CPU/config/manifest validation;
-2. CUDA conv/backward and NCCL preflight in the allocation;
-3. W&B-disabled first-update smoke for both arms;
-4. one unblinded 2,000-update seed per arm;
-5. promote a learning arm to one continuous 20,000-update `gpuhe.120h` run when
+1. migrate terra-baselines to the sole `relocation_progress_mult`, remove old
+   carry-field reads and reward-v2 guard arguments, and pass its preset/config
+   tests;
+2. CPU/config/manifest validation;
+3. CUDA conv/backward and NCCL preflight in the allocation;
+4. W&B-disabled first-update smoke for both arms;
+5. one unblinded 2,000-update seed per arm;
+6. promote a learning arm to one continuous 20,000-update `gpuhe.120h` run when
    two fixed evaluations show either one additional exact success or at least
    `+0.01` macro condition-balanced terminal completion without guard
    regression; and
-6. use paired seeds for the final scheduler claim, not to decide whether a
+7. use paired seeds for the final scheduler claim, not to decide whether a
    clearly learning recipe deserves enough compute.
 
 #### P5b Reward comparison
@@ -407,5 +435,9 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Branch-organized review gallery exporter | 3 focused tests; editable decision/comment CSV | complete |
 | 2026-07-30 | Final-code 32-condition acceptance smoke | [`SPLIT_PILOT_RECEIPT_20260730.md`](tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md) | complete |
 | 2026-07-30 | Real `160 -> 64/16/16/32` split probe | 256 unique scenarios; zero source leakage | complete |
-| 2026-07-30 | 32-condition × 64 candidate review generation | local, review-only, not split authority | running |
+| 2026-07-30 | Agent-neutral relocation reward | Terra `64deed22`; 47 focused checks | complete |
+| 2026-07-30 | Terra-baselines reward-field migration | sole multiplier plus carry-field consumers | blocking pre-training |
+| 2026-07-30 | Clean local review-site adapter | site `240f38f`; 13 Python + build + 6 Playwright pass | complete |
+| 2026-07-30 | 32-condition × 64 candidate review generation | 2048 maps; zero unsatisfied constraints; review-only | complete |
+| 2026-07-30 | Full seven-branch review site | site `4a1c1a2`; 512 hash-bound graphics at `127.0.0.1:4174` | running for review |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
