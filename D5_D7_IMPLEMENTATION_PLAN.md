@@ -326,7 +326,8 @@ Forty-seven focused reward, state-codec, protocol, and migration checks pass.
 Exit gate: the six P3 traces satisfy the rule without an agent-type reward
 branch. The Terra implementation and baseline configuration gates are complete.
 Current executable baseline presets are new agent-neutral reward treatments;
-they do not reproduce the old reward-v1/v2 split.
+they do not reproduce the old reward-v1/v2 split. The complete CPU
+terra-baselines suite passes against the paired Terra worktree (173 tests).
 
 ### P5 — controlled experiments
 
@@ -441,6 +442,7 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Agent-neutral relocation reward | Terra `64deed22`; 47 focused checks | complete |
 | 2026-07-30 | Benchmark direct-service parity | 5 tests + 4 subtests, normal CPU JIT | complete |
 | 2026-07-30 | Terra-baselines reward-field migration | baseline `3ce0e84`; 21 focused checks | complete |
+| 2026-07-30 | Terra-baselines CPU regression | 173 tests against paired Terra `64deed22` | complete |
 | 2026-07-30 | Clean local review-site adapter | site `240f38f`; 13 Python + build + 6 Playwright pass | complete |
 | 2026-07-30 | 32-condition × 64 candidate review generation | 2048 maps; zero unsatisfied constraints; review-only | complete |
 | 2026-07-30 | Full seven-branch review site | site `4a1c1a2`; 512 hash-bound graphics at `127.0.0.1:4174` | running for review |
