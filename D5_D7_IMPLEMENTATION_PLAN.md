@@ -121,10 +121,11 @@ evaluated later on the same fixed maps.
 
 - `source_group_id`: the base excavation/layout identity shared by deliberate
   counterfactual variants.
-- `scenario_id`: hash of every reset-consumed field: target, action state,
-  dumpability, occupancy/obstacles, distance metadata, and initial agent state.
-  P1 currently hashes the five map arrays. P2 must add the explicit initial
-  state before any split is frozen.
+- `scenario_id`: hash of the five map arrays consumed by reset: target, action
+  state, dumpability, occupancy/obstacles, and relocation distance.
+- `episode_id`: hash of `scenario_id`, fixed reset seed, and frozen environment
+  protocol hash. Evaluation pins this identity explicitly; training may sample
+  fresh reset seeds.
 - `condition_id`: the human-readable factor combination.
 - `split`: one of `train`, `promotion`, `development`, or `sealed`.
 
@@ -340,14 +341,52 @@ decision needs it; it is not an admission gate for visual review or PPO.
 
 Map and reward treatments never change together.
 
+Euler authorization recorded 2026-07-30: after Lorenzo's review decisions are
+exported, accepted conditions are regenerated and split-frozen, and local plus
+allocated-GPU first-update gates pass, sync the paired commits to the isolated
+Euler workspace and submit the bounded map experiments without another
+confirmation. This authorization covers the declared 2,000-update screens and
+one 20,000-update `gpuhe.120h` promotion that satisfies the fixed-bank gate. It
+does not authorize unplanned ablations or training on rejected/review-only maps.
+
 #### P5a Map sampler/curriculum
 
-- control: current committed reward-v2, uniform condition sampling;
-- treatment: current committed reward-v2, M3 deficit-aware scheduler;
-- maps: identical 64-layout training bank;
+- fixed reward: the committed agent-neutral contract
+  (`relocation_progress_mult=1.5`) for every arm;
+- maps: the same accepted 64-layout-per-condition training bank;
 - evaluation: identical frozen promotion/development panels;
 - reset, horizon, observation, action, dynamics, architecture, and PPO:
   identical.
+
+Minimal one-seed screen:
+
+| Arm | Training distribution | Question |
+|---|---|---|
+| `F-ANCHOR` | accepted foundation anchors, uniform | are the new foundation maps learnable from scratch? |
+| `T-ANCHOR` | accepted trench anchors, uniform | are the new trench maps learnable from scratch? |
+| `G-UNIFORM` | all accepted conditions, uniform | can one generalist learn the target distribution directly? |
+| `G-ADAPTIVE` | same all-condition bank, adaptive progressive sampler | does progressive exposure improve the generalist? |
+
+All four use scratch parameters with the same E8 architecture recipe
+(`resnet_spatial_8x8_se`, medium model, MLP, bf16), not an E8 checkpoint.
+`G-ADAPTIVE` is not a strict stage unlock: it retains a 20% aggregate uniform
+floor from update zero and spends 80% on the highest-competence unmastered
+conditions. Call the comparison adaptive-progressive versus uniform and log
+exposure by branch depth.
+
+Before any submission:
+
+1. materialize loader-ready contiguous arrays plus `dataset.json`,
+   `manifest.jsonl`, and `source_registry.json`;
+2. pin `reset_seed` and `episode_id` on every promotion/development/sealed row;
+3. port and migrate the adaptive sampler from the isolated experimental
+   worktree; it must use the sole agent-neutral reward API;
+4. report exact and condition-macro graded completion, micro p10, worst
+   condition, family, and cell metrics;
+5. use continuous promotion evidence rather than hard-coded counts from an old
+   panel size; and
+6. add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
+   scripts are historical inputs, not submission authority.
 
 Execution:
 
@@ -356,8 +395,9 @@ Execution:
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
 2. CPU/config/manifest validation;
 3. CUDA conv/backward and NCCL preflight in the allocation;
-4. W&B-disabled first-update smoke for both arms;
-5. one unblinded 2,000-update seed per arm;
+4. W&B-disabled first-update smoke for all four arms;
+5. one unblinded 2,000-update seed per arm
+   (`262,144,000` global transitions each at `4 x 1024 x 32`);
 6. promote a learning arm to one continuous 20,000-update `gpuhe.120h` run when
    two fixed evaluations show either one additional exact success or at least
    `+0.01` macro condition-balanced terminal completion without guard
@@ -365,16 +405,28 @@ Execution:
 7. use paired seeds for the final scheduler claim, not to decide whether a
    clearly learning recipe deserves enough compute.
 
+Current Euler readiness blockers, checked read-only on 2026-07-30:
+
+- the two copied worktrees under
+  `/cluster/home/lterenzi/codex_terra_edge_validation` contain local-only
+  `.git` pointers, so their HEAD and dirty state are unverifiable;
+- `/cluster/scratch/lterenzi/codex_terra_edge_venv` is purge-damaged and lacks
+  functional GitPython, JAX, and JAXlib;
+- scratch is above its soft inode quota (`1,019,988 / 1,000,000`) although
+  below the hard limit; and
+- no Terra job is currently active.
+
+Repair source provenance and the runtime environment before requesting a GPU.
+Inside the allocation, hard-check RTX 3090/4090 identity, run the JAX
+conv-backward and NCCL preflight, and require a finite completed update 1.
+
 #### P5b Reward comparison
 
-- maps and sampler: fixed to the selected P5a treatment;
-- control: reward-v2;
-- treatment: corrected agent-neutral reward;
-- evaluation: same fixed banks and checkpoints;
-- no map, reset, architecture, horizon, or PPO change.
-
-The first reward run is a bounded behavioural screen. It earns long compute
-only through the same fixed-bank task-progress rule as P5a.
+Deferred until P5a selects a viable map recipe. The old reward-v1/v2 EnvConfig
+and checkpoint schema are not executable in the current branch, so they are not
+a valid in-place control. Any later reward ablation must use a named,
+current-schema alternative on the frozen P5a maps and sampler; it must not be
+folded into the initial curriculum screen.
 
 ### P6 — 256-layout long-run bank
 
@@ -454,4 +506,7 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Clean local review-site adapter | site `240f38f`; 13 Python + build + 6 Playwright pass | complete |
 | 2026-07-30 | 32-condition × 64 candidate review generation | 2048 maps; zero unsatisfied constraints; review-only | complete |
 | 2026-07-30 | Full seven-branch review site | site `4a1c1a2`; 512 hash-bound graphics at `127.0.0.1:4174` | running for review |
+| 2026-07-30 | Euler curriculum-validation authorization | post-review/freeze smokes, 2k screens, gated 20k promotion | authorized, not yet launchable |
+| 2026-07-30 | Euler read-only readiness audit | no Terra jobs; invalid copied-worktree Git metadata; damaged venv; scratch soft inode quota exceeded | repair required |
+| 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | frozen, implementation pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
