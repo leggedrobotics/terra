@@ -412,3 +412,29 @@ class BatchConfig(NamedTuple):
     maps_dims: MapsDimsConfig = MapsDimsConfig()
 
     curriculum_global: CurriculumGlobalConfig = CurriculumGlobalConfig()
+
+
+def check_relocation_multipliers(env_cfg) -> str:
+    """reward-v2 guard: is the excavator re-dig discount actually a discount?
+
+    `_compute_potential_multiplier` scales the dump-time potential progress (and
+    the dump bonus with it) by `excavator_relocate_dumped_mult` when the
+    excavator lifts previously dumped material, and by
+    `excavator_relocate_dug_dirt_mult` otherwise. If the two are equal there is
+    no discount and the dig -> dump -> re-dig loop pays full rate, which is the
+    reward-v1 defect M1-B exploited (reward-v1 presets ship 1.5 / 1.5).
+
+    Returns an empty string when the configuration is sound, and a one-line
+    warning otherwise. Callers print it; nothing here raises, so reward-v1 runs
+    stay reproducible.
+    """
+    dumped = float(getattr(env_cfg, "excavator_relocate_dumped_mult", 0.2))
+    dug = float(getattr(env_cfg, "excavator_relocate_dug_dirt_mult", 1.5))
+    if dumped < dug:
+        return ""
+    return (
+        "reward-v2 WARNING: excavator_relocate_dumped_mult "
+        f"({dumped}) >= excavator_relocate_dug_dirt_mult ({dug}); the re-dig "
+        "discount is disabled and dig->dump->re-dig cycles pay full reward "
+        "(this is the reward-v1 configuration)."
+    )

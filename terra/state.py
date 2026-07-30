@@ -2822,13 +2822,12 @@ class State(NamedTuple):
         # jax.debug.print("  progress clamped: {}", progress_clamped) 
 
         is_moving_dumped_dirt = self.agent.moving_dumped_dirt
-        has_transport_agent = self._has_transport_agent()
         is_truck = cur.agent_type[0] == 1
         is_transport = jnp.logical_or(is_skidsteer, is_truck)
+        # reward-v2: the re-dig discount no longer depends on transport presence.
         potential_multiplier = self._compute_potential_multiplier(
             is_transport,
             is_moving_dumped_dirt,
-            has_transport_agent,
         )
         # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
         avg_target_tiles = AVG_TARGET_TILES
@@ -4102,26 +4101,48 @@ class State(NamedTuple):
             return jnp.min(masked)
         return jax.lax.cond(jnp.any(dump_mask), _calc_distance, lambda: jnp.float32(0.0))
 
-    def _compute_potential_multiplier(self, is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_, has_transport_agent: jnp.bool_) -> jnp.float32:
+    def _compute_potential_multiplier(self, is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_) -> jnp.float32:
+        """Relocation multiplier applied to the dump-time potential progress.
+
+        reward-v2 (2026-07-30). The excavator's re-dig discount used to be gated
+        on `has_transport_agent`, so in a SINGLE-EXCAVATOR setup (`agent_types:
+        [0]`, which is every M1 arm) the gate never opened and re-digging one's
+        own spoil pile paid exactly the same rate as a fresh dig. Combined with
+        the flat `+1.0` `started_loading` dig reward and a `dig_on_dump_penalty`
+        that only fires on the DESIGNATED dump zone (`target_map > 0`), a pile
+        staged on legal non-designated ground could be re-handled indefinitely
+        for full reward. That is the dig->dump->re-dig farm M1-B found: return
+        climbed to 11.49 while completion died, workspace cycles 2442 -> 23708.
+
+        The discount is a property of what is being moved, not of who else is on
+        the site, so it now applies whenever the excavator lifts previously
+        dumped material. `has_transport_agent` is no longer an input.
+
+        Semantics (both multipliers scale the SAME progress term, and the dump
+        bonus with it): re-digging own spoil must be strictly less profitable
+        than a fresh dig, i.e. `excavator_relocate_dumped_mult <
+        excavator_relocate_dug_dirt_mult`. The module defaults (0.2 vs 1.5)
+        satisfy that; a preset that sets them equal -- as the reward-v1 M1
+        presets do, at 1.5/1.5 -- silently disables the discount, which
+        `terra.config.check_relocation_multipliers` reports.
+        """
         # Get multipliers from env_cfg, falling back to legacy constants for backwards compatibility
         transport_mult = jnp.float32(getattr(self.env_cfg, 'transport_relocate_mult', TRANSPORT_RELOCATE_MULT))
         excavator_dumped_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dumped_mult', EXCAVATOR_RELOCATE_DUMPED_MULT))
         excavator_dug_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dug_dirt_mult', EXCAVATOR_RELOCATE_DUG_DIRT_MULT))
-        
+
         # Transport agents (skid steer, truck): use dedicated transport relocation multiplier
         def for_transport():
             return transport_mult
-        # Excavator: penalize relocating dumped dirt only when a transport agent exists
+
+        # Excavator: relocating already-dumped dirt is discounted, always.
         def for_excavator():
-            def with_transport():
-                return jax.lax.cond(
-                    is_moving_dumped_dirt,
-                    lambda: excavator_dumped_mult,
-                    lambda: excavator_dug_mult,
-                )
-            def without_transport():
-                return excavator_dug_mult
-            return jax.lax.cond(has_transport_agent, with_transport, without_transport)
+            return jax.lax.cond(
+                is_moving_dumped_dirt,
+                lambda: excavator_dumped_mult,
+                lambda: excavator_dug_mult,
+            )
+
         return jax.lax.cond(is_transport, for_transport, for_excavator)
 
 
