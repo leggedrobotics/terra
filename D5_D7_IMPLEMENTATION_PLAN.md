@@ -293,9 +293,9 @@ control numbers without hand-setting reward flags.
 - [x] Remove the transport-versus-excavator multiplier branch.
 - [x] Replace the three machine/material relocation multipliers with one
   `relocation_progress_mult` for every agent.
-- [ ] Remove obsolete machine-specific multiplier arguments and update known
-  presets directly. Terra is complete; the matching terra-baselines migration
-  is a mandatory pre-training blocker.
+- [x] Remove obsolete machine-specific multiplier arguments and update known
+  executable presets directly. Historical audit/receipt fields remain pinned
+  to their old revisions and are not launch inputs.
 - [x] Replace the global material flag and two carry-potential caches with one
   per-agent `carry_relocation_credit`.
 - [x] Pay signed relocation progress on dump; do not clip negative progress.
@@ -324,8 +324,9 @@ reward`) in
 Forty-seven focused reward, state-codec, protocol, and migration checks pass.
 
 Exit gate: the six P3 traces satisfy the rule without an agent-type reward
-branch. The Terra implementation gate is complete; baseline configuration and
-preset migration remains open before any training process may start.
+branch. The Terra implementation and baseline configuration gates are complete.
+Current executable baseline presets are new agent-neutral reward treatments;
+they do not reproduce the old reward-v1/v2 split.
 
 ### P5 — controlled experiments
 
@@ -342,9 +343,9 @@ Map and reward treatments never change together.
 
 Execution:
 
-1. migrate terra-baselines to the sole `relocation_progress_mult`, remove old
-   carry-field reads and reward-v2 guard arguments, and pass its preset/config
-   tests;
+1. [complete] migrate terra-baselines to the sole
+   `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
+   arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
 2. CPU/config/manifest validation;
 3. CUDA conv/backward and NCCL preflight in the allocation;
 4. W&B-disabled first-update smoke for both arms;
@@ -438,7 +439,8 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Final-code 32-condition acceptance smoke | [`SPLIT_PILOT_RECEIPT_20260730.md`](tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md) | complete |
 | 2026-07-30 | Real `160 -> 64/16/16/32` split probe | 256 unique scenarios; zero source leakage | complete |
 | 2026-07-30 | Agent-neutral relocation reward | Terra `64deed22`; 47 focused checks | complete |
-| 2026-07-30 | Terra-baselines reward-field migration | sole multiplier plus carry-field consumers | blocking pre-training |
+| 2026-07-30 | Benchmark direct-service parity | 5 tests + 4 subtests, normal CPU JIT | complete |
+| 2026-07-30 | Terra-baselines reward-field migration | baseline `3ce0e84`; 21 focused checks | complete |
 | 2026-07-30 | Clean local review-site adapter | site `240f38f`; 13 Python + build + 6 Playwright pass | complete |
 | 2026-07-30 | 32-condition × 64 candidate review generation | 2048 maps; zero unsatisfied constraints; review-only | complete |
 | 2026-07-30 | Full seven-branch review site | site `4a1c1a2`; 512 hash-bound graphics at `127.0.0.1:4174` | running for review |
