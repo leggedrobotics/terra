@@ -370,7 +370,7 @@ does not authorize unplanned ablations or training on rejected/review-only maps.
 Implementation:
 [terra-baselines P5 accepted-bank experiments](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
 (sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
-`18322cb`).
+`18322cb`, with the exact 64-training-layout cardinality gate at `e847d51`).
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -416,19 +416,21 @@ Before any submission:
    screen trains (`18322cb`); its allocated execution on the final frozen bank
    remains pending; and
 7. [x] add a content-addressed immutable Euler smoke/screen launch path and
-   receipt (`18322cb`). Existing v5m/v6m launch scripts are historical inputs,
-   not submission authority. The 20,000-update P6 path deliberately fails
-   closed until the separate 256-training-layouts-per-condition expansion
-   contract exists.
+   receipt (`18322cb`, strengthened at `e847d51` to require and record exactly
+   64 training layouts per condition). Existing v5m/v6m launch scripts are
+   historical inputs, not submission authority. The 20,000-update P6 path
+   deliberately fails closed until the separate
+   256-training-layouts-per-condition expansion contract exists.
 
 Execution:
 
 1. [complete] migrate terra-baselines to the sole
    `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
-2. [complete] CPU/config/manifest/launch validation (216 full baseline tests,
-   50 focused accepted-bank/Euler tests, ShellCheck, syntax, and deterministic
-   `SUBMIT=0` packaging at `18322cb`);
+2. [complete] CPU/config/manifest/launch validation (218 full baseline tests;
+   50 focused accepted-bank/Euler tests at `18322cb`; 21 focused cardinality
+   tests at `e847d51`; ShellCheck, syntax, and deterministic `SUBMIT=0`
+   packaging);
 3. [pending final bank] CUDA conv/backward and NCCL preflight in the
    allocation;
 4. [pending final bank] W&B-disabled first-update smoke for all four arms;
@@ -460,8 +462,9 @@ editable source bindings, quota footprint, and 19-file provenance ledger pass;
 ledger SHA-256 is
 `853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
 
-Source provenance and launch isolation are implemented at `18322cb`: the
-launcher requires clean committed source, stages and hashes the exact bank,
+Source provenance and launch isolation are implemented at `18322cb` and
+`e847d51`: the launcher requires clean committed source, stages and hashes the
+exact bank, requires exactly 64 training layouts in every selected condition,
 creates one content-addressed archive, unpacks it into allocation-local
 storage, and keeps only logs/checkpoints/W&B on scratch. It rejects
 `REVIEW_ONLY.md` and `NON_ADMISSION.md`, checks the dependency-ledger hash,
@@ -561,5 +564,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
-| 2026-07-30 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `18322cb`; 216 full + 50 focused tests; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
+| 2026-07-30 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `e847d51`; 218 full tests; exact 64-layout gate; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
