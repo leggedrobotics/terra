@@ -369,7 +369,8 @@ does not authorize unplanned ablations or training on rejected/review-only maps.
 
 Implementation:
 [terra-baselines P5 accepted-bank experiments](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
-(commit `64fc4a9`).
+(sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
+`18322cb`).
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -410,37 +411,46 @@ Before any submission:
    condition, family, and cell metrics;
 5. [x] use continuous promotion evidence rather than hard-coded counts from an
    old panel size;
-6. [ ] compare CPU/GPU initial-agent-state hashes for every fixed evaluation
-   seed under the exact runtime lock; and
-7. [ ] add a new immutable Euler launch path and receipt. Existing v5m/v6m launch
-   scripts are historical inputs, not submission authority.
+6. [x] implement a fail-closed CPU/GPU initial-agent-state comparison for every
+   fixed promotion/development seed under the exact runtime lock before a
+   screen trains (`18322cb`); its allocated execution on the final frozen bank
+   remains pending; and
+7. [x] add a content-addressed immutable Euler smoke/screen launch path and
+   receipt (`18322cb`). Existing v5m/v6m launch scripts are historical inputs,
+   not submission authority. The 20,000-update P6 path deliberately fails
+   closed until the separate 256-training-layouts-per-condition expansion
+   contract exists.
 
 Execution:
 
 1. [complete] migrate terra-baselines to the sole
    `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
-2. [complete] CPU/config/manifest validation (201 full baseline tests and 34
-   focused accepted-bank tests at `64fc4a9`);
-3. CUDA conv/backward and NCCL preflight in the allocation;
-4. W&B-disabled first-update smoke for all four arms;
-5. one unblinded 2,000-update seed per arm
+2. [complete] CPU/config/manifest/launch validation (216 full baseline tests,
+   50 focused accepted-bank/Euler tests, ShellCheck, syntax, and deterministic
+   `SUBMIT=0` packaging at `18322cb`);
+3. [pending final bank] CUDA conv/backward and NCCL preflight in the
+   allocation;
+4. [pending final bank] W&B-disabled first-update smoke for all four arms;
+5. [pending smoke receipts] one unblinded 2,000-update seed per arm
    (`262,144,000` global transitions each at `4 x 1024 x 32`);
-6. promote a learning arm to one continuous 20,000-update `gpuhe.120h` run when
+6. [P6, fail-closed] promote a learning generalist arm to one fresh continuous
+   20,000-update `gpuhe.120h` run on 256 training layouts per accepted
+   condition when
    two fixed evaluations show either one additional exact success or at least
    `+0.01` macro condition-balanced terminal completion without guard
    regression; and
 7. use paired seeds for the final scheduler claim, not to decide whether a
    clearly learning recipe deserves enough compute.
 
-Current Euler readiness blockers, checked read-only on 2026-07-30:
+Current execution blockers, checked 2026-07-30:
 
-- the two copied worktrees under
-  `/cluster/home/lterenzi/codex_terra_edge_validation` contain local-only
-  `.git` pointers, so their HEAD and dirty state are unverifiable;
-- scratch is above its soft inode quota (`1,019,988 / 1,000,000`) although
-  below the hard limit; and
-- no Terra job is currently active.
+- Lorenzo's map comments/accept/reject decisions have not yet been exported
+  from the local review site;
+- the accepted 64/16/16/32 source-disjoint bank therefore has not been
+  regenerated and frozen from those decisions; and
+- allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
+  exist.
 
 The purge-damaged scratch environment has been replaced by one dependency-only
 project environment:
@@ -450,12 +460,15 @@ editable source bindings, quota footprint, and 19-file provenance ledger pass;
 ledger SHA-256 is
 `853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
 
-Repair source provenance before requesting a GPU. Transfer immutable source and
-bank archives rather than copied worktrees, unpack them into allocation-local
-storage, and keep only logs/checkpoints/W&B on scratch so the shared scratch
-inode excess does not grow with map sidecars. Inside the allocation, hard-check
-RTX 3090/4090 identity, run the JAX conv-backward and NCCL preflight, and
-require a finite completed update 1.
+Source provenance and launch isolation are implemented at `18322cb`: the
+launcher requires clean committed source, stages and hashes the exact bank,
+creates one content-addressed archive, unpacks it into allocation-local
+storage, and keeps only logs/checkpoints/W&B on scratch. It rejects
+`REVIEW_ONLY.md` and `NON_ADMISSION.md`, checks the dependency-ledger hash,
+home quota, four RTX 4090 devices, JAX conv/backward/NCCL health, exact source
+imports, and a finite completed update 1 with clean transition integrity.
+Screens additionally require CPU/GPU equality of every fixed
+promotion/development initial-agent-state hash before training.
 
 #### P5b Reward comparison
 
@@ -548,5 +561,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
-| 2026-07-30 | Accepted-bank sampler/evaluator | baseline `64fc4a9`; 201 full + 34 focused tests | independent review complete; launch fixes pending |
+| 2026-07-30 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `18322cb`; 216 full + 50 focused tests; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
