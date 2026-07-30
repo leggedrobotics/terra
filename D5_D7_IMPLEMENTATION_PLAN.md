@@ -417,15 +417,24 @@ Current Euler readiness blockers, checked read-only on 2026-07-30:
 - the two copied worktrees under
   `/cluster/home/lterenzi/codex_terra_edge_validation` contain local-only
   `.git` pointers, so their HEAD and dirty state are unverifiable;
-- `/cluster/scratch/lterenzi/codex_terra_edge_venv` is purge-damaged and lacks
-  functional GitPython, JAX, and JAXlib;
 - scratch is above its soft inode quota (`1,019,988 / 1,000,000`) although
   below the hard limit; and
 - no Terra job is currently active.
 
-Repair source provenance and the runtime environment before requesting a GPU.
-Inside the allocation, hard-check RTX 3090/4090 identity, run the JAX
-conv-backward and NCCL preflight, and require a finite completed update 1.
+The purge-damaged scratch environment has been replaced by one dependency-only
+project environment:
+`/cluster/project/rsl/lterenzi/terra_curriculum_20260730_c14bd7d_3ce0e84_py312_jax0426`.
+Its exact 90-package lock, CPU imports, CUDA package presence, absence of
+editable source bindings, quota footprint, and 19-file provenance ledger pass;
+ledger SHA-256 is
+`853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
+
+Repair source provenance before requesting a GPU. Transfer immutable source and
+bank archives rather than copied worktrees, unpack them into allocation-local
+storage, and keep only logs/checkpoints/W&B on scratch so the shared scratch
+inode excess does not grow with map sidecars. Inside the allocation, hard-check
+RTX 3090/4090 identity, run the JAX conv-backward and NCCL preflight, and
+require a finite completed update 1.
 
 #### P5b Reward comparison
 
@@ -515,5 +524,6 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Full seven-branch review site | site `4a1c1a2`; 512 hash-bound graphics at `127.0.0.1:4174` | running for review |
 | 2026-07-30 | Euler curriculum-validation authorization | post-review/freeze smokes, 2k screens, gated 20k promotion | authorized, not yet launchable |
 | 2026-07-30 | Euler read-only readiness audit | no Terra jobs; invalid copied-worktree Git metadata; damaged venv; scratch soft inode quota exceeded | repair required |
+| 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | frozen, implementation pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
