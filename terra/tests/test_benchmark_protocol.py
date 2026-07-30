@@ -55,7 +55,7 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
     assert (
         first_receipt["env_config_sha256"]
         == protocol.FROZEN_ENV_CONFIG_SHA256
-        == "02863f625923a6f1302a0fe8f09fc9840b0ef92bf84f68bf2ea645d50b460072"
+        == "f720809566bf73d8a740124ae46c487af497ecda7de6d3f722a06b62c79dd0a3"
     )
     assert protocol.canonical_json_sha256(first_receipt["env_config"]) == (
         first_receipt["env_config_sha256"]

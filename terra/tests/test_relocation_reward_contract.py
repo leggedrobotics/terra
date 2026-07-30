@@ -1,8 +1,7 @@
-"""Deterministic action-path evidence for the committed reward-v2 contract.
+"""Deterministic action-path evidence for the agent-neutral reward contract.
 
-These tests are a control receipt for the subsequent agent-neutral reward
-change.  They deliberately characterize current behavior, including the
-handoff double-payment defect, without patching reward flags or carry caches.
+The tests exercise fresh excavation, rehandling, transport, and handoff paths
+without patching reward flags or carry credit.
 
 The traces use Terra's real dig, dump, and transfer transition paths and the
 same action-specific reward handlers selected by ``State._get_reward``.  They
@@ -55,9 +54,7 @@ def _env_config(agent_types: tuple[int, ...] = (0,)) -> EnvConfig:
         agent_types=agent_types,
         action_types=tuple(0 for _ in agent_types),
         foundation_dump_min_free_fraction=0.0,
-        excavator_relocate_dumped_mult=0.2,
-        excavator_relocate_dug_dirt_mult=1.5,
-        transport_relocate_mult=1.5,
+        relocation_progress_mult=1.5,
     )
 
 
@@ -150,9 +147,11 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
     """Run one real action and expose the current contract's reward accounting."""
     acting_index = int(np.asarray(state.agent.current_agent))
     actor_before = state.agent.agent_states[acting_index]
+    actor_type = int(np.asarray(actor_before.agent_type)[0])
     action_index = int(np.asarray(action.action).reshape(-1)[0])
-    if action_index == 6:
-        actor_type = int(np.asarray(actor_before.agent_type)[0])
+    if action_index == 0:
+        transitioned = state._handle_move_forward()
+    elif action_index == 6:
         is_loaded = int(np.asarray(actor_before.loaded)[0]) > 0
         if actor_type == 0 and not is_loaded:
             transitioned = state._handle_dig()
@@ -164,6 +163,8 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
             transitioned = transferred if transfer_happened else state._handle_dump()
         elif actor_type == 1 and is_loaded:
             transitioned = state._handle_dump()
+        elif actor_type == 2:
+            transitioned = state._handle_do()
         else:
             raise ValueError(
                 f"Unsupported DO evidence path: type={actor_type}, "
@@ -177,7 +178,16 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
 
     action_raw = 0.0
     if action_index == 6:
-        if int(np.asarray(actor_before.loaded)[0]) > 0:
+        if actor_type == 2:
+            action_raw = float(
+                np.asarray(
+                    state._handle_rewards_skid_steer_do(
+                        next_state,
+                        action.action,
+                    )
+                )
+            )
+        elif int(np.asarray(actor_before.loaded)[0]) > 0:
             action_raw = float(
                 np.asarray(state._handle_rewards_dump(next_state, action.action))
             )
@@ -185,8 +195,34 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
             action_raw = float(
                 np.asarray(state._handle_rewards_dig(next_state, action.action))
             )
+    elif action_index == 0 and actor_type == 2:
+        action_raw = float(
+            np.asarray(state._get_rewards_skidsteer(next_state, action.action))
+        )
 
     actor_after = next_state.agent.agent_states[acting_index]
+    fresh_target_progress = float(
+        np.asarray(
+            state._get_action_map_dig_progress(
+                state.world.action_map.map,
+                next_state.world.action_map.map,
+                state.world.target_map.map,
+            )
+        )
+    )
+    world_changed = bool(
+        np.any(
+            np.asarray(state.world.action_map.map)
+            != np.asarray(next_state.world.action_map.map)
+        )
+    )
+    realized_relocation_progress = 0.0
+    realized_relocation_reward = 0.0
+    if int(np.asarray(actor_before.loaded)[0]) > 0 and world_changed:
+        realized_relocation_progress = float(
+            np.asarray(state._get_relocation_progress(next_state))
+        )
+        realized_relocation_reward = action_raw
     # Calling the monolithic `_get_reward` here compiles termination, terminal,
     # trench, and logging branches that are unrelated to this deterministic
     # contract test.  For the nonterminal cycle below, the exact step total is
@@ -198,6 +234,9 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
     return next_state, {
         "action_raw": action_raw,
         "nonterminal_normalized": nonterminal_normalized,
+        "extraction_reward": float(fresh_target_progress > 0),
+        "relocation_progress": realized_relocation_progress,
+        "relocation_reward": realized_relocation_reward,
         "dig_progress": float(
             np.asarray(
                 state._get_action_map_dig_progress(
@@ -224,12 +263,7 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
         "potential_after": _potential(next_state),
         "completion_before": _completion(state),
         "completion_after": _completion(next_state),
-        "world_changed": float(
-            np.any(
-                np.asarray(state.world.action_map.map)
-                != np.asarray(next_state.world.action_map.map)
-            )
-        ),
+        "world_changed": float(world_changed),
     }
 
 
@@ -263,17 +297,21 @@ def test_reward_v2_fresh_dig_and_correct_dump_use_real_do_actions():
     assert dig["load_before"] == 0
     assert dig["load_after"] > 0
     assert dig["mass_after"] == initial_mass
-    assert not bool(after_dig.agent.moving_dumped_dirt)
+    assert dig["extraction_reward"] == 1.0
+    assert float(after_dig._get_current_agent_state().carry_relocation_credit) > 0
 
     ready_to_dump = _set_pose(after_dig, 0, CENTER, cabin=6)
     after_dump, dump = _step_trace(ready_to_dump, TrackedAction.do())
     assert dump["dump_progress"] > 0
     assert dump["action_raw"] > 0
+    assert dump["relocation_progress"] > 0
+    assert dump["relocation_reward"] > 0
     assert dump["load_before"] > 0
     assert dump["load_after"] == 0
     assert dump["completion_after"] > dump["completion_before"]
     assert dump["mass_after"] == initial_mass
     assert _mass(after_dump) == initial_mass
+    assert float(after_dump._get_current_agent_state().carry_relocation_credit) == 0
 
 
 def test_reward_v2_no_progress_redig_cycle_is_break_even_before_step_costs():
@@ -291,18 +329,109 @@ def test_reward_v2_no_progress_redig_cycle_is_break_even_before_step_costs():
     mass_before_cycle = _mass(staged)
 
     lifted, redig = _step_trace(staged, TrackedAction.do())
-    assert bool(lifted.agent.moving_dumped_dirt)
     assert redig["dig_progress"] == 0
-    assert redig["action_raw"] == pytest.approx(1.0)
+    assert redig["extraction_reward"] == 0
+    assert redig["action_raw"] == pytest.approx(0.0)
+    assert float(lifted._get_current_agent_state().carry_relocation_credit) > 0
 
     returned, redump = _step_trace(lifted, TrackedAction.do())
     assert redump["dump_progress"] == 0
-    assert redump["action_raw"] == pytest.approx(-1.0)
+    assert redump["action_raw"] == pytest.approx(0.0)
     assert redig["action_raw"] + redump["action_raw"] == pytest.approx(0.0)
     assert redig["nonterminal_normalized"] + redump["nonterminal_normalized"] < 0
     assert _potential(returned) == pytest.approx(potential_before_cycle)
     assert _completion(returned) == pytest.approx(completion_before_cycle)
     assert _mass(returned) == mass_before_cycle
+
+
+def _skid_workspace_after_forward() -> tuple[EnvConfig, np.ndarray]:
+    cfg = _env_config((2,))
+    empty = np.zeros(SHAPE, dtype=np.int8)
+    probe = _set_pose(_state(empty, env_cfg=cfg), 0, CENTER, cabin=0)
+    moved = probe._handle_move_forward()
+    assert not np.array_equal(
+        np.asarray(probe._get_current_agent_state().pos_base),
+        np.asarray(moved._get_current_agent_state().pos_base),
+    )
+    map_cyl, map_local = moved._get_map_local_and_cyl_coords()
+    workspace = np.asarray(
+        moved._get_dig_dump_mask_skidsteer(map_cyl, map_local)
+    ).reshape(SHAPE)
+    coordinates = np.argwhere(workspace)
+    if len(coordinates) < 52:
+        raise AssertionError("Expected a usable skid-steer workspace.")
+    return cfg, coordinates
+
+
+def test_skid_pickup_ignores_hole_and_productive_dump_is_rewarded():
+    cfg, coordinates = _skid_workspace_after_forward()
+    pile_cells = coordinates[:8]
+    hole_cell = coordinates[9]
+    dump_cells = coordinates[20:52]
+
+    target = np.zeros(SHAPE, dtype=np.int8)
+    target[tuple(dump_cells.T)] = 1
+    action = np.zeros(SHAPE, dtype=np.int8)
+    action[tuple(pile_cells.T)] = 1
+    action[tuple(hole_cell)] = -1
+
+    state = _set_pose(
+        _state(target, action=action, env_cfg=cfg),
+        0,
+        CENTER,
+        cabin=0,
+    )
+    initial_mass = _mass(state)
+    loaded, pickup = _step_trace(state, TrackedAction.forward())
+
+    assert pickup["load_after"] == len(pile_cells)
+    assert pickup["extraction_reward"] == 0
+    assert pickup["mass_after"] == initial_mass
+    assert np.asarray(loaded.world.action_map.map)[tuple(hole_cell)] == -1
+    assert float(loaded._get_current_agent_state().carry_relocation_credit) > 0
+
+    shovel_up, lift = _step_trace(loaded, TrackedAction.do())
+    assert lift["action_raw"] == pytest.approx(0.0)
+    assert int(np.asarray(shovel_up._get_current_agent_state().shovel_lifted)[0]) == 1
+
+    dumped, dump = _step_trace(shovel_up, TrackedAction.do())
+    assert dump["relocation_progress"] > 0
+    assert dump["relocation_reward"] > 0
+    assert dump["completion_after"] > dump["completion_before"]
+    assert _mass(dumped) == initial_mass
+    assert float(dumped._get_current_agent_state().carry_relocation_credit) == 0
+
+
+def test_skid_pickup_and_redump_inside_accepted_zone_is_nonpositive():
+    cfg, coordinates = _skid_workspace_after_forward()
+    dump_cells = coordinates[:32]
+    pile_cells = dump_cells[:8]
+
+    target = np.zeros(SHAPE, dtype=np.int8)
+    target[tuple(dump_cells.T)] = 1
+    action = np.zeros(SHAPE, dtype=np.int8)
+    action[tuple(pile_cells.T)] = 1
+    state = _set_pose(
+        _state(target, action=action, env_cfg=cfg),
+        0,
+        CENTER,
+        cabin=0,
+    )
+    initial_mass = _mass(state)
+    initial_completion = _completion(state)
+    initial_potential = _potential(state)
+
+    loaded, pickup = _step_trace(state, TrackedAction.forward())
+    shovel_up, lift = _step_trace(loaded, TrackedAction.do())
+    returned, redump = _step_trace(shovel_up, TrackedAction.do())
+
+    assert pickup["extraction_reward"] == 0
+    assert float(loaded._get_current_agent_state().carry_relocation_credit) == 0
+    assert redump["relocation_progress"] == pytest.approx(0.0)
+    assert pickup["action_raw"] + lift["action_raw"] + redump["action_raw"] <= 0
+    assert _mass(returned) == initial_mass
+    assert _completion(returned) == pytest.approx(initial_completion)
+    assert _potential(returned) == pytest.approx(initial_potential)
 
 
 def _truck_geometry() -> tuple[State, np.ndarray, np.ndarray]:
@@ -339,7 +468,7 @@ def _truck_geometry() -> tuple[State, np.ndarray, np.ndarray]:
     return state, target, distance
 
 
-def test_reward_v2_real_truck_handoff_pays_and_copies_carry_credit():
+def test_truck_handoff_moves_credit_without_reward_then_dump_pays_once():
     state, _, _ = _truck_geometry()
     initial_mass = _mass(state)
 
@@ -364,16 +493,13 @@ def test_reward_v2_real_truck_handoff_pays_and_copies_carry_credit():
     assert int(np.asarray(truck_after_transfer.loaded)[0]) > 0
     assert _mass(after_transfer) == initial_mass
 
-    # This is the committed control defect: a handoff with no terrain change is
-    # paid as a dump, while the truck receives the same carry potential.
-    assert transfer["action_raw"] > 0
-    assert float(truck_after_transfer.carry_baseline_potential) == pytest.approx(
-        float(excavator_after_dig.carry_baseline_potential)
-    )
-    assert float(truck_after_transfer.carry_potential_after_lift) == pytest.approx(
-        float(excavator_after_dig.carry_potential_after_lift)
+    assert transfer["action_raw"] == pytest.approx(0.0)
+    assert transfer["relocation_reward"] == pytest.approx(0.0)
+    assert float(truck_after_transfer.carry_relocation_credit) == pytest.approx(
+        float(excavator_after_dig.carry_relocation_credit)
     )
     assert int(np.asarray(excavator_after_transfer.loaded)[0]) == 0
+    assert float(excavator_after_transfer.carry_relocation_credit) == 0
 
     after_truck_dump, truck_dump = _step_trace(
         after_transfer,
@@ -385,3 +511,32 @@ def test_reward_v2_real_truck_handoff_pays_and_copies_carry_credit():
     assert truck_dump["load_after"] == 0
     assert truck_dump["completion_after"] > truck_dump["completion_before"]
     assert _mass(after_truck_dump) == initial_mass
+
+
+def test_truck_handoff_is_all_or_nothing_when_capacity_is_insufficient():
+    state, _, _ = _truck_geometry()
+    state = state._replace(
+        env_cfg=state.env_cfg._replace(truck_capacity=4),
+    )
+    carrying = state._handle_dig()
+    excavator_before = carrying.agent.agent_states[0]
+    truck_before = carrying.agent.agent_states[1]
+    assert int(np.asarray(excavator_before.loaded)[0]) > state.env_cfg.truck_capacity
+
+    attempted = carrying._try_truck_transfer_on_excavator_dump()
+    excavator_after = attempted.agent.agent_states[0]
+    truck_after = attempted.agent.agent_states[1]
+
+    assert int(np.asarray(excavator_after.loaded)[0]) == int(
+        np.asarray(excavator_before.loaded)[0]
+    )
+    assert int(np.asarray(truck_after.loaded)[0]) == int(
+        np.asarray(truck_before.loaded)[0]
+    )
+    assert float(excavator_after.carry_relocation_credit) == pytest.approx(
+        float(excavator_before.carry_relocation_credit)
+    )
+    assert float(truck_after.carry_relocation_credit) == pytest.approx(
+        float(truck_before.carry_relocation_credit)
+    )
+    assert _mass(attempted) == _mass(carrying)

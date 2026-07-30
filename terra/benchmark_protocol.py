@@ -17,7 +17,7 @@ from terra.config import Rewards
 from terra.config import RewardsType
 from terra.state import CORRECTED_DENSE_CONTRACT
 
-BENCHMARK_RELEASE_ID = "terramap-bench-v1.0.0"
+BENCHMARK_RELEASE_ID = "terramap-bench-v1.0.1"
 BENCHMARK_MAP_SIZE = 64
 BENCHMARK_MAX_STEPS = 450
 ENVIRONMENT_PROTOCOL_SCHEMA = "terra_environment_protocol_v1"
@@ -27,7 +27,7 @@ ENVIRONMENT_PROTOCOL_SCHEMA_VERSION = 1
 # second copy of the excavator's physical dimensions.
 _FROZEN_TRACKED_FOOTPRINT = (7, 11)
 FROZEN_ENV_CONFIG_SHA256 = (
-    "02863f625923a6f1302a0fe8f09fc9840b0ef92bf84f68bf2ea645d50b460072"
+    "f720809566bf73d8a740124ae46c487af497ecda7de6d3f722a06b62c79dd0a3"
 )
 
 

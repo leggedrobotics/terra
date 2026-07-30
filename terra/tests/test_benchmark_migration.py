@@ -113,13 +113,12 @@ def _factor(scenario: LoadedLegacyScenario) -> dict:
 def _state_record() -> dict:
     zeros = [0, 0, 0, 0]
     return {
-        "schema": "terra_agent_state_v1",
+        "schema": "terra_agent_state_v2",
         "width": 7,
         "height": 11,
         "max_agents": 4,
         "num_agents": 1,
         "current_agent": 0,
-        "moving_dumped_dirt": False,
         "agent_active": [True, False, False, False],
         "agent_states": {
             "pos_base": [[10, 10], [0, 0], [0, 0], [0, 0]],
@@ -130,8 +129,7 @@ def _state_record() -> dict:
             "agent_type": zeros,
             "action_type": zeros,
             "shovel_lifted": zeros,
-            "carry_baseline_potential": [0.0, 0.0, 0.0, 0.0],
-            "carry_potential_after_lift": [0.0, 0.0, 0.0, 0.0],
+            "carry_relocation_credit": [0.0, 0.0, 0.0, 0.0],
         },
     }
 

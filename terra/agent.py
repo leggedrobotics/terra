@@ -36,10 +36,8 @@ class AgentState(NamedTuple):
     agent_type: IntLowDim  # 0=excavator, 1=truck, 2=skidsteer
     action_type: IntLowDim  # 0=tracked, 1=wheeled (movement mechanism)
     shovel_lifted: IntLowDim  # 0=lowered, 1=lifted (for skid steer only)
-    # Per-agent baseline potential cached at start of carry (0 -> >0)
-    carry_baseline_potential: jnp.float32 = jnp.float32(0.0)
-    # Per-agent potential immediately after lifting (post-dig/auto-load)
-    carry_potential_after_lift: jnp.float32 = jnp.float32(0.0)
+    # Potential removed from the world while this agent accumulated its load.
+    carry_relocation_credit: jnp.float32 = jnp.float32(0.0)
 
 
 class Agent(NamedTuple):
@@ -49,8 +47,6 @@ class Agent(NamedTuple):
 
     width: int
     height: int
-
-    moving_dumped_dirt: bool
 
     # Variable number of agents with fixed-size storage (JAX-friendly, static max size)
     agent_states: tuple[AgentState, ...] | None = None  # Fixed-size container (e.g., 8)
@@ -83,7 +79,6 @@ class Agent(NamedTuple):
 
         width = env_cfg.agent.width
         height = env_cfg.agent.height
-        moving_dumped_dirt = False
 
         # Use JAX-compatible loop for agent placement
         map_width, map_height = padding_mask.shape
@@ -175,8 +170,7 @@ class Agent(NamedTuple):
                 agent_type=jnp.full((1,), agent_type_val, dtype=jnp.int8),
                 action_type=jnp.full((1,), action_type_val, dtype=jnp.int8),
                 shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),
-                carry_baseline_potential=jnp.float32(0.0),
-                carry_potential_after_lift=jnp.float32(0.0),
+                carry_relocation_credit=jnp.float32(0.0),
             )
             
             # Update mask only if we placed an agent
@@ -210,6 +204,7 @@ class Agent(NamedTuple):
             agent_type=jnp.array([0], dtype=IntLowDim),
             action_type=jnp.array([0], dtype=IntLowDim),  # Default to tracked
             shovel_lifted=jnp.array([0], dtype=IntLowDim),
+            carry_relocation_credit=jnp.float32(0.0),
         )
         
         # Initialize with dummy states that will be replaced
@@ -273,8 +268,7 @@ class Agent(NamedTuple):
                 agent_type=jnp.full((1,), agent_type_val, dtype=IntLowDim),
                 action_type=jnp.full((1,), action_type_val, dtype=IntLowDim),
                 shovel_lifted=jnp.full((1,), 0, dtype=IntLowDim),
-                carry_baseline_potential=jnp.float32(0.0),
-                carry_potential_after_lift=jnp.float32(0.0),
+                carry_relocation_credit=jnp.float32(0.0),
             )
             built_states.append(st_i)
 
@@ -303,7 +297,6 @@ class Agent(NamedTuple):
             current_agent=current_agent,
             width=width,
             height=height,
-            moving_dumped_dirt=moving_dumped_dirt,
         ), per_agent_keys[-1]
 
 

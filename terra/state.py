@@ -33,7 +33,6 @@ from terra.utils import wrap_angle_rad
 
 
 # Reward and scoring constants
-PROGRESS_CAP = jnp.float32(200.0)
 AVG_TARGET_TILES = jnp.float32(170.0)
 SCALE_MIN = jnp.float32(2.0)
 SCALE_MAX = jnp.float32(5.0)
@@ -61,14 +60,6 @@ def _as_axes_table(x: Array) -> Array:
 
 def _as_scalar_int(x: Array) -> Array:
     return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
-
-
-# Legacy constants (kept for backwards compatibility, but prefer env_cfg values)
-# These are used as fallbacks if env_cfg doesn't have the fields
-DUMP_BONUS_MULT = jnp.float32(0.5)
-EXCAVATOR_RELOCATE_DUMPED_MULT = jnp.float32(0.2)
-EXCAVATOR_RELOCATE_DUG_DIRT_MULT = jnp.float32(1.5)  
-TRANSPORT_RELOCATE_MULT = jnp.float32(1.5)
 
 
 class State(NamedTuple):
@@ -158,39 +149,6 @@ class State(NamedTuple):
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
-        # Compute initial relocation potential using the cached distance map
-        def _compute_initial_potential():
-            # Guard: if distance map is all zeros, raise an error sentinel
-            distance_map_all_zero = jnp.allclose(world.relocation_distance_map, 0.0)
-            def _raise_distance_map_error():
-                return jnp.array(-999999.0)
-            def _compute_potential():
-                return jnp.sum(
-                    jnp.where(
-                        world.target_map.map <= 0,
-                        jnp.clip(world.action_map.map, a_min=0),
-                        0,
-                    ) * world.relocation_distance_map
-                )
-            return jax.lax.cond(distance_map_all_zero, _raise_distance_map_error, _compute_potential)
-        def _zero_potential():
-            return jnp.float32(0.0)
-        initial_potential = jax.lax.cond(
-            jnp.any(world.target_map.map > 0),
-            _compute_initial_potential,
-            _zero_potential,
-        )
-
-        # Initialize per-agent baselines/after-lift to initial_potential
-        def _set_baselines(a: AgentState):
-            return a._replace(
-                carry_baseline_potential=jnp.float32(initial_potential),
-                carry_potential_after_lift=jnp.float32(initial_potential),
-            )
-        agent = agent._replace(
-            agent_states=tuple(_set_baselines(a) for a in agent.agent_states)
-        )
-        
         # Randomize starting agent uniformly among active agents to prevent first-mover advantage
         key, cat_key = jax.random.split(key)
         active_mask = agent.agent_active.astype(jnp.bool_)
@@ -785,36 +743,17 @@ class State(NamedTuple):
                 # (soil mechanics conserves dirt, so this is perfectly conserving)
                 new_loaded = current_load + available_dirt
                 
-                # Cache baseline when starting a carry (0 -> >0) - compute BEFORE removing dirt
-                potential_before_load = self._compute_relocation_potential(self.world.action_map.map)
-                started_loading = jnp.logical_and(current_load == 0, available_dirt > 0)
-                
-                # For subsequent loads: adjust baseline for world changes (like in dump rewards)
-                def _adjust_baseline_for_world_changes():
-                    # Current world potential before this auto-load
-                    current_potential = potential_before_load
-                    # Previous after-lift potential from last load
-                    previous_after_lift = cur.carry_potential_after_lift
-                    # Adjust baseline: if world got worse (higher potential), increase baseline
-                    # If world got better (lower potential), decrease baseline (make it harder)
-                    world_change = current_potential - previous_after_lift
-                    return cur.carry_baseline_potential + world_change
-                
-                new_carry_base = jax.lax.select(
-                    started_loading, 
-                    potential_before_load,  # First load: use current potential as baseline
-                    _adjust_baseline_for_world_changes()  # Subsequent loads: adjust for world changes
+                potential_before_load = new_state._compute_relocation_potential(
+                    new_state.world.action_map.map
                 )
-                
-                # Compute potential immediately after auto-load (post-removal map)
                 after_lift_potential = self._compute_relocation_potential(final_map)
-                
+                credit_increment = potential_before_load - after_lift_potential
 
-                
                 new_cur = cur._replace(
                     loaded=jnp.array([new_loaded], dtype=cur.loaded.dtype),
-                    carry_baseline_potential=jnp.float32(new_carry_base),
-                    carry_potential_after_lift=jnp.float32(after_lift_potential),
+                    carry_relocation_credit=jnp.float32(
+                        cur.carry_relocation_credit + credit_increment
+                    ),
                 )
                 return new_state._replace(
                     world=new_state.world._replace(
@@ -1493,11 +1432,11 @@ class State(NamedTuple):
         return jnp.logical_and(mask_2d, jnp.logical_not(remove)).reshape(-1)
 
     def _apply_dig_mask(
-        self, flattened_map: Array, dig_mask: Array, moving_dumped_dirt: bool
+        self, flattened_map: Array, dig_mask: Array, lifting_positive_soil: bool
     ) -> Array:
         """
         this function does the following:
-            if we are moving dumped dirt, we move all of it regardless of the amount
+            if we are lifting positive soil, we move all of it regardless of the amount
             if we are instead digging dirt, then we dig as much as self.env_cfg.agent.dig_depth
 
         Args:
@@ -1508,7 +1447,7 @@ class State(NamedTuple):
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
         new_flattened_map = jax.lax.cond(
-            moving_dumped_dirt,
+            lifting_positive_soil,
             lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
@@ -2123,22 +2062,11 @@ class State(NamedTuple):
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
         """
-        For skid steer: Allow lifting from any dirt (action_map != 0)
-        NEVER allow digging new holes (target_map < 0)
-        Now allows loading from dump zones (target_map > 0) but with penalty.
+        Allow a skid steer to lift positive soil without digging negative holes.
         """
-        # Allow lifting from any dirt (action_map != 0) - both natural and dumped
         action_map_2d = _as_2d_map(self.world.action_map.map)
-        dig_mask_action_map = action_map_2d != 0
-        
-        # Respect max dig limit
-        max_dig_limit_mask = (
-            action_map_2d > -self.env_cfg.agent.dig_depth
-        ).reshape(-1)
-        
-        # Combine all masks (no dump zone exclusion)
-        combined_mask = dig_mask & dig_mask_action_map.reshape(-1) & max_dig_limit_mask
-        return combined_mask
+        positive_soil = action_map_2d > 0
+        return dig_mask & positive_soil.reshape(-1)
 
     @staticmethod
     def _mask_out_single_tile_digs(dig_mask: Array) -> Array:
@@ -2173,11 +2101,11 @@ class State(NamedTuple):
                 flattened_action_map.astype(jnp.int32)
                 @ dig_mask.astype(jnp.int32)
             )
-            moving_dumped_dirt = selected_tiles_sum > 0
-            # if moving dumped dirt, move it all at once
+            lifting_positive_soil = selected_tiles_sum > 0
+            # Positive soil is lifted as one complete pile.
             # Ensure both branches return the same dtype (int32)
             dig_volume = jax.lax.cond(
-                moving_dumped_dirt,
+                lifting_positive_soil,
                 lambda: selected_tiles_sum.astype(jnp.int32),
                 lambda: dig_mask.sum().astype(jnp.int32),
             )
@@ -2185,7 +2113,7 @@ class State(NamedTuple):
             def _apply_dig(volume, fam):
                 # First remove dirt cleanly (without soil mechanics)
                 new_map_global_coords = self._apply_dig_mask(
-                    fam, dig_mask, moving_dumped_dirt
+                    fam, dig_mask, lifting_positive_soil
                 )
                 new_map_global_coords = new_map_global_coords.reshape(
                     action_map_2d.shape
@@ -2219,42 +2147,24 @@ class State(NamedTuple):
                     _keep_last_dig_mask,
                 )
 
-                # Cache potentials for telescoping and add artificial source for newly dug dirt
-                potential_before_dig = self._compute_relocation_potential(self.world.action_map.map)
+                potential_before_dig = self._compute_relocation_potential(
+                    self.world.action_map.map
+                )
                 after_lift_potential = self._compute_relocation_potential(final_map)
-                cur2 = self._get_current_agent_state()
-                started_loading = jnp.logical_and(cur2.loaded[0] == 0, actual_volume_loaded > 0)
-
-                def _compute_artificial_source_potential():
-                    old_map_2d = _as_2d_map(self.world.action_map.map)
-                    new_map_2d = _as_2d_map(final_map)
-                    delta_removed = jnp.clip(old_map_2d - new_map_2d, a_min=0)
-                    non_dump_mask = _as_2d_map(self.world.target_map.map) <= 0
-                    return jnp.sum(
-                        delta_removed
-                        * _as_2d_map(self.world.relocation_distance_map)
-                        * non_dump_mask
-                    )
-
-                artificial_source_potential = jax.lax.cond(
-                    jnp.logical_not(moving_dumped_dirt),
-                    _compute_artificial_source_potential,
-                    lambda: jnp.float32(0.0),
+                fresh_progress = self._get_fresh_target_excavation_map(
+                    self.world.action_map.map,
+                    final_map,
+                    self.world.target_map.map,
                 )
-
-                def _baseline_when_starting():
-                    return jax.lax.select(
-                        moving_dumped_dirt,
-                        potential_before_dig,
-                        potential_before_dig + artificial_source_potential,
-                    )
-
+                fresh_source_credit = jnp.sum(
+                    fresh_progress * _as_2d_map(self.world.relocation_distance_map)
+                )
+                credit_increment = (
+                    potential_before_dig
+                    - after_lift_potential
+                    + fresh_source_credit
+                )
                 cur3 = self._get_current_agent_state()
-                new_carry_base = jax.lax.select(
-                    started_loading,
-                    _baseline_when_starting(),
-                    cur3.carry_baseline_potential,
-                )
                 updated_state = self._replace(
                     world=self.world._replace(
                         action_map=self.world.action_map._replace(map=IntLowDim(final_map)),
@@ -2263,15 +2173,13 @@ class State(NamedTuple):
                         ),
                         last_dig_mask=new_last_dig_mask,
                     ),
-                    agent=self.agent._replace(
-                        moving_dumped_dirt=jnp.bool_(moving_dumped_dirt),
-                    ),
                 )
                 return updated_state._set_current_agent_state(
                     cur3._replace(
                         loaded=jnp.array([actual_volume_loaded], dtype=IntLowDim),
-                        carry_baseline_potential=jnp.float32(new_carry_base),
-                        carry_potential_after_lift=jnp.float32(after_lift_potential),
+                        carry_relocation_credit=jnp.float32(
+                            cur3.carry_relocation_credit + credit_increment
+                        ),
                     )
                 )
 
@@ -2343,6 +2251,12 @@ class State(NamedTuple):
                 self.agent.agent_states[2].agent_type[0],
                 self.agent.agent_states[3].agent_type[0],
             ])
+            loads = jnp.array([
+                self.agent.agent_states[0].loaded[0],
+                self.agent.agent_states[1].loaded[0],
+                self.agent.agent_states[2].loaded[0],
+                self.agent.agent_states[3].loaded[0],
+            ]).astype(jnp.int32)
             not_current = jnp.array([
                 0 != current_idx,
                 1 != current_idx,
@@ -2350,7 +2264,15 @@ class State(NamedTuple):
                 3 != current_idx,
             ])
             is_truck_vec = (types == 1)
-            candidates = jnp.logical_and(active, jnp.logical_and(is_truck_vec, jnp.logical_and(base_in, not_current)))
+            capacity = jnp.int32(self.env_cfg.truck_capacity)
+            whole_load_fits = loads + curd.loaded[0].astype(jnp.int32) <= capacity
+            candidates = (
+                active
+                & is_truck_vec
+                & base_in
+                & not_current
+                & whole_load_fits
+            )
 
             any_candidate = jnp.any(candidates)
 
@@ -2360,7 +2282,6 @@ class State(NamedTuple):
                 idxs = jnp.array([0, 1, 2, 3], dtype=jnp.int32)
                 scores = jnp.where(candidates, idxs, idxs + large)
                 sel_idx = jnp.argmin(scores)
-                capacity = jnp.int32(getattr(self.env_cfg, 'truck_capacity', 127))
 
                 sel_state = jax.lax.switch(sel_idx, [
                     lambda: self.agent.agent_states[0],
@@ -2370,31 +2291,27 @@ class State(NamedTuple):
                 ])
                 truck_loaded = sel_state.loaded[0].astype(jnp.int32)
                 cur_loaded = curd.loaded[0].astype(jnp.int32)
-                remaining_cap = jnp.maximum(capacity - truck_loaded, 0)
-                transfer = jnp.minimum(cur_loaded, remaining_cap)
 
                 def _apply_transfer():
-                    # Apply transfer with baseline adjustment like skidsteer
-                    started_loading = (truck_loaded == 0)
-                    current_potential = curd.carry_baseline_potential
-                    previous_after_lift = sel_state.carry_potential_after_lift
-                    world_change = current_potential - previous_after_lift
-                    adjusted_baseline = sel_state.carry_baseline_potential + world_change
-                    new_carry_base = jax.lax.select(started_loading, curd.carry_baseline_potential, adjusted_baseline)
-
                     new_truck = sel_state._replace(
-                        loaded=jnp.array([truck_loaded + transfer], dtype=IntLowDim),
-                        carry_baseline_potential=jnp.float32(new_carry_base),
-                        carry_potential_after_lift=jnp.float32(curd.carry_potential_after_lift),
+                        loaded=jnp.array(
+                            [truck_loaded + cur_loaded],
+                            dtype=IntLowDim,
+                        ),
+                        carry_relocation_credit=jnp.float32(
+                            sel_state.carry_relocation_credit
+                            + curd.carry_relocation_credit
+                        ),
                     )
                     updated = self._set_agent_state_at(sel_idx, new_truck)
                     cur_after = updated._get_current_agent_state()
                     new_cur = cur_after._replace(
-                        loaded=jnp.array([jnp.maximum(cur_loaded - transfer, 0)], dtype=IntLowDim)
+                        loaded=jnp.zeros((1,), dtype=IntLowDim),
+                        carry_relocation_credit=jnp.float32(0.0),
                     )
                     return updated._set_current_agent_state(new_cur)
 
-                return jax.lax.cond(transfer > 0, _apply_transfer, lambda: self)
+                return _apply_transfer()
 
             return jax.lax.cond(any_candidate, _do_transfer, lambda: self)
 
@@ -2503,13 +2420,11 @@ class State(NamedTuple):
                         ),
                         last_dig_mask=new_last_dig_mask,
                     ),
-                    agent=self.agent._replace(
-                        moving_dumped_dirt=jnp.bool_(False),
-                    ),
                 )
                 return updated_state._set_current_agent_state(
                     updated_state._get_current_agent_state()._replace(
-                        loaded=jnp.zeros((1,), dtype=IntLowDim)
+                        loaded=jnp.zeros((1,), dtype=IntLowDim),
+                        carry_relocation_credit=jnp.float32(0.0),
                     )
                 )
 
@@ -2746,6 +2661,21 @@ class State(NamedTuple):
         return action_map_progress.astype(jnp.float32)
 
     @staticmethod
+    def _get_fresh_target_excavation_map(
+        action_map_old: Array,
+        action_map_new: Array,
+        target_map: Array,
+    ) -> Array:
+        """Per-cell reduction in remaining required excavation depth."""
+        old = _as_2d_map(action_map_old).astype(jnp.float32)
+        new = _as_2d_map(action_map_new).astype(jnp.float32)
+        target = _as_2d_map(target_map).astype(jnp.float32)
+        required_depth = jnp.maximum(-target, 0.0)
+        completed_old = jnp.minimum(jnp.maximum(-old, 0.0), required_depth)
+        completed_new = jnp.minimum(jnp.maximum(-new, 0.0), required_depth)
+        return jnp.maximum(completed_new - completed_old, 0.0)
+
+    @staticmethod
     def _get_action_map_dig_progress(
         action_map_old: Array, action_map_new: Array, target_map: Array
     ) -> IntMap:
@@ -2754,16 +2684,11 @@ class State(NamedTuple):
         > 0 if there was progress on the dig tiles after the action
         = 0 if there was no progress on the dig tiles after the action
         """
-        action_map_clip_old = jnp.clip(action_map_old, a_max=0)
-        action_map_clip_new = jnp.clip(action_map_new, a_max=0)
-
-        target_map_dump_mask = target_map < 0
-
-        action_map_progress = (
-            (action_map_clip_old - action_map_clip_new) * target_map_dump_mask
-        ).sum()
-
-        return action_map_progress.astype(jnp.float32)
+        return State._get_fresh_target_excavation_map(
+            action_map_old,
+            action_map_new,
+            target_map,
+        ).sum(dtype=jnp.float32)
 
     @staticmethod
     def _get_action_map_dump_regress(
@@ -2785,128 +2710,67 @@ class State(NamedTuple):
 
         return action_map_regress.astype(jnp.float32)
 
+    def _get_relocation_progress(self, new_state: "State") -> Float:
+        """Signed potential progress realized by the current carrier's dump."""
+        cur = self._get_current_agent_state()
+        potential_before = self._compute_relocation_potential(
+            self.world.action_map.map
+        )
+        potential_after = self._compute_relocation_potential(
+            new_state.world.action_map.map
+        )
+        return cur.carry_relocation_credit + potential_before - potential_after
+
     def _handle_rewards_dump(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        """
-        Handles reward assignment at dump time.
-        This includes both the dump part and the realization
-        of the previously digged terrain.
-        """
-        # Check if agent is excavator (not skid steer)
+        """Reward a world dump once; a load handoff is reward-neutral."""
         cur = self._get_current_agent_state()
-        is_excavator = cur.agent_type[0] == 0
-        is_skidsteer = cur.agent_type[0] == 2
-        
-        
-        # Telescoping relocation reward: use progress since lift with effective baseline
-        baseline_before = cur.carry_baseline_potential
-        after_lift = cur.carry_potential_after_lift
-        current_potential = self._compute_relocation_potential(self.world.action_map.map)
-        new_potential = self._compute_relocation_potential(new_state.world.action_map.map)
-        # Use same effective baseline logic as in dump gating
-        baseline_eff = baseline_before + (current_potential - after_lift)
-        effective_progress = (baseline_eff - new_potential)
-        progress_clamped = jnp.clip(effective_progress, -PROGRESS_CAP, PROGRESS_CAP)
-        # Dump success/fail
-        dump_failed = jnp.allclose(
-            cur.loaded, new_state._get_prev_agent_state().loaded
+        next_actor = new_state._get_prev_agent_state()
+        load_decreased = cur.loaded[0] > next_actor.loaded[0]
+        world_changed = jnp.any(
+            self.world.action_map.map != new_state.world.action_map.map
         )
+        dump_failed = jnp.logical_not(load_decreased)
+        handoff = jnp.logical_and(load_decreased, jnp.logical_not(world_changed))
 
-        
-        # jax.debug.print("[DEBUG] Potential Rewards:")
-        # jax.debug.print("  potential (before lift): {}", baseline_before)
-        # jax.debug.print("  potential (after lift): {}", after_lift)
-        # jax.debug.print("  potential (new after dump): {}", new_potential)
-        # jax.debug.print("  effective progress: {}", effective_progress)
-        # jax.debug.print("  progress clamped: {}", progress_clamped) 
-
-        is_moving_dumped_dirt = self.agent.moving_dumped_dirt
-        is_truck = cur.agent_type[0] == 1
-        is_transport = jnp.logical_or(is_skidsteer, is_truck)
-        # reward-v2: the re-dig discount no longer depends on transport presence.
-        potential_multiplier = self._compute_potential_multiplier(
-            is_transport,
-            is_moving_dumped_dirt,
-        )
-        # Per-map normalization: factor=1 when target tiles ~= 173; >1 for smaller maps
-        avg_target_tiles = AVG_TARGET_TILES
-        # Use only dig target tiles (foundations): target_map < 0
+        relocation_progress = self._get_relocation_progress(new_state)
         dig_target_tiles = jnp.sum(self.world.target_map.map < 0)
-        scale_raw = avg_target_tiles / jnp.maximum(jnp.float32(1.0), dig_target_tiles.astype(jnp.float32))
+        scale_raw = AVG_TARGET_TILES / jnp.maximum(
+            jnp.float32(1.0),
+            dig_target_tiles.astype(jnp.float32),
+        )
         scale = jnp.clip(scale_raw, SCALE_MIN, SCALE_MAX) / 2
+        relocation_reward = (
+            relocation_progress
+            * jnp.float32(self.env_cfg.relocation_progress_mult)
+            * scale
+            * self.env_cfg.rewards.dump_correct
+        )
 
-
-        # Apply relocation multiplier returned from the helper
-        progress_clamped = progress_clamped * potential_multiplier * scale
-        #progress_clamped = progress_clamped * potential_multiplier * 1
-        #progress_clamped = progress_clamped * potential_multiplier
-
-        def _success_reward():
-            dump_progress = self._get_action_map_dump_progress(
-                self.world.action_map.map,
-                new_state.world.action_map.map,
-                self.world.target_map.map,
-            )
-            # Dump bonus only for skidsteers (relocation specialists)
-            # When truck is road-restricted and excavator is dumping, no dump bonus
-            # Only apply this if there's actually a truck agent in the environment
-            is_road_restricted = getattr(self.env_cfg, 'truck_road_restricted', False)
-            active_mask = self.agent.agent_active.astype(jnp.bool_)
-            types = self._agent_types_vec()
-            has_truck_agent = jnp.any(jnp.logical_and(active_mask, types == 1))
-            should_zero_bonus = jnp.logical_and(
-                jnp.logical_and(True, has_truck_agent),  #removed is_road_restricted
-                ~is_transport
-            )
-            
-            dump_bonus = jax.lax.cond(
-                should_zero_bonus,
+        return jax.lax.cond(
+            dump_failed,
+            lambda: self.env_cfg.rewards.dump_wrong,
+            lambda: jax.lax.cond(
+                handoff,
                 lambda: jnp.float32(0.0),
-                lambda: jax.lax.cond(
-                    is_transport,
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * jnp.float32(getattr(self.env_cfg, 'dump_bonus_mult', DUMP_BONUS_MULT)) * potential_multiplier,
-                    lambda: jnp.maximum(dump_progress, 0.0) * self.env_cfg.rewards.dump_correct * jnp.float32(getattr(self.env_cfg, 'dump_bonus_mult', DUMP_BONUS_MULT)) * potential_multiplier
-                )
-            )
-            meaningful_threshold = jnp.float32(0.1)
-            
-            def _truck_success():
-                return jax.lax.cond(
-                    dump_progress > meaningful_threshold,
-                    lambda: jnp.float32(2.0) + dump_bonus,
-                    lambda: -jnp.float32(1.0),
-                )
-
-            def _non_truck_success():
-                return jax.lax.cond(
-                    progress_clamped > meaningful_threshold,
-                    lambda: (progress_clamped * self.env_cfg.rewards.dump_correct + dump_bonus) - jnp.float32(1.0),
-                    lambda: -jnp.float32(1.0),
-                )
-
-            # Use truck-specific reward only when road-restricted, otherwise use same as other agents
-            use_truck_reward = jnp.logical_and(is_truck, is_road_restricted)
-            return jax.lax.cond(use_truck_reward, _truck_success, _non_truck_success)
-        def _failed_dump():
-            return self.env_cfg.rewards.dump_wrong
-
-
-        return jax.lax.cond(dump_failed, _failed_dump, _success_reward)
+                lambda: relocation_reward,
+            ),
+        )
         
 
     def _handle_rewards_dig(
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
-        # Unified dig rewards for all agent types - both excavators and skidsteers use same logic
         cur = self._get_current_agent_state()
         prev_new = new_state._get_prev_agent_state()
-        started_loading = jnp.logical_and(
-            cur.loaded[0] == 0,
-            prev_new.loaded[0] > 0,
+        fresh_target_progress = self._get_action_map_dig_progress(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
         )
         dig_reward = jax.lax.cond(
-            started_loading,
+            fresh_target_progress > 0,
             lambda: jnp.float32(1.0),
             lambda: jnp.float32(0.0),
         )
@@ -3848,7 +3712,7 @@ class State(NamedTuple):
         return reward
 
     def _get_rewards_truck(self, new_state: "State", action: ActionType) -> Float:
-        """Truck-specific rewards: proximity shaping when empty, avoid dig tiles penalty, reuse movement rewards."""
+        """Use common movement, turn, and soil-handling rewards for trucks."""
         reward = 0.0
         action = action[0]
 
@@ -3886,137 +3750,6 @@ class State(NamedTuple):
             lambda new_state, action: 0.0,
             new_state,
             action,
-        )
-
-        # Bonus if this truck started loading (went from 0 to >0)
-        cur_loaded = self._get_current_agent_state().loaded[0]
-        new_loaded = new_state._get_prev_agent_state().loaded[0]
-        started_loading = jnp.logical_and(cur_loaded == 0, new_loaded > 0)
-        reward += jax.lax.cond(started_loading, lambda: jnp.float32(2.0), lambda: jnp.float32(0.0))
-
-        # Proximity shaping when empty
-        cur = self._get_current_agent_state()
-        is_truck = cur.agent_type[0] == 1
-        is_empty = cur.loaded[0] == 0
-        is_loaded = ~is_empty
-
-        def _proximity_term():
-            old_pos = cur.pos_base.astype(jnp.float32)
-            new_pos = new_state._get_prev_agent_state().pos_base.astype(jnp.float32)
-            pos_changed = jnp.any(old_pos != new_pos)
-
-            def _compute_proximity_reward():
-                # Identify active excavators and gather their positions
-                active = self.agent.agent_active.astype(jnp.bool_)
-                types = jnp.array([
-                    self.agent.agent_states[0].agent_type[0],
-                    self.agent.agent_states[1].agent_type[0],
-                    self.agent.agent_states[2].agent_type[0],
-                    self.agent.agent_states[3].agent_type[0],
-                ])
-                is_excavator = (types == 0)
-
-                posxs = jnp.array([
-                    self.agent.agent_states[0].pos_base[0],
-                    self.agent.agent_states[1].pos_base[0],
-                    self.agent.agent_states[2].pos_base[0],
-                    self.agent.agent_states[3].pos_base[0],
-                ]).astype(jnp.float32)
-                posys = jnp.array([
-                    self.agent.agent_states[0].pos_base[1],
-                    self.agent.agent_states[1].pos_base[1],
-                    self.agent.agent_states[2].pos_base[1],
-                    self.agent.agent_states[3].pos_base[1],
-                ]).astype(jnp.float32)
-
-                old_x, old_y = old_pos
-                new_x, new_y = new_pos
-
-                # Mask to only consider active excavators
-                mask = jnp.logical_and(active, is_excavator)
-
-                # Compute squared distances to nearest excavator for old and new positions
-                dx_old = posxs - old_x
-                dy_old = posys - old_y
-                d2_old = jnp.where(mask, dx_old * dx_old + dy_old * dy_old, jnp.float32(1e9))
-                min_d2_old = jnp.min(d2_old)
-
-                dx_new = posxs - new_x
-                dy_new = posys - new_y
-                d2_new = jnp.where(mask, dx_new * dx_new + dy_new * dy_new, jnp.float32(1e9))
-                min_d2_new = jnp.min(d2_new)
-
-                # Convert to distances in tiles
-                min_d_old = jnp.sqrt(min_d2_old)
-                min_d_new = jnp.sqrt(min_d2_new)
-
-                # Symmetric distance reward: positive when moving closer, negative when moving away
-                delta_reward = jnp.where(
-                    min_d_new < min_d_old,
-                    jnp.float32(0.15),  # Reward for getting closer
-                    jnp.where(
-                        min_d_new > min_d_old,
-                        jnp.float32(-0.15),  # Penalty for moving away
-                        jnp.float32(0.0)  # No change
-                    )
-                )
-
-                # Bonus for being within excavator working range (reduced to prevent monopolization)
-                dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
-                tile_size = self.env_cfg.tile_size
-                max_agent_dim = jnp.max(jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2]))
-                min_distance_from_agent = tile_size * max_agent_dim
-                fixed_extension = 0.5
-                
-                
-                r_max_world = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
-                
-                #r_max_world = (min_distance_from_agent + dig_portion_radius * tile_size) * 1.3
-
-                #r_max_world = (fixed_extension + 1 + 0.3) * dig_portion_radius * tile_size + min_distance_from_agent  # small buffer
-                r_max_tiles = r_max_world / tile_size
-                near_after = min_d_new <= r_max_tiles
-                stay_bonus = jnp.where(near_after, jnp.float32(0.3), jnp.float32(0.0))  # Reduced from 0.5 to 0.2
-
-                # Small penalty for sitting on dig tiles when empty (temporarily disabled)
-                # on_dig = (self.world.target_map.map[cur.pos_base[0], cur.pos_base[1]] < 0)
-                # penalty = jnp.where(on_dig, jnp.float32(0.05), jnp.float32(0.0))
-
-                # If on dig tile, suppress proximity bonus and apply penalty (temporarily disabled)
-                # shaped = jnp.where(on_dig, -penalty, delta_reward + stay_bonus)
-                shaped = delta_reward + stay_bonus
-                return shaped
-
-            # Only provide proximity reward if the truck actually moved
-            return jax.lax.cond(pos_changed, _compute_proximity_reward, lambda: jnp.float32(0.0))
-
-        reward += jax.lax.cond(jnp.logical_and(is_truck, is_empty), _proximity_term, lambda: 0.0)
-
-        def _loaded_proximity_term():
-            old_pos = cur.pos_base.astype(jnp.float32)
-            new_pos = new_state._get_prev_agent_state().pos_base.astype(jnp.float32)
-            # Only compute distances if position actually changed
-            pos_changed = ~jnp.allclose(old_pos, new_pos, atol=1e-6)
-            
-            def _compute_reward():
-                dist_before = self._min_distance_to_dump_zone(old_pos)
-                dist_after = self._min_distance_to_dump_zone(new_pos)
-                delta = dist_before - dist_after
-                bonus = jnp.where(delta > 0, jnp.float32(0.2), jnp.float32(0.0))
-                penalty = jnp.where(delta < 0, jnp.float32(-0.2), jnp.float32(0.0))
-                return bonus + penalty
-            
-            # If position didn't change (collision), no reward/penalty
-            return jax.lax.cond(pos_changed, _compute_reward, lambda: jnp.float32(0.0))
-
-        is_move_action = jnp.logical_or(
-            action == TrackedActionType.FORWARD,
-            action == TrackedActionType.BACKWARD,
-        )
-        reward += jax.lax.cond(
-            jnp.logical_and(is_truck, is_loaded),
-            lambda: jax.lax.cond(is_move_action, _loaded_proximity_term, lambda: jnp.float32(0.0)),
-            lambda: jnp.float32(0.0),
         )
 
         return reward
@@ -4071,81 +3804,6 @@ class State(NamedTuple):
 
         return reward
 
-    # ---- Helper utilities (extracted) ----
-    def _agent_types_vec(self):
-        return jnp.array([
-            self.agent.agent_states[0].agent_type[0],
-            self.agent.agent_states[1].agent_type[0],
-            self.agent.agent_states[2].agent_type[0],
-            self.agent.agent_states[3].agent_type[0],
-        ])
-
-    def _has_transport_agent(self) -> jnp.bool_:
-        active_mask = self.agent.agent_active.astype(jnp.bool_)
-        types = self._agent_types_vec()
-        has_skid = jnp.any(jnp.logical_and(active_mask, types == 2))
-        has_truck = jnp.any(jnp.logical_and(active_mask, types == 1))
-        return jnp.logical_or(has_skid, has_truck)
-
-    def _min_distance_to_dump_zone(self, pos_base: Array) -> Float:
-        dump_mask = _as_2d_map(self.world.target_map.map) > 0
-        def _calc_distance():
-            yy, xx = jnp.indices(dump_mask.shape)
-            yy = yy.astype(jnp.float32)
-            xx = xx.astype(jnp.float32)
-            pos = pos_base.astype(jnp.float32)
-            dy = yy - pos[0]
-            dx = xx - pos[1]
-            dists = jnp.sqrt(dy * dy + dx * dx)
-            masked = jnp.where(dump_mask, dists, jnp.float32(1e6))
-            return jnp.min(masked)
-        return jax.lax.cond(jnp.any(dump_mask), _calc_distance, lambda: jnp.float32(0.0))
-
-    def _compute_potential_multiplier(self, is_transport: jnp.bool_, is_moving_dumped_dirt: jnp.bool_) -> jnp.float32:
-        """Relocation multiplier applied to the dump-time potential progress.
-
-        reward-v2 (2026-07-30). The excavator's re-dig discount used to be gated
-        on `has_transport_agent`, so in a SINGLE-EXCAVATOR setup (`agent_types:
-        [0]`, which is every M1 arm) the gate never opened and re-digging one's
-        own spoil pile paid exactly the same rate as a fresh dig. Combined with
-        the flat `+1.0` `started_loading` dig reward and a `dig_on_dump_penalty`
-        that only fires on the DESIGNATED dump zone (`target_map > 0`), a pile
-        staged on legal non-designated ground could be re-handled indefinitely
-        for full reward. That is the dig->dump->re-dig farm M1-B found: return
-        climbed to 11.49 while completion died, workspace cycles 2442 -> 23708.
-
-        The discount is a property of what is being moved, not of who else is on
-        the site, so it now applies whenever the excavator lifts previously
-        dumped material. `has_transport_agent` is no longer an input.
-
-        Semantics (both multipliers scale the SAME progress term, and the dump
-        bonus with it): re-digging own spoil must be strictly less profitable
-        than a fresh dig, i.e. `excavator_relocate_dumped_mult <
-        excavator_relocate_dug_dirt_mult`. The module defaults (0.2 vs 1.5)
-        satisfy that; a preset that sets them equal -- as the reward-v1 M1
-        presets do, at 1.5/1.5 -- silently disables the discount, which
-        `terra.config.check_relocation_multipliers` reports.
-        """
-        # Get multipliers from env_cfg, falling back to legacy constants for backwards compatibility
-        transport_mult = jnp.float32(getattr(self.env_cfg, 'transport_relocate_mult', TRANSPORT_RELOCATE_MULT))
-        excavator_dumped_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dumped_mult', EXCAVATOR_RELOCATE_DUMPED_MULT))
-        excavator_dug_mult = jnp.float32(getattr(self.env_cfg, 'excavator_relocate_dug_dirt_mult', EXCAVATOR_RELOCATE_DUG_DIRT_MULT))
-
-        # Transport agents (skid steer, truck): use dedicated transport relocation multiplier
-        def for_transport():
-            return transport_mult
-
-        # Excavator: relocating already-dumped dirt is discounted, always.
-        def for_excavator():
-            return jax.lax.cond(
-                is_moving_dumped_dirt,
-                lambda: excavator_dumped_mult,
-                lambda: excavator_dug_mult,
-            )
-
-        return jax.lax.cond(is_transport, for_transport, for_excavator)
-
-
     def _calculate_terminal_reward(self, completion_percentage: Float) -> Float:
         """
         Calculate terminal reward based on completion percentage.
@@ -4187,15 +3845,15 @@ class State(NamedTuple):
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
         """
-        Relocation potential: sum over non-dump tiles of positive dirt times distance to nearest dump zone.
+        Relocation potential over positive soil outside the accepted dump mask.
         Uses cached world.relocation_distance_map (float32, normalized).
         """
-        target_map = _as_2d_map(self.world.target_map.map)
         action_map = _as_2d_map(action_map)
         dist_map = _as_2d_map(self.world.relocation_distance_map)
+        off_zone = jnp.logical_not(self._accepted_dump_mask())
         return jnp.sum(
             jnp.where(
-                target_map <= 0,
+                off_zone,
                 jnp.clip(action_map, a_min=0) * dist_map,
                 0,
             )

@@ -18,14 +18,13 @@ from terra.config import EnvConfig
 from terra.utils import compute_polygon_mask
 from terra.utils import get_agent_corners
 
-SCHEMA = "terra_agent_state_v1"
+SCHEMA = "terra_agent_state_v2"
 MAX_AGENTS = 4
 INITIAL_STATE_SEED_SCHEMA = "terra_initial_state_seed_v1"
 
 _AGENT_FIELDS = (
     "width",
     "height",
-    "moving_dumped_dirt",
     "agent_states",
     "agent_active",
     "num_agents",
@@ -40,13 +39,12 @@ _AGENT_STATE_FIELDS = (
     "agent_type",
     "action_type",
     "shovel_lifted",
-    "carry_baseline_potential",
-    "carry_potential_after_lift",
+    "carry_relocation_credit",
 )
 
 if Agent._fields != _AGENT_FIELDS or AgentState._fields != _AGENT_STATE_FIELDS:
     raise RuntimeError(
-        "terra_agent_state_v1 no longer covers the complete Agent tree; "
+        "terra_agent_state_v2 no longer covers the complete Agent tree; "
         "define a new state schema before changing the codec."
     )
 
@@ -56,7 +54,6 @@ _ARRAY_SCHEMA = (
     ("max_agents", np.dtype("<i4"), ()),
     ("num_agents", np.dtype("<i4"), ()),
     ("current_agent", np.dtype("<i4"), ()),
-    ("moving_dumped_dirt", np.dtype("?"), ()),
     ("agent_active", np.dtype("i1"), (MAX_AGENTS,)),
     ("agent_states.pos_base", np.dtype("<i2"), (MAX_AGENTS, 2)),
     ("agent_states.angle_base", np.dtype("i1"), (MAX_AGENTS,)),
@@ -67,12 +64,7 @@ _ARRAY_SCHEMA = (
     ("agent_states.action_type", np.dtype("i1"), (MAX_AGENTS,)),
     ("agent_states.shovel_lifted", np.dtype("i1"), (MAX_AGENTS,)),
     (
-        "agent_states.carry_baseline_potential",
-        np.dtype("<f4"),
-        (MAX_AGENTS,),
-    ),
-    (
-        "agent_states.carry_potential_after_lift",
+        "agent_states.carry_relocation_credit",
         np.dtype("<f4"),
         (MAX_AGENTS,),
     ),
@@ -85,7 +77,6 @@ _RECORD_KEYS = (
     "max_agents",
     "num_agents",
     "current_agent",
-    "moving_dumped_dirt",
     "agent_active",
     "agent_states",
 )
@@ -152,7 +143,6 @@ def _agent_arrays(agent: Agent) -> dict[str, np.ndarray]:
         "max_agents": MAX_AGENTS,
         "num_agents": agent.num_agents,
         "current_agent": agent.current_agent,
-        "moving_dumped_dirt": agent.moving_dumped_dirt,
         "agent_active": agent.agent_active,
         "agent_states.pos_base": np.stack(
             [np.asarray(jax.device_get(state.pos_base)) for state in agent.agent_states]
@@ -180,7 +170,7 @@ def _agent_arrays(agent: Agent) -> dict[str, np.ndarray]:
 
 
 def agent_to_record(agent: Agent) -> dict[str, Any]:
-    """Convert a complete four-slot Agent tree to the v1 JSON record."""
+    """Convert a complete four-slot Agent tree to the v2 JSON record."""
     arrays = _agent_arrays(agent)
     state_fields = {
         field: arrays[f"agent_states.{field}"].tolist() for field in _AGENT_STATE_FIELDS
@@ -192,7 +182,6 @@ def agent_to_record(agent: Agent) -> dict[str, Any]:
         "max_agents": int(arrays["max_agents"]),
         "num_agents": int(arrays["num_agents"]),
         "current_agent": int(arrays["current_agent"]),
-        "moving_dumped_dirt": bool(arrays["moving_dumped_dirt"]),
         "agent_active": arrays["agent_active"].astype(bool).tolist(),
         "agent_states": state_fields,
     }
@@ -210,7 +199,7 @@ def _require_exact_keys(
 
 
 def agent_from_record(record: Mapping[str, Any]) -> Agent:
-    """Decode a v1 JSON record into the exact dtypes consumed by reset."""
+    """Decode a v2 JSON record into the exact dtypes consumed by reset."""
     if not isinstance(record, Mapping):
         raise TypeError("Agent state record must be a mapping.")
     _require_exact_keys(record, _RECORD_KEYS, "initial_agent_state")
@@ -234,7 +223,6 @@ def agent_from_record(record: Mapping[str, Any]) -> Agent:
         "max_agents": record["max_agents"],
         "num_agents": record["num_agents"],
         "current_agent": record["current_agent"],
-        "moving_dumped_dirt": record["moving_dumped_dirt"],
         "agent_active": record["agent_active"],
         **{
             f"agent_states.{field}": state_record[field]
@@ -281,12 +269,8 @@ def agent_from_record(record: Mapping[str, Any]) -> Agent:
                     arrays["agent_states.shovel_lifted"][index : index + 1],
                     dtype=jnp.int8,
                 ),
-                carry_baseline_potential=jnp.asarray(
-                    arrays["agent_states.carry_baseline_potential"][index],
-                    dtype=jnp.float32,
-                ),
-                carry_potential_after_lift=jnp.asarray(
-                    arrays["agent_states.carry_potential_after_lift"][index],
+                carry_relocation_credit=jnp.asarray(
+                    arrays["agent_states.carry_relocation_credit"][index],
                     dtype=jnp.float32,
                 ),
             )
@@ -295,7 +279,6 @@ def agent_from_record(record: Mapping[str, Any]) -> Agent:
     return Agent(
         width=jnp.asarray(arrays["width"], dtype=jnp.int32),
         height=jnp.asarray(arrays["height"], dtype=jnp.int32),
-        moving_dumped_dirt=jnp.asarray(arrays["moving_dumped_dirt"], dtype=jnp.bool_),
         agent_states=tuple(states),
         agent_active=jnp.asarray(arrays["agent_active"], dtype=jnp.int8),
         num_agents=jnp.asarray(arrays["num_agents"], dtype=jnp.int32),
@@ -328,7 +311,7 @@ def canonical_agent_bytes(agent: Agent) -> bytes:
 
 
 def agent_state_sha256(agent: Agent) -> str:
-    """Return the portable terra_agent_state_v1 digest."""
+    """Return the portable terra_agent_state_v2 digest."""
     return hashlib.sha256(canonical_agent_bytes(agent)).hexdigest()
 
 
@@ -436,7 +419,7 @@ def validate_benchmark_initial_agent(
     action_map: Any,
     dumpability_mask: Any,
 ) -> None:
-    """Validate the one-active-tracked-excavator v1 benchmark reset."""
+    """Validate the one-active-tracked-excavator v2 benchmark reset."""
     arrays = _agent_arrays(agent)
     expected_width = int(np.asarray(jax.device_get(env_cfg.agent.width)))
     expected_height = int(np.asarray(jax.device_get(env_cfg.agent.height)))
@@ -450,21 +433,18 @@ def validate_benchmark_initial_agent(
             f"expected {expected_width}x{expected_height}."
         )
     if int(arrays["num_agents"]) != 1:
-        raise ValueError("terra_agent_state_v1 supports exactly one active agent.")
+        raise ValueError("terra_agent_state_v2 supports exactly one active agent.")
     if not np.array_equal(
         arrays["agent_active"], np.array([True, False, False, False])
     ):
         raise ValueError("agent_active must be [true, false, false, false].")
     if int(arrays["current_agent"]) != 0:
         raise ValueError("current_agent must select the sole active slot 0.")
-    if bool(arrays["moving_dumped_dirt"]):
-        raise ValueError("Full benchmark resets cannot start while moving dumped dirt.")
-
     active_values = {
         field: arrays[f"agent_states.{field}"][0] for field in _AGENT_STATE_FIELDS[1:]
     }
     if int(active_values["agent_type"]) != 0 or int(active_values["action_type"]) != 0:
-        raise ValueError("The v1 benchmark agent must be a tracked excavator.")
+        raise ValueError("The v2 benchmark agent must be a tracked excavator.")
     if int(active_values["loaded"]) != 0:
         raise ValueError("A full benchmark reset must start unloaded.")
     if (
@@ -474,10 +454,8 @@ def validate_benchmark_initial_agent(
         raise ValueError(
             "Tracked benchmark resets require zero wheel and shovel state."
         )
-    if np.any(arrays["agent_states.carry_baseline_potential"] != 0.0) or np.any(
-        arrays["agent_states.carry_potential_after_lift"] != 0.0
-    ):
-        raise ValueError("The v1 full reset records zero-valued carry caches.")
+    if np.any(arrays["agent_states.carry_relocation_credit"] != 0.0):
+        raise ValueError("The v2 full reset records zero relocation credit.")
 
     inactive_fields = ("pos_base",) + _AGENT_STATE_FIELDS[1:]
     for field in inactive_fields:

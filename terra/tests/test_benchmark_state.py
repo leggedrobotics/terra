@@ -41,8 +41,7 @@ class BenchmarkAgentStateTest(unittest.TestCase):
         canonical: bool = False,
     ) -> AgentState:
         value = 0 if canonical else index + 1
-        carry_baseline = 0.0 if canonical else value + 0.25
-        carry_after_lift = 0.0 if canonical else value + 0.75
+        carry_credit = 0.0 if canonical else value + 0.25
         return AgentState(
             pos_base=jnp.asarray(pos_base, dtype=jnp.int16),
             angle_base=jnp.asarray([value % 12], dtype=jnp.int8),
@@ -54,8 +53,7 @@ class BenchmarkAgentStateTest(unittest.TestCase):
             agent_type=jnp.asarray([value % 3], dtype=jnp.int8),
             action_type=jnp.asarray([value % 2], dtype=jnp.int8),
             shovel_lifted=jnp.asarray([value % 2], dtype=jnp.int8),
-            carry_baseline_potential=jnp.asarray(carry_baseline, dtype=jnp.float32),
-            carry_potential_after_lift=jnp.asarray(carry_after_lift, dtype=jnp.float32),
+            carry_relocation_credit=jnp.asarray(carry_credit, dtype=jnp.float32),
         )
 
     @classmethod
@@ -63,7 +61,6 @@ class BenchmarkAgentStateTest(unittest.TestCase):
         return Agent(
             width=jnp.asarray(7, dtype=jnp.int32),
             height=jnp.asarray(11, dtype=jnp.int32),
-            moving_dumped_dirt=jnp.asarray(True),
             agent_states=(
                 cls._state_slot(0, pos_base=(30, 30)),
                 cls._state_slot(1, pos_base=(18, 18)),
@@ -82,7 +79,6 @@ class BenchmarkAgentStateTest(unittest.TestCase):
         return Agent(
             width=jnp.asarray(7, dtype=jnp.int32),
             height=jnp.asarray(11, dtype=jnp.int32),
-            moving_dumped_dirt=jnp.asarray(False),
             agent_states=(active, zero, zero, zero),
             agent_active=jnp.asarray([1, 0, 0, 0], dtype=jnp.int8),
             num_agents=jnp.asarray(1, dtype=jnp.int32),
@@ -165,11 +161,11 @@ class BenchmarkAgentStateTest(unittest.TestCase):
 
         self.assertEqual(
             agent_state_sha256(agent),
-            "debd22b6ff2c8b31d263ceb843e524d5bf9ae1ffe186e26291f1e5ec3d18fb1a",
+            "cd0ebe5b215bf7d29db14274df23cbc65ec3e97a1ae1f493f3820526e98f9db4",
         )
 
         mutated_slot = agent.agent_states[3]._replace(
-            carry_potential_after_lift=jnp.asarray(1.0, dtype=jnp.float32)
+            carry_relocation_credit=jnp.asarray(1.0, dtype=jnp.float32)
         )
         mutated = agent._replace(agent_states=agent.agent_states[:3] + (mutated_slot,))
         self.assertNotEqual(

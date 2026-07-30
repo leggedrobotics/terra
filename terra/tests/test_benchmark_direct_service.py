@@ -47,14 +47,12 @@ class BenchmarkDirectServiceTest(unittest.TestCase):
             agent_type=jnp.zeros((1,), dtype=jnp.int8),
             action_type=jnp.zeros((1,), dtype=jnp.int8),
             shovel_lifted=jnp.zeros((1,), dtype=jnp.int8),
-            carry_baseline_potential=jnp.float32(0.0),
-            carry_potential_after_lift=jnp.float32(0.0),
+            carry_relocation_credit=jnp.float32(0.0),
         )
         active = zero._replace(pos_base=jnp.asarray(cls.CENTER, dtype=jnp.int16))
         return Agent(
             width=jnp.asarray(7, dtype=jnp.int32),
             height=jnp.asarray(11, dtype=jnp.int32),
-            moving_dumped_dirt=jnp.bool_(False),
             agent_states=(active, zero, zero, zero),
             agent_active=jnp.asarray([1, 0, 0, 0], dtype=jnp.int8),
             num_agents=jnp.int32(1),
