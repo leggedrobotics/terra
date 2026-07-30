@@ -50,7 +50,27 @@ Generate more than 128 candidate maps per condition so rerolled pair slots can
 be discarded without shrinking a split. The materializer does not search for a
 near-feasible allocation: it either meets the exact contract or fails.
 
+Create the human-review folder without mutating the bank:
+
+```bash
+python tools/map_generation/export_review_gallery.py \
+  --bank /path/to/generated/bank \
+  --output /path/to/new/review-folder
+```
+
+The gallery groups conditions into explicit sibling branches rather than one
+ambiguous “one-axis” level. Its `index.csv` pins every displayed image to its
+scenario identity and provides editable `decision` and `comment` columns.
+
 The `generate_prototypes*.py` modules are a private snapshot of the reviewed
 v6 generator lineage. They are retained to avoid changing validated geometry,
 capacity, lane, obstacle, and proximity semantics during the diversity repair.
 Do not invoke them directly.
+
+Implementation receipts:
+
+- [`SMOKE_RECEIPT_20260730.md`](SMOKE_RECEIPT_20260730.md): reproducibility and
+  representative 64-map generation;
+- [`SPLIT_PILOT_RECEIPT_20260730.md`](SPLIT_PILOT_RECEIPT_20260730.md):
+  final-code 32-condition acceptance plus real `160 -> 64/16/16/32`
+  materialization.

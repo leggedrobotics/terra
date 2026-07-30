@@ -197,7 +197,7 @@ Focused tests:
 2. [x] 64 scenarios can be generated for a representative slab and trench
    condition without IoU exhaustion;
 3. [x] an exact duplicate scenario fails loudly; and
-4. [ ] variants of one source group cannot cross splits (P2).
+4. [x] variants of one source group cannot cross splits (P2).
 
 Exit gate: the representative two-condition command generated 64 valid slab
 and 64 valid trench scenarios. Two independent trench runs had identical
@@ -214,18 +214,30 @@ five arrays. Receipt:
 - [x] Implement exact deterministic `64/16/16/32`
   train/promotion/development/sealed materialization.
 - [x] Fail instead of leaking one realized source across splits.
-- [ ] Generate an oversized candidate bank (initially 160 maps per condition)
+- [x] Generate an oversized candidate bank (initially 160 maps per condition)
   so at least 128 exact pair slots remain after reroll drops.
-- [ ] Materialize `64/16/16/32` retained pair slots for each active condition.
-- [ ] Validate hard gates.
+- [x] Materialize `64/16/16/32` retained pair slots for representative
+  foundation and trench anchor conditions.
+- [x] Validate hard gates on the final-code 32-condition acceptance smoke and
+  representative split-ready bank.
 - [x] Write placed, translation-normalized, and dihedral-normalized dig counts
   as diagnostics, not admission gates.
-- [ ] Fail if any condition has fewer than its requested retained pair slots.
+- [x] Fail if any condition has fewer than its requested retained pair slots.
 - [ ] Select 16 review examples per condition using descriptor coverage and
   nearest-neighbour diversity, without changing the training bank.
-- [ ] Export overview images and website data.
+- [x] Export an image-folder gallery grouped by explicit sibling branches:
+  anchor/easy, capacity, distance, dump layout, geometry/topology, site, and
+  composed.
+- [ ] Export the accepted gallery into the local website.
 - [ ] Record Lorenzo's comments/accept/reject decisions without changing
   scenario identity.
+
+Implementation receipt:
+[`tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md`](tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md).
+The first real split-ready probe produced 160 candidates for one foundation
+anchor and one trench anchor, then materialized exact `64/16/16/32` splits with
+256/256 unique scenarios and zero source leakage. This validates the mechanism;
+all conditions still require visual acceptance before the curriculum is frozen.
 
 Exit gate: every selected condition has complete split counts, zero leakage,
 zero exact scenario duplicates, a visual subset, and an accepted or explicitly
@@ -239,7 +251,7 @@ deferred review disposition.
   1. [x] excavator fresh dig and correct dump;
   2. [x] excavator dump/re-dig/dump closed cycle;
   3. [x] excavator-to-truck productive transfer and dump;
-  4. skid-steer pickup of an excavator pile and correct dump; and
+  4. skid-steer pickup of an excavator pile and correct dump;
   5. transport pickup/drop/re-pickup closed cycle; and
   6. [x] a handoff and dump that exposes the current double payment and copied
      carry caches.
@@ -392,5 +404,8 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Exact split materializer | pair-slot grouping plus realized-source leakage failure | complete |
 | 2026-07-30 | Reward semantic path audit | signed common potential plus one per-agent carry credit | complete |
 | 2026-07-30 | Reward-v2 real-path control harness | 3 new + 7 existing focused tests pass | complete |
+| 2026-07-30 | Branch-organized review gallery exporter | 3 focused tests; editable decision/comment CSV | complete |
+| 2026-07-30 | Final-code 32-condition acceptance smoke | [`SPLIT_PILOT_RECEIPT_20260730.md`](tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md) | complete |
+| 2026-07-30 | Real `160 -> 64/16/16/32` split probe | 256 unique scenarios; zero source leakage | complete |
 | 2026-07-30 | 32-condition × 64 candidate review generation | local, review-only, not split authority | running |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
