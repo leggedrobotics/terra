@@ -381,7 +381,7 @@ Implementation:
 (sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
 `18322cb`, with exact 64-layout declaration and staged-payload gates at
 `e847d51`, `98d0055`, and `af5ca6a`, plus review-admission binding at
-`d35d9cf`).
+`d35d9cf` and pinned review-release validation at `cee4de9`).
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -413,7 +413,8 @@ Before any submission:
    map-vote-inferred condition sets fail; the exact review-data SHA and
    canonical 32-condition registry are pinned, the loader bank copies and
    hashes the receipt, and the Euler launcher requires its accepted IDs to
-   equal the train condition IDs (`d35d9cf`);
+   equal the train condition IDs (`d35d9cf`, pinned to the exact review
+   release at `cee4de9`);
 1. [x] materialize loader-ready contiguous arrays plus `dataset.json`,
    `manifest.jsonl`, and `source_registry.jsonl`
    (`7f9fd4ee`, strengthened by `c6d894cf` so published arrays are re-hashed
@@ -436,9 +437,10 @@ Before any submission:
    receipt (`18322cb`, strengthened at `e847d51`, `98d0055`, and `af5ca6a` to
    require and record exactly 64 training layouts per condition, require local
    `slot_count = 64`, and validate the staged manifests plus all five reset-array
-   file sets before upload, and at `d35d9cf` to require the archived review
+   file sets before upload, at `d35d9cf` to require the archived review
    receipt and exact equality between its accepted IDs and the training-bank
-   conditions). Existing
+   conditions, and at `cee4de9` to reject stale release, manifest, or
+   review-data identity). Existing
    v5m/v6m launch scripts are historical inputs, not submission authority. The
    20,000-update P6 path deliberately fails closed until the separate
    256-training-layouts-per-condition expansion contract exists.
@@ -448,9 +450,10 @@ Execution:
 1. [complete] migrate terra-baselines to the sole
    `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
-2. [complete] CPU/config/manifest/launch validation (223 full baseline tests;
-   50 focused accepted-bank/Euler tests at `18322cb`; 26 focused staged-bank
-   tests at `af5ca6a`; 29 focused review-bound launch tests at `d35d9cf`;
+2. [complete] CPU/config/manifest/launch validation (50 focused
+   accepted-bank/Euler tests at `18322cb`; 26 focused staged-bank tests at
+   `af5ca6a`; current 35 focused and 232 full review-bound launch tests at
+   `cee4de9`;
    ShellCheck, syntax, and deterministic `SUBMIT=0` packaging);
 3. [pending final bank] CUDA conv/backward and NCCL preflight in the
    allocation;
@@ -484,8 +487,8 @@ ledger SHA-256 is
 `853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
 
 Source provenance and launch isolation are implemented at `18322cb`,
-`e847d51`, `98d0055`, `af5ca6a`, and `d35d9cf`: the launcher requires clean
-committed source, copies
+`e847d51`, `98d0055`, `af5ca6a`, `d35d9cf`, and `cee4de9`: the launcher
+requires clean committed source, copies
 the bank into a private stage, validates local `slot_count = 64`, exactly 64
 ordered manifest slots, and all five reset-array file sets for every training
 condition, validates the copied review receipt and exact accepted-condition
@@ -590,5 +593,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
 | 2026-07-31 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `af5ca6a`; 223 full tests; staged 64-layout manifest/array gate with required local `slot_count = 64`; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
-| 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf`; 7 browser, 37 Terra curriculum, and 29 baseline launch checks | complete; Lorenzo dispositions pending |
+| 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf` + `cee4de9`; 7 browser, 40 Terra curriculum, 35 focused baseline, and 232 full baseline checks | complete; Lorenzo dispositions pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
