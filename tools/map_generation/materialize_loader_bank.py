@@ -47,6 +47,12 @@ from terra.maps_buffer import (  # noqa: E402
 )
 from terra.maps_buffer import reset_array_scenario_sha256  # noqa: E402
 from terra.maps_buffer import validate_exact_dataset_contract  # noqa: E402
+from tools.map_generation.compile_condition_review import (  # noqa: E402
+    MANIFEST_SHA256 as REVIEW_MANIFEST_SHA256,
+    OUTPUT_SCHEMA as REVIEW_ADMISSION_SCHEMA,
+    RELEASE_ID as REVIEW_RELEASE_ID,
+    REVIEW_DATA_SHA256,
+)
 
 SPLIT_BANK_SCHEMA = "terra_curriculum_split_bank_v1"
 LOADER_BANK_SCHEMA = "terra_curriculum_loader_bank_v1"
@@ -119,6 +125,35 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _validate_review_admission(path: Path, conditions: list[str]) -> dict[str, Any]:
+    receipt = _read_json(path)
+    if receipt.get("schema") != REVIEW_ADMISSION_SCHEMA:
+        raise ValueError(f"{path}: unsupported review admission schema")
+    expected_identity = {
+        "release": REVIEW_RELEASE_ID,
+        "manifest_sha256": REVIEW_MANIFEST_SHA256,
+        "review_data_sha256": REVIEW_DATA_SHA256,
+    }
+    for field, expected in expected_identity.items():
+        if receipt.get(field) != expected:
+            raise ValueError(f"{path}: {field} does not match the reviewed release")
+    accepted = receipt.get("accepted_conditions")
+    if (
+        not isinstance(accepted, list)
+        or not all(isinstance(value, str) and value for value in accepted)
+        or accepted != sorted(set(accepted))
+    ):
+        raise ValueError(f"{path}: accepted_conditions must be unique and sorted")
+    if accepted != conditions:
+        raise ValueError(
+            "review admission conditions do not match the split bank: "
+            f"accepted={accepted}, split={conditions}"
+        )
+    if not SHA256_PATTERN.fullmatch(str(receipt.get("review_bundle_sha256", ""))):
+        raise ValueError(f"{path}: review_bundle_sha256 must be a SHA-256 digest")
+    return receipt
 
 
 def _scenario_sha256(dataset: Path, sample_index: int) -> tuple[str, tuple[int, int]]:
@@ -545,6 +580,7 @@ def materialize_loader_bank(
     split_bank: Path,
     output: Path,
     terra_revision: str,
+    review_admission: Path,
 ) -> dict[str, Any]:
     """Materialize the only loader-ready view of one final split bank."""
     split_bank = split_bank.resolve()
@@ -552,6 +588,9 @@ def materialize_loader_bank(
     if output.exists():
         raise FileExistsError(f"output already exists: {output}")
     summary, rows_by_split, shape = _validate_split_bank(split_bank)
+    conditions = sorted({row["condition_id"] for row in rows_by_split["train"]})
+    review_admission = review_admission.resolve()
+    review_receipt = _validate_review_admission(review_admission, conditions)
     environment_protocol = frozen_environment_protocol(terra_revision)
     protocol_hash = environment_protocol["environment_protocol_sha256"]
     if not SHA256_PATTERN.fullmatch(protocol_hash):
@@ -589,10 +628,10 @@ def materialize_loader_bank(
         source_registry = root / "source_registry.jsonl"
         _write_jsonl(source_registry, registry_rows)
         _write_json(root / "environment_protocol.json", environment_protocol)
+        shutil.copyfile(review_admission, root / "review_admission.json")
 
         training_levels = []
         training_rows = rows_by_split["train"]
-        conditions = sorted({row["condition_id"] for row in training_rows})
         for level_index, condition in enumerate(conditions):
             rows = sorted(
                 (row for row in training_rows if row["condition_id"] == condition),
@@ -653,6 +692,14 @@ def materialize_loader_bank(
             "train": training_levels,
             "evaluation_panels": evaluation_panels,
         }
+        loader_summary.update(
+            {
+                "review_admission": "review_admission.json",
+                "review_admission_sha256": _sha256_file(root / "review_admission.json"),
+                "review_release": review_receipt["release"],
+                "review_manifest_sha256": review_receipt["manifest_sha256"],
+            }
+        )
         _write_json(root / "dataset.json", loader_summary)
         root.rename(output)
     return loader_summary
@@ -672,6 +719,12 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="immutable Terra commit or source revision bound into episode_id",
     )
+    parser.add_argument(
+        "--review-admission",
+        required=True,
+        type=Path,
+        help="validated review_admission.json from compile_condition_review.py",
+    )
     return parser.parse_args()
 
 
@@ -681,6 +734,7 @@ def main() -> None:
         args.split_bank,
         args.output,
         args.terra_revision,
+        args.review_admission,
     )
     print(
         f"materialized {len(summary['train'])} training levels and "

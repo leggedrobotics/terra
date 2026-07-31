@@ -10,16 +10,38 @@ the reviewed v6 map semantics while admitting any valid, non-duplicate
 scenario. Centred IoU is written to `diversity_report.json`; it does not reject
 training maps.
 
+Before generating a P5 accepted bank, compile the manifest-bound review export
+into an explicit condition list:
+
+```bash
+python tools/map_generation/compile_condition_review.py \
+  --review-data /path/to/curriculum-diverse64-review-data.json \
+  --decisions /path/to/review-decisions.jsonl \
+  --output /path/to/new/review-admission
+```
+
+The compiler requires exactly one Accept, Reject, or Quarantine disposition
+for every condition, exact release and manifest identity, and at least one
+accepted easy anchor for each family. It validates any included map records but
+only for their pinned release and scenario identity; it never infers a
+condition decision from map votes or comments. The accepted
+condition IDs are written as one comma-separated line in
+`accepted_conditions.txt`; pass that explicit set to `--only` below.
+
 Example:
 
 ```bash
 python tools/map_generation/generate_curriculum_bank.py \
   --source-foundations /path/to/foundations_dumpzones_v3 \
   --output /path/to/empty/output \
-  --maps 64
+  --maps 160 \
+  --only "$(cat /path/to/review-admission/accepted_conditions.txt)" \
+  --review-examples 0
 ```
 
-Use `--only condition-a,condition-b` for a bounded generator smoke. The command
+The 160 candidates leave room for the exact `64/16/16/32` split after dropping
+rerolled pair slots. Use `--only condition-a,condition-b` for a bounded
+generator smoke. The command
 fails on unknown conditions, a non-empty output directory, missing source data,
 unfilled conditions, or exact duplicate full scenarios.
 
@@ -62,6 +84,7 @@ layout:
 python tools/map_generation/materialize_loader_bank.py \
   --split-bank /path/to/split-bank \
   --output /path/to/new/accepted-bank \
+  --review-admission /path/to/review-admission/review_admission.json \
   --terra-revision "$(git rev-parse HEAD)"
 ```
 
@@ -79,6 +102,11 @@ Each published level declares `terra_reset_arrays_sha256_v1`; the live loader
 recomputes that identity and compares the arrays, manifest, and source registry.
 Historical exact datasets remain loadable only when explicitly labeled
 `terra_legacy_map_id_v0`.
+
+The loader bank copies the validated `review_admission.json`, hashes it in the
+root `dataset.json`, and requires its explicit accepted condition IDs to equal
+the split bank's training conditions exactly. The Euler campaign rejects banks
+without that binding.
 
 Create the human-review folder without mutating the bank:
 

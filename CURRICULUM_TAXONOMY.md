@@ -172,9 +172,15 @@ The remaining identities have distinct roles:
 
 The current diverse-64 artifact and its 16-example gallery are **review-only**.
 Their long generation began before the final source-group/pair-slot repair.
-After Accept/Reject/Quarantine decisions are exported, selected conditions must
-be regenerated with the committed generator and then split-frozen. The review
-artifact itself must never be used for P5 training.
+Map comments and map votes are supporting evidence only. The Receipts view
+requires one separate Accept/Reject/Quarantine disposition per condition.
+`compile_condition_review.py` pins the exact release, manifest, review-data
+bytes, and canonical registry, then emits the accepted condition set without
+inferring from map votes. Selected conditions must be regenerated with the
+committed generator and then split-frozen. The loader bank copies and hashes
+the admission receipt, and the Euler launcher rejects any mismatch between its
+accepted IDs and the bank's train conditions. The review artifact itself must
+never be used for P5 training.
 
 For every accepted condition, the pilot contract is:
 

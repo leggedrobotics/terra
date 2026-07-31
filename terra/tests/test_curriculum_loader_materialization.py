@@ -117,14 +117,47 @@ def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def _write_review_admission(root: Path, accepted=None) -> Path:
+    path = root / "review_admission.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": loader.REVIEW_ADMISSION_SCHEMA,
+                "release": loader.REVIEW_RELEASE_ID,
+                "manifest_sha256": loader.REVIEW_MANIFEST_SHA256,
+                "review_data_sha256": loader.REVIEW_DATA_SHA256,
+                "review_bundle_sha256": "d" * 64,
+                "accepted_conditions": (
+                    accepted
+                    if accepted is not None
+                    else sorted(condition for condition, _, _ in CONDITIONS)
+                ),
+            }
+        )
+        + "\n"
+    )
+    return path
+
+
+def _materialize(split_bank: Path, output: Path, tmp_path: Path):
+    return loader.materialize_loader_bank(
+        split_bank,
+        output,
+        "terra-test-revision",
+        _write_review_admission(tmp_path),
+    )
+
+
 def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
     split_bank = _write_split_bank(tmp_path / "split")
     output = tmp_path / "loader"
+    review_admission = _write_review_admission(tmp_path)
 
     receipt = loader.materialize_loader_bank(
         split_bank,
         output,
         "terra-test-revision",
+        review_admission,
     )
 
     assert receipt == json.loads((output / "dataset.json").read_text())
@@ -139,6 +172,11 @@ def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
         ("trn-anchor", "trench", "Anchor", 2),
     ]
     assert (output / receipt["source_registry"]).is_file()
+    assert receipt["review_admission"] == "review_admission.json"
+    assert receipt["review_admission_sha256"] == loader._sha256_file(review_admission)
+    assert (output / receipt["review_admission"]).read_bytes() == (
+        review_admission.read_bytes()
+    )
 
     for level in receipt["train"]:
         directory = output / level["maps_path"]
@@ -185,8 +223,8 @@ def test_materialization_is_deterministic(tmp_path):
     split_bank = _write_split_bank(tmp_path / "split")
     first = tmp_path / "first"
     second = tmp_path / "second"
-    loader.materialize_loader_bank(split_bank, first, "terra-test-revision")
-    loader.materialize_loader_bank(split_bank, second, "terra-test-revision")
+    _materialize(split_bank, first, tmp_path)
+    _materialize(split_bank, second, tmp_path)
 
     for relative in (
         "dataset.json",
@@ -199,15 +237,46 @@ def test_materialization_is_deterministic(tmp_path):
         assert (first / relative).read_bytes() == (second / relative).read_bytes()
 
 
+def test_rejects_review_admission_condition_mismatch(tmp_path):
+    split_bank = _write_split_bank(tmp_path / "split")
+    review_admission = _write_review_admission(tmp_path, ["fnd-anchor"])
+    with pytest.raises(ValueError, match="do not match the split bank"):
+        loader.materialize_loader_bank(
+            split_bank,
+            tmp_path / "unused",
+            "terra-test-revision",
+            review_admission,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("release", "stale-release"),
+        ("manifest_sha256", "0" * 64),
+        ("review_data_sha256", "1" * 64),
+    ),
+)
+def test_rejects_stale_review_admission_identity(tmp_path, field, value):
+    split_bank = _write_split_bank(tmp_path / "split")
+    review_admission = _write_review_admission(tmp_path)
+    receipt = json.loads(review_admission.read_text())
+    receipt[field] = value
+    review_admission.write_text(json.dumps(receipt) + "\n")
+    with pytest.raises(ValueError, match=f"{field} does not match"):
+        loader.materialize_loader_bank(
+            split_bank,
+            tmp_path / "unused",
+            "terra-test-revision",
+            review_admission,
+        )
+
+
 def test_rejects_review_only_banks(tmp_path):
     review_only = tmp_path / "review"
     review_only.mkdir()
     with pytest.raises(ValueError, match="Review-only or unsplit"):
-        loader.materialize_loader_bank(
-            review_only,
-            tmp_path / "unused",
-            "terra-test-revision",
-        )
+        _materialize(review_only, tmp_path / "unused", tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -229,11 +298,7 @@ def test_rejects_cross_split_source_and_pair_leakage(
     promotion_rows[0][field] = train_rows[0][field]
     _write_csv(promotion_manifest, promotion_rows)
     with pytest.raises(ValueError, match=message):
-        loader.materialize_loader_bank(
-            split_bank,
-            tmp_path / "leaking",
-            "terra-test-revision",
-        )
+        _materialize(split_bank, tmp_path / "leaking", tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -255,11 +320,7 @@ def test_rejects_duplicate_pair_or_source_with_unchanged_row_count(
     _write_csv(train_manifest, rows)
 
     with pytest.raises(ValueError, match=message):
-        loader.materialize_loader_bank(
-            split_bank,
-            tmp_path / "duplicate-identity",
-            "terra-test-revision",
-        )
+        _materialize(split_bank, tmp_path / "duplicate-identity", tmp_path)
 
 
 def test_rejects_per_condition_count_mismatch(tmp_path):
@@ -274,11 +335,7 @@ def test_rejects_per_condition_count_mismatch(tmp_path):
     _write_csv(train_manifest, rows)
 
     with pytest.raises(ValueError, match="condition counts do not match"):
-        loader.materialize_loader_bank(
-            split_bank,
-            tmp_path / "count-mismatch",
-            "terra-test-revision",
-        )
+        _materialize(split_bank, tmp_path / "count-mismatch", tmp_path)
 
 
 def test_rejects_array_identity_and_truncated_seed_hash_collisions(
@@ -292,11 +349,7 @@ def test_rejects_array_identity_and_truncated_seed_hash_collisions(
     rows[0]["scenario_sha256"] = "b" * 64
     _write_csv(promotion_manifest, rows)
     with pytest.raises(ValueError, match="scenario hash mismatch"):
-        loader.materialize_loader_bank(
-            split_bank,
-            tmp_path / "bad-identity",
-            "terra-test-revision",
-        )
+        _materialize(split_bank, tmp_path / "bad-identity", tmp_path)
 
     split_bank = _write_split_bank(tmp_path / "second-split")
     monkeypatch.setattr(
@@ -305,11 +358,7 @@ def test_rejects_array_identity_and_truncated_seed_hash_collisions(
         lambda count: [7] * count,
     )
     with pytest.raises(ValueError, match="reset-seed hash collision"):
-        loader.materialize_loader_bank(
-            split_bank,
-            tmp_path / "seed-collision",
-            "terra-test-revision",
-        )
+        _materialize(split_bank, tmp_path / "seed-collision", tmp_path)
 
 
 def test_consumer_rejects_published_array_and_manifest_identity_mutation(
@@ -317,11 +366,7 @@ def test_consumer_rejects_published_array_and_manifest_identity_mutation(
 ):
     split_bank = _write_split_bank(tmp_path / "split")
     array_output = tmp_path / "array-output"
-    loader.materialize_loader_bank(
-        split_bank,
-        array_output,
-        "terra-test-revision",
-    )
+    _materialize(split_bank, array_output, tmp_path)
     image_path = array_output / "promotion" / "images" / "img_1.npy"
     target = np.load(image_path)
     target[-1, -1] = -1
@@ -330,11 +375,7 @@ def test_consumer_rejects_published_array_and_manifest_identity_mutation(
         validate_exact_dataset_contract(array_output / "promotion", 2)
 
     manifest_output = tmp_path / "manifest-output"
-    loader.materialize_loader_bank(
-        split_bank,
-        manifest_output,
-        "terra-test-revision",
-    )
+    _materialize(split_bank, manifest_output, tmp_path)
     manifest_path = manifest_output / "promotion" / "manifest.jsonl"
     rows = _jsonl(manifest_path)
     rows[0]["scenario_id"] = "b" * 64

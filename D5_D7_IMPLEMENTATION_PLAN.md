@@ -252,6 +252,12 @@ five arrays. Receipt:
   composed.
 - [x] Export the full candidate gallery into the isolated local review website
   on port `4174`.
+- [x] Separate map comments from one explicit manifest-bound
+  Accept/Reject/Quarantine disposition per condition; never infer condition
+  admission from map votes.
+- [x] Add a fail-loud compiler that requires all condition dispositions and
+  accepted foundation/trench anchors before emitting the generator `--only`
+  list (`tools/map_generation/compile_condition_review.py`).
 - [ ] Record Lorenzo's comments/accept/reject decisions without changing
   scenario identity.
 
@@ -269,7 +275,8 @@ Visual review authority:
 - image folders and editable index:
   [`terra_diverse64_full_review_20260730`](/home/lorenzo/moleworks/.artifacts/terra_diverse64_full_review_20260730);
 - local site: [http://127.0.0.1:4174/](http://127.0.0.1:4174/);
-- site branch/commit: `diverse64-gallery-review` at `4a1c1a2`.
+- site branch/commit: `diverse64-gallery-review` at `885f56b` (diverse-64
+  default; explicit condition dispositions and atomic combined import/export).
 
 The visual source bank is explicitly review-only because its long process
 started before the final source/pair identity repair. Accepted conditions must
@@ -373,7 +380,8 @@ Implementation:
 [terra-baselines P5 accepted-bank experiments](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
 (sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
 `18322cb`, with exact 64-layout declaration and staged-payload gates at
-`e847d51`, `98d0055`, and `af5ca6a`).
+`e847d51`, `98d0055`, and `af5ca6a`, plus review-admission binding at
+`d35d9cf`).
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -400,6 +408,12 @@ exposure by branch depth.
 
 Before any submission:
 
+0. [x] compile an explicit condition-level review receipt bound to the current
+   review release and manifest; incomplete, duplicate, stale, unknown, or
+   map-vote-inferred condition sets fail; the exact review-data SHA and
+   canonical 32-condition registry are pinned, the loader bank copies and
+   hashes the receipt, and the Euler launcher requires its accepted IDs to
+   equal the train condition IDs (`d35d9cf`);
 1. [x] materialize loader-ready contiguous arrays plus `dataset.json`,
    `manifest.jsonl`, and `source_registry.jsonl`
    (`7f9fd4ee`, strengthened by `c6d894cf` so published arrays are re-hashed
@@ -422,7 +436,9 @@ Before any submission:
    receipt (`18322cb`, strengthened at `e847d51`, `98d0055`, and `af5ca6a` to
    require and record exactly 64 training layouts per condition, require local
    `slot_count = 64`, and validate the staged manifests plus all five reset-array
-   file sets before upload). Existing
+   file sets before upload, and at `d35d9cf` to require the archived review
+   receipt and exact equality between its accepted IDs and the training-bank
+   conditions). Existing
    v5m/v6m launch scripts are historical inputs, not submission authority. The
    20,000-update P6 path deliberately fails closed until the separate
    256-training-layouts-per-condition expansion contract exists.
@@ -434,8 +450,8 @@ Execution:
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
 2. [complete] CPU/config/manifest/launch validation (223 full baseline tests;
    50 focused accepted-bank/Euler tests at `18322cb`; 26 focused staged-bank
-   tests at `af5ca6a`; ShellCheck, syntax, and deterministic `SUBMIT=0`
-   packaging);
+   tests at `af5ca6a`; 29 focused review-bound launch tests at `d35d9cf`;
+   ShellCheck, syntax, and deterministic `SUBMIT=0` packaging);
 3. [pending final bank] CUDA conv/backward and NCCL preflight in the
    allocation;
 4. [pending final bank] W&B-disabled first-update smoke for all four arms;
@@ -450,10 +466,10 @@ Execution:
 7. use paired seeds for the final scheduler claim, not to decide whether a
    clearly learning recipe deserves enough compute.
 
-Current execution blockers, checked 2026-07-30:
+Current execution blockers, checked 2026-07-31:
 
-- Lorenzo's map comments/accept/reject decisions have not yet been exported
-  from the local review site;
+- Lorenzo's current diverse-64 map comments and all 32 explicit condition
+  dispositions have not yet been exported from the local review site;
 - the accepted 64/16/16/32 source-disjoint bank therefore has not been
   regenerated and frozen from those decisions; and
 - allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
@@ -468,11 +484,12 @@ ledger SHA-256 is
 `853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
 
 Source provenance and launch isolation are implemented at `18322cb`,
-`e847d51`, `98d0055`, and `af5ca6a`: the launcher requires clean committed
-source, copies
+`e847d51`, `98d0055`, `af5ca6a`, and `d35d9cf`: the launcher requires clean
+committed source, copies
 the bank into a private stage, validates local `slot_count = 64`, exactly 64
 ordered manifest slots, and all five reset-array file sets for every training
-condition, then hashes that same staged payload. It creates one content-addressed
+condition, validates the copied review receipt and exact accepted-condition
+set, then hashes that same staged payload. It creates one content-addressed
 archive, unpacks it into
 allocation-local storage, and keeps only logs/checkpoints/W&B on scratch. It rejects
 `REVIEW_ONLY.md` and `NON_ADMISSION.md`, checks the dependency-ledger hash,
@@ -573,4 +590,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
 | 2026-07-31 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `af5ca6a`; 223 full tests; staged 64-layout manifest/array gate with required local `slot_count = 64`; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
+| 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf`; 7 browser, 37 Terra curriculum, and 29 baseline launch checks | complete; Lorenzo dispositions pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |

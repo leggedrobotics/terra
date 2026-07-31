@@ -51,6 +51,11 @@ Artifact:
 - Branch: `diverse64-gallery-review`
 - Adapter commit: `240f38f`
 - Full-gallery commit: `4a1c1a2`
+- Condition-admission UI commit: `885f56b`
+- Canonical compiler input:
+  `/home/lorenzo/moleworks/.worktrees/terra_digging_benchmark_diverse64_review_20260730/public/data/curriculum-diverse64-review-data.json`
+- Expected browser export:
+  `/home/lorenzo/Downloads/map-curriculum-diverse64-visual-review-20260730-review-decisions.jsonl`
 - Site manifest SHA-256:
   `39f7cd2e8ce565bd384de214da5f2eee5e76764cb554e149c0ba675d815d6d51`
 
@@ -62,3 +67,10 @@ Site validation:
 - six Playwright tests passed with six expected project skips;
 - comments persist across reload; and
 - Accept, Reject, Quarantine, reviewer, and comment receipts export as JSONL.
+
+The condition-admission extension makes diverse-64 the default release and
+adds one explicit manifest-bound disposition per condition. Combined JSONL
+export/import is atomic; map comments remain evidence and never imply
+condition admission. The paired Terra compiler pins the exact review-data
+SHA-256
+`8404fcaa9a6b66949ade2b0225d3e7800968951953d2b6363aabffe38100cc0b`.
