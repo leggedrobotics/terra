@@ -1,5 +1,10 @@
 # Curriculum map generation
 
+The canonical current `v6-main` condition registry, token glossary, anchor/tier
+semantics, exact 32-condition table, bank counts, and P5 sampler boundary are in
+[`CURRICULUM_TAXONOMY.md`](../../CURRICULUM_TAXONOMY.md). This page documents
+the one supported generation/materialization path.
+
 `generate_curriculum_bank.py` is the only supported entry point. It preserves
 the reviewed v6 map semantics while admitting any valid, non-duplicate
 scenario. Centred IoU is written to `diversity_report.json`; it does not reject

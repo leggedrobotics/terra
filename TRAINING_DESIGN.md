@@ -9,13 +9,17 @@
 - Active implementation addendum:
   [`D5_D7_IMPLEMENTATION_PLAN.md`](D5_D7_IMPLEMENTATION_PLAN.md), including
   the explicit `$simple-research-code` constraint
+- Canonical current `v6-main` identities, factor graph, bank counts, and P5
+  sampler boundary: [`CURRICULUM_TAXONOMY.md`](CURRICULUM_TAXONOMY.md)
 
-The original v4 sections below are retained as the preregistered experiment
-contract. The completed result, critical review, corrected decisions, and
-dependency-ordered backlog are in
+The original v4 sections below, including the `M0`-`M6` ladders and warnings
+against a global adaptive sampler, are retained as the preregistered historical
+experiment contract. They do not describe the current 32-condition taxonomy or
+the implemented P5 uniform/adaptive comparison. The completed result, critical
+review, corrected decisions, and dependency-ordered backlog are in
 [`FAILURE_ANALYSIS.md`](FAILURE_ANALYSIS.md) and
-[`TRAINING_TASKS.md`](TRAINING_TASKS.md). The canonical current benchmark and
-map-curriculum design, including the accepted-reviewer decision log, is
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md). The broader benchmark design and
+accepted-reviewer decision log are in
 [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md). Those companion documents
 supersede the original map ladder and execution order for new work; they do
 not rewrite the historical treatment after seeing the result.
@@ -29,11 +33,13 @@ Post-screen result:
 
 ## 0. Ratified recovery contract
 
-The original M0-M2 ladder below is retained only as the frozen description of
-the failed screen. It is outdated as a future map curriculum. The active
+The original M0-M6 ladder below is retained only as the frozen description of
+the failed screen and its proposed extensions. It is outdated as a future map
+curriculum. The current factor/anchor semantics are in
+[`CURRICULUM_TAXONOMY.md`](CURRICULUM_TAXONOMY.md). The active
 dependency-ordered execution plan is in
-[`TRAINING_TASKS.md`](TRAINING_TASKS.md), and the normative current map design
-is in [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md).
+[`TRAINING_TASKS.md`](TRAINING_TASKS.md), and the broader benchmark design is in
+[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md).
 
 The following decisions were ratified after reviewing the failure evidence:
 

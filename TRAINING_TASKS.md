@@ -14,8 +14,11 @@
 - Active D5/D7 implementation plan:
   [`D5_D7_IMPLEMENTATION_PLAN.md`](D5_D7_IMPLEMENTATION_PLAN.md), governed by
   the linked `$simple-research-code` workflow
+- Canonical current `v6-main` condition registry, counts, tier/anchor semantics,
+  split contract, and runtime-sampler boundary:
+  [`CURRICULUM_TAXONOMY.md`](CURRICULUM_TAXONOMY.md)
 - Governing design: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
-- Canonical current map-benchmark/curriculum specification:
+- Broader map-benchmark design and reviewer log:
   [`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), especially the v0.3
   reviewer decision log in Section 20
 - Active first subgoal: standardize the training distribution and deliver its
@@ -29,7 +32,12 @@
 - Production training authorized by this document: yes, only for declared
   tasks whose gates pass; independent declared arms may run concurrently
 
-The latest accepted map-curriculum design must be written into
+The current executable 32-condition taxonomy and P5 bank/sampler contract are
+the linked `CURRICULUM_TAXONOMY.md` and D5/D7 plan. Older `M0`-`M6`, S1/S2
+pilot-size, and rehearsal-sampler passages below are historical decision and
+execution receipts; they do not override those current documents.
+
+The latest accepted broader benchmark design must be written into
 `MAP_BENCHMARK_SPEC.md` in the same change that records its reviewer
 disposition. This execution ledger may summarize that design but must not
 silently override it. Chat history is not an execution dependency.
@@ -42,9 +50,10 @@ healthy and prove partial feasibility; their source-disjoint evaluations show
 memorization, non-monotonic cell difficulty, and regression. More unchanged
 PPO is not justified.
 
-The live plan is the factorized admission graph in
-[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md), with its accepted-review
-log in Section 20. The benchmark/site goal in
+The live v6 plan is the linked taxonomy and D5/D7 implementation plan. The
+older factorized admission graph and its accepted-review log remain in
+[`MAP_BENCHMARK_SPEC.md`](MAP_BENCHMARK_SPEC.md) as benchmark design context.
+The benchmark/site goal in
 [`DIGGING_BENCHMARK_SITE_GOAL.md`](DIGGING_BENCHMARK_SITE_GOAL.md) is now the
 first delivery priority. The immediate order is:
 

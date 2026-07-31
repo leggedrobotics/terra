@@ -1,9 +1,12 @@
+import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from terra.maps_buffer import reset_array_scenario_sha256
+from tools.map_generation import curriculum_taxonomy as taxonomy
 from tools.map_generation import generate_curriculum_bank as generator
 
 
@@ -156,3 +159,49 @@ def test_exact_full_scenario_duplicate_fails_loudly():
                 {"map_id": "map-b", "scenario_sha256": identity},
             ]
         )
+
+
+def test_current_taxonomy_document_matches_executable_registry():
+    repository = Path(__file__).resolve().parents[2]
+    document = repository / taxonomy.SPEC_PATH
+    assert document.is_file(), taxonomy.SPEC_PATH
+    assert taxonomy.spec_path_for("v6-main") == taxonomy.SPEC_PATH
+    assert {
+        taxonomy.spec_path_for(release)
+        for release in ("v3", "v4", "v5-main", "v5-transport")
+    } == {taxonomy.HISTORICAL_SPEC_PATH}
+    assert generator.CURRENT_TAXONOMY_PATH == taxonomy.SPEC_PATH
+
+    text = document.read_text()
+    table = text.split("<!-- taxonomy:v6-main:start -->", 1)[1].split(
+        "<!-- taxonomy:v6-main:end -->", 1
+    )[0]
+    rows = re.findall(
+        r"^\| `([^`]+)` \| T(\d+) \| [^|]+ \| (?:`([^`]+)`|-) \|",
+        table,
+        flags=re.MULTILINE,
+    )
+    documented = [
+        (condition_id, int(tier), anchor or None)
+        for condition_id, tier, anchor in rows
+    ]
+    executable = [
+        (condition_id, tier, anchor)
+        for _, condition_id, tier, anchor in taxonomy.SPEC_TABLE_V6_MAIN
+    ]
+
+    assert documented == executable
+    assert len(documented) == 32
+    assert {tier: sum(row[1] == tier for row in documented) for tier in range(3)} == {
+        0: 9,
+        1: 19,
+        2: 4,
+    }
+
+
+def test_generated_readme_points_to_current_taxonomy(tmp_path):
+    generator.write_readme(tmp_path, generator.DATASETS["main"], {})
+
+    readme = (tmp_path / "README.md").read_text()
+    assert f"`{taxonomy.SPEC_PATH}`" in readme
+    assert "docs/CURRICULUM_SPEC_V6.md" not in readme

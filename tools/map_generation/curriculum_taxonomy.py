@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Factor-based curriculum taxonomy for the map curriculum candidate release.
+"""Release-scoped factor taxonomy for Terra curriculum map banks.
 
-Spec: docs/CURRICULUM_TAXONOMY_SPEC.md (v1, 2026-07-28).
+Canonical reference: ``CURRICULUM_TAXONOMY.md``. The supported bank generator
+selects ``v6-main`` explicitly; older release tables remain here for provenance.
 
-Difficulty tier is computed from factor levels, never hand-assigned. Levels are
-derived from the manifest fields already present on every scenario; the explicit
-23-row cell table from spec section 2 is the source of truth for anchors and is
-asserted against the derived condition ids.
+Tier is computed from factor levels, never hand-assigned. Levels are derived
+from manifest fields, and every release table is asserted against its derived
+condition IDs, tiers, anchors, and deltas.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-SPEC_PATH = "docs/CURRICULUM_TAXONOMY_SPEC.md"
+SPEC_PATH = "CURRICULUM_TAXONOMY.md"
+HISTORICAL_SPEC_PATH = "docs/CURRICULUM_TAXONOMY_SPEC.md"
 TAXONOMY_VERSION = 1
 
 # Releases are scoped. The v3/v3.1 tables below are FROZEN: the published
@@ -693,15 +694,23 @@ def spec_for(release: str | ReleaseSpec | None = None) -> ReleaseSpec:
     return RELEASES[release or DEFAULT_RELEASE]
 
 
+def spec_path_for(release: str | ReleaseSpec | None = None) -> str:
+    """Current v6 reference without rewriting frozen historical payloads."""
+    if spec_for(release).name == "v6-main":
+        return SPEC_PATH
+    return HISTORICAL_SPEC_PATH
+
+
 def parse_condition_id(
     condition: str, release: str | ReleaseSpec | None = None
 ) -> dict[str, str]:
     """Invert the id grammar back into factor levels.
 
-    The five level vocabularies are disjoint, so `<fam>-<geo>-<dump>[-cap]
-    [-dist][-site]` parses without ambiguity (geometry is longest-match, which
-    is what `slab-lg` needs). Round-tripping through `condition_id` is asserted
-    here, so a vocabulary collision fails loudly instead of silently mis-parsing.
+    The release vocabularies are disjoint, so `<fam>-<geo>-<dump>[-cap]
+    [-dist][-site][-scale]` parses without ambiguity (geometry is longest-match,
+    which is what `slab-lg` needs). Round-tripping through `condition_id` is
+    asserted here, so a vocabulary collision fails loudly instead of silently
+    mis-parsing.
     """
     spec = spec_for(release)
     family, rest = condition.split("-", 1)
@@ -804,7 +813,7 @@ def scenario_levels(
 
 
 def condition_id(levels: dict[str, str], release: str | ReleaseSpec | None = None) -> str:
-    """`<fam>-<geometry>-<dump>[-<capacity>][-<distance>][-<site>]`.
+    """`<fam>-<geometry>-<dump>[-<capacity>][-<distance>][-<site>][-<scale>]`.
 
     Generous capacity and clean sites are always omitted. Distance only appears
     for the levels the release declares in `emit_distance` — v3 emits none, so
@@ -1007,10 +1016,11 @@ def release_taxonomy(
     scenarios: list[dict[str, Any]], release: str | ReleaseSpec | None = None
 ) -> dict[str, Any]:
     """The top-level `taxonomy` value (spec section 3)."""
-    conditions = build_conditions(scenarios, release)
+    spec = spec_for(release)
+    conditions = build_conditions(scenarios, spec)
     return {
         "version": TAXONOMY_VERSION,
-        "specPath": SPEC_PATH,
+        "specPath": spec_path_for(spec),
         "conditions": [
             {
                 "id": condition.condition_id,
@@ -1023,7 +1033,7 @@ def release_taxonomy(
                 "mapCount": condition.map_count,
             }
             for condition in (
-                conditions[row[0]] for row in release_cells(scenarios, release)
+                conditions[row[0]] for row in release_cells(scenarios, spec)
             )
         ],
     }

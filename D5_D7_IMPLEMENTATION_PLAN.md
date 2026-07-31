@@ -10,6 +10,8 @@
   [`$simple-research-code`](/home/lorenzo/git/codex_skills/skills/simple-research-code/SKILL.md)
 - Training authority: [`TRAINING_TASKS.md`](TRAINING_TASKS.md)
 - Design context: [`TRAINING_DESIGN.md`](TRAINING_DESIGN.md)
+- Canonical current curriculum taxonomy:
+  [`CURRICULUM_TAXONOMY.md`](CURRICULUM_TAXONOMY.md)
 - Executable P5 baseline plan:
   [`P5_ACCEPTED_BANK_EXPERIMENTS.md`](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
 - Local visual-review adapter:
@@ -371,7 +373,7 @@ Implementation:
 [terra-baselines P5 accepted-bank experiments](/home/lorenzo/moleworks/.worktrees/terra_baselines_simple_mapbank_reward_20260730/docs/research/P5_ACCEPTED_BANK_EXPERIMENTS.md)
 (sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
 `18322cb`, with exact 64-layout declaration and staged-payload gates at
-`e847d51` and `98d0055`).
+`e847d51`, `98d0055`, and `af5ca6a`).
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -417,9 +419,10 @@ Before any submission:
    screen trains (`18322cb`); its allocated execution on the final frozen bank
    remains pending; and
 7. [x] add a content-addressed immutable Euler smoke/screen launch path and
-   receipt (`18322cb`, strengthened at `e847d51` and `98d0055` to require and
-   record exactly 64 training layouts per condition and validate the staged
-   manifests plus all five reset-array file sets before upload). Existing
+   receipt (`18322cb`, strengthened at `e847d51`, `98d0055`, and `af5ca6a` to
+   require and record exactly 64 training layouts per condition, require local
+   `slot_count = 64`, and validate the staged manifests plus all five reset-array
+   file sets before upload). Existing
    v5m/v6m launch scripts are historical inputs, not submission authority. The
    20,000-update P6 path deliberately fails closed until the separate
    256-training-layouts-per-condition expansion contract exists.
@@ -429,9 +432,9 @@ Execution:
 1. [complete] migrate terra-baselines to the sole
    `relocation_progress_mult`, remove old carry-field reads and reward-v2 guard
    arguments, and pass its preset/config tests (`3ce0e84`, 21 focused tests);
-2. [complete] CPU/config/manifest/launch validation (222 full baseline tests;
-   50 focused accepted-bank/Euler tests at `18322cb`; 25 focused staged-bank
-   tests at `98d0055`; ShellCheck, syntax, and deterministic `SUBMIT=0`
+2. [complete] CPU/config/manifest/launch validation (223 full baseline tests;
+   50 focused accepted-bank/Euler tests at `18322cb`; 26 focused staged-bank
+   tests at `af5ca6a`; ShellCheck, syntax, and deterministic `SUBMIT=0`
    packaging);
 3. [pending final bank] CUDA conv/backward and NCCL preflight in the
    allocation;
@@ -465,10 +468,12 @@ ledger SHA-256 is
 `853871aef55efe34a64474660109673c0d48b9a34cba333e368600a11b126d5c`.
 
 Source provenance and launch isolation are implemented at `18322cb`,
-`e847d51`, and `98d0055`: the launcher requires clean committed source, copies
-the bank into a private stage, validates exactly 64 ordered manifest slots and
-all five reset-array file sets for every training condition, then hashes that
-same staged payload. It creates one content-addressed archive, unpacks it into
+`e847d51`, `98d0055`, and `af5ca6a`: the launcher requires clean committed
+source, copies
+the bank into a private stage, validates local `slot_count = 64`, exactly 64
+ordered manifest slots, and all five reset-array file sets for every training
+condition, then hashes that same staged payload. It creates one content-addressed
+archive, unpacks it into
 allocation-local storage, and keeps only logs/checkpoints/W&B on scratch. It rejects
 `REVIEW_ONLY.md` and `NON_ADMISSION.md`, checks the dependency-ledger hash,
 home quota, four RTX 4090 devices, JAX conv/backward/NCCL health, exact source
@@ -567,5 +572,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
 | 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
-| 2026-07-30 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `98d0055`; 222 full tests; staged 64-layout manifest/array gate; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
+| 2026-07-31 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `af5ca6a`; 223 full tests; staged 64-layout manifest/array gate with required local `slot_count = 64`; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |

@@ -5,8 +5,17 @@ pending
 
 Last accepted-review update: 2026-07-27
 
-This is the canonical current map-benchmark and map-curriculum design. Section
-20 is the append-only decision log for reviewer comments: an accepted or
+This is the broader map-benchmark design and append-only reviewer log frozen on
+2026-07-27. The current executable `v6-main` condition registry, identity
+boundary, `64/16/16/32` pilot splits, and P5 uniform/adaptive sampler are
+specified in [`CURRICULUM_TAXONOMY.md`](CURRICULUM_TAXONOMY.md) and
+[`D5_D7_IMPLEMENTATION_PLAN.md`](D5_D7_IMPLEMENTATION_PLAN.md). Where this
+older document's Anchor/One-axis/Composed admission meanings, scenario identity,
+pilot counts, or sampler differ, those current documents supersede it. Its
+`M`-level and admission-graph material remains historical design context, not a
+runtime curriculum.
+
+Section 20 is the append-only decision log for reviewer comments: an accepted or
 modified comment must be recorded there in the same change that updates the
 normative sections. `TRAINING_TASKS.md` owns execution evidence and links back
 to this document; chat history is never the only record of an accepted design

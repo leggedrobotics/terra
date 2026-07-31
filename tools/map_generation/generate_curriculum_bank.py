@@ -75,8 +75,8 @@ v6.2 -- **the trench debt from TRENCH_WIDTH_AUDIT.md, closed** (2026-07-30).
          the planning pressure. Numbers in the block above
          ``ADJACENT_PROXIMITY_DEFERRED``.
 
-Spec: ``terra-digging-benchmark-site/docs/CURRICULUM_SPEC_V6.md`` section 2,
-with the carried-forward gates in ``CURRICULUM_TAXONOMY_SPEC.md`` 8.2 / 8.6.
+Current taxonomy and bank contract: ``CURRICULUM_TAXONOMY.md``. Historical v6
+construction lineage is recorded in this module's D1/D2 and carried-gate notes.
 """
 
 from __future__ import annotations
@@ -121,6 +121,7 @@ tax = v9.tax
 DatasetSpec = v9.DatasetSpec
 
 SCHEMA = "terra_curriculum_diverse_bank_v1"
+CURRENT_TAXONOMY_PATH = tax.SPEC_PATH
 # NOT bumped: byte-identity of the carried conditions depends on it, and so does
 # the shared dig between the ring conditions and their capacity/layout siblings.
 SEED_BASE = v9.SEED_BASE
@@ -2097,7 +2098,9 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
     lines = [
         f"# Terra curriculum v6 review bank — `{dataset.name}`",
         "",
-        "v5-main plus the two deltas of `docs/CURRICULUM_SPEC_V6.md` §2:",
+        f"Current taxonomy and bank contract: `{CURRENT_TAXONOMY_PATH}`.",
+        "",
+        "Construction lineage: v5-main plus the two v6 deltas:",
         "",
         "- **D1** — the seven ring conditions carry 1–3 forbidden sectors of",
         "  15–40° each in the capped 3–4× band. The sectors are **non-designated",
@@ -2463,8 +2466,8 @@ def main() -> None:
         "schema": SCHEMA,
         "dataset": dataset.name,
         "seed_base": SEED_BASE,
-        "spec_path": "docs/CURRICULUM_SPEC_V6.md",
-        "spec_section": "2 (D1 + D2), carried gates 8.2 / 8.6",
+        "spec_path": CURRENT_TAXONOMY_PATH,
+        "spec_section": "3-5 (registry, counterfactuals, and bank contract)",
         "taxonomy_version": tax.TAXONOMY_VERSION,
         "taxonomy_release": dataset.release,
         "generator": "tools/map_generation/generate_curriculum_bank.py",
