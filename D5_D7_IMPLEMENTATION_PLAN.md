@@ -466,10 +466,12 @@ Before any submission:
 9. [x] select complete counterfactual slots in scarcity order while rejecting
    any cross-level `source_group_id` reuse (`2af65baf`, 22 focused tests), so
    train/evaluation source disjointness is guaranteed before split assignment;
-10. [in progress] extend only the under-supported whole dig-bank levels from
-    the reviewed deterministic 160-map prefix to 320 candidates, verifying the
-    complete prefix row-by-row and all five arrays before atomic materialization
-    (`4c219563`, header-subset repair `ea524470`, 35 focused integration tests).
+10. [in progress] build one fresh complete 320-candidate-per-condition bank.
+    The bounded whole-level extension materializer (`4c219563`, header-subset
+    repair `ea524470`, 35 focused integration tests) correctly rejected a real
+    rerolled `net4` prefix mismatch at map index 152, proving that a larger
+    salt bank is not a literal extension of every 160-map row. Do not weaken
+    that check or merge the partial shards; use the clean full-bank build.
 
 Execution:
 
@@ -515,8 +517,8 @@ Current execution blockers, checked 2026-08-01:
   receipt. The complete 160-map candidate bank passed static generation gates,
   but the exact split gate measured only 96 `net3` and 80 `net4` shared slots
   and exposed cross-level OSM source reuse. The source-safe selector is fixed;
-  deterministic 320-map extensions for `net3`, `net4`, and `slab-lg` are not
-  yet all complete; and
+  a clean full 320-candidate-per-condition regeneration is in progress after
+  the prefix-exact extension gate rejected one changed rerolled map; and
 - allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
   exist.
 
@@ -642,3 +644,4 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-08-01 | Six-arm P5 screen | add full-family `F-SPECIALIST` and `T-SPECIALIST`; retain `G-UNIFORM` versus `G-ADAPTIVE` as the sole curriculum ablation; specialist verdicts use trained-family slices | authorized; final bank and allocated gates pending |
 | 2026-08-01 | Accepted 160-candidate regeneration | 5,120 unique scenarios, 32 conditions x 160, zero unsatisfied constraints; manifest SHA-256 `a7087cf5d5b4ac072e917c80bb138e88fb31eb1309a580d866f2a55644f6b611` | static generation complete; split support insufficient |
 | 2026-08-01 | Exact pair/source split recovery | measured `net3=96`, `net4=80`, `slab=129`, `straight=138`, `proc=141` complete slots; old assignment would leak 21 reused sources; Terra `2af65baf`, `4c219563`, and `ea524470` preserve both gates and extend only complete levels | 320-candidate level extensions in progress; no Euler submission yet |
+| 2026-08-01 | Candidate extension decision | real 320-map `net4` shard differs from the 160-map bank at rerolled map index 152; exact extension gate rejected it before output | partial-shard merge rejected; fresh full 320-condition bank running |
