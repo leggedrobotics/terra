@@ -176,11 +176,12 @@ Map comments and map votes are supporting evidence only. The Receipts view
 requires one separate Accept/Reject/Quarantine disposition per condition.
 `compile_condition_review.py` pins the exact release, manifest, review-data
 bytes, and canonical registry, then emits the accepted condition set without
-inferring from map votes. Selected conditions must be regenerated with the
-committed generator and then split-frozen. The loader bank copies and hashes
-the admission receipt, and the Euler launcher rejects any mismatch between its
-accepted IDs and the bank's train conditions. The review artifact itself must
-never be used for P5 training.
+inferring from map votes. All 32 conditions are accepted in the compiled
+receipt. They are regenerated with the committed generator and then
+split-frozen. The loader bank copies and hashes the admission receipt, and the
+Euler launcher rejects any mismatch between its accepted IDs and the bank's
+train conditions. The review artifact itself must never be used for P5
+training.
 
 For every accepted condition, the pilot contract is:
 
@@ -196,11 +197,18 @@ view of candidate scenarios, not an additional split. P6 expands only the train
 split from 64 to 256 source groups per selected condition (192 additions); the
 three evaluation splits remain frozen.
 
+The target-320 pass is candidate over-generation, not a benchmark cardinality
+or P6's 256-training-layout bank. A candidate index that exhausts its bounded
+attempt budget remains explicitly absent and is never imputed. P5 admission is
+only the exact `64/16/16/32` materialization above; any condition with fewer
+than 128 retained exact, source-safe pair slots fails.
+
 ## 6. Runtime sampling is a separate treatment
 
 The taxonomy fixes support and labels. It does not prescribe the training
-weights. P5 keeps four core scratch arms and adds two bounded family-feasibility
-diagnostics on the regenerated accepted bank:
+weights. P5 freezes six scratch-trained arms on the regenerated accepted bank:
+two anchor controls, two full-family specialists, and two all-family
+generalists.
 
 - `F-ANCHOR`: accepted foundation T0 conditions, uniform by condition;
 - `F-SPECIALIST`: every accepted foundation condition, uniform by condition;

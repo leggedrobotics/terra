@@ -245,7 +245,7 @@ five arrays. Receipt:
 - [x] Write placed, translation-normalized, and dihedral-normalized dig counts
   as diagnostics, not admission gates.
 - [x] Fail if any condition has fewer than its requested retained pair slots.
-- [ ] Select 16 review examples per condition using descriptor coverage and
+- [x] Select 16 review examples per condition using descriptor coverage and
   nearest-neighbour diversity, without changing the training bank.
 - [x] Export an image-folder gallery grouped by explicit sibling branches:
   anchor/easy, capacity, distance, dump layout, geometry/topology, site, and
@@ -258,15 +258,19 @@ five arrays. Receipt:
 - [x] Add a fail-loud compiler that requires all condition dispositions and
   accepted foundation/trench anchors before emitting the generator `--only`
   list (`tools/map_generation/compile_condition_review.py`).
-- [ ] Record Lorenzo's comments/accept/reject decisions without changing
-  scenario identity.
+- [x] Record Lorenzo's condition decisions without changing scenario identity.
+  All 32 conditions are accepted in the manifest-bound receipt
+  `/home/lorenzo/moleworks/.artifacts/terra_diverse64_review_admission_20260801_df2143282273/review_admission.json`.
+  Map comments and map votes remain optional supporting evidence, not
+  condition admission.
 
 Implementation receipt:
 [`tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md`](tools/map_generation/SPLIT_PILOT_RECEIPT_20260730.md).
 The first real split-ready probe produced 160 candidates for one foundation
 anchor and one trench anchor, then materialized exact `64/16/16/32` splits with
 256/256 unique scenarios and zero source leakage. This validates the mechanism;
-all conditions still require visual acceptance before the curriculum is frozen.
+all 32 conditions have now been visually accepted; only the regenerated,
+split-frozen bank can freeze the curriculum.
 
 Visual review authority:
 
@@ -279,8 +283,9 @@ Visual review authority:
   default; explicit condition dispositions and atomic combined import/export).
 
 The visual source bank is explicitly review-only because its long process
-started before the final source/pair identity repair. Accepted conditions must
-be regenerated with the committed generator before split freezing.
+started before the final source/pair identity repair. All 32 accepted
+conditions were regenerated in one committed-generator candidate pass; P5 uses
+only its later frozen split, never the review bank.
 
 Exit gate: every selected condition has complete split counts, zero leakage,
 zero exact scenario duplicates, a visual subset, and an accepted or explicitly
@@ -366,9 +371,9 @@ decision needs it; it is not an admission gate for visual review or PPO.
 
 Map and reward treatments never change together.
 
-Euler authorization recorded 2026-07-30: after Lorenzo's review decisions are
-exported, accepted conditions are regenerated and split-frozen, and local plus
-allocated-GPU first-update gates pass, sync the paired commits to the isolated
+Euler authorization recorded 2026-07-30: the review is complete. After the
+accepted conditions are split-frozen and local plus allocated-GPU first-update
+gates pass, sync the paired commits to the isolated
 Euler workspace and submit the bounded map experiments without another
 confirmation. This authorization covers the six declared 2,000-update screens and
 one 20,000-update `gpuhe.120h` promotion that satisfies the fixed-bank gate. It
@@ -466,14 +471,30 @@ Before any submission:
 9. [x] select complete counterfactual slots in scarcity order while rejecting
    any cross-level `source_group_id` reuse (`2af65baf`, 22 focused tests), so
    train/evaluation source disjointness is guaranteed before split assignment;
-10. [in progress] build one fresh complete 320-candidate-per-condition bank.
-    A bounded whole-level extension probe (`4c219563`, header-subset repair
-    `ea524470`, 35 focused integration tests) correctly rejected a real
-    rerolled `net4` prefix mismatch at map index 152, proving that a larger
-    salt bank is not a literal extension of every 160-map row. That unused
-    alternate path was then removed from the launch branch under the
-    `$simple-research-code` rule. Do not merge the partial shards; use the
-    single clean full-bank build.
+10. [complete] Run one fresh full-bank
+    pass targeting map indices `0..319` for every accepted condition. “Target
+    320” is candidate over-generation for P5's exact 128 retained slots, not
+    an exact-320 admission promise and not P6's 256-training-layout bank.
+    Candidate indices that exhaust the bounded attempt budget remain explicitly
+    rejected; no extension, shard merge, or silent backfill is supported.
+    `materialize_splits.py` must still emit exactly `64/16/16/32`
+    source-disjoint retained pair slots for every condition or fail.
+
+Final P5 split receipt:
+
+- artifact:
+  `/home/lorenzo/moleworks/.artifacts/terra_p5_splits_64_16_16_32_20260801_ab5c64aa`;
+- 4,096 scenarios across 32 conditions, exactly 64 train, 16 promotion, 16
+  development, and 32 sealed scenarios per condition;
+- 1,664 retained exact pair slots and 1,664 source groups, with zero pair or
+  source leakage;
+- every array and metadata sidecar byte-matches the audited candidate and every
+  scenario identity recomputes; and
+- summary SHA-256 `6063094b4d9a466771219b66df60e3e927e5823d6cbb8e0cbf27a78d0f9d0a46`,
+  split-manifest SHA-256
+  `a944b24b360fca14af658d67ce727b6436d2ee9dc20ea0145922dc2091066b25`,
+  assignment SHA-256
+  `ac6fba63ee5f68e024f1a629aa58d781961149d45880373007f42ec44f412624`.
 
 Execution:
 
@@ -515,12 +536,18 @@ Current execution blockers, checked 2026-08-01:
 - Lorenzo accepted all 32 conditions. The explicit condition receipt is
   compiled at
   `/home/lorenzo/moleworks/.artifacts/terra_diverse64_review_admission_20260801_df2143282273/review_admission.json`;
-- the accepted 64/16/16/32 source-disjoint bank is being regenerated from that
-  receipt. The complete 160-map candidate bank passed static generation gates,
-  but the exact split gate measured only 96 `net3` and 80 `net4` shared slots
-  and exposed cross-level OSM source reuse. The source-safe selector is fixed;
-  a clean full 320-candidate-per-condition regeneration is in progress after
-  the prefix-exact extension gate rejected one changed rerolled map; and
+- the accepted `64/16/16/32` source-disjoint bank is materialized and
+  independently validated from that receipt. The complete 160-map candidate bank passed static generation
+  gates, but the exact split gate measured only 96 `net3` and 80 `net4` shared
+  slots and exposed cross-level OSM source reuse. The source-safe selector is
+  fixed. The single full target-320 pass accepted 10,238 candidates: only
+  `trn-net3-side1-road` indices 155 and 264 exhausted all 320 bounded attempts
+  and remain explicitly absent. Net3 still retains 187 exact pair slots; final
+  admissibility is exactly 128 retained slots per condition after reroll and
+  cross-level source-conflict drops. The final split has 4,096 scenarios,
+  1,664 retained pair/source groups, zero leakage, and assignment SHA-256
+  `ac6fba63ee5f68e024f1a629aa58d781961149d45880373007f42ec44f412624`;
+  the loader bank remains to be bound to the final Terra revision; and
 - allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
   exist.
 
@@ -637,13 +664,13 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Euler curriculum-validation authorization | post-review/freeze smokes, 2k screens, gated 20k promotion | authorized, not yet launchable |
 | 2026-07-30 | Euler read-only readiness audit | no Terra jobs; invalid copied-worktree Git metadata; damaged venv; scratch soft inode quota exceeded | repair required |
 | 2026-07-30 | Dependency-only Euler runtime repair | project venv; exact 90-package lock; ledger `853871ae...`; no GPU job | complete |
-| 2026-07-30 | Minimal experiment matrix | F-ANCHOR, T-ANCHOR, G-UNIFORM, G-ADAPTIVE | implementation complete; review/freeze gates pending |
 | 2026-07-30 | Strict accepted-bank identity/count verification | Terra `c6d894cf`; 81 relevant tests + 4 subtests; real split pilot | complete |
 | 2026-07-31 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `af5ca6a`; 223 full tests; staged 64-layout manifest/array gate with required local `slot_count = 64`; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
-| 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf` + `cee4de9`; 7 browser, 40 Terra curriculum, 35 focused baseline, and 232 full baseline checks | complete; Lorenzo dispositions pending |
-| 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
+| 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf` + `cee4de9`; 7 browser, 40 Terra curriculum, 35 focused baseline, and 232 full baseline checks | complete; all 32 conditions accepted |
 | 2026-08-01 | Explicit 32-condition review decision | all 32 accepted; compiled receipt `terra_diverse64_review_admission_20260801_df2143282273`; raw review SHA-256 `df21432822733a1da3ea5ea47d565b68b601521d84aa90c07556083722ee1691` | complete |
 | 2026-08-01 | Six-arm P5 screen | add full-family `F-SPECIALIST` and `T-SPECIALIST`; retain `G-UNIFORM` versus `G-ADAPTIVE` as the sole curriculum ablation; specialist verdicts use trained-family slices | authorized; final bank and allocated gates pending |
 | 2026-08-01 | Accepted 160-candidate regeneration | 5,120 unique scenarios, 32 conditions x 160, zero unsatisfied constraints; manifest SHA-256 `a7087cf5d5b4ac072e917c80bb138e88fb31eb1309a580d866f2a55644f6b611` | static generation complete; split support insufficient |
-| 2026-08-01 | Exact pair/source split recovery | measured `net3=96`, `net4=80`, `slab=129`, `straight=138`, `proc=141` complete slots; old assignment would leak 21 reused sources; Terra `2af65baf`, `4c219563`, and `ea524470` preserve both gates and extend only complete levels | 320-candidate level extensions in progress; no Euler submission yet |
-| 2026-08-01 | Candidate extension decision | real 320-map `net4` shard differs from the 160-map bank at rerolled map index 152; exact extension gate rejected it before output | partial-shard merge rejected; fresh full 320-condition bank running |
+| 2026-08-01 | Exact pair/source split recovery | measured N160 support `net3=96`, `net4=80`, `slab=129`, `straight=138`, `proc=141`; old assignment would leak 21 reused sources; Terra `2af65baf` preserves both gates | selector complete; N160 insufficient |
+| 2026-08-01 | Candidate extension decision | real 320-map `net4` shard differs from the 160-map bank at rerolled map index 152; exact extension gate rejected it before output | rejected and code removed; not a launch path |
+| 2026-08-01 | Full target-320 candidate pass | 10,238 accepted candidates; only `trn-net3-side1-road` indices 155 and 264 explicitly rejected; manifest SHA-256 `9d8de6894bb0d9fcda2a83f6b61586bcc144b56bc16ff1fb59ad9f55b5f7e9e8`; summary SHA-256 `026c2895d2f10a3c0c929cd16f405356fd6bc6c1d1172aff9c2b02dc7b9ee2c7` | candidate generation complete |
+| 2026-08-01 | Accepted P5 split | 4,096 scenarios; exact 64/16/16/32 per condition; 1,664 exact pair/source groups; zero leakage; split manifest `a944b24b...`; assignment `ac6fba63...` | independently validated; loader pending |
