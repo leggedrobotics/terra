@@ -381,7 +381,10 @@ Implementation:
 (sampler/evaluator base `64fc4a9`; reviewed immutable Euler screen path
 `18322cb`, with exact 64-layout declaration and staged-payload gates at
 `e847d51`, `98d0055`, and `af5ca6a`, plus review-admission binding at
-`d35d9cf` and pinned review-release validation at `cee4de9`).
+`d35d9cf`, pinned review-release validation at `cee4de9`, and the exact
+six-arm specialist/generalist campaign at `1b8064ca`). The latter passes 245
+paired CPU tests, 70 focused tests, ShellCheck, shell syntax, compileall, and
+diff checks.
 
 - fixed reward: the committed agent-neutral contract
   (`relocation_progress_mult=1.5`) for every arm;
@@ -460,6 +463,13 @@ Before any submission:
    trench anchors, all accepted trenches, and the identical all-condition set
    for both generalists. Specialists must sample conditions uniformly and must
    fail loudly if their support equals the corresponding anchor support.
+9. [x] select complete counterfactual slots in scarcity order while rejecting
+   any cross-level `source_group_id` reuse (`2af65baf`, 22 focused tests), so
+   train/evaluation source disjointness is guaranteed before split assignment;
+10. [in progress] extend only the under-supported whole dig-bank levels from
+    the reviewed deterministic 160-map prefix to 320 candidates, verifying the
+    complete prefix row-by-row and all five arrays before atomic materialization
+    (`4c219563`, header-subset repair `ea524470`, 35 focused integration tests).
 
 Execution:
 
@@ -502,7 +512,11 @@ Current execution blockers, checked 2026-08-01:
   compiled at
   `/home/lorenzo/moleworks/.artifacts/terra_diverse64_review_admission_20260801_df2143282273/review_admission.json`;
 - the accepted 64/16/16/32 source-disjoint bank is being regenerated from that
-  receipt and is not yet frozen; and
+  receipt. The complete 160-map candidate bank passed static generation gates,
+  but the exact split gate measured only 96 `net3` and 80 `net4` shared slots
+  and exposed cross-level OSM source reuse. The source-safe selector is fixed;
+  deterministic 320-map extensions for `net3`, `net4`, and `slab-lg` are not
+  yet all complete; and
 - allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
   exist.
 
@@ -626,3 +640,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
 | 2026-08-01 | Explicit 32-condition review decision | all 32 accepted; compiled receipt `terra_diverse64_review_admission_20260801_df2143282273`; raw review SHA-256 `df21432822733a1da3ea5ea47d565b68b601521d84aa90c07556083722ee1691` | complete |
 | 2026-08-01 | Six-arm P5 screen | add full-family `F-SPECIALIST` and `T-SPECIALIST`; retain `G-UNIFORM` versus `G-ADAPTIVE` as the sole curriculum ablation; specialist verdicts use trained-family slices | authorized; final bank and allocated gates pending |
+| 2026-08-01 | Accepted 160-candidate regeneration | 5,120 unique scenarios, 32 conditions x 160, zero unsatisfied constraints; manifest SHA-256 `a7087cf5d5b4ac072e917c80bb138e88fb31eb1309a580d866f2a55644f6b611` | static generation complete; split support insufficient |
+| 2026-08-01 | Exact pair/source split recovery | measured `net3=96`, `net4=80`, `slab=129`, `straight=138`, `proc=141` complete slots; old assignment would leak 21 reused sources; Terra `2af65baf`, `4c219563`, and `ea524470` preserve both gates and extend only complete levels | 320-candidate level extensions in progress; no Euler submission yet |
