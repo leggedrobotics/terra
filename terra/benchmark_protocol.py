@@ -17,11 +17,13 @@ from terra.config import Rewards
 from terra.config import RewardsType
 from terra.state import CORRECTED_DENSE_CONTRACT
 
-BENCHMARK_RELEASE_ID = "terramap-bench-v1.0.1"
+BENCHMARK_RELEASE_ID = "terramap-bench-v1.0.2"
 BENCHMARK_MAP_SIZE = 64
 BENCHMARK_MAX_STEPS = 450
 ENVIRONMENT_PROTOCOL_SCHEMA = "terra_environment_protocol_v1"
 ENVIRONMENT_PROTOCOL_SCHEMA_VERSION = 1
+BENCHMARK_JAX_DEFAULT_PRNG_IMPL = "threefry2x32"
+BENCHMARK_JAX_THREEFRY_PARTITIONABLE = True
 
 # This is the derived discrete footprint frozen by the v1 benchmark, not a
 # second copy of the excavator's physical dimensions.
@@ -153,6 +155,12 @@ def frozen_environment_protocol(terra_revision: str) -> dict[str, Any]:
         "release_id": BENCHMARK_RELEASE_ID,
         "terra_revision": terra_revision,
         "env_config_sha256": env_receipt["env_config_sha256"],
+        "reset_prng": {
+            "jax_default_prng_impl": BENCHMARK_JAX_DEFAULT_PRNG_IMPL,
+            "jax_threefry_partitionable": (
+                BENCHMARK_JAX_THREEFRY_PARTITIONABLE
+            ),
+        },
         "map": {
             "edge_length_px": env_receipt["edge_length_px"],
             "edge_length_m": env_receipt["edge_length_m"],

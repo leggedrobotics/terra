@@ -36,6 +36,10 @@ if str(REPOSITORY_ROOT) not in sys.path:
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 
+from terra.benchmark_protocol import (  # noqa: E402
+    BENCHMARK_JAX_DEFAULT_PRNG_IMPL,
+    BENCHMARK_JAX_THREEFRY_PARTITIONABLE,
+)
 from terra.benchmark_protocol import canonical_json_sha256  # noqa: E402
 from terra.benchmark_protocol import frozen_environment_protocol  # noqa: E402
 from terra.config import EnvConfig  # noqa: E402
@@ -75,6 +79,30 @@ DISTANCE_METRIC = "8_connected_cardinal_1_diagonal_sqrt2"
 DISTANCE_NORMALIZATION = "per_map_max_to_1"
 ACCEPTED_DUMP_CONTRACT = "exact_visible_dump_v1"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _configure_benchmark_prng() -> None:
+    """Use the PRNG mode frozen into evaluation episode identities."""
+    jax.config.update(
+        "jax_default_prng_impl",
+        BENCHMARK_JAX_DEFAULT_PRNG_IMPL,
+    )
+    jax.config.update(
+        "jax_threefry_partitionable",
+        BENCHMARK_JAX_THREEFRY_PARTITIONABLE,
+    )
+    actual = (
+        jax.config.jax_default_prng_impl,
+        bool(jax.config.jax_threefry_partitionable),
+    )
+    expected = (
+        BENCHMARK_JAX_DEFAULT_PRNG_IMPL,
+        BENCHMARK_JAX_THREEFRY_PARTITIONABLE,
+    )
+    if actual != expected:
+        raise RuntimeError(
+            f"JAX PRNG contract mismatch: runtime={actual}, expected={expected}"
+        )
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -207,6 +235,7 @@ def _branch_depth(row: dict[str, str]) -> str:
 
 
 def _selected_map_indices(seeds: list[int], count: int) -> np.ndarray:
+    _configure_benchmark_prng()
     keys = jax.vmap(jax.random.PRNGKey)(jnp.asarray(seeds, dtype=jnp.uint32))
     index_only_buffer = SimpleNamespace(n_maps=count)
     env_cfg = EnvConfig()

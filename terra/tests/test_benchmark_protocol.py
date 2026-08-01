@@ -111,6 +111,10 @@ def test_environment_protocol_receipts_the_executable_action_and_config_contract
     assert receipt["schema_version"] == 1
     assert receipt["release_id"] == protocol.BENCHMARK_RELEASE_ID
     assert receipt["env_config_sha256"] == env_receipt["env_config_sha256"]
+    assert receipt["reset_prng"] == {
+        "jax_default_prng_impl": "threefry2x32",
+        "jax_threefry_partitionable": True,
+    }
     assert receipt["map"] == {
         "edge_length_px": 64,
         "edge_length_m": config.maps.edge_length_m,

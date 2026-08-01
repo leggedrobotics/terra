@@ -351,7 +351,9 @@ reward`) in
 [`terra/state.py`](terra/state.py),
 [`terra/agent.py`](terra/agent.py), and
 [`terra/config.py`](terra/config.py). The serialized agent state is intentionally
-`terra_agent_state_v2`; the benchmark release is `terramap-bench-v1.0.1`.
+`terra_agent_state_v2`; the PRNG-bound benchmark release is
+`terramap-bench-v1.0.2`. The superseded `v1.0.1` loader and campaign remain
+content-addressed historical artifacts and are never overwritten.
 Forty-seven focused reward, state-codec, protocol, and migration checks pass.
 
 Exit gate: the six P3 traces satisfy the rule without an agent-type reward
@@ -441,7 +443,8 @@ Before any submission:
    [`materialize_loader_bank.py`](tools/map_generation/materialize_loader_bank.py));
 2. [x] pin `reset_seed` and `episode_id` on every
    promotion/development/sealed row through the live `MapsBuffer` selection
-   path;
+   path under the hashed reset-PRNG contract (`threefry2x32`, partitionable
+   mode enabled);
 3. [x] port and migrate the adaptive sampler from the isolated experimental
    worktree onto the sole agent-neutral reward API (`64fc4a9`);
 4. [x] report exact and condition-macro graded completion, micro p10, worst
@@ -506,9 +509,11 @@ Execution:
    `af5ca6a`; current 35 focused and 232 full review-bound launch tests at
    `cee4de9`;
    ShellCheck, syntax, and deterministic `SUBMIT=0` packaging);
-3. [pending final bank] CUDA conv/backward and NCCL preflight in the
+3. [pending PRNG-bound bank] CUDA conv/backward and NCCL preflight in the
    allocation;
-4. [pending final bank] W&B-disabled first-update smoke for all six arms;
+4. [rerun required] W&B-disabled first-update smoke for all six arms; the
+   first content-addressed campaign passed, but its evaluation reset seeds
+   predated the now-hashed partitionable-Threefry contract;
 5. [pending smoke receipts] one unblinded 2,000-update seed per arm
    (`262,144,000` global transitions each at `4 x 1024 x 32`, hence
    `1,572,864,000` transitions across the six-arm screen);
@@ -674,3 +679,6 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-08-01 | Candidate extension decision | real 320-map `net4` shard differs from the 160-map bank at rerolled map index 152; exact extension gate rejected it before output | rejected and code removed; not a launch path |
 | 2026-08-01 | Full target-320 candidate pass | 10,238 accepted candidates; only `trn-net3-side1-road` indices 155 and 264 explicitly rejected; manifest SHA-256 `9d8de6894bb0d9fcda2a83f6b61586bcc144b56bc16ff1fb59ad9f55b5f7e9e8`; summary SHA-256 `026c2895d2f10a3c0c929cd16f405356fd6bc6c1d1172aff9c2b02dc7b9ee2c7` | candidate generation complete |
 | 2026-08-01 | Accepted P5 split | 4,096 scenarios; exact 64/16/16/32 per condition; 1,664 exact pair/source groups; zero leakage; split manifest `a944b24b...`; assignment `ac6fba63...` | independently validated; loader pending |
+| 2026-08-01 | First six-arm allocated smoke | all six jobs completed update 1, strict four-GPU CUDA/NCCL checks, checkpoint validation, and v2 receipts | passed for superseded loader campaign; no 2k evidence |
+| 2026-08-01 | Screen reset-parity gate | all six screen jobs stopped before W&B/PPO because loader seeds were generated with legacy non-partitionable Threefry and selected only 319/512 unique slots under the trainer runtime | gate worked; no training started |
+| 2026-08-01 | Reset-PRNG contract repair | preserve maps/splits/review decisions; hash `threefry2x32` plus `jax_threefry_partitionable=true` into the environment protocol and regenerate only reset seeds/episode IDs | implementation complete; loader, smoke, and screen rerun required |

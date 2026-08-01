@@ -148,6 +148,19 @@ def _materialize(split_bank: Path, output: Path, tmp_path: Path):
     )
 
 
+def test_exact_reset_seeds_use_the_frozen_partitionable_prng_contract():
+    loader.jax.config.update("jax_threefry_partitionable", False)
+    seeds = loader._exact_reset_seeds(4)
+
+    assert seeds == [1, 3, 0, 2]
+    assert loader.jax.config.jax_default_prng_impl == "threefry2x32"
+    assert bool(loader.jax.config.jax_threefry_partitionable) is True
+    np.testing.assert_array_equal(
+        loader._selected_map_indices(seeds, 4),
+        np.arange(4),
+    )
+
+
 def test_materializes_exact_training_levels_and_evaluation_panels(tmp_path):
     split_bank = _write_split_bank(tmp_path / "split")
     output = tmp_path / "loader"
