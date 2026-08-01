@@ -467,11 +467,13 @@ Before any submission:
    any cross-level `source_group_id` reuse (`2af65baf`, 22 focused tests), so
    train/evaluation source disjointness is guaranteed before split assignment;
 10. [in progress] build one fresh complete 320-candidate-per-condition bank.
-    The bounded whole-level extension materializer (`4c219563`, header-subset
-    repair `ea524470`, 35 focused integration tests) correctly rejected a real
+    A bounded whole-level extension probe (`4c219563`, header-subset repair
+    `ea524470`, 35 focused integration tests) correctly rejected a real
     rerolled `net4` prefix mismatch at map index 152, proving that a larger
-    salt bank is not a literal extension of every 160-map row. Do not weaken
-    that check or merge the partial shards; use the clean full-bank build.
+    salt bank is not a literal extension of every 160-map row. That unused
+    alternate path was then removed from the launch branch under the
+    `$simple-research-code` rule. Do not merge the partial shards; use the
+    single clean full-bank build.
 
 Execution:
 
