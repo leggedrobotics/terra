@@ -54,6 +54,8 @@ def _write_bank(
                 "seed_base": str(generator.SEED_BASE),
                 "source_group_id": f"dig:{dig_sha256}",
             }
+            if condition.family == "foundation":
+                row["foundation_only_field"] = "foundation"
             rows.append(row)
             for folder_index, folder in enumerate(extension.ARRAY_FOLDERS):
                 destination = root / "dataset" / folder
@@ -80,9 +82,9 @@ def _write_bank(
                 + "\n"
             )
 
-    fieldnames = sorted(rows[0])
+    fieldnames = sorted({field for row in rows for field in row})
     with (root / "manifest.csv").open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, restval="")
         writer.writeheader()
         writer.writerows(rows)
     counts = {condition_id: maps for condition_id in condition_ids}
@@ -131,6 +133,11 @@ def test_materializes_whole_level_suffix_and_preserves_base_ids(
 
     output_rows = _rows(output / "manifest.csv")
     base_rows = _rows(base / "manifest.csv")
+    with (base / "manifest.csv").open(newline="") as handle:
+        base_fields = set(csv.DictReader(handle).fieldnames or ())
+    with (shard / "manifest.csv").open(newline="") as handle:
+        shard_fields = set(csv.DictReader(handle).fieldnames or ())
+    assert "foundation_only_field" in base_fields - shard_fields
     assert len(output_rows) == len(base_rows) + len(net3)
     output_by_sample = {row["sample_index"]: row for row in output_rows}
     assert all(output_by_sample[row["sample_index"]] == row for row in base_rows)
@@ -138,6 +145,7 @@ def test_materializes_whole_level_suffix_and_preserves_base_ids(
     appended_rows = [
         row for row in output_rows if row["sample_index"] not in base_samples
     ]
+    assert all(row["foundation_only_field"] == "" for row in appended_rows)
     assert {row["map_id"] for row in appended_rows} == {
         f"base-candidates-{generator.sample_index_of(index, 1):04d}"
         for index, condition in enumerate(generator.MAIN_CONDITIONS)
@@ -216,6 +224,23 @@ def test_rejects_provenance_mismatch(tmp_path, candidate_banks):
     output = tmp_path / "output"
 
     with pytest.raises(ValueError, match="source_foundations_sha256"):
+        extension.materialize_candidate_extension(base, [shard], output)
+
+    assert not output.exists()
+
+
+def test_rejects_extension_manifest_fields_absent_from_base(tmp_path, candidate_banks):
+    base, shard, _ = candidate_banks
+    rows = _rows(shard / "manifest.csv")
+    for row in rows:
+        row["extension_only_field"] = "unexpected"
+    with (shard / "manifest.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    output = tmp_path / "output"
+
+    with pytest.raises(ValueError, match="fields absent from the base"):
         extension.materialize_candidate_extension(base, [shard], output)
 
     assert not output.exists()

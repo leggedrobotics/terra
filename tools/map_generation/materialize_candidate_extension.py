@@ -325,9 +325,11 @@ def _validate_compatibility(
     base: dict[str, Any], extensions: list[dict[str, Any]]
 ) -> None:
     for extension in extensions:
-        if extension["fieldnames"] != base["fieldnames"]:
+        extra_fields = set(extension["fieldnames"]) - set(base["fieldnames"])
+        if extra_fields:
             raise ValueError(
-                f"{extension['path']}: manifest header differs from base bank"
+                f"{extension['path']}: extension manifest has fields absent "
+                f"from the base manifest: {sorted(extra_fields)}"
             )
         for field in COMPATIBILITY_FIELDS:
             if extension["summary"][field] != base["summary"][field]:
@@ -349,7 +351,7 @@ def _compare_overlap(
             for field in base["fieldnames"]:
                 if field == "map_id":
                     continue
-                if base_row[field] != extension_row[field]:
+                if base_row.get(field, "") != extension_row.get(field, ""):
                     raise ValueError(
                         f"{extension['path']}: overlap identity differs at "
                         f"{condition_id}/{map_index} field {field!r}"
@@ -441,7 +443,9 @@ def materialize_candidate_extension(
         for condition_id in sorted(extension["counts"]):
             for map_index in range(base_count, extension["map_count"]):
                 source_row = extension["rows_by_condition"][condition_id][map_index]
-                output_row = dict(source_row)
+                output_row = {
+                    field: source_row.get(field, "") for field in base["fieldnames"]
+                }
                 sample_index = int(output_row["sample_index"])
                 output_row["map_id"] = f"{base['map_id_prefix']}-{sample_index:04d}"
                 rows_with_sources.append((output_row, extension["path"], source_row))
