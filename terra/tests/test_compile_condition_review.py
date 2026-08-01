@@ -1,9 +1,28 @@
 import hashlib
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from tools.map_generation import compile_condition_review as review
+
+
+def test_cli_loads_from_outside_the_repository(tmp_path):
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, str(Path(review.__file__)), "--help"],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--review-data" in result.stdout
 
 
 def _review_data():
