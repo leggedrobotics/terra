@@ -181,7 +181,7 @@ def test_fails_if_source_group_is_empty(tmp_path):
         )
 
 
-def test_fails_if_pair_slots_would_leak_one_realized_source(tmp_path):
+def test_fails_if_cross_level_source_conflicts_leave_too_few_slots(tmp_path):
     rows = [
         _row("fnd-a", 0, "foundation-source:7", "slab:0"),
         _row("fnd-a", 1, "foundation-source:8", "slab:1"),
@@ -190,7 +190,9 @@ def test_fails_if_pair_slots_would_leak_one_realized_source(tmp_path):
     ]
     manifest, dataset = _write_bank(tmp_path / "input", rows)
 
-    with pytest.raises(RuntimeError, match="leak a realized source group"):
+    with pytest.raises(
+        RuntimeError, match="only 1 source-disjoint exact pair slots remain"
+    ):
         splits.materialize_splits(
             manifest,
             dataset,
@@ -202,6 +204,41 @@ def test_fails_if_pair_slots_would_leak_one_realized_source(tmp_path):
                 "sealed": 0,
             },
         )
+
+
+def test_skips_cross_level_source_conflicts_before_split_assignment(tmp_path):
+    # The stable hash orders roomy:14 before the two non-conflicting slots.
+    rows = [
+        _row("scarce", 0, "source:shared", "scarce:0"),
+        _row("scarce", 1, "source:scarce", "scarce:1"),
+        _row("roomy", 2, "source:shared", "roomy:14"),
+        _row("roomy", 3, "source:roomy-1", "roomy:1"),
+        _row("roomy", 4, "source:roomy-2", "roomy:2"),
+    ]
+    manifest, dataset = _write_bank(tmp_path / "input", rows)
+
+    summary = splits.materialize_splits(
+        manifest,
+        dataset,
+        tmp_path / "output",
+        {
+            "train": 1,
+            "promotion": 1,
+            "development": 0,
+            "sealed": 0,
+        },
+    )
+
+    materialized = _read_rows(tmp_path / "output" / "manifest.csv")
+    assert {row["source_group_id"] for row in materialized} == {
+        "source:shared",
+        "source:scarce",
+        "source:roomy-1",
+        "source:roomy-2",
+    }
+    assert summary["pair_integrity"]["source_conflict_pair_slots"] == [
+        "roomy:14"
+    ]
 
 
 def test_drops_rerolled_pair_slot_before_exact_selection(tmp_path):

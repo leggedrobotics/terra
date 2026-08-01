@@ -88,7 +88,7 @@ def _read_rows(manifest_path: Path) -> tuple[list[dict[str, str]], list[str]]:
 def select_complete_pair_slots(
     rows: list[dict[str, str]], required_per_condition: int
 ) -> tuple[list[dict[str, str]], dict]:
-    """Drop rerolled pair slots, then take an exact deterministic prefix."""
+    """Select exact pair slots without reusing a source across levels."""
     by_level: dict[str, dict[str, list[dict[str, str]]]] = defaultdict(
         lambda: defaultdict(list)
     )
@@ -101,7 +101,8 @@ def select_complete_pair_slots(
             ) from exc
         by_level[level][row["pair_slot_id"]].append(row)
 
-    selected_slots: set[str] = set()
+    complete_by_level: dict[str, list[str]] = {}
+    sources_by_slot: dict[str, set[str]] = {}
     incomplete_slots: list[str] = []
     for level, slots in sorted(by_level.items()):
         expected_conditions = {
@@ -115,6 +116,9 @@ def select_complete_pair_slots(
                 incomplete_slots.append(pair_slot)
                 continue
             complete.append(pair_slot)
+            sources_by_slot[pair_slot] = {
+                row["source_group_id"] for row in slot_rows
+            }
         complete.sort(key=lambda value: (_stable_hash(value), value))
         if len(complete) < required_per_condition:
             raise RuntimeError(
@@ -122,13 +126,49 @@ def select_complete_pair_slots(
                 f"dropping rerolls; {required_per_condition} required. "
                 "Generate a larger candidate bank."
             )
-        selected_slots.update(complete[:required_per_condition])
+        complete_by_level[level] = complete
+
+    # Give the least-supported level first choice. Once a source is selected,
+    # no slot from another level may reuse it: otherwise post-hoc assignment
+    # could leak that source across train/evaluation splits.
+    selected_slots: set[str] = set()
+    selected_sources: set[str] = set()
+    source_conflict_slots: list[str] = []
+    levels = sorted(
+        complete_by_level,
+        key=lambda level: (
+            len(complete_by_level[level]),
+            _stable_hash(level),
+            level,
+        ),
+    )
+    for level in levels:
+        selected_for_level: list[str] = []
+        conflicts_for_level: list[str] = []
+        for pair_slot in complete_by_level[level]:
+            if sources_by_slot[pair_slot] & selected_sources:
+                conflicts_for_level.append(pair_slot)
+                continue
+            selected_for_level.append(pair_slot)
+            selected_sources.update(sources_by_slot[pair_slot])
+            if len(selected_for_level) == required_per_condition:
+                break
+        if len(selected_for_level) < required_per_condition:
+            raise RuntimeError(
+                f"{level}: only {len(selected_for_level)} source-disjoint exact "
+                "pair slots remain after dropping rerolls and cross-level "
+                f"source conflicts; {required_per_condition} required. "
+                "Generate a larger candidate bank."
+            )
+        selected_slots.update(selected_for_level)
+        source_conflict_slots.extend(conflicts_for_level)
 
     selected = [row for row in rows if row["pair_slot_id"] in selected_slots]
     return selected, {
         "input_pair_slots": sum(len(slots) for slots in by_level.values()),
         "selected_pair_slots": len(selected_slots),
         "incomplete_pair_slots": sorted(incomplete_slots),
+        "source_conflict_pair_slots": sorted(source_conflict_slots),
     }
 
 
