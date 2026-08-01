@@ -199,12 +199,22 @@ three evaluation splits remain frozen.
 ## 6. Runtime sampling is a separate treatment
 
 The taxonomy fixes support and labels. It does not prescribe the training
-weights. P5 compares four scratch arms on the regenerated accepted bank:
+weights. P5 keeps four core scratch arms and adds two bounded family-feasibility
+diagnostics on the regenerated accepted bank:
 
 - `F-ANCHOR`: accepted foundation T0 conditions, uniform by condition;
+- `F-SPECIALIST`: every accepted foundation condition, uniform by condition;
 - `T-ANCHOR`: accepted trench T0 conditions, uniform by condition;
+- `T-SPECIALIST`: every accepted trench condition, uniform by condition;
 - `G-UNIFORM`: every accepted condition, uniform by condition; and
 - `G-ADAPTIVE`: the identical all-condition support, adaptively weighted.
+
+Only `G-UNIFORM` versus `G-ADAPTIVE` is a causal sampler/curriculum
+comparison. The specialists use the same global transition budget but devote
+it to one family, so they diagnose within-family feasibility and cannot isolate
+negative transfer. Anchor-versus-specialist also changes support and exposure.
+All six retain identical architecture, reward, reset, horizon, observation,
+action, dynamics, PPO, checkpoint, and evaluation protocols.
 
 The loader serializes tier depth as `Anchor`, `One-axis`, or `Composed`, but
 those labels do not unlock maps. `G-ADAPTIVE` exposes every accepted condition

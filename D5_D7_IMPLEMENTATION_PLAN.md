@@ -370,7 +370,7 @@ Euler authorization recorded 2026-07-30: after Lorenzo's review decisions are
 exported, accepted conditions are regenerated and split-frozen, and local plus
 allocated-GPU first-update gates pass, sync the paired commits to the isolated
 Euler workspace and submit the bounded map experiments without another
-confirmation. This authorization covers the declared 2,000-update screens and
+confirmation. This authorization covers the six declared 2,000-update screens and
 one 20,000-update `gpuhe.120h` promotion that satisfies the fixed-bank gate. It
 does not authorize unplanned ablations or training on rejected/review-only maps.
 
@@ -395,16 +395,27 @@ Minimal one-seed screen:
 | Arm | Training distribution | Question |
 |---|---|---|
 | `F-ANCHOR` | accepted foundation anchors, uniform | are the new foundation maps learnable from scratch? |
+| `F-SPECIALIST` | every accepted foundation condition, uniform | can the full foundation family learn when it owns the complete compute budget? |
 | `T-ANCHOR` | accepted trench anchors, uniform | are the new trench maps learnable from scratch? |
+| `T-SPECIALIST` | every accepted trench condition, uniform | can the full trench family learn when it owns the complete compute budget? |
 | `G-UNIFORM` | all accepted conditions, uniform | can one generalist learn the target distribution directly? |
 | `G-ADAPTIVE` | same all-condition bank, adaptive progressive sampler | does progressive exposure improve the generalist? |
 
-All four use scratch parameters with the same E8 architecture recipe
+All six use scratch parameters with the same E8 architecture recipe
 (`resnet_spatial_8x8_se`, medium model, MLP, bf16), not an E8 checkpoint.
 `G-ADAPTIVE` is not a strict stage unlock: it retains a 20% aggregate uniform
 floor from update zero and spends 80% on the highest-competence unmastered
 conditions. Call the comparison adaptive-progressive versus uniform and log
 exposure by branch depth.
+
+Only `G-UNIFORM` versus `G-ADAPTIVE` is a causal curriculum ablation: those
+arms have identical support and compute and differ only in sampling weights.
+The specialists are family-feasibility diagnostics, not negative-transfer
+ablations. With all 32 conditions accepted, `F-SPECIALIST` assigns each of 18
+foundation conditions `32/18 = 1.78x` the per-condition exposure of a
+generalist, while `T-SPECIALIST` assigns each of 14 trench conditions
+`32/14 = 2.29x`. Anchor-versus-specialist also changes both support and dose.
+Never rank unlike-support arms by a pooled all-condition score.
 
 Before any submission:
 
@@ -444,6 +455,11 @@ Before any submission:
    v5m/v6m launch scripts are historical inputs, not submission authority. The
    20,000-update P6 path deliberately fails closed until the separate
    256-training-layouts-per-condition expansion contract exists.
+8. [pending final bank] verify that the six declared arm supports are exact:
+   five accepted foundation anchors, all accepted foundations, four accepted
+   trench anchors, all accepted trenches, and the identical all-condition set
+   for both generalists. Specialists must sample conditions uniformly and must
+   fail loudly if their support equals the corresponding anchor support.
 
 Execution:
 
@@ -457,10 +473,11 @@ Execution:
    ShellCheck, syntax, and deterministic `SUBMIT=0` packaging);
 3. [pending final bank] CUDA conv/backward and NCCL preflight in the
    allocation;
-4. [pending final bank] W&B-disabled first-update smoke for all four arms;
+4. [pending final bank] W&B-disabled first-update smoke for all six arms;
 5. [pending smoke receipts] one unblinded 2,000-update seed per arm
-   (`262,144,000` global transitions each at `4 x 1024 x 32`);
-6. [P6, fail-closed] promote a learning generalist arm to one fresh continuous
+   (`262,144,000` global transitions each at `4 x 1024 x 32`, hence
+   `1,572,864,000` transitions across the six-arm screen);
+6. [P6, fail-closed] promote the selected learning generalist arm to one fresh continuous
    20,000-update `gpuhe.120h` run on 256 training layouts per accepted
    condition when
    two fixed evaluations show either one additional exact success or at least
@@ -469,12 +486,23 @@ Execution:
 7. use paired seeds for the final scheduler claim, not to decide whether a
    clearly learning recipe deserves enough compute.
 
-Current execution blockers, checked 2026-07-31:
+The specialist verdict uses only its trained-family slice of the same frozen
+promotion/development panels: family exact successes, family condition-macro
+completion, family micro p10, and family worst-condition completion. Progress
+from update 1,000 to 2,000 requires either one additional family exact success
+or `+0.01` family macro completion; family p10 and family worst condition may
+not regress by more than `0.05`, and all global integrity guards must pass. The
+other family is reported only as a transfer diagnostic. Promotion and P6
+selection remain exclusively between `G-UNIFORM` and `G-ADAPTIVE`; a
+specialist long run requires a separate recorded decision.
 
-- Lorenzo's current diverse-64 map comments and all 32 explicit condition
-  dispositions have not yet been exported from the local review site;
-- the accepted 64/16/16/32 source-disjoint bank therefore has not been
-  regenerated and frozen from those decisions; and
+Current execution blockers, checked 2026-08-01:
+
+- Lorenzo accepted all 32 conditions. The explicit condition receipt is
+  compiled at
+  `/home/lorenzo/moleworks/.artifacts/terra_diverse64_review_admission_20260801_df2143282273/review_admission.json`;
+- the accepted 64/16/16/32 source-disjoint bank is being regenerated from that
+  receipt and is not yet frozen; and
 - allocated CUDA/NCCL, reset-parity, and completed-update-1 receipts do not yet
   exist.
 
@@ -515,7 +543,8 @@ folded into the initial curriculum screen.
 - [ ] Re-run only hard validation and diversity reporting.
 - [ ] Keep the promotion/development/sealed banks unchanged.
 - [ ] Materialize exact sampler slots and record effective condition weights.
-- [ ] Launch the selected scratch specialist/generalist recipes independently.
+- [ ] Launch the selected scratch generalist recipe; any specialist promotion
+      requires its own recorded decision.
 - [ ] Continue long runs while fixed-bank task metrics improve.
 
 ## 6. Metrics and promotion
@@ -595,3 +624,5 @@ or reward schedule to rescue the same run. Each is a separate named treatment.
 | 2026-07-31 | Accepted-bank sampler/evaluator and immutable Euler screens | baseline `af5ca6a`; 223 full tests; staged 64-layout manifest/array gate with required local `slot_count = 64`; deterministic local packaging; no remote mutation | implementation complete; human review/final bank and allocated receipts pending |
 | 2026-07-31 | Explicit condition admission contract | site `885f56b`; Terra compiler + loader binding; baseline `d35d9cf` + `cee4de9`; 7 browser, 40 Terra curriculum, 35 focused baseline, and 232 full baseline checks | complete; Lorenzo dispositions pending |
 | 2026-07-30 | Oversized split-ready candidate and review export | P2 | pending |
+| 2026-08-01 | Explicit 32-condition review decision | all 32 accepted; compiled receipt `terra_diverse64_review_admission_20260801_df2143282273`; raw review SHA-256 `df21432822733a1da3ea5ea47d565b68b601521d84aa90c07556083722ee1691` | complete |
+| 2026-08-01 | Six-arm P5 screen | add full-family `F-SPECIALIST` and `T-SPECIALIST`; retain `G-UNIFORM` versus `G-ADAPTIVE` as the sole curriculum ablation; specialist verdicts use trained-family slices | authorized; final bank and allocated gates pending |
