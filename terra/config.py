@@ -17,10 +17,11 @@ class RewardsType(IntEnum):
 
 
 class RewardStage(IntEnum):
-    """Global reward mode for the compact Stage-B reward experiment."""
+    """Global reward mode for the compact excavation experiments."""
 
     DENSE_SKILL = 0
     TERMINAL_OBJECTIVE = 1
+    ANNEALED_OBJECTIVE = 2
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -222,6 +223,9 @@ class EnvConfig(NamedTuple):
 
     # Appended for positional compatibility with pre-reward-v2 checkpoints.
     reward_stage: int = RewardStage.DENSE_SKILL
+    # Used only by ANNEALED_OBJECTIVE: 0 is exactly dense and 1 is exactly
+    # terminal-only. The trainer updates this scalar between PPO rollouts.
+    terminal_reward_mix: float = 0.0
 
     @classmethod
     def new(cls):

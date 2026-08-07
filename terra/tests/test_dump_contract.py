@@ -675,7 +675,10 @@ class ExactDumpContractTest(unittest.TestCase):
             TrackedAction.do_nothing(),
         )
         expected_step_efficiency = 1.0 - 100.0 / 450.0
-        expected_reward = 1.0 + 0.15 + 0.05 * expected_step_efficiency
+        dense_success_base = 2.0 * 200.0 / 70.0
+        expected_reward = dense_success_base * (
+            1.0 + 0.15 + 0.05 * expected_step_efficiency
+        )
         np.testing.assert_allclose(
             np.asarray(efficient_reward),
             np.asarray(expected_reward, dtype=np.float32),
@@ -693,8 +696,8 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertGreater(float(efficient_reward), float(extra_workspace_reward))
         self.assertGreater(float(efficient_reward), float(slower_reward))
         self.assertGreater(float(slower_reward), float(timeout_reward))
-        self.assertGreaterEqual(float(efficient_reward), 1.0)
-        self.assertLessEqual(float(efficient_reward), 1.2)
+        self.assertGreaterEqual(float(efficient_reward), dense_success_base)
+        self.assertLessEqual(float(efficient_reward), dense_success_base * 1.2)
 
         reward_fn = lambda candidate: old_state._get_reward(
             candidate,
@@ -759,16 +762,120 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(float(success_components["workspace_efficiency"]), 0.0)
         self.assertEqual(float(success_components["step_efficiency"]), 0.0)
 
-    def test_reward_stage_is_appended_for_legacy_positional_checkpoints(self):
+    def test_annealed_reward_endpoints_and_midpoint_are_exact(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[20:22, 20:22] = -1
+        target[40, 40] = 1
+        exact_action = np.zeros(self.SHAPE, dtype=np.int8)
+        exact_action[20:22, 20:22] = -1
+        exact_action[40, 40] = 4
+        old_state = self._state(target)
+        dense = self._state(target, action=exact_action, env_steps=100)
+        terminal = dense._replace(
+            env_cfg=dense.env_cfg._replace(
+                reward_stage=RewardStage.TERMINAL_OBJECTIVE,
+            )
+        )
+
+        dense_reward, _ = old_state._get_reward(
+            dense,
+            TrackedAction.do_nothing(),
+        )
+        terminal_reward, _ = old_state._get_reward(
+            terminal,
+            TrackedAction.do_nothing(),
+        )
+        observed = []
+        for terminal_mix in (0.0, 0.5, 1.0):
+            annealed = dense._replace(
+                env_cfg=dense.env_cfg._replace(
+                    reward_stage=RewardStage.ANNEALED_OBJECTIVE,
+                    terminal_reward_mix=terminal_mix,
+                )
+            )
+            reward, _ = old_state._get_reward(
+                annealed,
+                TrackedAction.do_nothing(),
+            )
+            observed.append(reward)
+        np.testing.assert_allclose(observed[0], dense_reward, rtol=0.0, atol=0.0)
+        np.testing.assert_allclose(
+            observed[1],
+            0.5 * (dense_reward + terminal_reward),
+            rtol=0.0,
+            atol=1e-6,
+        )
+        np.testing.assert_allclose(observed[2], terminal_reward, rtol=0.0, atol=0.0)
+
+    def test_live_anneal_mix_applies_and_survives_auto_reset(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[20:22, 20:22] = -1
+        target[40, 40] = 1
+        completed_action = np.zeros(self.SHAPE, dtype=np.int8)
+        completed_action[20:22, 20:22] = -1
+        completed_action[40, 40] = 4
+        state = self._state(
+            target,
+            action=completed_action,
+            reward_stage=RewardStage.ANNEALED_OBJECTIVE,
+            env_steps=100,
+            productive_workspace_cycles=1,
+        )
+        live_cfg = state.env_cfg._replace(terminal_reward_mix=1.0)
+        env = TerraEnv.new(maps_size_px=64)
+
+        terminal = TerraEnv.step_no_reset.__wrapped__(
+            env,
+            state,
+            TrackedAction.do_nothing(),
+            live_cfg,
+        )
+        dense_success_base = 2.0 * 200.0 / 70.0
+        expected_reward = dense_success_base * (
+            1.0 + 0.15 + 0.05 * (1.0 - 101.0 / 450.0)
+        )
+        np.testing.assert_allclose(
+            np.asarray(terminal.reward),
+            np.asarray(expected_reward, dtype=np.float32),
+            rtol=0.0,
+            atol=1e-6,
+        )
+        self.assertEqual(float(terminal.env_cfg.terminal_reward_mix), 1.0)
+        self.assertEqual(float(terminal.state.env_cfg.terminal_reward_mix), 1.0)
+
+        auto_reset = TerraEnv.step.__wrapped__(
+            env,
+            state,
+            TrackedAction.do_nothing(),
+            target,
+            np.zeros(self.SHAPE, dtype=np.int8),
+            -97.0 * np.ones((3, 3), dtype=np.float32),
+            np.int32(-1),
+            -97.0 * np.ones((64, 3), dtype=np.float32),
+            np.int32(-1),
+            np.ones(self.SHAPE, dtype=np.bool_),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.ones(self.SHAPE, dtype=np.float32),
+            live_cfg,
+        )
+        self.assertTrue(bool(auto_reset.done))
+        self.assertEqual(float(auto_reset.env_cfg.terminal_reward_mix), 1.0)
+        self.assertEqual(float(auto_reset.state.env_cfg.terminal_reward_mix), 1.0)
+
+    def test_reward_fields_are_appended_for_legacy_positional_checkpoints(self):
         current = EnvConfig()
-        self.assertEqual(EnvConfig._fields[-1], "reward_stage")
-        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-1]))
+        self.assertEqual(
+            EnvConfig._fields[-2:],
+            ("reward_stage", "terminal_reward_mix"),
+        )
+        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-2]))
         restored = EnvConfig(*legacy_values)
         self.assertEqual(
             restored.reward_stage,
             RewardStage.DENSE_SKILL,
         )
-        for field_name in EnvConfig._fields[:-1]:
+        self.assertEqual(restored.terminal_reward_mix, 0.0)
+        for field_name in EnvConfig._fields[:-2]:
             self.assertEqual(
                 getattr(restored, field_name),
                 getattr(current, field_name),

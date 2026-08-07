@@ -44,9 +44,9 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 # Future-policy reward/completion semantics introduced by C1/C1a.
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
 
-# The narrow Stage-B terminal-objective experiment keeps success dominant and
-# uses efficiency only to order successful episodes.
-TERMINAL_OBJECTIVE_SUCCESS_REWARD = jnp.float32(1.0)
+# The terminal objective keeps success dominant and uses efficiency only to
+# order successful episodes. Its success base is supplied by the normalized
+# dense terminal component so annealing does not create a reward-scale jump.
 TERMINAL_OBJECTIVE_FAILURE_REWARD = jnp.float32(-1.0)
 TERMINAL_OBJECTIVE_WORKSPACE_WEIGHT = jnp.float32(0.15)
 TERMINAL_OBJECTIVE_STEP_WEIGHT = jnp.float32(0.05)
@@ -3056,10 +3056,11 @@ class State(NamedTuple):
         new_state: "State",
         done: jnp.bool_,
         done_task: jnp.bool_,
+        success_base: Float,
     ) -> tuple[Float, Float, Float]:
-        """Return the Stage-B terminal objective and its two tie-breakers."""
-        # The compact Stage-B bank uses full-reset dig-and-dump tasks. Required
-        # dig volume is therefore the fixed per-map work-volume reference.
+        """Return the terminal-only objective and its two tie-breakers."""
+        # The V8 bank uses full-reset dig-and-dump tasks. Required dig volume is
+        # therefore the fixed per-map work-volume reference.
         target_map = _as_2d_map(new_state.world.target_map.map)
         required_work_volume = jnp.sum(
             jnp.clip(
@@ -3099,9 +3100,12 @@ class State(NamedTuple):
             a_max=jnp.float32(1.0),
         )
         success_reward = (
-            TERMINAL_OBJECTIVE_SUCCESS_REWARD
-            + TERMINAL_OBJECTIVE_WORKSPACE_WEIGHT * workspace_efficiency
-            + TERMINAL_OBJECTIVE_STEP_WEIGHT * step_efficiency
+            jnp.asarray(success_base, dtype=jnp.float32)
+            * (
+                jnp.float32(1.0)
+                + TERMINAL_OBJECTIVE_WORKSPACE_WEIGHT * workspace_efficiency
+                + TERMINAL_OBJECTIVE_STEP_WEIGHT * step_efficiency
+            )
         )
         reward = jnp.where(
             done_task,
@@ -3308,43 +3312,52 @@ class State(NamedTuple):
                 new_state,
                 done,
                 done_task,
+                jnp.float32(2.0)
+                * jnp.asarray(self.env_cfg.rewards.terminal, dtype=jnp.float32)
+                / (
+                    denom
+                    * jnp.asarray(
+                        self.env_cfg.rewards.normalizer,
+                        dtype=jnp.float32,
+                    )
+                ),
             )
         )
-        use_terminal_objective = (
-            jnp.asarray(new_state.env_cfg.reward_stage, dtype=jnp.int32)
-            == jnp.int32(RewardStage.TERMINAL_OBJECTIVE)
+        reward_stage = jnp.asarray(
+            new_state.env_cfg.reward_stage,
+            dtype=jnp.int32,
         )
-        reward = jnp.where(
-            use_terminal_objective,
-            terminal_objective_reward,
-            reward,
+        terminal_mix = jnp.where(
+            reward_stage == jnp.int32(RewardStage.TERMINAL_OBJECTIVE),
+            jnp.float32(1.0),
+            jnp.where(
+                reward_stage == jnp.int32(RewardStage.ANNEALED_OBJECTIVE),
+                jnp.clip(
+                    jnp.asarray(
+                        new_state.env_cfg.terminal_reward_mix,
+                        dtype=jnp.float32,
+                    ),
+                    a_min=jnp.float32(0.0),
+                    a_max=jnp.float32(1.0),
+                ),
+                jnp.float32(0.0),
+            ),
         )
-        components["agent_rewards"] = jnp.where(
-            use_terminal_objective,
-            jnp.zeros_like(components["agent_rewards"]),
-            components["agent_rewards"],
+        dense_mix = jnp.float32(1.0) - terminal_mix
+        reward = dense_mix * reward + terminal_mix * terminal_objective_reward
+        components["agent_rewards"] = (
+            dense_mix * components["agent_rewards"]
         )
         for component_name in ("trench", "existence"):
-            components[component_name] = jnp.where(
-                use_terminal_objective,
-                jnp.float32(0.0),
-                components[component_name],
+            components[component_name] = (
+                dense_mix * components[component_name]
             )
-        components["terminal"] = jnp.where(
-            use_terminal_objective,
-            terminal_objective_reward,
-            components["terminal"],
+        components["terminal"] = (
+            dense_mix * components["terminal"]
+            + terminal_mix * terminal_objective_reward
         )
-        components["workspace_efficiency"] = jnp.where(
-            use_terminal_objective,
-            workspace_efficiency,
-            jnp.float32(0.0),
-        )
-        components["step_efficiency"] = jnp.where(
-            use_terminal_objective,
-            step_efficiency,
-            jnp.float32(0.0),
-        )
+        components["workspace_efficiency"] = terminal_mix * workspace_efficiency
+        components["step_efficiency"] = terminal_mix * step_efficiency
 
         return reward, components
 

@@ -123,6 +123,7 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # preserves the original dense behavior, so keep the existing v1 payload
     # and hashes byte-compatible.
     payload.pop("reward_stage")
+    payload.pop("terminal_reward_mix")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

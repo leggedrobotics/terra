@@ -351,6 +351,10 @@ class TerraEnv(NamedTuple):
         distance_map: Array,
         env_cfg: EnvConfig,
     ) -> TimeStep:
+        # ``env_cfg`` is the live trainer-owned configuration. Keep the state
+        # copy synchronized so rollout-time reward changes apply immediately,
+        # including before an episode reset.
+        state = state._replace(env_cfg=env_cfg)
         new_state = state._step(action)
         transition_diagnostics = self._transition_diagnostics(
             state,
@@ -462,6 +466,7 @@ class TerraEnv(NamedTuple):
         env_cfg: EnvConfig,
     ) -> TimeStep:
         """Step once and return the terminal state instead of auto-resetting on done."""
+        state = state._replace(env_cfg=env_cfg)
         new_state = state._step(action)
         transition_diagnostics = self._transition_diagnostics(
             state,
