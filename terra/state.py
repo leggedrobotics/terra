@@ -15,6 +15,7 @@ from terra.agent import Agent
 from terra.agent import AgentState
 from terra.config import AgentConfig
 from terra.config import EnvConfig
+from terra.config import RewardStage
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -42,6 +43,14 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 
 # Future-policy reward/completion semantics introduced by C1/C1a.
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
+
+# The narrow Stage-B terminal-objective experiment keeps success dominant and
+# uses efficiency only to order successful episodes.
+TERMINAL_OBJECTIVE_SUCCESS_REWARD = jnp.float32(1.0)
+TERMINAL_OBJECTIVE_FAILURE_REWARD = jnp.float32(-1.0)
+TERMINAL_OBJECTIVE_WORKSPACE_WEIGHT = jnp.float32(0.15)
+TERMINAL_OBJECTIVE_STEP_WEIGHT = jnp.float32(0.05)
+TERMINAL_OBJECTIVE_REFERENCE_WORK_VOLUME = jnp.float32(52.0)
 
 
 def _as_2d_map(x: Array) -> Array:
@@ -94,6 +103,7 @@ class State(NamedTuple):
     agent: Agent
 
     env_steps: int
+    productive_workspace_cycles: int
 
 
     @classmethod
@@ -127,6 +137,7 @@ class State(NamedTuple):
                 world=world,
                 agent=initial_agent,
                 env_steps=0,
+                productive_workspace_cycles=0,
             )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
@@ -163,6 +174,7 @@ class State(NamedTuple):
             world=world,
             agent=agent,
             env_steps=0,
+            productive_workspace_cycles=0,
         )
 
     def _reset(
@@ -3039,6 +3051,73 @@ class State(NamedTuple):
         # Agent type check is now handled in the main reward function
         return _get_trench_reward()
 
+    def _get_terminal_objective_reward(
+        self,
+        new_state: "State",
+        done: jnp.bool_,
+        done_task: jnp.bool_,
+    ) -> tuple[Float, Float, Float]:
+        """Return the Stage-B terminal objective and its two tie-breakers."""
+        # The compact Stage-B bank uses full-reset dig-and-dump tasks. Required
+        # dig volume is therefore the fixed per-map work-volume reference.
+        target_map = _as_2d_map(new_state.world.target_map.map)
+        required_work_volume = jnp.sum(
+            jnp.clip(
+                -target_map.astype(jnp.float32),
+                a_min=jnp.float32(0.0),
+            )
+        )
+        workspace_lower_bound = jnp.maximum(
+            jnp.float32(1.0),
+            jnp.ceil(
+                required_work_volume
+                / TERMINAL_OBJECTIVE_REFERENCE_WORK_VOLUME
+            ),
+        )
+        workspace_cycles = jnp.asarray(
+            new_state.productive_workspace_cycles,
+            dtype=jnp.float32,
+        )
+        workspace_efficiency = jnp.clip(
+            workspace_lower_bound
+            / jnp.maximum(workspace_cycles, workspace_lower_bound),
+            a_min=jnp.float32(0.0),
+            a_max=jnp.float32(1.0),
+        )
+
+        horizon = jnp.maximum(
+            jnp.asarray(
+                new_state.env_cfg.max_steps_in_episode,
+                dtype=jnp.float32,
+            ),
+            jnp.float32(1.0),
+        )
+        step_efficiency = jnp.clip(
+            jnp.float32(1.0)
+            - jnp.asarray(new_state.env_steps, dtype=jnp.float32) / horizon,
+            a_min=jnp.float32(0.0),
+            a_max=jnp.float32(1.0),
+        )
+        success_reward = (
+            TERMINAL_OBJECTIVE_SUCCESS_REWARD
+            + TERMINAL_OBJECTIVE_WORKSPACE_WEIGHT * workspace_efficiency
+            + TERMINAL_OBJECTIVE_STEP_WEIGHT * step_efficiency
+        )
+        reward = jnp.where(
+            done_task,
+            success_reward,
+            jnp.where(
+                done,
+                TERMINAL_OBJECTIVE_FAILURE_REWARD,
+                jnp.float32(0.0),
+            ),
+        )
+        return (
+            reward,
+            jnp.where(done_task, workspace_efficiency, jnp.float32(0.0)),
+            jnp.where(done_task, step_efficiency, jnp.float32(0.0)),
+        )
+
     def _get_reward(self, new_state: "State", action_handler: Action):
         action = action_handler.action
 
@@ -3223,6 +3302,49 @@ class State(NamedTuple):
             "agent_active": components["agent_active"],
             "num_agents": components["num_agents"],
         }
+
+        terminal_objective_reward, workspace_efficiency, step_efficiency = (
+            self._get_terminal_objective_reward(
+                new_state,
+                done,
+                done_task,
+            )
+        )
+        use_terminal_objective = (
+            jnp.asarray(new_state.env_cfg.reward_stage, dtype=jnp.int32)
+            == jnp.int32(RewardStage.TERMINAL_OBJECTIVE)
+        )
+        reward = jnp.where(
+            use_terminal_objective,
+            terminal_objective_reward,
+            reward,
+        )
+        components["agent_rewards"] = jnp.where(
+            use_terminal_objective,
+            jnp.zeros_like(components["agent_rewards"]),
+            components["agent_rewards"],
+        )
+        for component_name in ("trench", "existence"):
+            components[component_name] = jnp.where(
+                use_terminal_objective,
+                jnp.float32(0.0),
+                components[component_name],
+            )
+        components["terminal"] = jnp.where(
+            use_terminal_objective,
+            terminal_objective_reward,
+            components["terminal"],
+        )
+        components["workspace_efficiency"] = jnp.where(
+            use_terminal_objective,
+            workspace_efficiency,
+            jnp.float32(0.0),
+        )
+        components["step_efficiency"] = jnp.where(
+            use_terminal_objective,
+            step_efficiency,
+            jnp.float32(0.0),
+        )
 
         return reward, components
 

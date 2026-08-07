@@ -115,6 +115,7 @@ def fake_transition_diagnostics(done):
         "timeout": zeros_bool,
         "action_had_effect": jnp.ones_like(done, dtype=jnp.bool_),
         "productive_workspace_cycle": zeros_int,
+        "productive_workspace_cycles": zeros_int,
         "transition_mass_residual": zeros_int,
         "target_mutation": zeros_bool,
         "obstacle_mutation": zeros_bool,

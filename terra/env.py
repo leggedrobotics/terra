@@ -150,6 +150,8 @@ class TerraEnv(NamedTuple):
             "terminal": zero,
             "trench": zero,
             "existence": zero,
+            "workspace_efficiency": zero,
+            "step_efficiency": zero,
             "dig_completion_edge": zero,
             "dig_completion_inner": zero,
             "dig_completion_total": zero,
@@ -173,6 +175,7 @@ class TerraEnv(NamedTuple):
             "timeout": jnp.zeros((), dtype=jnp.bool_),
             "action_had_effect": jnp.zeros((), dtype=jnp.bool_),
             "productive_workspace_cycle": jnp.zeros((), dtype=jnp.int32),
+            "productive_workspace_cycles": jnp.zeros((), dtype=jnp.int32),
             "transition_mass_residual": jnp.zeros((), dtype=jnp.int32),
             "target_mutation": jnp.zeros((), dtype=jnp.bool_),
             "obstacle_mutation": jnp.zeros((), dtype=jnp.bool_),
@@ -249,6 +252,20 @@ class TerraEnv(NamedTuple):
                 new_state.world.padding_mask.map != state.world.padding_mask.map
             ),
         }
+
+    @staticmethod
+    def _accumulate_productive_workspace_cycles(
+        state: State,
+        new_state: State,
+        transition_diagnostics: dict[str, Array],
+    ) -> State:
+        """Count one cycle on each zero-to-positive load transition."""
+        return new_state._replace(
+            productive_workspace_cycles=(
+                state.productive_workspace_cycles
+                + transition_diagnostics["productive_workspace_cycle"]
+            )
+        )
 
     @staticmethod
     def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
@@ -339,6 +356,17 @@ class TerraEnv(NamedTuple):
             state,
             new_state,
         )
+        new_state = self._accumulate_productive_workspace_cycles(
+            state,
+            new_state,
+            transition_diagnostics,
+        )
+        transition_diagnostics = {
+            **transition_diagnostics,
+            "productive_workspace_cycles": (
+                new_state.productive_workspace_cycles
+            ),
+        }
         reward, reward_components = state._get_reward(new_state, action)
         # Recompute reachability only for effective DO actions that changed terrain.
         # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
@@ -439,6 +467,17 @@ class TerraEnv(NamedTuple):
             state,
             new_state,
         )
+        new_state = self._accumulate_productive_workspace_cycles(
+            state,
+            new_state,
+            transition_diagnostics,
+        )
+        transition_diagnostics = {
+            **transition_diagnostics,
+            "productive_workspace_cycles": (
+                new_state.productive_workspace_cycles
+            ),
+        }
         reward, reward_components = state._get_reward(new_state, action)
         is_do = action.action[0] == TrackedActionType.DO
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
@@ -842,6 +881,9 @@ class TerraEnvBatch:
                     "action_had_effect": item.info["action_had_effect"],
                     "productive_workspace_cycle": item.info[
                         "productive_workspace_cycle"
+                    ],
+                    "productive_workspace_cycles": item.info[
+                        "productive_workspace_cycles"
                     ],
                     "transition_mass_residual": item.info["transition_mass_residual"],
                     "target_mutation": item.info["target_mutation"],

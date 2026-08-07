@@ -13,6 +13,7 @@ from terra.actions import TrackedActionType
 from terra.benchmark_state import SCHEMA as AGENT_STATE_SCHEMA
 from terra.config import BatchConfig
 from terra.config import EnvConfig
+from terra.config import RewardStage
 from terra.config import Rewards
 from terra.config import RewardsType
 from terra.state import CORRECTED_DENSE_CONTRACT
@@ -116,6 +117,12 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
         action_types=(tracked_type,),
     )
     payload = _jsonable(config)
+    if config.reward_stage != RewardStage.DENSE_SKILL:
+        raise RuntimeError("The v1 benchmark must use dense-skill rewards.")
+    # RewardStage was appended after the v1 protocol was frozen. Its default
+    # preserves the original dense behavior, so keep the existing v1 payload
+    # and hashes byte-compatible.
+    payload.pop("reward_stage")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

@@ -16,6 +16,13 @@ class RewardsType(IntEnum):
     SPARSE = 1
 
 
+class RewardStage(IntEnum):
+    """Global reward mode for the compact Stage-B reward experiment."""
+
+    DENSE_SKILL = 0
+    TERMINAL_OBJECTIVE = 1
+
+
 class ImmutableMapsConfig(NamedTuple):
     """
     Define the max size of the map in meters.
@@ -212,6 +219,9 @@ class EnvConfig(NamedTuple):
     enable_reachability_obs: bool = False
     reachability_inflation_tiles: int = 3 # not used if downsample factor != 1
     reachability_downsample_factor: int = 2
+
+    # Appended for positional compatibility with pre-reward-v2 checkpoints.
+    reward_stage: int = RewardStage.DENSE_SKILL
 
     @classmethod
     def new(cls):

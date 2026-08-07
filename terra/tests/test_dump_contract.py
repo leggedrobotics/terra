@@ -1,3 +1,4 @@
+import pickle
 import unittest
 
 import jax
@@ -8,6 +9,7 @@ from terra.actions import TrackedAction
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import MapsDimsConfig
+from terra.config import RewardStage
 from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.state import CORRECTED_DENSE_CONTRACT
@@ -18,7 +20,11 @@ class ExactDumpContractTest(unittest.TestCase):
     SHAPE = (64, 64)
 
     @staticmethod
-    def _env_config(*, enforce_edge: bool = False) -> EnvConfig:
+    def _env_config(
+        *,
+        enforce_edge: bool = False,
+        reward_stage: int = RewardStage.DENSE_SKILL,
+    ) -> EnvConfig:
         batch_env = object.__new__(TerraEnvBatch)
         batch_env.batch_cfg = BatchConfig()._replace(
             maps_dims=MapsDimsConfig(maps_edge_length=64)
@@ -41,6 +47,8 @@ class ExactDumpContractTest(unittest.TestCase):
             ),
             agent_types=(0,),
             action_types=(0,),
+            reward_stage=reward_stage,
+            max_steps_in_episode=450,
             enforce_foundation_border_alignment=enforce_edge,
             foundation_dump_min_free_fraction=0.0,
         )
@@ -55,6 +63,9 @@ class ExactDumpContractTest(unittest.TestCase):
         dumpability: np.ndarray | None = None,
         loaded: int = 0,
         enforce_edge: bool = False,
+        reward_stage: int = RewardStage.DENSE_SKILL,
+        env_steps: int = 0,
+        productive_workspace_cycles: int = 0,
     ) -> State:
         if action is None:
             action = np.zeros(cls.SHAPE, dtype=np.int8)
@@ -64,7 +75,10 @@ class ExactDumpContractTest(unittest.TestCase):
             dumpability = np.ones(cls.SHAPE, dtype=np.bool_)
         state = State.new(
             jax.random.PRNGKey(7),
-            cls._env_config(enforce_edge=enforce_edge),
+            cls._env_config(
+                enforce_edge=enforce_edge,
+                reward_stage=reward_stage,
+            ),
             target,
             padding,
             -97.0 * np.ones((3, 3), dtype=np.float32),
@@ -81,7 +95,10 @@ class ExactDumpContractTest(unittest.TestCase):
             angle_cabin=jnp.array([0], dtype=jnp.int8),
             loaded=jnp.array([loaded], dtype=jnp.int8),
         )
-        return state._set_current_agent_state(current)
+        return state._set_current_agent_state(current)._replace(
+            env_steps=env_steps,
+            productive_workspace_cycles=productive_workspace_cycles,
+        )
 
     @classmethod
     def _workspace_coordinates(cls) -> np.ndarray:
@@ -477,6 +494,285 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(int(diagnostics["transition_mass_residual"]), 0)
         self.assertFalse(bool(diagnostics["target_mutation"]))
         self.assertFalse(bool(diagnostics["obstacle_mutation"]))
+
+    def test_productive_workspace_counter_counts_load_boundaries_and_resets(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        old_state = self._state(target)
+        loaded_agent = old_state._get_current_agent_state()._replace(
+            loaded=jnp.array([5], dtype=jnp.int8)
+        )
+        loaded_state = old_state._set_current_agent_state(loaded_agent)
+        first_diagnostics = TerraEnv._transition_diagnostics(
+            old_state,
+            loaded_state,
+        )
+        first_cycle = TerraEnv._accumulate_productive_workspace_cycles(
+            old_state,
+            loaded_state,
+            first_diagnostics,
+        )
+        self.assertEqual(int(first_cycle.productive_workspace_cycles), 1)
+
+        same_load_diagnostics = TerraEnv._transition_diagnostics(
+            first_cycle,
+            first_cycle,
+        )
+        same_cycle = TerraEnv._accumulate_productive_workspace_cycles(
+            first_cycle,
+            first_cycle,
+            same_load_diagnostics,
+        )
+        self.assertEqual(int(same_cycle.productive_workspace_cycles), 1)
+
+        unloaded_agent = same_cycle._get_current_agent_state()._replace(
+            loaded=jnp.array([0], dtype=jnp.int8)
+        )
+        unloaded_state = same_cycle._set_current_agent_state(unloaded_agent)
+        unload_diagnostics = TerraEnv._transition_diagnostics(
+            same_cycle,
+            unloaded_state,
+        )
+        after_unload = TerraEnv._accumulate_productive_workspace_cycles(
+            same_cycle,
+            unloaded_state,
+            unload_diagnostics,
+        )
+        self.assertEqual(int(after_unload.productive_workspace_cycles), 1)
+
+        reloaded_agent = after_unload._get_current_agent_state()._replace(
+            loaded=jnp.array([3], dtype=jnp.int8)
+        )
+        reloaded_state = after_unload._set_current_agent_state(reloaded_agent)
+        reload_diagnostics = TerraEnv._transition_diagnostics(
+            after_unload,
+            reloaded_state,
+        )
+        second_cycle = TerraEnv._accumulate_productive_workspace_cycles(
+            after_unload,
+            reloaded_state,
+            reload_diagnostics,
+        )
+        self.assertEqual(int(second_cycle.productive_workspace_cycles), 2)
+        self.assertEqual(
+            int(self._state(target).productive_workspace_cycles),
+            0,
+        )
+
+        terminal_target = np.zeros(self.SHAPE, dtype=np.int8)
+        terminal_target[20:22, 20:22] = -1
+        terminal_target[40, 40] = 1
+        terminal_action = np.zeros(self.SHAPE, dtype=np.int8)
+        terminal_action[20:22, 20:22] = -1
+        terminal_action[40, 40] = 4
+        terminal_state = self._state(
+            terminal_target,
+            action=terminal_action,
+            reward_stage=RewardStage.TERMINAL_OBJECTIVE,
+            env_steps=100,
+            productive_workspace_cycles=3,
+        )
+        env = TerraEnv.new(maps_size_px=64)
+        step_no_reset = TerraEnv.step_no_reset.__wrapped__(
+            env,
+            terminal_state,
+            TrackedAction.do_nothing(),
+            terminal_state.env_cfg,
+        )
+        self.assertTrue(bool(step_no_reset.done))
+        self.assertEqual(
+            int(step_no_reset.info["productive_workspace_cycles"]),
+            3,
+        )
+        self.assertEqual(
+            int(step_no_reset.state.productive_workspace_cycles),
+            3,
+        )
+
+        auto_reset = TerraEnv.step.__wrapped__(
+            env,
+            terminal_state,
+            TrackedAction.do_nothing(),
+            terminal_target,
+            np.zeros(self.SHAPE, dtype=np.int8),
+            -97.0 * np.ones((3, 3), dtype=np.float32),
+            np.int32(-1),
+            -97.0 * np.ones((64, 3), dtype=np.float32),
+            np.int32(-1),
+            np.ones(self.SHAPE, dtype=np.bool_),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.ones(self.SHAPE, dtype=np.float32),
+            terminal_state.env_cfg,
+        )
+        self.assertTrue(bool(auto_reset.done))
+        self.assertEqual(
+            int(auto_reset.info["productive_workspace_cycles"]),
+            3,
+        )
+        self.assertEqual(
+            int(auto_reset.state.productive_workspace_cycles),
+            0,
+        )
+
+    def test_terminal_objective_is_terminal_only_and_orders_successes(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[20:22, 20:22] = -1
+        target[40, 40] = 1
+        old_state = self._state(
+            target,
+            reward_stage=RewardStage.TERMINAL_OBJECTIVE,
+        )
+
+        nonterminal = self._state(
+            target,
+            reward_stage=RewardStage.TERMINAL_OBJECTIVE,
+            env_steps=1,
+        )
+        nonterminal_reward, nonterminal_components = old_state._get_reward(
+            nonterminal,
+            TrackedAction.do_nothing(),
+        )
+        self.assertEqual(float(nonterminal_reward), 0.0)
+        self.assertEqual(float(nonterminal_components["terminal"]), 0.0)
+        self.assertEqual(float(nonterminal_components["existence"]), 0.0)
+        self.assertEqual(float(nonterminal_components["trench"]), 0.0)
+        np.testing.assert_array_equal(
+            np.asarray(nonterminal_components["agent_rewards"]),
+            np.zeros((4,), dtype=np.float32),
+        )
+
+        timeout = nonterminal._replace(env_steps=450)
+        timeout_reward, timeout_components = old_state._get_reward(
+            timeout,
+            TrackedAction.do_nothing(),
+        )
+        self.assertEqual(float(timeout_reward), -1.0)
+        self.assertEqual(float(timeout_components["workspace_efficiency"]), 0.0)
+        self.assertEqual(float(timeout_components["step_efficiency"]), 0.0)
+
+        exact_action = np.zeros(self.SHAPE, dtype=np.int8)
+        exact_action[20:22, 20:22] = -1
+        exact_action[40, 40] = 4
+        efficient = self._state(
+            target,
+            action=exact_action,
+            reward_stage=RewardStage.TERMINAL_OBJECTIVE,
+            env_steps=100,
+            productive_workspace_cycles=1,
+        )
+        extra_workspace = efficient._replace(productive_workspace_cycles=2)
+        slower = efficient._replace(env_steps=200)
+
+        efficient_reward, efficient_components = old_state._get_reward(
+            efficient,
+            TrackedAction.do_nothing(),
+        )
+        extra_workspace_reward, _ = old_state._get_reward(
+            extra_workspace,
+            TrackedAction.do_nothing(),
+        )
+        slower_reward, _ = old_state._get_reward(
+            slower,
+            TrackedAction.do_nothing(),
+        )
+        expected_step_efficiency = 1.0 - 100.0 / 450.0
+        expected_reward = 1.0 + 0.15 + 0.05 * expected_step_efficiency
+        np.testing.assert_allclose(
+            np.asarray(efficient_reward),
+            np.asarray(expected_reward, dtype=np.float32),
+            rtol=0.0,
+            atol=1e-6,
+        )
+        np.testing.assert_allclose(
+            np.asarray(efficient_components["workspace_efficiency"]),
+            np.asarray(1.0, dtype=np.float32),
+        )
+        np.testing.assert_allclose(
+            np.asarray(efficient_components["step_efficiency"]),
+            np.asarray(expected_step_efficiency, dtype=np.float32),
+        )
+        self.assertGreater(float(efficient_reward), float(extra_workspace_reward))
+        self.assertGreater(float(efficient_reward), float(slower_reward))
+        self.assertGreater(float(slower_reward), float(timeout_reward))
+        self.assertGreaterEqual(float(efficient_reward), 1.0)
+        self.assertLessEqual(float(efficient_reward), 1.2)
+
+        reward_fn = lambda candidate: old_state._get_reward(
+            candidate,
+            TrackedAction.do_nothing(),
+        )[0]
+        compiled = jax.jit(reward_fn)(efficient)
+        batched_states = jax.tree_util.tree_map(
+            lambda value: jnp.stack([jnp.asarray(value), jnp.asarray(value)]),
+            efficient,
+        )
+        vectorized = jax.vmap(reward_fn)(batched_states)
+        np.testing.assert_allclose(np.asarray(compiled), np.asarray(efficient_reward))
+        np.testing.assert_allclose(
+            np.asarray(vectorized),
+            np.repeat(np.asarray(efficient_reward)[None], 2, axis=0),
+        )
+
+    def test_dense_reward_golden_values_are_unchanged(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[20:22, 20:22] = -1
+        target[40, 40] = 1
+        old_state = self._state(target)
+
+        nonterminal = self._state(target, env_steps=1)
+        nonterminal_reward, nonterminal_components = old_state._get_reward(
+            nonterminal,
+            TrackedAction.do_nothing(),
+        )
+        np.testing.assert_allclose(
+            np.asarray(nonterminal_reward),
+            np.asarray(-0.0035714285913854837, dtype=np.float32),
+            rtol=0.0,
+            atol=0.0,
+        )
+        np.testing.assert_allclose(
+            np.asarray(nonterminal_components["existence"]),
+            np.asarray(-0.0035714285714285713, dtype=np.float32),
+            rtol=0.0,
+            atol=0.0,
+        )
+
+        exact_action = np.zeros(self.SHAPE, dtype=np.int8)
+        exact_action[20:22, 20:22] = -1
+        exact_action[40, 40] = 4
+        success = self._state(target, action=exact_action, env_steps=101)
+        success_reward, success_components = old_state._get_reward(
+            success,
+            TrackedAction.do_nothing(),
+        )
+        np.testing.assert_allclose(
+            np.asarray(success_reward),
+            np.asarray(6.853571891784668, dtype=np.float32),
+            rtol=0.0,
+            atol=0.0,
+        )
+        np.testing.assert_allclose(
+            np.asarray(success_components["terminal"]),
+            np.asarray(6.857143402099609, dtype=np.float32),
+            rtol=0.0,
+            atol=0.0,
+        )
+        self.assertEqual(float(success_components["workspace_efficiency"]), 0.0)
+        self.assertEqual(float(success_components["step_efficiency"]), 0.0)
+
+    def test_reward_stage_is_appended_for_legacy_positional_checkpoints(self):
+        current = EnvConfig()
+        self.assertEqual(EnvConfig._fields[-1], "reward_stage")
+        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-1]))
+        restored = EnvConfig(*legacy_values)
+        self.assertEqual(
+            restored.reward_stage,
+            RewardStage.DENSE_SKILL,
+        )
+        for field_name in EnvConfig._fields[:-1]:
+            self.assertEqual(
+                getattr(restored, field_name),
+                getattr(current, field_name),
+            )
 
     def test_transition_diagnostics_ignore_bookkeeping_and_detect_integrity(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
