@@ -21,6 +21,8 @@ training semantics remain unchanged:
 """
 from __future__ import annotations
 
+import heapq
+import math
 import os
 from collections import deque
 from pathlib import Path
@@ -38,6 +40,95 @@ except Exception:
 DEFAULT_REALISTIC_MAX_DISTANCE = 24
 DEFAULT_OBSTACLE_PROXIMITY_RADIUS = 6
 DEFAULT_OBSTACLE_PROXIMITY_WEIGHT = 0.35
+
+# R2 has one distance definition.  The identifiers are recorded by the trainer
+# alongside the sidecar hash; the numeric reference and admitted bound are
+# experiment constants supplied after the bank-wide audit.
+REWARD_V2_DISTANCE_PROTOCOL_ID = "obstacle_geodesic_8_physical_global_v1"
+REWARD_V2_DISTANCE_METRIC = "obstacle_geodesic_8_physical_metres"
+REWARD_V2_DISTANCE_NORMALIZATION = "global_reference_metres"
+
+
+def compute_reward_v2_distance_map(
+    target_map: np.ndarray,
+    obstacle_mask: np.ndarray,
+    *,
+    tile_size_m: float,
+    distance_ref_m: float,
+    distance_bound: float,
+) -> np.ndarray:
+    """Return the canonical R2 distance-to-accepted-dump field.
+
+    Cardinal steps cost one tile and diagonal steps cost ``sqrt(2)`` tiles.
+    The resulting physical metres are divided by one benchmark-wide reference;
+    no per-map rescaling or clipping is allowed.
+    """
+    target = np.asarray(target_map)
+    obstacles = np.asarray(obstacle_mask, dtype=np.bool_)
+    if target.ndim != 2 or obstacles.shape != target.shape:
+        raise ValueError(
+            "R2 target and obstacle maps must be matching two-dimensional arrays."
+        )
+    for name, value in (
+        ("tile_size_m", tile_size_m),
+        ("distance_ref_m", distance_ref_m),
+        ("distance_bound", distance_bound),
+    ):
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f"R2 {name} must be finite and positive; got {value}.")
+
+    accepted_dump = (target > 0) & ~obstacles
+    if not np.any(accepted_dump):
+        raise ValueError("R2 distance field requires an accepted dump cell.")
+
+    height, width = target.shape
+    distance_tiles = np.full((height, width), np.inf, dtype=np.float64)
+    frontier: list[tuple[float, int, int]] = []
+    for y, x in np.argwhere(accepted_dump):
+        distance_tiles[y, x] = 0.0
+        heapq.heappush(frontier, (0.0, int(y), int(x)))
+
+    moves = (
+        (-1, 0, 1.0),
+        (1, 0, 1.0),
+        (0, -1, 1.0),
+        (0, 1, 1.0),
+        (-1, -1, math.sqrt(2.0)),
+        (-1, 1, math.sqrt(2.0)),
+        (1, -1, math.sqrt(2.0)),
+        (1, 1, math.sqrt(2.0)),
+    )
+    while frontier:
+        current, y, x = heapq.heappop(frontier)
+        if current != distance_tiles[y, x]:
+            continue
+        for dy, dx, step in moves:
+            ny, nx = y + dy, x + dx
+            if not (0 <= ny < height and 0 <= nx < width):
+                continue
+            if obstacles[ny, nx]:
+                continue
+            proposed = current + step
+            if proposed < distance_tiles[ny, nx]:
+                distance_tiles[ny, nx] = proposed
+                heapq.heappush(frontier, (proposed, ny, nx))
+
+    traversable = ~obstacles
+    if np.any(~np.isfinite(distance_tiles[traversable])):
+        raise ValueError(
+            "R2 distance field has traversable cells disconnected from every "
+            "accepted dump cell."
+        )
+
+    distance = distance_tiles * float(tile_size_m) / float(distance_ref_m)
+    distance[obstacles] = 0.0
+    maximum = float(np.max(distance))
+    if maximum > float(distance_bound) + 1e-6:
+        raise ValueError(
+            "R2 distance field exceeds the admitted global bound: "
+            f"max={maximum:.9g}, bound={distance_bound:.9g}."
+        )
+    return distance.astype(np.float32)
 
 
 def compute_distance_map_taxicab(
@@ -271,8 +362,12 @@ def write_distance_maps_recursive(
 
 __all__ = [
     "DEFAULT_REALISTIC_MAX_DISTANCE",
+    "REWARD_V2_DISTANCE_METRIC",
+    "REWARD_V2_DISTANCE_NORMALIZATION",
+    "REWARD_V2_DISTANCE_PROTOCOL_ID",
     "compute_distance_map_taxicab",
     "compute_geodesic_distance_map",
+    "compute_reward_v2_distance_map",
     "write_distance_maps",
     "write_distance_maps_recursive",
 ]

@@ -22,6 +22,20 @@ class RewardStage(IntEnum):
     DENSE_SKILL = 0
     TERMINAL_OBJECTIVE = 1
     ANNEALED_OBJECTIVE = 2
+    REWARD_V2 = 3
+
+
+DENSE_REWARD_PROTOCOL_ID = "dense_skill_legacy_relocation_v1"
+REWARD_V2_PROTOCOL_ID = "material_potential_v2"
+REWARD_V2_SUCCESS_BONUS = 6.0
+REWARD_V2_HORIZON_FAILURE_PENALTY = 1.0
+REWARD_V2_STEP_COST_TOTAL = 1.0
+REWARD_V2_ALPHA = 1.0
+REWARD_V2_BETA = 1.5
+REWARD_V2_POTENTIAL_GAMMA = 0.9984
+REWARD_V2_SHAPING_WEIGHT = 1.0
+REWARD_V2_DISTANCE_REF_M = 16.0
+REWARD_V2_DISTANCE_BOUND = 2.5
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -52,7 +66,9 @@ class ImmutableAgentConfig(NamedTuple):
     angles_cabin: int = 12
     max_wheel_angle: int = 2
     wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
-    num_state_obs: int = 8  # number of state observations: [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded, agent_type, shovel_lifted]
+    # [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded,
+    #  agent_type, shovel_lifted, normalized carry work]
+    num_state_obs: int = 9
 
 
 class AgentConfig(NamedTuple):

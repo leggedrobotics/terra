@@ -16,6 +16,15 @@ from terra.agent import AgentState
 from terra.config import AgentConfig
 from terra.config import EnvConfig
 from terra.config import RewardStage
+from terra.config import REWARD_V2_ALPHA
+from terra.config import REWARD_V2_BETA
+from terra.config import REWARD_V2_DISTANCE_BOUND
+from terra.config import REWARD_V2_DISTANCE_REF_M
+from terra.config import REWARD_V2_HORIZON_FAILURE_PENALTY
+from terra.config import REWARD_V2_POTENTIAL_GAMMA
+from terra.config import REWARD_V2_SHAPING_WEIGHT
+from terra.config import REWARD_V2_STEP_COST_TOTAL
+from terra.config import REWARD_V2_SUCCESS_BONUS
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -43,6 +52,7 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 
 # Future-policy reward/completion semantics introduced by C1/C1a.
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
+REWARD_V2_HORIZON = jnp.float32(450.0)
 
 # The terminal objective keeps success dominant and uses efficiency only to
 # order successful episodes. Its success base is supplied by the normalized
@@ -104,6 +114,7 @@ class State(NamedTuple):
 
     env_steps: int
     productive_workspace_cycles: int
+    material_h_reset: Float
 
 
     @classmethod
@@ -131,13 +142,17 @@ class State(NamedTuple):
         if initial_agent is not None:
             # Benchmark resets own the complete Agent tree. Do not derive caches,
             # choose a current agent, or consume reset randomness in this path.
-            return State(
+            state = State(
                 key=key,
                 env_cfg=env_cfg,
                 world=world,
                 agent=initial_agent,
                 env_steps=0,
                 productive_workspace_cycles=0,
+                material_h_reset=jnp.float32(0.0),
+            )
+            return state._replace(
+                material_h_reset=state._compute_material_work()
             )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
@@ -168,13 +183,17 @@ class State(NamedTuple):
         start_idx = jax.random.categorical(cat_key, logits).astype(jnp.int32)
         agent = agent._replace(current_agent=start_idx)
 
-        return State(
+        state = State(
             key=key,
             env_cfg=env_cfg,
             world=world,
             agent=agent,
             env_steps=0,
             productive_workspace_cycles=0,
+            material_h_reset=jnp.float32(0.0),
+        )
+        return state._replace(
+            material_h_reset=state._compute_material_work()
         )
 
     def _reset(
@@ -3359,6 +3378,77 @@ class State(NamedTuple):
         components["workspace_efficiency"] = terminal_mix * workspace_efficiency
         components["step_efficiency"] = terminal_mix * step_efficiency
 
+        use_reward_v2 = (
+            reward_stage == jnp.int32(RewardStage.REWARD_V2)
+        )
+        zero = jnp.float32(0.0)
+        reward_v2, reward_v2_components = jax.lax.cond(
+            use_reward_v2,
+            lambda: self._get_reward_v2(
+                new_state,
+                done,
+                done_task,
+            ),
+            lambda: (
+                zero,
+                {
+                    "reward_v2_q": zero,
+                    "reward_v2_q_next": zero,
+                    "reward_v2_p": zero,
+                    "reward_v2_p_next": zero,
+                    "reward_v2_phi": zero,
+                    "reward_v2_phi_next": zero,
+                    "reward_v2_material_work": zero,
+                    "reward_v2_h_reset": zero,
+                    "reward_v2_carry_work": zero,
+                    "reward_v2_shaping": zero,
+                    "reward_v2_success": zero,
+                    "reward_v2_horizon_failure": zero,
+                    "reward_v2_step": zero,
+                    "reward_v2_valid": zero,
+                },
+            ),
+        )
+        reward = jnp.where(use_reward_v2, reward_v2, reward)
+        reward_v2_agent = jnp.zeros(
+            (MAX_AGENTS,),
+            dtype=jnp.float32,
+        ).at[self.agent.current_agent].set(
+            reward_v2_components["reward_v2_shaping"]
+        )
+        components["agent_rewards"] = jnp.where(
+            use_reward_v2,
+            reward_v2_agent,
+            components["agent_rewards"],
+        )
+        components["terminal"] = jnp.where(
+            use_reward_v2,
+            reward_v2_components["reward_v2_success"]
+            + reward_v2_components["reward_v2_horizon_failure"],
+            components["terminal"],
+        )
+        components["existence"] = jnp.where(
+            use_reward_v2,
+            reward_v2_components["reward_v2_step"],
+            components["existence"],
+        )
+        for component_name in (
+            "trench",
+            "workspace_efficiency",
+            "step_efficiency",
+        ):
+            components[component_name] = jnp.where(
+                use_reward_v2,
+                jnp.float32(0.0),
+                components[component_name],
+            )
+        for component_name, value in reward_v2_components.items():
+            components[component_name] = jnp.where(
+                use_reward_v2,
+                value,
+                jnp.float32(0.0),
+            )
+
         return reward, components
 
     def _get_task_completion(
@@ -3977,6 +4067,173 @@ class State(NamedTuple):
             action_map,
             target_map,
         )["absolute_completion"]
+
+    def _required_excavation_volume(self) -> Float:
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        return jnp.sum(jnp.clip(-target, a_min=jnp.float32(0.0)))
+
+    def _total_carry_work(self) -> Float:
+        credits = jnp.stack(
+            [
+                jnp.asarray(agent_state.carry_relocation_credit, dtype=jnp.float32)
+                for agent_state in self.agent.agent_states
+            ]
+        )
+        return jnp.sum(
+            jnp.where(
+                self.agent.agent_active.astype(jnp.bool_),
+                credits,
+                jnp.float32(0.0),
+            )
+        )
+
+    def _compute_material_work(self) -> Float:
+        """Return remaining excavation plus off-zone and carried haul work."""
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
+        distance = _as_2d_map(self.world.relocation_distance_map).astype(
+            jnp.float32
+        )
+        required = jnp.clip(-target, a_min=jnp.float32(0.0))
+        completed = jnp.minimum(
+            jnp.clip(-action, a_min=jnp.float32(0.0)),
+            required,
+        )
+        remaining = required - completed
+        off_zone_soil = jnp.where(
+            self._accepted_dump_mask(target),
+            jnp.float32(0.0),
+            jnp.clip(action, a_min=jnp.float32(0.0)),
+        )
+        return (
+            jnp.sum(remaining * distance)
+            + jnp.sum(off_zone_soil * distance)
+            + self._total_carry_work()
+        )
+
+    def _reward_v2_state_values(self) -> tuple[Float, Float, Float, Float, Float]:
+        """Return ``(Q, H, P, Phi, valid)`` for the R2 material potential."""
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
+        required = jnp.clip(-target, a_min=jnp.float32(0.0))
+        v0 = jnp.sum(required)
+        completed = jnp.minimum(
+            jnp.clip(-action, a_min=jnp.float32(0.0)),
+            required,
+        )
+        q = jnp.sum(completed) / jnp.maximum(v0, jnp.float32(1e-6))
+        h = self._compute_material_work()
+        p = (self.material_h_reset - h) / jnp.maximum(v0, jnp.float32(1e-6))
+        bound = jnp.float32(REWARD_V2_DISTANCE_BOUND)
+        alpha = jnp.float32(REWARD_V2_ALPHA)
+        beta = jnp.float32(REWARD_V2_BETA)
+        phi = alpha * q + beta * (p + bound)
+        distance = _as_2d_map(self.world.relocation_distance_map)
+        constants = jnp.asarray(
+            [
+                REWARD_V2_SUCCESS_BONUS,
+                REWARD_V2_HORIZON_FAILURE_PENALTY,
+                REWARD_V2_STEP_COST_TOTAL,
+                REWARD_V2_ALPHA,
+                REWARD_V2_BETA,
+                REWARD_V2_POTENTIAL_GAMMA,
+                REWARD_V2_SHAPING_WEIGHT,
+                REWARD_V2_DISTANCE_REF_M,
+                REWARD_V2_DISTANCE_BOUND,
+            ],
+            dtype=jnp.float32,
+        )
+        agent_types = jnp.stack(
+            [agent_state.agent_type[0] for agent_state in self.agent.agent_states]
+        )
+        action_types = jnp.stack(
+            [agent_state.action_type[0] for agent_state in self.agent.agent_states]
+        )
+        active = self.agent.agent_active.astype(jnp.bool_)
+        r2_embodiment = jnp.logical_and(
+            self.agent.num_agents == 1,
+            jnp.all(
+                jnp.logical_or(
+                    jnp.logical_not(active),
+                    jnp.logical_and(agent_types == 0, action_types == 0),
+                )
+            ),
+        )
+        valid = jnp.logical_and(
+            jnp.logical_and(
+                v0 > 0,
+                jnp.logical_and(
+                    self.env_cfg.max_steps_in_episode == 450,
+                    r2_embodiment,
+                ),
+            ),
+            jnp.logical_and(
+                jnp.all(jnp.isfinite(constants)),
+                jnp.logical_and(
+                    jnp.all(jnp.isfinite(distance)),
+                    jnp.logical_and(
+                        jnp.min(distance) >= 0,
+                        jnp.logical_and(
+                            jnp.max(distance) <= bound + jnp.float32(1e-5),
+                            jnp.logical_and(
+                                q >= -jnp.float32(1e-5),
+                                jnp.logical_and(
+                                    q <= jnp.float32(1.0) + jnp.float32(1e-5),
+                                    jnp.logical_and(
+                                        p >= -bound - jnp.float32(1e-4),
+                                        p <= bound + jnp.float32(1e-4),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        return q, h, p, phi, valid.astype(jnp.float32)
+
+    def _get_reward_v2(
+        self,
+        new_state: "State",
+        done: jnp.bool_,
+        exact_success: jnp.bool_,
+    ) -> tuple[Float, dict[str, Float]]:
+        """Compute the one R2 reward on every physical transition."""
+        q, h, p, phi, valid = self._reward_v2_state_values()
+        q_next, h_next, p_next, phi_next, valid_next = (
+            new_state._reward_v2_state_values()
+        )
+        horizon_failure = jnp.logical_and(done, jnp.logical_not(exact_success))
+        gamma = jnp.float32(REWARD_V2_POTENTIAL_GAMMA)
+        shaping_weight = jnp.float32(REWARD_V2_SHAPING_WEIGHT)
+        shaping = shaping_weight * (gamma * phi_next - phi)
+        success = (
+            jnp.float32(REWARD_V2_SUCCESS_BONUS)
+            * exact_success.astype(jnp.float32)
+        )
+        failure = -jnp.float32(
+            REWARD_V2_HORIZON_FAILURE_PENALTY
+        ) * horizon_failure.astype(jnp.float32)
+        step = -jnp.float32(REWARD_V2_STEP_COST_TOTAL) / REWARD_V2_HORIZON
+        reward = success + failure + step + shaping
+        valid_transition = jnp.logical_and(valid > 0, valid_next > 0)
+        reward = jnp.where(valid_transition, reward, jnp.float32(jnp.nan))
+        return reward, {
+            "reward_v2_q": q,
+            "reward_v2_q_next": q_next,
+            "reward_v2_p": p,
+            "reward_v2_p_next": p_next,
+            "reward_v2_phi": phi,
+            "reward_v2_phi_next": phi_next,
+            "reward_v2_material_work": h_next,
+            "reward_v2_h_reset": new_state.material_h_reset,
+            "reward_v2_carry_work": new_state._total_carry_work(),
+            "reward_v2_shaping": shaping,
+            "reward_v2_success": success,
+            "reward_v2_horizon_failure": failure,
+            "reward_v2_step": step,
+            "reward_v2_valid": valid_transition.astype(jnp.float32),
+        }
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
         """

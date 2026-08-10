@@ -13,6 +13,7 @@ from terra.agent import Agent
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
+from terra.maps_buffer import LEGACY_DISTANCE_PROTOCOL_ID
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
@@ -166,6 +167,20 @@ class TerraEnv(NamedTuple):
             "illegal_dump_volume": zero,
             "remaining_edge_dig_tiles": zero,
             "remaining_inner_dig_tiles": zero,
+            "reward_v2_q": zero,
+            "reward_v2_q_next": zero,
+            "reward_v2_p": zero,
+            "reward_v2_p_next": zero,
+            "reward_v2_phi": zero,
+            "reward_v2_phi_next": zero,
+            "reward_v2_material_work": zero,
+            "reward_v2_h_reset": zero,
+            "reward_v2_carry_work": zero,
+            "reward_v2_shaping": zero,
+            "reward_v2_success": zero,
+            "reward_v2_horizon_failure": zero,
+            "reward_v2_step": zero,
+            "reward_v2_valid": zero,
         }
 
     @staticmethod
@@ -328,7 +343,7 @@ class TerraEnv(NamedTuple):
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
             interaction_mask=obs["interaction_mask"],  # [H, W] - dig/dump cones for all active agents
-            agent_states=obs["agent_states"],  # [MAX_AGENTS, 8] with active agent at index 0
+            agent_states=obs["agent_states"],  # [MAX_AGENTS, 9] with active agent at index 0
             agent_active=obs["agent_active"],  # [MAX_AGENTS] mask
             num_agents=obs["num_agents"],      # scalar
             generate_gif=generate_gif,
@@ -518,7 +533,18 @@ class TerraEnv(NamedTuple):
         """
         # Build per-agent features for fixed-size agent array and reorder so current agent is first
         # Feature order mirrors legacy single-agent vector
-        def _feat(a):
+        required_volume = state._required_excavation_volume()
+
+        def _feat(a, active):
+            carry_work_normalized = jnp.where(
+                jnp.logical_and(active, required_volume > 0),
+                jnp.asarray(
+                    a.carry_relocation_credit,
+                    dtype=jnp.float32,
+                )
+                / jnp.maximum(required_volume, jnp.float32(1e-6)),
+                jnp.float32(0.0),
+            )
             return jnp.hstack([
                 a.pos_base,
                 a.angle_base,
@@ -527,12 +553,19 @@ class TerraEnv(NamedTuple):
                 a.loaded,
                 a.agent_type,
                 a.shovel_lifted,
+                carry_work_normalized[None],
             ])
 
         # Fixed MAX_AGENTS consistent with Agent.new
         MAX_AGENTS = 4
         # Assemble [MAX_AGENTS, feat_dim]
-        agents_feat = jnp.stack([_feat(s) for s in state.agent.agent_states[:MAX_AGENTS]], axis=0)
+        agents_feat = jnp.stack(
+            [
+                _feat(state.agent.agent_states[i], state.agent.agent_active[i])
+                for i in range(MAX_AGENTS)
+            ],
+            axis=0,
+        )
 
         # Reorder so that the current (acting) agent is first, then pack actives contiguously
         agents_feat_rolled = jnp.roll(agents_feat, -state.agent.current_agent, axis=0)
@@ -593,8 +626,14 @@ class TerraEnvBatch:
         display: bool = False,
         shuffle_maps: bool = False,
         single_map_path: str = None,
+        distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
     ) -> None:
-        self.maps_buffer, self.batch_cfg = init_maps_buffer(batch_cfg, shuffle_maps, single_map_path)
+        self.maps_buffer, self.batch_cfg = init_maps_buffer(
+            batch_cfg,
+            shuffle_maps,
+            single_map_path,
+            required_distance_protocol_id=distance_protocol_id,
+        )
         self.terra_env = TerraEnv.new(
             maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,
             rendering=rendering,

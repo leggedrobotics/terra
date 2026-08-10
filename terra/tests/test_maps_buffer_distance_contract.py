@@ -14,6 +14,12 @@ from terra.config import BatchConfig
 from terra.config import CurriculumGlobalConfig
 from terra.config import EnvConfig
 from terra.config import RewardsType
+from terra.config import REWARD_V2_DISTANCE_BOUND
+from terra.config import REWARD_V2_DISTANCE_REF_M
+from terra.env_generation.distance import REWARD_V2_DISTANCE_METRIC
+from terra.env_generation.distance import REWARD_V2_DISTANCE_NORMALIZATION
+from terra.env_generation.distance import REWARD_V2_DISTANCE_PROTOCOL_ID
+from terra.env_generation.distance import compute_reward_v2_distance_map
 from terra.maps_buffer import init_maps_buffer
 from terra.maps_buffer import LEGACY_SCENARIO_IDENTITY_CONTRACT
 from terra.maps_buffer import load_maps_from_disk
@@ -155,6 +161,81 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
                     with patch.dict(os.environ, {"DATASET_SIZE": "1"}):
                         with self.assertRaisesRegex(RuntimeError, message):
                             load_maps_from_disk(str(root))
+
+    def test_reward_v2_sidecar_is_canonical_and_protocol_gated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.write_map(
+                root,
+                np.zeros((64, 64), dtype=np.float32),
+            )
+            target_path = root / "images" / "img_1.npy"
+            target = np.load(target_path)
+            target[40:44, 40:44] = 1
+            np.save(target_path, target)
+            occupancy = np.load(root / "occupancy" / "img_1.npy")
+            tile_size_m = 36.5714285714 / 64
+            distance = compute_reward_v2_distance_map(
+                target,
+                occupancy,
+                tile_size_m=tile_size_m,
+                distance_ref_m=REWARD_V2_DISTANCE_REF_M,
+                distance_bound=REWARD_V2_DISTANCE_BOUND,
+            )
+            self.assertEqual(float(distance[40, 40]), 0.0)
+            self.assertAlmostEqual(
+                float(distance[39, 39]),
+                np.sqrt(2.0) * tile_size_m / REWARD_V2_DISTANCE_REF_M,
+                places=7,
+            )
+            distance_path = root / "distance" / "img_1.npy"
+            np.save(distance_path, distance)
+            metadata_path = root / "dataset.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata.update(
+                {
+                    "distance_protocol_id": REWARD_V2_DISTANCE_PROTOCOL_ID,
+                    "distance_metric": REWARD_V2_DISTANCE_METRIC,
+                    "distance_normalization": REWARD_V2_DISTANCE_NORMALIZATION,
+                    "tile_size_m": tile_size_m,
+                    "distance_ref_m": REWARD_V2_DISTANCE_REF_M,
+                    "distance_bound": REWARD_V2_DISTANCE_BOUND,
+                }
+            )
+            metadata_path.write_text(json.dumps(metadata, sort_keys=True) + "\n")
+
+            with patch.dict(os.environ, {"DATASET_SIZE": "1"}):
+                load_maps_from_disk(
+                    str(root),
+                    required_distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
+                )
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Legacy reward requested an R2",
+                ):
+                    load_maps_from_disk(str(root))
+
+                changed = distance.copy()
+                changed[0, 0] += np.float32(1e-3)
+                np.save(distance_path, changed)
+                with self.assertRaisesRegex(RuntimeError, "not the canonical"):
+                    load_maps_from_disk(
+                        str(root),
+                        required_distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
+                    )
+
+                metadata.pop("distance_protocol_id")
+                metadata["distance_metric"] = "fixture_geodesic"
+                metadata["distance_normalization"] = "fixture_unit_interval"
+                metadata_path.write_text(
+                    json.dumps(metadata, sort_keys=True) + "\n"
+                )
+                np.save(distance_path, np.zeros((64, 64), dtype=np.float32))
+                with self.assertRaisesRegex(RuntimeError, "Reward-v2 requires"):
+                    load_maps_from_disk(
+                        str(root),
+                        required_distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
+                    )
 
     def test_exact_contract_rejects_count_and_manifest_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary:

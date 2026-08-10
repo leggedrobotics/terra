@@ -12,7 +12,15 @@ from jax import Array
 from tqdm import tqdm
 from typing import Any
 
-from terra.config import ImmutableMapsConfig, BatchConfig, EnvConfig
+from terra.config import BatchConfig
+from terra.config import EnvConfig
+from terra.config import ImmutableMapsConfig
+from terra.config import REWARD_V2_DISTANCE_BOUND
+from terra.config import REWARD_V2_DISTANCE_REF_M
+from terra.env_generation.distance import REWARD_V2_DISTANCE_METRIC
+from terra.env_generation.distance import REWARD_V2_DISTANCE_NORMALIZATION
+from terra.env_generation.distance import REWARD_V2_DISTANCE_PROTOCOL_ID
+from terra.env_generation.distance import compute_reward_v2_distance_map
 from terra.settings import IntMap
 from terra.settings import IntLowDim
 
@@ -384,6 +392,7 @@ EXACT_DATASET_MANIFEST = "manifest.jsonl"
 EXACT_DATASET_METADATA = "dataset.json"
 RESET_ARRAY_SCENARIO_IDENTITY_CONTRACT = "terra_reset_arrays_sha256_v1"
 LEGACY_SCENARIO_IDENTITY_CONTRACT = "terra_legacy_map_id_v0"
+LEGACY_DISTANCE_PROTOCOL_ID = "legacy_dataset_distance"
 RESET_ARRAY_FOLDERS = (
     "images",
     "occupancy",
@@ -402,6 +411,68 @@ EXACT_DATASET_REQUIRED_ROW_FIELDS = (
     "slot_weight",
     "identity_slot_multiplicity",
 )
+
+
+def _reward_v2_distance_contract(
+    directory: Path,
+    expected_shape: tuple[int, int],
+) -> dict[str, float] | None:
+    """Read the one supported R2 distance contract, or identify legacy data."""
+    metadata_path = directory / EXACT_DATASET_METADATA
+    metadata = json.loads(metadata_path.read_text())
+    protocol_id = metadata.get("distance_protocol_id")
+    if protocol_id is None:
+        return None
+    if protocol_id != REWARD_V2_DISTANCE_PROTOCOL_ID:
+        raise RuntimeError(
+            f"Unsupported distance_protocol_id {protocol_id!r} in {metadata_path}."
+        )
+    if metadata.get("distance_metric") != REWARD_V2_DISTANCE_METRIC:
+        raise RuntimeError(
+            f"{metadata_path} must declare distance_metric "
+            f"{REWARD_V2_DISTANCE_METRIC!r} for R2."
+        )
+    if metadata.get("distance_normalization") != REWARD_V2_DISTANCE_NORMALIZATION:
+        raise RuntimeError(
+            f"{metadata_path} must declare distance_normalization "
+            f"{REWARD_V2_DISTANCE_NORMALIZATION!r} for R2."
+        )
+    if expected_shape[0] != expected_shape[1]:
+        raise RuntimeError("The R2 physical-distance contract requires square maps.")
+
+    expected_tile_size_m = (
+        ImmutableMapsConfig().edge_length_m / expected_shape[0]
+    )
+    values: dict[str, float] = {}
+    for field in ("tile_size_m", "distance_ref_m", "distance_bound"):
+        value = metadata.get(field)
+        if (
+            not isinstance(value, (int, float))
+            or not np.isfinite(value)
+            or value <= 0
+        ):
+            raise RuntimeError(f"{metadata_path} has invalid R2 field {field}.")
+        values[field] = float(value)
+    if not np.isclose(
+        values["tile_size_m"],
+        expected_tile_size_m,
+        rtol=0.0,
+        atol=1e-12,
+    ):
+        raise RuntimeError(
+            f"{metadata_path} tile_size_m={values['tile_size_m']} does not match "
+            f"Terra geometry {expected_tile_size_m}."
+        )
+    for field, expected in (
+        ("distance_ref_m", REWARD_V2_DISTANCE_REF_M),
+        ("distance_bound", REWARD_V2_DISTANCE_BOUND),
+    ):
+        if not np.isclose(values[field], expected, rtol=0.0, atol=0.0):
+            raise RuntimeError(
+                f"{metadata_path} {field}={values[field]} does not match the "
+                f"frozen R2 value {expected}."
+            )
+    return values
 
 
 def reset_array_scenario_sha256(arrays: Mapping[str, Any]) -> str:
@@ -855,6 +926,7 @@ def load_maps_from_disk(
     folder_path: str,
     require_trench_metadata: bool = False,
     require_exact_contract: bool = True,
+    required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
 ) -> Array:
     # Set the max number of branches the trench has. v5-main net4 trenches carry
     # four axes, so this pads to 4 and truncates anything longer (the foundation
@@ -868,12 +940,33 @@ def load_maps_from_disk(
         raise RuntimeError("DATASET_SIZE must be > 0.")
     expected_shape = None
     minimum_dump_capacity_ratio = None
+    reward_v2_distance = None
     if require_exact_contract:
         (
             _,
             expected_shape,
             minimum_dump_capacity_ratio,
         ) = validate_exact_dataset_contract(folder_path, dataset_size)
+        reward_v2_distance = _reward_v2_distance_contract(
+            Path(folder_path),
+            expected_shape,
+        )
+    if required_distance_protocol_id == LEGACY_DISTANCE_PROTOCOL_ID:
+        if reward_v2_distance is not None:
+            raise RuntimeError(
+                "Legacy reward requested an R2 physical-distance dataset."
+            )
+    elif required_distance_protocol_id == REWARD_V2_DISTANCE_PROTOCOL_ID:
+        if reward_v2_distance is None:
+            raise RuntimeError(
+                "Reward-v2 requires a dataset declaring and validating "
+                f"distance_protocol_id={REWARD_V2_DISTANCE_PROTOCOL_ID!r}."
+            )
+    else:
+        raise ValueError(
+            "Unsupported required_distance_protocol_id "
+            f"{required_distance_protocol_id!r}."
+        )
     maps = []
     occupancies = []
     dumpability_masks_init = []
@@ -956,6 +1049,14 @@ def load_maps_from_disk(
             actions.append(actions_map)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
+        if (
+            required_distance_protocol_id == REWARD_V2_DISTANCE_PROTOCOL_ID
+            and np.any(actions[-1] != 0)
+        ):
+            raise RuntimeError(
+                "Reward-v2 R2 supports full-reset maps only; initial action "
+                f"map is nonzero for slot {i}."
+            )
         contained_dump_capacity_sanity_check(
             map,
             occupancy,
@@ -990,11 +1091,30 @@ def load_maps_from_disk(
             )
         minimum = float(np.min(dist_map))
         maximum = float(np.max(dist_map))
-        if minimum < 0.0 or maximum > 1.0:
-            raise RuntimeError(
-                f"Distance map must be normalized to [0, 1]: {distance_file} "
-                f"has min={minimum}, max={maximum}."
+        if reward_v2_distance is None:
+            if minimum < 0.0 or maximum > 1.0:
+                raise RuntimeError(
+                    f"Legacy distance map must be normalized to [0, 1]: "
+                    f"{distance_file} has min={minimum}, max={maximum}."
+                )
+        else:
+            expected_distance = compute_reward_v2_distance_map(
+                map,
+                occupancy,
+                tile_size_m=reward_v2_distance["tile_size_m"],
+                distance_ref_m=reward_v2_distance["distance_ref_m"],
+                distance_bound=reward_v2_distance["distance_bound"],
             )
+            observed_distance = dist_map.astype(np.float32)
+            if not np.array_equal(observed_distance, expected_distance):
+                max_error = float(
+                    np.max(np.abs(observed_distance - expected_distance))
+                )
+                raise RuntimeError(
+                    "R2 distance sidecar is not the canonical function of its "
+                    f"visible target/obstacle maps: {distance_file}; "
+                    f"max_abs_error={max_error:.9g}."
+                )
         found_any_distance = True
         distances.append(dist_map.astype(np.float32))
 
@@ -1188,9 +1308,19 @@ def _check_maps(maps: list[Array]) -> tuple[int, int]:
     return maps_width, maps_height
 
 
-def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path: str = None):
+def init_maps_buffer(
+    batch_cfg: BatchConfig,
+    shuffle_maps: bool,
+    single_map_path: str = None,
+    required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
+):
     manifest_rows_per_level: list[list[dict[str, Any]]] | None = None
     if single_map_path is not None:
+        if required_distance_protocol_id != LEGACY_DISTANCE_PROTOCOL_ID:
+            raise RuntimeError(
+                "Reward-v2 accepts only exact datasets with validated physical "
+                "distance sidecars, not the legacy single-map loader."
+            )
         print(f"Loading single map from {single_map_path}")
         maps_from_disk = []
         occupancies_from_disk = []
@@ -1258,6 +1388,7 @@ def init_maps_buffer(batch_cfg: BatchConfig, shuffle_maps: bool, single_map_path
                 require_trench_metadata=batch_cfg.curriculum_global.levels[idx].get(
                     "apply_trench_rewards", False
                 ),
+                required_distance_protocol_id=required_distance_protocol_id,
             )
             maps_from_disk.append(maps)
             occupancies_from_disk.append(occupancies)
