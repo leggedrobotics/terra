@@ -37,6 +37,24 @@ REWARD_V2_SHAPING_WEIGHT = 1.0
 REWARD_V2_DISTANCE_REF_M = 16.0
 REWARD_V2_DISTANCE_BOUND = 2.5
 
+# Reward-v2.1 timing (adopted 2026-08-12). Discounted shaping of a potential
+# with a large additive constant charges implicit rent for standing still:
+# w*(1-gamma)*Phi, measured at 0.0060-0.0072/step, i.e. 76.5% of all time
+# pressure, and it is an untuned by-product of beta*D_bound rather than a
+# chosen pace. Shaping undiscounted removes the rent (and with it the
+# procrastination gap: the constant cancels exactly at gamma=1, so no
+# re-centering is needed), and the step cost then carries the whole, explicit,
+# Phi-independent pace pressure at the same total magnitude.
+#   0 BASELINE  shaping = w*(gamma*Phi_next - Phi), step cost 1.0/450
+#               (frozen reward_v2, bit for bit; kept for replay only)
+#   1 V21       shaping = w*(Phi_next - Phi),       step cost 3.6/450 = 0.0080
+# The two changes are one treatment and move together under a single selector.
+REWARD_V2_TIMING_BASELINE = 0
+REWARD_V2_TIMING_V21 = 1
+REWARD_V2_TIMING_V21_ID = "gamma1_stepcost_3.6"
+REWARD_V2_V21_SHAPING_GAMMA = 1.0
+REWARD_V2_V21_STEP_COST_TOTAL = 3.6
+
 
 class ImmutableMapsConfig(NamedTuple):
     """
@@ -242,6 +260,10 @@ class EnvConfig(NamedTuple):
     # Used only by ANNEALED_OBJECTIVE: 0 is exactly dense and 1 is exactly
     # terminal-only. The trainer updates this scalar between PPO rollouts.
     terminal_reward_mix: float = 0.0
+    # Reward-v2 timing selector (REWARD_V2_TIMING_*). Appended last so earlier
+    # checkpoints stay positionally compatible; 0 is the frozen reward_v2
+    # reward, bit for bit, and 1 is the adopted v2.1 timing.
+    reward_v2_timing_variant: int = REWARD_V2_TIMING_BASELINE
 
     @classmethod
     def new(cls):

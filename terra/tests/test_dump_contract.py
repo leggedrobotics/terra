@@ -10,6 +10,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import MapsDimsConfig
 from terra.config import RewardStage
+from terra.config import REWARD_V2_TIMING_BASELINE
 from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.state import CORRECTED_DENSE_CONTRACT
@@ -865,17 +866,27 @@ class ExactDumpContractTest(unittest.TestCase):
     def test_reward_fields_are_appended_for_legacy_positional_checkpoints(self):
         current = EnvConfig()
         self.assertEqual(
-            EnvConfig._fields[-2:],
-            ("reward_stage", "terminal_reward_mix"),
+            EnvConfig._fields[-3:],
+            ("reward_stage", "terminal_reward_mix", "reward_v2_timing_variant"),
         )
-        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-2]))
+        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-3]))
         restored = EnvConfig(*legacy_values)
         self.assertEqual(
             restored.reward_stage,
             RewardStage.DENSE_SKILL,
         )
         self.assertEqual(restored.terminal_reward_mix, 0.0)
-        for field_name in EnvConfig._fields[:-2]:
+        self.assertEqual(
+            restored.reward_v2_timing_variant,
+            REWARD_V2_TIMING_BASELINE,
+        )
+        # A pre-timing checkpoint (reward_stage + mix, no variant) also loads.
+        pre_timing = EnvConfig(*tuple(current)[:-1])
+        self.assertEqual(
+            pre_timing.reward_v2_timing_variant,
+            REWARD_V2_TIMING_BASELINE,
+        )
+        for field_name in EnvConfig._fields[:-3]:
             self.assertEqual(
                 getattr(restored, field_name),
                 getattr(current, field_name),

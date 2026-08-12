@@ -25,6 +25,9 @@ from terra.config import REWARD_V2_POTENTIAL_GAMMA
 from terra.config import REWARD_V2_SHAPING_WEIGHT
 from terra.config import REWARD_V2_STEP_COST_TOTAL
 from terra.config import REWARD_V2_SUCCESS_BONUS
+from terra.config import REWARD_V2_TIMING_V21
+from terra.config import REWARD_V2_V21_SHAPING_GAMMA
+from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -4204,7 +4207,24 @@ class State(NamedTuple):
             new_state._reward_v2_state_values()
         )
         horizon_failure = jnp.logical_and(done, jnp.logical_not(exact_success))
-        gamma = jnp.float32(REWARD_V2_POTENTIAL_GAMMA)
+        # Reward-v2.1 timing: shape undiscounted and pay the pace explicitly.
+        # Variant 0 leaves both knobs at their frozen values, so its arithmetic
+        # is bit-identical to reward_v2. Phi itself, its two logged values and
+        # the validity guard are the same under either variant.
+        v21 = jnp.asarray(
+            new_state.env_cfg.reward_v2_timing_variant,
+            dtype=jnp.int32,
+        ) == jnp.int32(REWARD_V2_TIMING_V21)
+        gamma = jnp.where(
+            v21,
+            jnp.float32(REWARD_V2_V21_SHAPING_GAMMA),
+            jnp.float32(REWARD_V2_POTENTIAL_GAMMA),
+        )
+        step_cost_total = jnp.where(
+            v21,
+            jnp.float32(REWARD_V2_V21_STEP_COST_TOTAL),
+            jnp.float32(REWARD_V2_STEP_COST_TOTAL),
+        )
         shaping_weight = jnp.float32(REWARD_V2_SHAPING_WEIGHT)
         shaping = shaping_weight * (gamma * phi_next - phi)
         success = (
@@ -4214,7 +4234,7 @@ class State(NamedTuple):
         failure = -jnp.float32(
             REWARD_V2_HORIZON_FAILURE_PENALTY
         ) * horizon_failure.astype(jnp.float32)
-        step = -jnp.float32(REWARD_V2_STEP_COST_TOTAL) / REWARD_V2_HORIZON
+        step = -step_cost_total / REWARD_V2_HORIZON
         reward = success + failure + step + shaping
         valid_transition = jnp.logical_and(valid > 0, valid_next > 0)
         reward = jnp.where(valid_transition, reward, jnp.float32(jnp.nan))

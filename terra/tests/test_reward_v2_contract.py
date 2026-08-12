@@ -14,8 +14,12 @@ from terra.config import REWARD_V2_BETA
 from terra.config import REWARD_V2_DISTANCE_BOUND
 from terra.config import REWARD_V2_HORIZON_FAILURE_PENALTY
 from terra.config import REWARD_V2_POTENTIAL_GAMMA
+from terra.config import REWARD_V2_SHAPING_WEIGHT
 from terra.config import REWARD_V2_STEP_COST_TOTAL
 from terra.config import REWARD_V2_SUCCESS_BONUS
+from terra.config import REWARD_V2_TIMING_BASELINE
+from terra.config import REWARD_V2_TIMING_V21
+from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.state import State
@@ -23,7 +27,7 @@ from terra.state import State
 SHAPE = (64, 64)
 
 
-def _env_config() -> EnvConfig:
+def _env_config(timing_variant: int = REWARD_V2_TIMING_BASELINE) -> EnvConfig:
     batch_env = object.__new__(TerraEnvBatch)
     batch_env.batch_cfg = BatchConfig()._replace(
         maps_dims=MapsDimsConfig(maps_edge_length=SHAPE[0])
@@ -45,10 +49,11 @@ def _env_config() -> EnvConfig:
         agent_types=(0,),
         action_types=(0,),
         reward_stage=RewardStage.REWARD_V2,
+        reward_v2_timing_variant=timing_variant,
     )
 
 
-def _state() -> State:
+def _state(timing_variant: int = REWARD_V2_TIMING_BASELINE) -> State:
     target = np.zeros(SHAPE, dtype=np.int8)
     target[20, 20:24] = -1
     target[40, 40:48] = 1
@@ -56,7 +61,7 @@ def _state() -> State:
     distance[target > 0] = 0.0
     state = State.new(
         jax.random.PRNGKey(20260810),
-        _env_config(),
+        _env_config(timing_variant),
         target,
         np.zeros(SHAPE, dtype=np.int8),
         -97.0 * np.ones((4, 3), dtype=np.float32),
@@ -230,3 +235,105 @@ def test_reward_v2_endpoints_cycles_and_dominance_primitives():
     np.testing.assert_allclose(minimum_success, 0.7710143, atol=1e-6)
     np.testing.assert_allclose(maximum_horizon_failure, -0.8154759, atol=1e-6)
     assert minimum_success > maximum_horizon_failure
+
+
+def _dwell_and_progress(timing_variant: int):
+    """Return (dwell, progress) reward/component pairs under one variant."""
+    state = _state(timing_variant)
+    action = np.zeros(SHAPE, dtype=np.int8)
+    action[20, 20] = -1
+    lifted = _with_material(state, action, loaded=1, carry_work=1.0, env_steps=1)
+    dwell = _reward_v2(lifted, lifted._replace(env_steps=2))
+
+    progressed_action = np.zeros(SHAPE, dtype=np.int8)
+    progressed_action[20, 20:22] = -1
+    progressed = _with_material(
+        state,
+        progressed_action,
+        loaded=1,
+        carry_work=1.0,
+        env_steps=2,
+    )
+    return dwell, _reward_v2(lifted, progressed)
+
+
+def test_reward_v2_timing_variant_zero_is_the_frozen_reward():
+    """Variant 0 must reproduce w * (gamma * Phi_next - Phi) bit for bit."""
+    for (_, components) in _dwell_and_progress(REWARD_V2_TIMING_BASELINE):
+        frozen = jnp.float32(REWARD_V2_SHAPING_WEIGHT) * (
+            jnp.float32(REWARD_V2_POTENTIAL_GAMMA)
+            * components["reward_v2_phi_next"]
+            - components["reward_v2_phi"]
+        )
+        np.testing.assert_array_equal(
+            np.asarray(components["reward_v2_shaping"]),
+            np.asarray(frozen),
+        )
+
+
+def test_reward_v2_timing_variant_zero_keeps_the_frozen_step_cost():
+    """The frozen 1.0/450 step cost is untouched by the selector's presence."""
+    for (_, components) in _dwell_and_progress(REWARD_V2_TIMING_BASELINE):
+        np.testing.assert_array_equal(
+            np.asarray(components["reward_v2_step"]),
+            np.asarray(-jnp.float32(REWARD_V2_STEP_COST_TOTAL) / jnp.float32(450.0)),
+        )
+
+
+def test_reward_v21_prices_dwelling_at_the_explicit_step_cost_only():
+    """v2.1 shapes undiscounted, so standing still pays the pace and no rent."""
+    (dwell_reward, dwell), (progress_reward, progress) = _dwell_and_progress(
+        REWARD_V2_TIMING_V21
+    )
+    assert float(dwell["reward_v2_shaping"]) == 0.0
+    np.testing.assert_allclose(
+        float(dwell["reward_v2_step"]), -0.0080, rtol=0.0, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        float(dwell_reward),
+        -REWARD_V2_V21_STEP_COST_TOTAL / 450.0,
+        rtol=0.0,
+        atol=1e-7,
+    )
+    np.testing.assert_allclose(
+        np.asarray(progress["reward_v2_shaping"]),
+        np.asarray(
+            jnp.float32(REWARD_V2_SHAPING_WEIGHT)
+            * (progress["reward_v2_phi_next"] - progress["reward_v2_phi"])
+        ),
+    )
+    assert float(progress_reward) > float(dwell_reward)
+
+
+def test_reward_v21_replaces_implicit_rent_with_explicit_pace():
+    """Total per-step time pressure is preserved; the Phi-dependent part is not."""
+    (baseline_reward, baseline), _ = _dwell_and_progress(REWARD_V2_TIMING_BASELINE)
+    (v21_reward, v21), _ = _dwell_and_progress(REWARD_V2_TIMING_V21)
+    # The baseline's dwell charge is implicit rent: w*(1-gamma)*Phi, so it is
+    # set by an untuned constant (beta*D_bound = 3.75 at reset) and drifts with
+    # progress. That is the whole defect.
+    rent = -float(baseline["reward_v2_shaping"])
+    np.testing.assert_allclose(
+        rent,
+        (1.0 - REWARD_V2_POTENTIAL_GAMMA) * float(baseline["reward_v2_phi"]),
+        rtol=0.0,
+        atol=1e-6,
+    )
+    reset_rent = (1.0 - REWARD_V2_POTENTIAL_GAMMA) * (
+        REWARD_V2_BETA * REWARD_V2_DISTANCE_BOUND
+    )
+    np.testing.assert_allclose(reset_rent, 0.0060, rtol=0.0, atol=1e-7)
+    assert rent > reset_rent  # Phi-dependent, hence untunable as a pace.
+    # v2.1 pays the same total pace explicitly and Phi-independently.
+    baseline_pressure = reset_rent + REWARD_V2_STEP_COST_TOTAL / 450.0
+    v21_pressure = -float(v21["reward_v2_step"])
+    np.testing.assert_allclose(v21_pressure, 0.0080, rtol=0.0, atol=1e-7)
+    np.testing.assert_allclose(
+        v21_pressure, baseline_pressure, rtol=0.03, atol=0.0
+    )
+    assert float(v21["reward_v2_shaping"]) == 0.0
+    # The guard and the logged potentials are identical under both variants.
+    for key in ("reward_v2_valid", "reward_v2_phi", "reward_v2_phi_next",
+                "reward_v2_success", "reward_v2_horizon_failure"):
+        np.testing.assert_array_equal(np.asarray(v21[key]), np.asarray(baseline[key]))
+    assert float(v21_reward) > float(baseline_reward)
