@@ -14,6 +14,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
 from terra.maps_buffer import LEGACY_DISTANCE_PROTOCOL_ID
+from terra.state import STALL_AGE_CAP_STEPS
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
@@ -609,6 +610,11 @@ class TerraEnv(NamedTuple):
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
             "interaction_mask": state.world.interaction_mask.map,
+            "stall_age": jnp.minimum(
+                jnp.asarray(state.stall_age_steps, dtype=jnp.float32),
+                jnp.float32(STALL_AGE_CAP_STEPS),
+            )
+            / jnp.float32(STALL_AGE_CAP_STEPS),
         }
 
 

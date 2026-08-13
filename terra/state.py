@@ -56,6 +56,7 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 # Future-policy reward/completion semantics introduced by C1/C1a.
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
 REWARD_V2_HORIZON = jnp.float32(450.0)
+STALL_AGE_CAP_STEPS = 32
 
 # The terminal objective keeps success dominant and uses efficiency only to
 # order successful episodes. Its success base is supplied by the normalized
@@ -118,6 +119,7 @@ class State(NamedTuple):
     env_steps: int
     productive_workspace_cycles: int
     material_h_reset: Float
+    stall_age_steps: int
 
 
     @classmethod
@@ -153,6 +155,7 @@ class State(NamedTuple):
                 env_steps=0,
                 productive_workspace_cycles=0,
                 material_h_reset=jnp.float32(0.0),
+                stall_age_steps=jnp.int32(0),
             )
             return state._replace(
                 material_h_reset=state._compute_material_work()
@@ -194,6 +197,7 @@ class State(NamedTuple):
             env_steps=0,
             productive_workspace_cycles=0,
             material_h_reset=jnp.float32(0.0),
+            stall_age_steps=jnp.int32(0),
         )
         return state._replace(
             material_h_reset=state._compute_material_work()
@@ -288,7 +292,44 @@ class State(NamedTuple):
             state._swap,
             lambda: state
         )
-        return state._replace(env_steps=state.env_steps + 1)
+        return state._replace(
+            env_steps=state.env_steps + 1,
+            stall_age_steps=self._next_stall_age_steps(state),
+        )
+
+    def _next_stall_age_steps(self, new_state: "State") -> Array:
+        """Count consecutive transitions without a material-state change."""
+        action_map_changed = jnp.any(
+            self.world.action_map.map != new_state.world.action_map.map
+        )
+        active = self.agent.agent_active.astype(jnp.bool_)
+        loaded_changed = jnp.stack(
+            [
+                jnp.any(old.loaded != new.loaded)
+                for old, new in zip(
+                    self.agent.agent_states,
+                    new_state.agent.agent_states,
+                )
+            ]
+        )
+        carry_changed = jnp.stack(
+            [
+                old.carry_relocation_credit != new.carry_relocation_credit
+                for old, new in zip(
+                    self.agent.agent_states,
+                    new_state.agent.agent_states,
+                )
+            ]
+        )
+        material_changed = jnp.logical_or(
+            action_map_changed,
+            jnp.any(active & (loaded_changed | carry_changed)),
+        )
+        next_age = jnp.minimum(
+            jnp.asarray(self.stall_age_steps, dtype=jnp.int32) + 1,
+            jnp.int32(STALL_AGE_CAP_STEPS),
+        )
+        return jnp.where(material_changed, jnp.int32(0), next_age)
 
     def _do_nothing(self):
         return self
