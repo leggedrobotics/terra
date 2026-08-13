@@ -10,8 +10,8 @@ cone, 12 cabin indices), which is constant-for-constant identical to the panel's
 
 Env rules encoded, each traced in the panel:
 
-* a dig fires only when the cone is obstacle-free (``state.py:2290-2293``) and
-  holds >= 2 dig-eligible tiles (``state.py:2143-2152``);
+* a dig fires only when the cone is obstacle-free and holds at least one
+  dig-eligible tile;
 * a dump lands whenever ONE accepted cell (``target > 0``, not obstacle, dumpable)
   is anywhere in the cone (auto-aim, ``state.py:2437-2451``) — and there is NO
   obstacle veto on dump, so the env-faithful test is "accepted cell in the
@@ -198,7 +198,7 @@ class MapGeom:
         reached = np.zeros_like(self.dig)
         dig_bases = np.zeros_like(bases)
         for h in range(NH):
-            can_dig = bases & self.cone_clear[h] & (self.dig_count[h] >= 2)
+            can_dig = bases & self.cone_clear[h] & (self.dig_count[h] > 0)
             dig_bases |= can_dig
             reached |= _dil(can_dig, CONES[h])
             served |= _dil(can_dig & can_dump, CONES[h])
@@ -384,7 +384,7 @@ def plan_sensitivity(
             dump_ok = base & (_corr(live_dump, ANNULUS) > 0)
             served = np.zeros_like(dig)
             for h in range(NH):
-                can_dig = base & cone_clear[h] & (_corr(remaining, CONES[h]) >= 2)
+                can_dig = base & cone_clear[h] & (_corr(remaining, CONES[h]) > 0)
                 served |= _dil(can_dig & dump_ok, CONES[h])
             unserved += int((chunk_mask & ~served).sum())
             excavated |= chunk_mask

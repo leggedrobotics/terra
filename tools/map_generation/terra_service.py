@@ -94,8 +94,7 @@ def direct_service_coverage(
     dig_count = [_corr(dig, CONES[h]) for h in range(NH)]
     accepted_in_cone = [_corr(accepted, CONES[h]) > 0 for h in range(NH)]
 
-    # a dig only fires with >= 2 target tiles in the cone (state.py:2144-2152)
-    can_dig = [base & cone_clear[h] & (dig_count[h] >= 2) for h in range(NH)]
+    can_dig = [base & cone_clear[h] & (dig_count[h] > 0) for h in range(NH)]
     can_dump = [base & cone_clear[h] & accepted_in_cone[h] for h in range(NH)]
 
     pose_dump = np.zeros_like(base)

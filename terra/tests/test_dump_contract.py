@@ -305,6 +305,40 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(float(buffer_components["absolute_completion"]), 0.0)
         self.assertEqual(float(buffer_components["terminal"]), 0.0)
 
+    def test_one_cell_fresh_target_executes_normal_dig(self):
+        coordinate = self._workspace_coordinates()[0]
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[tuple(coordinate)] = -1
+        state = self._state(target)
+        old_map = np.asarray(state.world.action_map.map).astype(np.int32)
+
+        dug = state._handle_dig()
+        new_map = np.asarray(dug.world.action_map.map).astype(np.int32)
+        loaded = int(dug._get_current_agent_state().loaded[0])
+
+        self.assertEqual(int(new_map[tuple(coordinate)]), -1)
+        self.assertEqual(int(np.count_nonzero(new_map)), 1)
+        self.assertEqual(loaded, 1)
+        self.assertEqual(int(old_map.sum()), int(new_map.sum()) + loaded)
+
+    def test_one_cell_positive_soil_executes_normal_relift(self):
+        coordinate = self._workspace_coordinates()[0]
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[0, 0] = 1
+        action = np.zeros(self.SHAPE, dtype=np.int8)
+        action[tuple(coordinate)] = 7
+        state = self._state(target, action=action)
+        old_map = np.asarray(state.world.action_map.map).astype(np.int32)
+
+        lifted = state._handle_dig()
+        new_map = np.asarray(lifted.world.action_map.map).astype(np.int32)
+        loaded = int(lifted._get_current_agent_state().loaded[0])
+
+        self.assertEqual(int(new_map[tuple(coordinate)]), 0)
+        self.assertEqual(int(np.count_nonzero(new_map)), 0)
+        self.assertEqual(loaded, 7)
+        self.assertEqual(int(old_map.sum()), int(new_map.sum()) + loaded)
+
     def test_legal_dump_is_contained_and_conserves_mass(self):
         legal_coordinate = self._workspace_coordinates()[0]
         target = np.zeros(self.SHAPE, dtype=np.int8)

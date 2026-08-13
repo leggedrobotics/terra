@@ -2143,17 +2143,6 @@ class State(NamedTuple):
         positive_soil = action_map_2d > 0
         return dig_mask & positive_soil.reshape(-1)
 
-    @staticmethod
-    def _mask_out_single_tile_digs(dig_mask: Array) -> Array:
-        """Reject dig footprints that would affect only one tile."""
-        dig_mask = dig_mask.astype(jnp.bool_)
-        dig_tile_count = jnp.sum(dig_mask.astype(jnp.int32))
-        return jnp.where(
-            dig_tile_count <= 1,
-            jnp.zeros_like(dig_mask, dtype=jnp.bool_),
-            dig_mask,
-        )
-
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         return compute_dynamic_dumpability(
             self.world.dumpability_mask_init.map,
@@ -2167,7 +2156,6 @@ class State(NamedTuple):
         def _dig_when_clear():
             dig_mask = self._build_dig_dump_cone()
             dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-            dig_mask = self._mask_out_single_tile_digs(dig_mask)
             action_map_2d = _as_2d_map(self.world.action_map.map)
             flattened_action_map = action_map_2d.reshape(-1)
             # The map is int8, but a workspace may contain more than 127 units.

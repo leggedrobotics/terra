@@ -60,6 +60,37 @@ def test_dig_admission_rejects_exact_duplicate_and_source_reuse():
     )
 
 
+def test_single_cell_dig_is_serviceable_in_all_admission_gates():
+    target = np.ones((64, 64), dtype=np.int8)
+    target[32, 32] = -1
+    occupancy = np.zeros_like(target, dtype=np.bool_)
+    dumpability = np.ones_like(target, dtype=np.bool_)
+
+    assert (
+        generator.tsvc.direct_service_coverage(
+            target,
+            occupancy,
+            dumpability,
+        )
+        == 1.0
+    )
+    coverage = generator.tdump.measure(
+        target,
+        occupancy,
+        dumpability,
+        full=False,
+    )
+    assert coverage["dig_cov_any"] == 1.0
+    assert coverage["turn_dump_cov_any"] == 1.0
+    plan = generator.tdump.plan_sensitivity(
+        target,
+        occupancy,
+        dumpability,
+    )
+    assert plan["plan_cost_near"] == 0.0
+    assert plan["plan_cost_far"] == 0.0
+
+
 def test_sample_indices_do_not_collide_at_large_bank_sizes():
     indices = {
         generator.sample_index_of(condition_index, map_index)

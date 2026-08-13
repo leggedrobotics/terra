@@ -116,7 +116,6 @@ def _dig_prefilter_for_candidate(state: State, candidate: jax.Array) -> jax.Arra
 
     dig_mask = posed._build_dig_dump_cone()
     dig_mask = posed._mask_out_wrong_dig_tiles(dig_mask)
-    dig_mask = posed._mask_out_single_tile_digs(dig_mask)
     action_map = posed.world.action_map.map.reshape(-1)
     selected_sum = action_map.astype(jnp.int32) @ dig_mask.astype(jnp.int32)
     moving_dumped_dirt = selected_sum > 0
