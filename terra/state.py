@@ -1511,7 +1511,7 @@ class State(NamedTuple):
     ) -> Array:
         """
         this function does the following:
-            if we are lifting positive soil, we move all of it regardless of the amount
+            if we are lifting positive soil, we move at most one complete carrier load
             if we are instead digging dirt, then we dig as much as self.env_cfg.agent.dig_depth
 
         Args:
@@ -1521,9 +1521,34 @@ class State(NamedTuple):
             - new_flattened_map: (N, ) Array flattened new height map
         """
         delta_dig = self.env_cfg.agent.dig_depth * dig_mask.astype(IntMap)
+
+        def _lift_positive_soil():
+            # Preserve the selected pile shape instead of introducing a spatial
+            # first-cell rule.  Prefix apportionment removes each cell's
+            # proportional share, sums exactly to one int8 carrier load, and
+            # differs from exact proportional scaling by less than one unit per
+            # cell because the height map is integer-valued.
+            map_i32 = flattened_map.astype(jnp.int32)
+            eligible = jnp.where(
+                dig_mask,
+                jnp.maximum(map_i32, jnp.int32(0)),
+                jnp.int32(0),
+            )
+            total = jnp.sum(eligible, dtype=jnp.int32)
+            pickup = jnp.minimum(total, jnp.int32(INTLOWDIM_MAX))
+            cumulative = jnp.cumsum(eligible, dtype=jnp.int32)
+            removed_cumulative = (cumulative * pickup) // jnp.maximum(
+                total, jnp.int32(1)
+            )
+            removed_before = jnp.concatenate(
+                [jnp.zeros((1,), dtype=jnp.int32), removed_cumulative[:-1]]
+            )
+            removed = removed_cumulative - removed_before
+            return (map_i32 - removed).astype(IntMap)
+
         new_flattened_map = jax.lax.cond(
             lifting_positive_soil,
-            lambda: jnp.where(dig_mask, 0, flattened_map).astype(IntMap),
+            _lift_positive_soil,
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
         #Optionally apply soil mechanics using the global flag
@@ -2159,17 +2184,20 @@ class State(NamedTuple):
             action_map_2d = _as_2d_map(self.world.action_map.map)
             flattened_action_map = action_map_2d.reshape(-1)
             # The map is int8, but a workspace may contain more than 127 units.
-            # Sum in int32 so an oversized pile is rejected instead of wrapping.
+            # Sum in int32 so a capacity-bounded relift cannot wrap.
             selected_tiles_sum = (
                 flattened_action_map.astype(jnp.int32)
                 @ dig_mask.astype(jnp.int32)
             )
             lifting_positive_soil = selected_tiles_sum > 0
-            # Positive soil is lifted as one complete pile.
+            # Positive soil is lifted up to the int8 carrier capacity.
             # Ensure both branches return the same dtype (int32)
             dig_volume = jax.lax.cond(
                 lifting_positive_soil,
-                lambda: selected_tiles_sum.astype(jnp.int32),
+                lambda: jnp.minimum(
+                    selected_tiles_sum,
+                    jnp.int32(INTLOWDIM_MAX),
+                ),
                 lambda: dig_mask.sum().astype(jnp.int32),
             )
 

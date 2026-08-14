@@ -339,6 +339,112 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(loaded, 7)
         self.assertEqual(int(old_map.sum()), int(new_map.sum()) + loaded)
 
+    def test_over_capacity_positive_soil_loads_127_and_leaves_exact_remainder(self):
+        coordinates = self._workspace_coordinates()
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[0, 0] = 1
+        action = np.zeros(self.SHAPE, dtype=np.int8)
+        action[tuple(coordinates.T)] = 3
+        state = self._state(
+            target,
+            action=action,
+            reward_stage=RewardStage.REWARD_V2,
+        )._replace(
+            stall_age_steps=jnp.int32(9)
+        )
+        initial_potential = float(
+            state._compute_relocation_potential(state.world.action_map.map)
+        )
+
+        lifted = state._step(TrackedAction.do(), turn=False)
+        lifted_map = np.asarray(lifted.world.action_map.map).astype(np.int32)
+        loaded = int(lifted._get_current_agent_state().loaded[0])
+        remaining = int(lifted_map.clip(min=0).sum())
+        carry_credit = float(
+            lifted._get_current_agent_state().carry_relocation_credit
+        )
+        remaining_potential = float(
+            lifted._compute_relocation_potential(lifted.world.action_map.map)
+        )
+
+        self.assertEqual(int(action.sum()), 135)
+        self.assertEqual(loaded, 127)
+        self.assertEqual(remaining, 8)
+        self.assertEqual(int(action.sum()), remaining + loaded)
+        self.assertTrue(np.all(lifted_map >= 0))
+        self.assertEqual(int(lifted.stall_age_steps), 0)
+        self.assertAlmostEqual(
+            carry_credit,
+            initial_potential - remaining_potential,
+            places=5,
+        )
+
+    def test_repeated_capacity_pickups_conserve_mass_and_clear_the_source(self):
+        empty_target = np.zeros(self.SHAPE, dtype=np.int8)
+        probe = self._state(empty_target)
+        pickup_mask = np.asarray(probe._build_dig_dump_cone()).reshape(self.SHAPE)
+        pickup_coordinates = np.argwhere(pickup_mask)
+
+        opposite_agent = probe._get_current_agent_state()._replace(
+            angle_cabin=jnp.array([6], dtype=jnp.int8)
+        )
+        opposite = probe._set_current_agent_state(opposite_agent)
+        dump_mask = np.asarray(opposite._build_dig_dump_cone()).reshape(self.SHAPE)
+        self.assertFalse(bool(np.any(pickup_mask & dump_mask)))
+
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[dump_mask] = 1
+        action = np.zeros(self.SHAPE, dtype=np.int8)
+        action[tuple(pickup_coordinates.T)] = 3
+        state = self._state(
+            target,
+            action=action,
+            reward_stage=RewardStage.REWARD_V2,
+        )
+        initial_mass = int(action.sum())
+
+        first_lift = state._step(TrackedAction.do(), turn=False)
+        self.assertEqual(int(first_lift._get_current_agent_state().loaded[0]), 127)
+
+        dump_agent = first_lift._get_current_agent_state()._replace(
+            angle_cabin=jnp.array([6], dtype=jnp.int8)
+        )
+        first_dump = first_lift._set_current_agent_state(dump_agent)._step(
+            TrackedAction.do(), turn=False
+        )
+        self.assertEqual(int(first_dump._get_current_agent_state().loaded[0]), 0)
+        self.assertEqual(
+            float(first_dump._get_current_agent_state().carry_relocation_credit),
+            0.0,
+        )
+
+        pickup_agent = first_dump._get_current_agent_state()._replace(
+            angle_cabin=jnp.array([0], dtype=jnp.int8)
+        )
+        second_lift = first_dump._set_current_agent_state(pickup_agent)._step(
+            TrackedAction.do(), turn=False
+        )
+        second_load = int(second_lift._get_current_agent_state().loaded[0])
+        second_map = np.asarray(second_lift.world.action_map.map).astype(np.int32)
+        self.assertEqual(second_load, 8)
+        self.assertEqual(int(second_map[pickup_mask].clip(min=0).sum()), 0)
+        self.assertEqual(int(second_map.sum()) + second_load, initial_mass)
+
+        dump_agent = second_lift._get_current_agent_state()._replace(
+            angle_cabin=jnp.array([6], dtype=jnp.int8)
+        )
+        final = second_lift._set_current_agent_state(dump_agent)._step(
+            TrackedAction.do(), turn=False
+        )
+        final_map = np.asarray(final.world.action_map.map).astype(np.int32)
+        self.assertEqual(int(final._get_current_agent_state().loaded[0]), 0)
+        self.assertEqual(int(final_map[pickup_mask].clip(min=0).sum()), 0)
+        self.assertEqual(int(final_map.sum()), initial_mass)
+        self.assertEqual(
+            float(final._get_current_agent_state().carry_relocation_credit),
+            0.0,
+        )
+
     def test_legal_dump_is_contained_and_conserves_mass(self):
         legal_coordinate = self._workspace_coordinates()[0]
         target = np.zeros(self.SHAPE, dtype=np.int8)

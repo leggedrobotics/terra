@@ -287,7 +287,7 @@ class PartialActionLoadingTest(unittest.TestCase):
             wrapped = TerraEnv.wrap_state(state, update_reachability=jnp.bool_(False))
             self.assertEqual(wrapped.world.action_map.map.dtype, jnp.int8)
 
-    def test_runtime_excavator_accepts_127_and_rejects_128(self):
+    def test_runtime_excavator_accepts_127_and_partially_lifts_128(self):
         shape = (64, 64)
         target = np.zeros(shape, dtype=np.int8)
         occupancy = np.zeros(shape, dtype=np.int8)
@@ -362,14 +362,18 @@ class PartialActionLoadingTest(unittest.TestCase):
                 )
             )
         )
-        rejected = state_128._handle_dig()
+        partially_lifted = state_128._handle_dig()
         self.assertEqual(
-            int(rejected._get_current_agent_state().loaded[0]),
-            0,
+            int(partially_lifted._get_current_agent_state().loaded[0]),
+            127,
         )
         self.assertEqual(
-            int(np.asarray(rejected.world.action_map.map).astype(np.int32).sum()),
-            128,
+            int(
+                np.asarray(partially_lifted.world.action_map.map)
+                .astype(np.int32)
+                .sum()
+            ),
+            1,
         )
 
     def test_dataset_generation_rejects_nonzero_source_actions(self):
