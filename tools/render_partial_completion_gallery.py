@@ -147,6 +147,9 @@ def _render_entry(
         "negative_volume",
         "positive_volume",
         "remaining_component_sizes",
+        "original_target_component_count_4",
+        "remaining_target_component_count_4",
+        "relay_center_source_distance_tolerance_tiles",
         "maximum_pile_height",
         "positive_support_area",
         "positive_component_count",
@@ -254,7 +257,7 @@ def _render_entry(
         f"{condition} | source img {record['source_index']} | fraction {record['achieved_completion_fraction']:.2f}",
         f"mass {record['positive_volume']} | piles {record['pile_count']} | conservative workspace pickups >= {record['minimum_conservative_workspace_pickups_for_staged_volume']}",
         f"route {record.get('relay_shortest_route_tiles', 'n/a')} tiles | no shared conservative proxy center {record.get('relay_no_shared_conservative_proxy_center', 'n/a')}",
-        f"center route excess {max(int(pile.get('route_excess_tiles', 0)) for pile in piles)} / {record.get('relay_center_max_route_excess_tiles', 'n/a')} tiles | static only",
+        f"center route excess {max(int(pile.get('route_excess_tiles', 0)) for pile in piles)} / {record.get('relay_center_max_route_excess_tiles', 'n/a')} tiles | source tolerance {record.get('relay_center_source_distance_tolerance_tiles', 'n/a')} | static only",
     ]
     for line in lines:
         draw.text((8, label_y), line, fill=(20, 20, 20))

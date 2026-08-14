@@ -4,10 +4,12 @@ import numpy as np
 
 from terra.env_generation.partial_completion import PartialCompletionConfig
 from terra.env_generation.partial_completion import RELAY_CENTER_MAX_ROUTE_EXCESS_TILES
+from terra.env_generation.partial_completion import _component_masks
 from terra.env_generation.partial_completion import _maximum_workspace_load
 from terra.env_generation.partial_completion import _relay_corridor_masks
 from terra.env_generation.partial_completion import _runtime_sampling_domain
 from terra.env_generation.partial_completion import _select_completed_mask
+from terra.env_generation.partial_completion import _select_dump_rooted_completed_mask
 from terra.env_generation.partial_completion import compute_dynamic_dumpability_numpy
 from terra.env_generation.partial_completion import generate_partial_action_map
 from terra.env_generation.partial_completion import validate_partial_state
@@ -125,6 +127,56 @@ class PartialCompletionGenerationTest(unittest.TestCase):
         )
         self.assertEqual(diagnostics["remaining_component_sizes"], [1])
 
+    def test_relay_completion_peels_prongs_before_dump_connected_spine(self):
+        target = np.zeros((24, 24), dtype=np.int8)
+        target[4:16, 10] = -1
+        target[5, 4:10] = -1
+        target[13, 4:10] = -1
+        target[4:16, 12:15] = 1
+        occupancy = np.zeros_like(target, dtype=np.bool_)
+        prongs = np.zeros_like(target, dtype=np.bool_)
+        prongs[5, 4:10] = True
+        prongs[13, 4:10] = True
+        spine = np.zeros_like(target, dtype=np.bool_)
+        spine[4:16, 10] = True
+
+        selected = _select_dump_rooted_completed_mask(
+            target,
+            occupancy,
+            int(np.count_nonzero(prongs)),
+            np.random.default_rng(19),
+        )
+
+        np.testing.assert_array_equal(selected & prongs, prongs)
+        self.assertFalse(np.any(selected & spine))
+
+        later = _select_dump_rooted_completed_mask(
+            target,
+            occupancy,
+            int(np.count_nonzero(prongs)) + 5,
+            np.random.default_rng(19),
+        )
+        remaining = (target < 0) & ~later
+        self.assertEqual(len(_component_masks(remaining, connectivity=4)), 1)
+        self.assertEqual(int(np.count_nonzero(later)), 17)
+
+    def test_relay_completion_preserves_disconnected_target_components(self):
+        target = np.zeros((24, 24), dtype=np.int8)
+        target[4:12, 5:8] = -1
+        target[13:21, 5:8] = -1
+        target[4:21, 12:15] = 1
+        selected = _select_dump_rooted_completed_mask(
+            target,
+            np.zeros_like(target, dtype=np.bool_),
+            42,
+            np.random.default_rng(23),
+        )
+
+        remaining = (target < 0) & ~selected
+        self.assertEqual(int(np.count_nonzero(selected)), 42)
+        self.assertEqual(len(_component_masks(target < 0, connectivity=4)), 2)
+        self.assertEqual(len(_component_masks(remaining, connectivity=4)), 2)
+
     def test_relay_corridor_is_deterministic_and_keeps_pile_on_natural_route(self):
         target = np.zeros((64, 64), dtype=np.int8)
         target[10:22, 8:20] = -1
@@ -153,6 +205,10 @@ class PartialCompletionGenerationTest(unittest.TestCase):
 
         np.testing.assert_array_equal(first.action_map, second.action_map)
         self.assertEqual(first.manifest, second.manifest)
+        self.assertEqual(
+            first.manifest["completed_selection"],
+            "terminal_rooted_reverse_delete",
+        )
         self.assertGreater(first.manifest["relay_handoff_support_count"], 0)
         self.assertEqual(first.manifest["positive_component_count"], 1)
         self.assertLessEqual(

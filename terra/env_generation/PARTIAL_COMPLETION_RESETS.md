@@ -51,10 +51,19 @@ For each source map, completion fraction, and random seed:
 
 1. Count target excavation tiles and compute
    `K = round(fraction * dig_tile_count)`.
-2. Pick one random boundary seed per connected target component, compute
-   8-neighbor distance from those seeds, and take the `K` closest target tiles
-   with random tie-breaking. This produces a compact advancing excavation
-   front without scattered per-tile completion.
+2. Select the `K` completed target tiles:
+   - ordinary pile modes grow a compact front from one random boundary seed
+     per target component;
+   - `relay_corridor` roots every target component at a terminal-facing cell
+     and reverse-deletes only boundary cells whose removal preserves
+     four-neighbor connectivity to that root. Candidates farther from the
+     terminal and root are removed first. On branching trenches this peels
+     leaf/prong work before the access spine; at higher completion it consumes
+     the spine from its ends instead of cutting through its middle. This rule
+     is inferred from target topology and does not depend on named map types or
+     authored trench axes. It guarantees connected remaining target material,
+     not exact excavator footprint or workspace reachability; the normal access
+     validation remains a separate gate.
 3. Put `-1` on the selected tiles. The removed volume is exactly `K`. A single
    remaining target tile is valid and actionable.
 4. Recompute dynamic dumpability using Terra's five-by-five hole-clearance
@@ -67,10 +76,13 @@ For each source map, completion fraction, and random seed:
    - `relay_corridor`: choose the most upstream completed tile, compute an
      obstacle-aware four-neighbor route to the terminal, and place compact
      soil in one compact pile within a one-machine-width pocket around the
-     early part of that route. The pile center is at most one tile longer than
-     a shortest route and about one workspace reach downstream of the source.
-     This keeps soil on the natural working direction rather than in a remote
-     corner. The manifest records whether conservative pickup and terminal
+     early part of that route. The pile center may sit one cell beside a
+     shortest route (at most three added route steps, including grid
+     discretization). Centers are sought about one workspace reach downstream
+     of the source, with four tiles of along-route tolerance so a pile can use
+     a connected staging pocket. This keeps soil on the natural working
+     direction rather than in a remote corner. The manifest records whether
+     conservative pickup and terminal
      service-center proxies overlap; that field is not an exact relocation
      proof.
 6. Relay mode uses one pile. Other modes choose one to three separated pile

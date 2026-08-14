@@ -53,8 +53,10 @@ WORKSPACE_MAX_RADIUS_TILES = math.ceil(
 )
 WORKSPACE_HALF_ANGLE_RAD = math.pi / 6.0
 RELAY_CORRIDOR_SLACK_TILES = 2 * (AGENT_WIDTH_TILES // 2)
-RELAY_CENTER_MAX_ROUTE_EXCESS_TILES = 1
-RELAY_CORRIDOR_CENTER_TOLERANCE_TILES = 1
+# A one-cell lateral pocket costs two route steps; one extra step absorbs grid
+# discretization at diagonal trench junctions without admitting remote piles.
+RELAY_CENTER_MAX_ROUTE_EXCESS_TILES = 3
+RELAY_CORRIDOR_CENTER_TOLERANCE_TILES = AGENT_WIDTH_TILES // 2 + 1
 RELAY_PILE_POCKET_RADIUS_TILES = AGENT_WIDTH_TILES
 
 
@@ -566,6 +568,111 @@ def _select_completed_mask(
     return selected
 
 
+def _select_dump_rooted_completed_mask(
+    target_map: np.ndarray,
+    occupancy: np.ndarray,
+    count: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Peel leaf/prong cells without cutting the dump-connected target spine."""
+    dig_target = np.asarray(target_map) < 0
+    dump_zone = np.asarray(target_map) > 0
+    coordinates = np.argwhere(dig_target)
+    if count <= 0 or count >= len(coordinates):
+        raise PartialCompletionError(
+            "Completed excavation count is outside the partial range."
+        )
+
+    terminal_distance = _grid_distance_to(
+        dump_zone,
+        ~np.asarray(occupancy, dtype=bool),
+    )
+    anchor_distance = np.full(
+        dig_target.shape,
+        np.iinfo(np.int32).max,
+        dtype=np.int32,
+    )
+    components = _component_masks(dig_target, connectivity=4)
+    anchors = np.zeros_like(dig_target, dtype=bool)
+    for component in components:
+        component_terminal_distance = terminal_distance[component]
+        reachable = component_terminal_distance < target_map.size + 1
+        if not np.any(reachable):
+            raise PartialCompletionError(
+                "A dig-target component has no static route to the terminal zone."
+            )
+        root_distance = int(component_terminal_distance[reachable].min())
+        roots = component & (terminal_distance == root_distance)
+        root_coordinates = np.argwhere(roots)
+        root_centroid = root_coordinates.mean(axis=0)
+        squared_distance = np.square(root_coordinates - root_centroid).sum(axis=1)
+        anchor_order = np.lexsort(
+            (root_coordinates[:, 1], root_coordinates[:, 0], squared_distance)
+        )
+        anchor = tuple(int(value) for value in root_coordinates[anchor_order[0]])
+        anchors[anchor] = True
+
+        queue: deque[tuple[int, int]] = deque([anchor])
+        anchor_distance[anchor] = 0
+        while queue:
+            x, y = queue.popleft()
+            next_distance = anchor_distance[x, y] + 1
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if (
+                    0 <= nx < dig_target.shape[0]
+                    and 0 <= ny < dig_target.shape[1]
+                    and component[nx, ny]
+                    and next_distance < anchor_distance[nx, ny]
+                ):
+                    anchor_distance[nx, ny] = next_distance
+                    queue.append((nx, ny))
+
+    tie_break = np.full(dig_target.shape, -1.0, dtype=np.float64)
+    tie_break[dig_target] = rng.random(len(coordinates))
+    ranked_coordinates = sorted(
+        (tuple(int(value) for value in coordinate) for coordinate in coordinates),
+        key=lambda position: (
+            int(terminal_distance[position]),
+            int(anchor_distance[position]),
+            float(tie_break[position]),
+        ),
+        reverse=True,
+    )
+
+    remaining = dig_target.copy()
+    selected = np.zeros_like(dig_target, dtype=bool)
+    expected_component_count = len(components)
+    for _ in range(count):
+        chosen: tuple[int, int] | None = None
+        for position in ranked_coordinates:
+            if not remaining[position] or anchors[position]:
+                continue
+            x, y = position
+            boundary = any(
+                not (0 <= nx < remaining.shape[0] and 0 <= ny < remaining.shape[1])
+                or not remaining[nx, ny]
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+            )
+            if not boundary:
+                continue
+            candidate = remaining.copy()
+            candidate[position] = False
+            if (
+                len(_component_masks(candidate, connectivity=4))
+                == expected_component_count
+            ):
+                chosen = position
+                break
+        if chosen is None:
+            raise PartialCompletionError(
+                "Could not excavate the requested volume without cutting a "
+                "dump-connected target spine."
+            )
+        remaining[chosen] = False
+        selected[chosen] = True
+    return selected
+
+
 def _choose_centers(
     center_mask: np.ndarray,
     count: int,
@@ -944,6 +1051,9 @@ def _relay_static_diagnostics(
         "relay_corridor_metric": "obstacle_geodesic_4",
         "relay_corridor_slack_tiles": RELAY_CORRIDOR_SLACK_TILES,
         "relay_center_max_route_excess_tiles": RELAY_CENTER_MAX_ROUTE_EXCESS_TILES,
+        "relay_center_source_distance_tolerance_tiles": (
+            RELAY_CORRIDOR_CENTER_TOLERANCE_TILES
+        ),
         "relay_pile_pocket_radius_tiles": RELAY_PILE_POCKET_RADIUS_TILES,
         "relay_shortest_route_tiles": int(corridor_data["shortest_route_tiles"]),
         "relay_source_anchor": corridor_data["source_anchor"],
@@ -1121,6 +1231,19 @@ def validate_partial_state(
     remaining_component_sizes = [
         int(np.count_nonzero(component)) for component in remaining_components
     ]
+    original_target_component_count_4 = len(
+        _component_masks(target_map < 0, connectivity=4)
+    )
+    remaining_target_component_count_4 = len(
+        _component_masks(remaining, connectivity=4)
+    )
+    if (
+        expected_mode == "relay_corridor"
+        and remaining_target_component_count_4 != original_target_component_count_4
+    ):
+        raise PartialCompletionError(
+            "Relay excavation cut a dump-connected target component."
+        )
 
     dump_zone = target_map > 0
     dump_buffer = _binary_dilate(dump_zone, radius=1)
@@ -1216,6 +1339,8 @@ def validate_partial_state(
         "negative_volume": negative_volume,
         "positive_volume": positive_volume,
         "remaining_component_sizes": remaining_component_sizes,
+        "original_target_component_count_4": original_target_component_count_4,
+        "remaining_target_component_count_4": remaining_target_component_count_4,
         "maximum_pile_height": int(pile_heights.max(initial=0)),
         "positive_support_area": int(np.count_nonzero(positive)),
         "positive_component_count": len(positive_components),
@@ -1282,11 +1407,21 @@ def generate_partial_action_map(
     last_error: Exception | None = None
     for attempt in range(1, config.max_attempts_per_variant + 1):
         try:
-            completed = _select_completed_mask(
-                dig_target,
-                completed_count,
-                rng,
-            )
+            if mode == "relay_corridor":
+                completed = _select_dump_rooted_completed_mask(
+                    target_map,
+                    occupancy,
+                    completed_count,
+                    rng,
+                )
+                completed_selection = "terminal_rooted_reverse_delete"
+            else:
+                completed = _select_completed_mask(
+                    dig_target,
+                    completed_count,
+                    rng,
+                )
+                completed_selection = "compact_random_front"
             action_map = np.zeros_like(target_map, dtype=np.int32)
             action_map[completed] = -1
             dynamic_dumpability = compute_dynamic_dumpability_numpy(
@@ -1321,6 +1456,7 @@ def generate_partial_action_map(
                 "completed_dig_tile_count": completed_count,
                 "remaining_dig_tile_count": original_dig_count - completed_count,
                 "pile_mode": mode,
+                "completed_selection": completed_selection,
                 "pile_count": len(piles),
                 "piles": piles,
                 "generation_attempt": attempt,
