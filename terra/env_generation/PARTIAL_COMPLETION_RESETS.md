@@ -8,12 +8,13 @@ Create normal Terra maps that start partway through an excavation task. These
 maps are for early curriculum stages: the agent sees useful endgame states
 without first solving the full exploration problem.
 
-The generator does not plan an excavation sequence and does not try to find an
-optimal soil distribution. It only constructs a plausible state:
+The generator does not plan an excavation sequence. It constructs a plausible
+state for a narrow skill curriculum:
 
 - one coherent part of the target has already been dug;
 - exactly the same soil volume appears in compact piles;
-- piles are in the final dump zone, close to it, or split between both; and
+- piles are in the final dump zone, close to it, split between both, or placed
+  in a natural source-to-terminal relay corridor; and
 - enough excavation remains for the episode to continue.
 
 The first implementation supports the current 64 x 64, one-depth, solo
@@ -40,8 +41,9 @@ no need to change the meaning of `-1`.
 
 Terra must accept positive action-map heights when loading a dataset, derive
 initial dynamic dumpability from the loaded holes, and sum a lift in `int32`.
-If one lift would exceed the `int8` bucket capacity of 127, the action is a
-no-op instead of wrapping the load.
+Relifts take up to the 127-unit bucket capacity and leave the remaining pile in
+place. A large staged pile therefore teaches repeated partial pickup rather
+than becoming an artificial no-op.
 
 ## Generation algorithm
 
@@ -53,24 +55,33 @@ For each source map, completion fraction, and random seed:
    8-neighbor distance from those seeds, and take the `K` closest target tiles
    with random tie-breaking. This produces a compact advancing excavation
    front without scattered per-tile completion.
-3. Repair or reject selections that leave a one-tile excavation component.
-4. Put `-1` on the selected tiles. The removed volume is exactly `K`.
-5. Recompute dynamic dumpability using Terra's five-by-five hole-clearance
+3. Put `-1` on the selected tiles. The removed volume is exactly `K`. A single
+   remaining target tile is valid and actionable.
+4. Recompute dynamic dumpability using Terra's five-by-five hole-clearance
    rule.
-6. Choose one of three pile layouts:
+5. Choose a pile layout:
    - `in_zone`: all soil lies in the dump zone or its one-tile apron;
    - `near_zone`: all soil lies two to eight Manhattan tiles from the dump
      zone and outside its apron;
    - `mixed`: 60-90% lies in-zone and the remainder lies near-zone.
-7. Choose one to three separated pile centers in the selected support.
-   `max_piles` is the total, including both parts of a mixed state.
-8. Grow each pile bottom-up. A unit is added to the closest legal support cell
+   - `relay_corridor`: choose the most upstream completed tile, compute an
+     obstacle-aware four-neighbor route to the terminal, and place compact
+     soil in one compact pile within a one-machine-width pocket around the
+     early part of that route. The pile center is at most one tile longer than
+     a shortest route and about one workspace reach downstream of the source.
+     This keeps soil on the natural working direction rather than in a remote
+     corner. The manifest records whether conservative pickup and terminal
+     service-center proxies overlap; that field is not an exact relocation
+     proof.
+6. Relay mode uses one pile. Other modes choose one to three separated pile
+   centers; `max_piles` is the total, including both parts of a mixed state.
+7. Grow each pile bottom-up. A unit is added to the closest legal support cell
    only when the increment preserves:
    - integer height;
    - the configured maximum height; and
    - a four-neighbor height difference of at most one.
-9. Combine the negative completed patch and positive pile field.
-10. Reject the candidate if any required check below fails. Retry with the same
+8. Combine the negative completed patch and positive pile field.
+9. Reject the candidate if any required check below fails. Retry with the same
     requested fraction and pile mode up to the configured bounded attempt
     count; then fail with the last concrete reason.
 
@@ -91,21 +102,18 @@ Every emitted action map must satisfy:
   sum(positive heights) == number of completed -1 tiles
   ```
 
-- at least two unfinished excavation tiles remain;
-- no unfinished excavation component is a singleton;
+- at least one unfinished excavation tile remains;
 - the selected pile-mode support is respected;
+- relay mode contains exactly one four-neighbor-connected staged pile;
 - pile height and four-neighbor slope limits hold;
 - at least one conservative footprint-sized spawn region remains; and
 - a footprint-eroded four-neighbor free-space proxy connects spawn regions to
   remaining excavation, staged soil, and the final dump zone.
 
-The generator uses a slightly oversized NumPy cone as a conservative load
-check for staged soil outside the final dump zone. It rejects a candidate if a
-possible staged lift exceeds 127. Soil already in the final zone is complete
-and need not be lifted; Terra's runtime capacity guard safely rejects an agent
-action that nevertheless tries to lift too much at once. The NumPy cone is a
-safety proxy, not a claim that it exactly reproduces every float32 Terra
-boundary tile.
+The manifest reports the largest staged-soil volume seen by a slightly
+oversized NumPy cone, the corresponding lower bound on workspace pickups, and
+the minimum number of 127-unit bucket loads. These are difficulty diagnostics,
+not rejection thresholds.
 
 The spawn and connectivity checks are also static feasibility proxies. They do
 not prove that an action sequence exists, and they must not be described as
@@ -143,23 +151,56 @@ python tools/generate_partial_completion_dataset.py \
   --seed 0
 ```
 
+For relocation training, use one explicit path:
+
+```bash
+python tools/generate_partial_completion_dataset.py \
+  --input /path/to/full_dataset \
+  --output /path/to/relay_dataset \
+  --completion-fractions 0.50,0.75,0.90 \
+  --mode-weights relay_corridor=1.0 \
+  --seed 0
+```
+
 `in_zone` is the one default path because it applies to the broadest set of
 maps. Run explicit `near_zone=1.0` or `mixed=1.0` experiments on source maps
 whose nearby staging area passes the static access proxy; unsupported
 map/mode combinations fail instead of silently falling back to another mode.
 
+## Relay curriculum progression
+
+The first pilot should mix no more than 25% partial-reset lanes with ordinary
+full starts. Move from late cleanup back toward the real initial-state
+distribution:
+
+1. `R0`: 90% completed, with conservative pickup and terminal service-center
+   proxies still overlapping. This is the easiest relift-and-cleanup reset.
+2. `R1`: 75-90% completed with
+   `relay_no_shared_conservative_proxy_center=true`. This selects likely
+   stage-move-relift cases for inspection; it is not proof that relocation is
+   required under exact Terra poses.
+3. `R2`: 50-75% completed, then ordinary full starts. This bridges cleanup to
+   excavation plus cleanup without inventing remote or lateral pile geometry.
+
+Fractions are independently generated compact fronts, not snapshots from one
+demonstration. This is Backplay-inspired start-distribution shaping, not exact
+Backplay, and completion fraction must not be used as a proxy for relay length.
+
+Anneal the partial fraction toward zero and judge promotion only on untouched
+full-start maps. Partial-reset successes must not update the full-start
+curriculum mastery EMA.
+
 ## Minimal test gate
 
 The high-value test set is:
 
-1. Generate all three pile modes and verify exact mass, support, slope, and
+1. Generate all pile modes and verify exact mass, support, slope, and
    nonterminal state.
-2. Verify a fixed seed is deterministic and a 90%-complete patch retains no
-   singleton excavation component.
+2. Verify a fixed seed is deterministic and a one-tile remainder remains valid.
 3. Load a generated dataset through `MapsBuffer` and `State.new`, checking that
    multi-height soil survives and initial dynamic dumpability reflects holes.
-4. Exercise actual Terra lifts at the bucket boundary: accept 127 and reject
-   128 without mutating the state.
+4. Exercise actual Terra partial relifts above the bucket boundary and verify
+   exact mass conservation across repeated pickup/dump cycles.
 5. Generate a small sample from the real review dataset and inspect/reject
    failures explicitly.
 
@@ -170,6 +211,11 @@ or action-planning proof belongs in this research generator.
 
 - The partial state is plausible, not a demonstrated outcome of a legal action
   history.
+- The relay corridor and workspace-handoff fields are static geometry
+  diagnostics, not an executable action witness.
+- `relay_no_shared_conservative_proxy_center` is a difficulty hint from an
+  under-approximating static pose model, not a proof that exact Terra base
+  relocation is necessary.
 - Pile shape is a compact stable mound, not a soil-physics simulation.
 - The access test ignores dynamic ordering effects.
 - Some difficult source maps or pile modes will be rejected. That is preferable

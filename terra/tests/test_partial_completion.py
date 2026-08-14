@@ -3,11 +3,12 @@ import unittest
 import numpy as np
 
 from terra.env_generation.partial_completion import PartialCompletionConfig
-from terra.env_generation.partial_completion import PartialCompletionError
-from terra.env_generation.partial_completion import _component_masks
+from terra.env_generation.partial_completion import RELAY_CENTER_MAX_ROUTE_EXCESS_TILES
 from terra.env_generation.partial_completion import _maximum_workspace_load
+from terra.env_generation.partial_completion import _relay_corridor_masks
 from terra.env_generation.partial_completion import _runtime_sampling_domain
 from terra.env_generation.partial_completion import _select_completed_mask
+from terra.env_generation.partial_completion import compute_dynamic_dumpability_numpy
 from terra.env_generation.partial_completion import generate_partial_action_map
 from terra.env_generation.partial_completion import validate_partial_state
 
@@ -87,18 +88,14 @@ class PartialCompletionGenerationTest(unittest.TestCase):
                     diagnostics["negative_volume"],
                 )
                 self.assertLessEqual(
-                    diagnostics["maximum_staged_workspace_load"],
-                    config.max_workspace_load,
-                )
-                self.assertLessEqual(
                     result.manifest["pile_count"],
                     config.max_piles,
                 )
 
-    def test_high_completion_repairs_singleton_residuals_at_exact_count(self):
+    def test_single_remaining_tile_is_an_actionable_partial_state(self):
         dig_target = np.zeros((20, 20), dtype=np.bool_)
-        dig_target[3:17, 3:17] = True
-        requested_count = round(0.90 * int(np.count_nonzero(dig_target)))
+        dig_target[10, 10:13] = True
+        requested_count = 2
         selected = _select_completed_mask(
             dig_target,
             requested_count,
@@ -106,14 +103,9 @@ class PartialCompletionGenerationTest(unittest.TestCase):
         )
 
         self.assertEqual(int(np.count_nonzero(selected)), requested_count)
-        remaining_sizes = [
-            int(np.count_nonzero(component))
-            for component in _component_masks(dig_target & ~selected)
-        ]
-        self.assertTrue(remaining_sizes)
-        self.assertTrue(all(size >= 2 for size in remaining_sizes))
+        self.assertEqual(int(np.count_nonzero(dig_target & ~selected)), 1)
 
-    def test_singleton_remaining_component_is_rejected(self):
+    def test_singleton_remaining_component_is_valid(self):
         target = np.zeros((64, 64), dtype=np.int8)
         target[20, 20:23] = -1
         target[42:55, 40:55] = 1
@@ -123,18 +115,85 @@ class PartialCompletionGenerationTest(unittest.TestCase):
         action[45, 46] = 1
         config = self._config("in_zone")
 
-        with self.assertRaisesRegex(
-            PartialCompletionError,
-            "singleton",
-        ):
-            validate_partial_state(
-                target,
-                self.occupancy,
-                self.dumpability,
-                action,
-                config=config,
-                expected_mode="in_zone",
-            )
+        diagnostics = validate_partial_state(
+            target,
+            self.occupancy,
+            self.dumpability,
+            action,
+            config=config,
+            expected_mode="in_zone",
+        )
+        self.assertEqual(diagnostics["remaining_component_sizes"], [1])
+
+    def test_relay_corridor_is_deterministic_and_keeps_pile_on_natural_route(self):
+        target = np.zeros((64, 64), dtype=np.int8)
+        target[10:22, 8:20] = -1
+        target[42:54, 44:58] = 1
+        config = self._config(
+            "relay_corridor",
+            completion_fractions=(0.90,),
+            min_piles=1,
+            max_piles=1,
+            max_attempts_per_variant=100,
+        )
+        first = generate_partial_action_map(
+            target,
+            self.occupancy,
+            self.dumpability,
+            rng=np.random.default_rng(7),
+            config=config,
+        )
+        second = generate_partial_action_map(
+            target,
+            self.occupancy,
+            self.dumpability,
+            rng=np.random.default_rng(7),
+            config=config,
+        )
+
+        np.testing.assert_array_equal(first.action_map, second.action_map)
+        self.assertEqual(first.manifest, second.manifest)
+        self.assertGreater(first.manifest["relay_handoff_support_count"], 0)
+        self.assertEqual(first.manifest["positive_component_count"], 1)
+        self.assertLessEqual(
+            first.manifest["piles"][0]["route_excess_tiles"],
+            RELAY_CENTER_MAX_ROUTE_EXCESS_TILES,
+        )
+        self.assertEqual(first.manifest["minimum_bucket_loads_for_staged_volume"], 2)
+
+        dynamic = compute_dynamic_dumpability_numpy(
+            self.dumpability,
+            np.where(first.action_map < 0, first.action_map, 0),
+        )
+        corridor, _, _ = _relay_corridor_masks(
+            target,
+            self.occupancy,
+            dynamic,
+            first.action_map < 0,
+        )
+        self.assertFalse(np.any((first.action_map > 0) & ~corridor))
+
+    def test_relay_corridor_bends_through_an_obstacle_gap(self):
+        target = np.zeros((64, 64), dtype=np.int8)
+        target[20:28, 8:16] = -1
+        target[20:28, 48:56] = 1
+        occupancy = np.zeros_like(target, dtype=np.bool_)
+        occupancy[:, 32] = True
+        occupancy[28:36, 32] = False
+        completed = target < 0
+        action = np.where(completed, -1, 0).astype(np.int8)
+        dynamic = compute_dynamic_dumpability_numpy(self.dumpability, action)
+
+        corridor, _, corridor_data = _relay_corridor_masks(
+            target,
+            occupancy,
+            dynamic,
+            completed,
+        )
+
+        self.assertTrue(np.any(corridor[28:36, 30:35]))
+        self.assertTrue(np.any(corridor_data["route_core"][28:36, 30:35]))
+        self.assertFalse(corridor_data["route_core"][10, 30])
 
     def test_workspace_load_boundary_accepts_127_and_detects_128(self):
         offsets = (((0, 0),),)

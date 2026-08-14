@@ -32,7 +32,7 @@ def _parse_mode_weights(value: str) -> tuple[tuple[str, float], ...]:
             result.append((name.strip(), float(weight)))
     except ValueError as error:
         raise argparse.ArgumentTypeError(
-            "Mode weights must look like in_zone=0.65,near_zone=0.25,mixed=0.10."
+            "Mode weights must look like relay_corridor=1.0."
         ) from error
     return tuple(result)
 
@@ -63,7 +63,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--near-distance-min", type=int, default=2)
     parser.add_argument("--near-distance-max", type=int, default=8)
     parser.add_argument("--max-pile-height", type=int, default=32)
-    parser.add_argument("--max-workspace-load", type=int, default=127)
     parser.add_argument("--min-spawn-centers", type=int, default=16)
     parser.add_argument("--max-attempts-per-variant", type=int, default=100)
     parser.add_argument("--include-full", action="store_true")
@@ -84,7 +83,6 @@ def main() -> None:
         near_distance_min=args.near_distance_min,
         near_distance_max=args.near_distance_max,
         max_pile_height=args.max_pile_height,
-        max_workspace_load=args.max_workspace_load,
         min_spawn_centers=args.min_spawn_centers,
         max_attempts_per_variant=args.max_attempts_per_variant,
         include_full=args.include_full,

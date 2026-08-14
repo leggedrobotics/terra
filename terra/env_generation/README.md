@@ -93,8 +93,9 @@ For structured training progression:
 `tools/generate_partial_completion_dataset.py` converts an existing
 Terra-format excavation dataset into mass-conserving partial reset states. It
 marks coherent target patches as already excavated and places the corresponding
-volume in compact multi-height piles inside or near the final dump zone. This
-is stochastic state construction, not an excavation planner.
+volume in compact multi-height piles. The `relay_corridor` mode places those
+piles along an obstacle-aware source-to-terminal working corridor. This is
+stochastic state construction, not an excavation planner.
 
 Example:
 
@@ -103,13 +104,14 @@ python tools/generate_partial_completion_dataset.py \
   --input /path/to/full_dataset \
   --output /path/to/partial_dataset \
   --completion-fractions 0.25,0.50,0.75,0.90 \
-  --mode-weights in_zone=1.0 \
+  --mode-weights relay_corridor=1.0 \
   --seed 0
 ```
 
 The command never overwrites an existing output directory and publishes the
-dataset atomically only after every generated state passes mass, pile,
-staged-workspace-load, spawn, and static access checks. See
+dataset atomically only after every generated state passes mass, pile, spawn,
+and static access checks. Large piles remain valid because relifts load up to
+bucket capacity and leave the remainder in place. See
 [`PARTIAL_COMPLETION_RESETS.md`](PARTIAL_COMPLETION_RESETS.md) for the approved
 algorithm and validation contract.
 

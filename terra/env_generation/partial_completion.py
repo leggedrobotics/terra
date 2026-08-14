@@ -15,10 +15,10 @@ from typing import Any
 
 import numpy as np
 
-SUPPORTED_PILE_MODES = ("in_zone", "near_zone", "mixed")
+SUPPORTED_PILE_MODES = ("in_zone", "near_zone", "mixed", "relay_corridor")
 ACTION_MAP_MIN = -1
 ACTION_MAP_MAX = int(np.iinfo(np.int8).max)
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 MAP_SIZE = 64
 MAP_EDGE_M = 36.5714285714
 TILE_SIZE_M = MAP_EDGE_M / MAP_SIZE
@@ -52,6 +52,10 @@ WORKSPACE_MAX_RADIUS_TILES = math.ceil(
     0.5 / TILE_SIZE_M + _WORKSPACE_AGENT_RADIUS_TILES + DIG_RADIUS_TILES
 )
 WORKSPACE_HALF_ANGLE_RAD = math.pi / 6.0
+RELAY_CORRIDOR_SLACK_TILES = 2 * (AGENT_WIDTH_TILES // 2)
+RELAY_CENTER_MAX_ROUTE_EXCESS_TILES = 1
+RELAY_CORRIDOR_CENTER_TOLERANCE_TILES = 1
+RELAY_PILE_POCKET_RADIUS_TILES = AGENT_WIDTH_TILES
 
 
 class PartialCompletionError(RuntimeError):
@@ -71,7 +75,6 @@ class PartialCompletionConfig:
     mixed_in_zone_fraction_min: float = 0.60
     mixed_in_zone_fraction_max: float = 0.90
     max_pile_height: int = 32
-    max_workspace_load: int = ACTION_MAP_MAX
     min_spawn_centers: int = 16
     max_attempts_per_variant: int = 100
     include_full: bool = False
@@ -121,8 +124,6 @@ class PartialCompletionConfig:
             raise ValueError("Mixed-mode in-zone fraction bounds are invalid.")
         if not 1 <= self.max_pile_height <= ACTION_MAP_MAX:
             raise ValueError(f"max_pile_height must lie in [1, {ACTION_MAP_MAX}].")
-        if not 1 <= self.max_workspace_load <= ACTION_MAP_MAX:
-            raise ValueError(f"max_workspace_load must lie in [1, {ACTION_MAP_MAX}].")
         if self.min_spawn_centers <= 0:
             raise ValueError("min_spawn_centers must be positive.")
         if self.max_attempts_per_variant <= 0:
@@ -223,6 +224,137 @@ def _manhattan_distance_to(mask: np.ndarray) -> np.ndarray:
     return distance
 
 
+def _grid_distance_to(mask: np.ndarray, passable: np.ndarray) -> np.ndarray:
+    """Four-neighbor distance around static obstacles."""
+    mask = np.asarray(mask, dtype=bool)
+    passable = np.asarray(passable, dtype=bool)
+    if mask.shape != passable.shape or not np.any(mask):
+        raise PartialCompletionError("Distance seeds and passable grid are invalid.")
+    height, width = mask.shape
+    unreachable = height * width + 1
+    distance = np.full(mask.shape, unreachable, dtype=np.int32)
+    queue: deque[tuple[int, int]] = deque()
+    for x, y in np.argwhere(mask):
+        distance[x, y] = 0
+        queue.append((int(x), int(y)))
+    while queue:
+        x, y = queue.popleft()
+        next_distance = distance[x, y] + 1
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if (
+                0 <= nx < height
+                and 0 <= ny < width
+                and passable[nx, ny]
+                and next_distance < distance[nx, ny]
+            ):
+                distance[nx, ny] = next_distance
+                queue.append((nx, ny))
+    return distance
+
+
+def _relay_corridor_masks(
+    target_map: np.ndarray,
+    occupancy: np.ndarray,
+    dynamic_dumpability: np.ndarray,
+    completed: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    """Return an obstacle-aware source-to-terminal staging corridor.
+
+    The support stays close to a shortest static route from the completed
+    excavation patch to the terminal zone. The source anchor is the most
+    upstream completed tile, and the first pile is placed about one workspace
+    reach downstream of it.
+    """
+    occupancy = np.asarray(occupancy, dtype=bool)
+    completed = np.asarray(completed, dtype=bool)
+    dump_zone = np.asarray(target_map) > 0
+    passable = ~occupancy
+    terminal_distance = _grid_distance_to(dump_zone, passable)
+    unreachable = target_map.size + 1
+    completed_coordinates = np.argwhere(completed)
+    if not len(completed_coordinates):
+        raise PartialCompletionError(
+            "Relay mode requires a completed excavation patch."
+        )
+    completed_terminal_distance = terminal_distance[completed]
+    reachable_completed = completed_terminal_distance < unreachable
+    if not np.any(reachable_completed):
+        raise PartialCompletionError(
+            "Completed excavation has no static route to the terminal zone."
+        )
+    reachable_coordinates = completed_coordinates[reachable_completed]
+    reachable_distances = completed_terminal_distance[reachable_completed]
+    source_coordinate = reachable_coordinates[int(np.argmax(reachable_distances))]
+    source_anchor = np.zeros_like(completed, dtype=bool)
+    source_anchor[int(source_coordinate[0]), int(source_coordinate[1])] = True
+    source_distance = _grid_distance_to(source_anchor, passable)
+    route_lengths = source_distance[dump_zone]
+    reachable_routes = route_lengths[route_lengths < unreachable]
+    if not len(reachable_routes):
+        raise PartialCompletionError(
+            "Completed excavation has no static route to the terminal zone."
+        )
+    shortest_route = int(reachable_routes.min())
+    route_sum = source_distance.astype(np.int64) + terminal_distance.astype(np.int64)
+    route_excess = route_sum - shortest_route
+    finite = (source_distance < unreachable) & (terminal_distance < unreachable)
+    dump_buffer = _binary_dilate(dump_zone, radius=1)
+    physically_valid = (
+        np.asarray(dynamic_dumpability, dtype=bool)
+        & ~occupancy
+        & ~(np.asarray(target_map) < 0)
+    )
+    route_core = (
+        ~occupancy
+        & finite
+        & (route_excess >= 0)
+        & (route_excess <= RELAY_CORRIDOR_SLACK_TILES)
+        & (source_distance > 0)
+        & (terminal_distance < shortest_route)
+        & (terminal_distance > 1)
+    )
+    support = (
+        physically_valid
+        & (np.asarray(target_map) == 0)
+        & ~dump_buffer
+        & _binary_dilate(route_core, radius=RELAY_PILE_POCKET_RADIUS_TILES)
+    )
+    center_base = (
+        physically_valid
+        & (np.asarray(target_map) == 0)
+        & ~dump_buffer
+        & route_core
+        & (route_excess <= RELAY_CENTER_MAX_ROUTE_EXCESS_TILES)
+    )
+    if not np.any(center_base):
+        raise PartialCompletionError(
+            "No dynamically dumpable cells lie on the source-to-terminal corridor."
+        )
+    upstream_stage_error = np.abs(
+        source_distance.astype(np.int64) - int(WORKSPACE_MAX_RADIUS_TILES)
+    )
+    minimum_error = int(upstream_stage_error[center_base].min())
+    centers = center_base & (
+        upstream_stage_error <= minimum_error + RELAY_CORRIDOR_CENTER_TOLERANCE_TILES
+    )
+    return (
+        support,
+        centers,
+        {
+            "shortest_route_tiles": shortest_route,
+            "corridor_candidate_count": int(np.count_nonzero(support)),
+            "corridor_core_count": int(np.count_nonzero(route_core)),
+            "center_candidate_count": int(np.count_nonzero(centers)),
+            "center_max_route_excess_tiles": RELAY_CENTER_MAX_ROUTE_EXCESS_TILES,
+            "source_anchor": [int(source_coordinate[0]), int(source_coordinate[1])],
+            "source_distance": source_distance,
+            "terminal_distance": terminal_distance,
+            "route_excess": route_excess,
+            "route_core": route_core,
+        },
+    )
+
+
 def _component_masks(mask: np.ndarray, connectivity: int = 8) -> list[np.ndarray]:
     mask = np.asarray(mask, dtype=bool)
     height, width = mask.shape
@@ -259,76 +391,9 @@ def _component_masks(mask: np.ndarray, connectivity: int = 8) -> list[np.ndarray
     return components
 
 
-def _has_no_singleton_components(mask: np.ndarray) -> bool:
-    return all(
-        int(np.count_nonzero(component)) >= 2
-        for component in _component_masks(mask, connectivity=8)
-    )
-
-
-def _repair_singleton_residuals(
-    selected: np.ndarray,
-    dig_target: np.ndarray,
-    count: int,
-    rng: np.random.Generator,
-) -> np.ndarray | None:
-    """Return completed tiles to singleton residuals, then regrow exactly."""
-    repaired = selected.copy()
-
-    # Returning a neighboring completed tile grows or joins every singleton
-    # residual. Restore the requested count only after all singletons are gone,
-    # so each regrowth choice can preserve that invariant.
-    for _ in range(int(np.count_nonzero(dig_target))):
-        remaining = dig_target & ~repaired
-        singletons = [
-            component
-            for component in _component_masks(remaining, connectivity=8)
-            if int(np.count_nonzero(component)) == 1
-        ]
-        if not singletons:
-            break
-        singleton = singletons[int(rng.integers(0, len(singletons)))]
-        neighbors = (
-            _binary_dilate(singleton, radius=1)
-            & repaired
-            & np.asarray(dig_target, dtype=bool)
-        )
-        candidates = np.argwhere(neighbors)
-        if not len(candidates):
-            return None
-        candidate = candidates[int(rng.integers(0, len(candidates)))]
-        repaired[int(candidate[0]), int(candidate[1])] = False
-    else:
-        return None
-
-    while int(np.count_nonzero(repaired)) < count:
-        remaining = dig_target & ~repaired
-        frontier = remaining & _binary_dilate(repaired, radius=1)
-        candidates = np.argwhere(frontier)
-        if not len(candidates):
-            candidates = np.argwhere(remaining)
-        accepted = False
-        for candidate_index in rng.permutation(len(candidates)):
-            candidate = candidates[int(candidate_index)]
-            x, y = int(candidate[0]), int(candidate[1])
-            repaired[x, y] = True
-            if _has_no_singleton_components(dig_target & ~repaired):
-                accepted = True
-                break
-            repaired[x, y] = False
-        if not accepted:
-            return None
-
-    if int(np.count_nonzero(repaired)) != count:
-        return None
-    if not _has_no_singleton_components(dig_target & ~repaired):
-        return None
-    return repaired
-
-
 @lru_cache(maxsize=1)
 def _conservative_workspace_offsets() -> tuple[tuple[tuple[int, int], ...], ...]:
-    """Oversized 12-heading cones used only for the int8 load bound."""
+    """Oversized 12-heading cones used only for staged-volume diagnostics."""
     result: list[tuple[tuple[int, int], ...]] = []
     radius = math.ceil(WORKSPACE_MAX_RADIUS_TILES)
     for heading_index in range(12):
@@ -465,52 +530,40 @@ def _select_completed_mask(
             "Completed excavation count is outside the partial range."
         )
     components = _component_masks(dig_target, connectivity=8)
-    for _ in range(32):
-        distance = np.full(dig_target.shape, np.iinfo(np.int32).max, dtype=np.int32)
-        queue: deque[tuple[int, int]] = deque()
-        for component in components:
-            component_boundary = np.argwhere(
-                component & ~_binary_erode_square(component, radius=1)
-            )
-            if not len(component_boundary):
-                component_boundary = np.argwhere(component)
-            x, y = component_boundary[int(rng.integers(0, len(component_boundary)))]
-            position = (int(x), int(y))
-            distance[position] = 0
-            queue.append(position)
-        while queue:
-            x, y = queue.popleft()
-            next_distance = distance[x, y] + 1
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    nx, ny = x + dx, y + dy
-                    if (
-                        (dx != 0 or dy != 0)
-                        and 0 <= nx < dig_target.shape[0]
-                        and 0 <= ny < dig_target.shape[1]
-                        and dig_target[nx, ny]
-                        and next_distance < distance[nx, ny]
-                    ):
-                        distance[nx, ny] = next_distance
-                        queue.append((nx, ny))
-
-        target_distances = distance[dig_target]
-        order = np.lexsort((rng.random(len(coordinates)), target_distances))
-        selected = np.zeros_like(dig_target, dtype=bool)
-        chosen = coordinates[order[:count]]
-        selected[chosen[:, 0], chosen[:, 1]] = True
-
-        repaired = _repair_singleton_residuals(
-            selected,
-            dig_target,
-            count,
-            rng,
+    distance = np.full(dig_target.shape, np.iinfo(np.int32).max, dtype=np.int32)
+    queue: deque[tuple[int, int]] = deque()
+    for component in components:
+        component_boundary = np.argwhere(
+            component & ~_binary_erode_square(component, radius=1)
         )
-        if repaired is not None:
-            return repaired
-    raise PartialCompletionError(
-        "Could not grow coherent completed patches without a singleton residual component."
-    )
+        if not len(component_boundary):
+            component_boundary = np.argwhere(component)
+        x, y = component_boundary[int(rng.integers(0, len(component_boundary)))]
+        position = (int(x), int(y))
+        distance[position] = 0
+        queue.append(position)
+    while queue:
+        x, y = queue.popleft()
+        next_distance = distance[x, y] + 1
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nx, ny = x + dx, y + dy
+                if (
+                    (dx != 0 or dy != 0)
+                    and 0 <= nx < dig_target.shape[0]
+                    and 0 <= ny < dig_target.shape[1]
+                    and dig_target[nx, ny]
+                    and next_distance < distance[nx, ny]
+                ):
+                    distance[nx, ny] = next_distance
+                    queue.append((nx, ny))
+
+    target_distances = distance[dig_target]
+    order = np.lexsort((rng.random(len(coordinates)), target_distances))
+    selected = np.zeros_like(dig_target, dtype=bool)
+    chosen = coordinates[order[:count]]
+    selected[chosen[:, 0], chosen[:, 1]] = True
+    return selected
 
 
 def _choose_centers(
@@ -624,6 +677,7 @@ def _deposit_mode_volume(
     heights = np.zeros_like(allowed, dtype=np.int32)
     for center, pile_volume in zip(centers, volumes):
         component = _allowed_component(allowed, center)
+        pile_support = np.zeros_like(allowed, dtype=bool)
         coordinates_x = np.arange(heights.shape[0])[:, None]
         coordinates_y = np.arange(heights.shape[1])[None, :]
         center_cost = (coordinates_x - center[0]) ** 2 + (
@@ -635,6 +689,17 @@ def _deposit_mode_volume(
                 component,
                 config.max_pile_height,
             )
+            if np.any(pile_support):
+                connected_growth = pile_support.copy()
+                connected_growth[1:, :] |= pile_support[:-1, :]
+                connected_growth[:-1, :] |= pile_support[1:, :]
+                connected_growth[:, 1:] |= pile_support[:, :-1]
+                connected_growth[:, :-1] |= pile_support[:, 1:]
+                legal &= connected_growth
+            else:
+                center_is_legal = bool(legal[center])
+                legal.fill(False)
+                legal[center] = center_is_legal
             candidates = np.argwhere(legal)
             if not len(candidates):
                 raise PartialCompletionError(
@@ -645,7 +710,9 @@ def _deposit_mode_volume(
             minimum_cost = int(candidate_costs.min())
             nearest = candidates[candidate_costs == minimum_cost]
             chosen = nearest[int(rng.integers(0, len(nearest)))]
-            heights[int(chosen[0]), int(chosen[1])] += 1
+            chosen_coordinate = (int(chosen[0]), int(chosen[1]))
+            heights[chosen_coordinate] += 1
+            pile_support[chosen_coordinate] = True
     if int(heights.sum()) != volume:
         raise PartialCompletionError("Pile construction did not conserve volume.")
     return heights, centers, volumes
@@ -655,6 +722,7 @@ def _construct_piles(
     target_map: np.ndarray,
     occupancy: np.ndarray,
     dynamic_dumpability: np.ndarray,
+    completed: np.ndarray,
     volume: int,
     mode: str,
     rng: np.random.Generator,
@@ -680,6 +748,37 @@ def _construct_piles(
     near_allowed = physically_valid & near_band
     near_centers = near_allowed & _binary_erode_square(near_allowed, radius=1)
     pile_records: list[dict[str, Any]] = []
+
+    if mode == "relay_corridor":
+        corridor_allowed, corridor_centers, corridor = _relay_corridor_masks(
+            target_map,
+            occupancy,
+            dynamic_dumpability,
+            completed,
+        )
+        heights, centers, volumes = _deposit_mode_volume(
+            volume,
+            corridor_allowed,
+            corridor_centers,
+            rng,
+            config,
+            pile_count=1,
+        )
+        source_distance = corridor["source_distance"]
+        terminal_distance = corridor["terminal_distance"]
+        route_excess = corridor["route_excess"]
+        pile_records.extend(
+            {
+                "mode": "relay_corridor",
+                "center": list(center),
+                "volume": pile_volume,
+                "source_distance_tiles": int(source_distance[center]),
+                "terminal_distance_tiles": int(terminal_distance[center]),
+                "route_excess_tiles": int(route_excess[center]),
+            }
+            for center, pile_volume in zip(centers, volumes)
+        )
+        return heights, pile_records
 
     if mode == "in_zone":
         heights, centers, volumes = _deposit_mode_volume(
@@ -781,6 +880,95 @@ def _validate_slopes(
             )
 
 
+def _interaction_region(
+    center_free: np.ndarray,
+    relevant: np.ndarray,
+) -> np.ndarray:
+    return (
+        np.asarray(center_free, dtype=bool)
+        & _binary_dilate(relevant, radius=int(WORKSPACE_MAX_RADIUS_TILES))
+        & ~_binary_dilate(
+            relevant,
+            radius=max(0, int(WORKSPACE_MIN_RADIUS_TILES) - 1),
+        )
+    )
+
+
+def _relay_static_diagnostics(
+    target_map: np.ndarray,
+    occupancy: np.ndarray,
+    dynamic_dumpability: np.ndarray,
+    action_map: np.ndarray,
+) -> dict[str, Any]:
+    """Describe relay geometry with a conservative static workspace proxy.
+
+    This is intentionally a static construction contract, not an exact Terra
+    action witness. Empty overlap between the deliberately conservative pickup
+    and terminal service-center sets flags a likely relocation case, but it
+    does not prove that no exact rotated Terra pose can serve both regions.
+    """
+    occupancy = np.asarray(occupancy, dtype=bool)
+    action_map = np.asarray(action_map)
+    positive = action_map > 0
+    dump_zone = np.asarray(target_map) > 0
+    center_free = _binary_erode_square(
+        ~occupancy & (action_map == 0),
+        FOOTPRINT_RADIUS_TILES,
+    )
+    pickup_centers = _interaction_region(center_free, positive)
+    terminal_centers = _interaction_region(center_free, dump_zone)
+    direct_centers = pickup_centers & terminal_centers
+
+    pickup_dump_reach = _interaction_region(
+        np.ones_like(center_free, dtype=bool),
+        pickup_centers,
+    )
+    terminal_lift_reach = _interaction_region(
+        np.ones_like(center_free, dtype=bool),
+        terminal_centers,
+    )
+    completed = action_map < 0
+    corridor, _, corridor_data = _relay_corridor_masks(
+        target_map,
+        occupancy,
+        dynamic_dumpability,
+        completed,
+    )
+    handoff_support = (
+        corridor & (action_map == 0) & pickup_dump_reach & terminal_lift_reach
+    )
+    terminal_distance = corridor_data["terminal_distance"]
+    positive_heights = np.where(positive, action_map, 0).astype(np.int64)
+    positive_volume = int(positive_heights.sum())
+    return {
+        "relay_corridor_metric": "obstacle_geodesic_4",
+        "relay_corridor_slack_tiles": RELAY_CORRIDOR_SLACK_TILES,
+        "relay_center_max_route_excess_tiles": RELAY_CENTER_MAX_ROUTE_EXCESS_TILES,
+        "relay_pile_pocket_radius_tiles": RELAY_PILE_POCKET_RADIUS_TILES,
+        "relay_shortest_route_tiles": int(corridor_data["shortest_route_tiles"]),
+        "relay_source_anchor": corridor_data["source_anchor"],
+        "relay_corridor_core_count": int(corridor_data["corridor_core_count"]),
+        "relay_corridor_candidate_count": int(
+            corridor_data["corridor_candidate_count"]
+        ),
+        "relay_pickup_service_center_count": int(np.count_nonzero(pickup_centers)),
+        "relay_terminal_service_center_count": int(np.count_nonzero(terminal_centers)),
+        "relay_direct_service_center_count": int(np.count_nonzero(direct_centers)),
+        "relay_handoff_support_count": int(np.count_nonzero(handoff_support)),
+        "relay_no_shared_conservative_proxy_center": not np.any(direct_centers),
+        "relay_support_min_terminal_distance_tiles": int(
+            terminal_distance[positive].min()
+        ),
+        "relay_support_max_terminal_distance_tiles": int(
+            terminal_distance[positive].max()
+        ),
+        "relay_volume_weighted_terminal_distance_tiles": float(
+            (terminal_distance.astype(np.float64) * positive_heights).sum()
+            / positive_volume
+        ),
+    }
+
+
 def _validate_access(
     target_map: np.ndarray,
     occupancy: np.ndarray,
@@ -812,22 +1000,11 @@ def _validate_access(
     ]
     staged_components = _component_masks(staged, connectivity=8)
     for index, component in enumerate(staged_components):
-        if int(np.count_nonzero(component)) < 2:
-            raise PartialCompletionError(
-                f"Staged pile component {index} has fewer than two support tiles."
-            )
         relevant_regions.append((f"lift_{index}", component))
     relevant_regions.append(("dump", target_map > 0))
 
     for name, relevant in relevant_regions:
-        interaction_region = (
-            center_free
-            & _binary_dilate(relevant, radius=int(WORKSPACE_MAX_RADIUS_TILES))
-            & ~_binary_dilate(
-                relevant,
-                radius=max(0, int(WORKSPACE_MIN_RADIUS_TILES) - 1),
-            )
-        )
+        interaction_region = _interaction_region(center_free, relevant)
         if not np.any(interaction_region):
             raise PartialCompletionError(
                 f"{name} has no footprint-clear nearby interaction region."
@@ -915,6 +1092,11 @@ def validate_partial_state(
         raise PartialCompletionError("Positive soil may not overlap target excavation.")
     if np.any(positive & occupancy.astype(bool)):
         raise PartialCompletionError("Positive soil may not overlap static obstacles.")
+    positive_components = _component_masks(positive, connectivity=4)
+    if expected_mode == "relay_corridor" and len(positive_components) != 1:
+        raise PartialCompletionError(
+            "Relay mode must produce one four-neighbor-connected staged pile."
+        )
 
     dynamic_dumpability = compute_dynamic_dumpability_numpy(
         static_dumpability,
@@ -939,10 +1121,6 @@ def validate_partial_state(
     remaining_component_sizes = [
         int(np.count_nonzero(component)) for component in remaining_components
     ]
-    if any(size < 2 for size in remaining_component_sizes):
-        raise PartialCompletionError(
-            f"Remaining excavation has singleton components: {remaining_component_sizes}."
-        )
 
     dump_zone = target_map > 0
     dump_buffer = _binary_dilate(dump_zone, radius=1)
@@ -972,6 +1150,25 @@ def validate_partial_state(
             "Near-zone support left its Manhattan-distance band."
         )
 
+    relay_diagnostics: dict[str, Any] = {}
+    if expected_mode == "relay_corridor":
+        corridor, _, corridor_data = _relay_corridor_masks(
+            target_map,
+            occupancy.astype(bool),
+            dynamic_dumpability,
+            negative,
+        )
+        if np.any(positive & ~corridor):
+            raise PartialCompletionError(
+                "Relay soil left the obstacle-aware source-to-terminal corridor."
+            )
+        relay_diagnostics = _relay_static_diagnostics(
+            target_map,
+            occupancy,
+            dynamic_dumpability,
+            action_map,
+        )
+
     physically_valid = dynamic_dumpability & ~occupancy.astype(bool) & ~(target_map < 0)
     pile_heights = np.where(positive, action_map, 0).astype(np.int32)
     _validate_slopes(pile_heights, physically_valid)
@@ -989,12 +1186,6 @@ def validate_partial_state(
             _conservative_workspace_offsets(),
         )
     )
-    if maximum_staged_workspace_load > config.max_workspace_load:
-        raise PartialCompletionError(
-            "A possible excavator workspace over staged soil contains "
-            f"{maximum_staged_workspace_load} soil units, exceeding "
-            f"{config.max_workspace_load}."
-        )
 
     spawn_centers = _spawn_center_mask(
         occupancy,
@@ -1015,21 +1206,35 @@ def validate_partial_state(
         spawn_centers,
     )
     positive_distances = distance[positive]
+    staged_volume = int(staged_pile_heights.sum())
+    minimum_conservative_workspace_pickups = (
+        math.ceil(staged_volume / maximum_staged_workspace_load)
+        if staged_volume and maximum_staged_workspace_load
+        else 0
+    )
     return {
         "negative_volume": negative_volume,
         "positive_volume": positive_volume,
         "remaining_component_sizes": remaining_component_sizes,
         "maximum_pile_height": int(pile_heights.max(initial=0)),
         "positive_support_area": int(np.count_nonzero(positive)),
+        "positive_component_count": len(positive_components),
         "minimum_positive_dump_distance": int(positive_distances.min()),
         "maximum_positive_dump_distance": int(positive_distances.max()),
         "valid_spawn_center_count": valid_spawn_count,
         "maximum_staged_workspace_load": int(maximum_staged_workspace_load),
+        "minimum_bucket_loads_for_staged_volume": int(
+            math.ceil(staged_volume / ACTION_MAP_MAX)
+        ),
+        "minimum_conservative_workspace_pickups_for_staged_volume": int(
+            minimum_conservative_workspace_pickups
+        ),
         "maximum_staged_workspace_position": (
             list(maximum_staged_workspace_position)
             if maximum_staged_workspace_position is not None
             else None
         ),
+        **relay_diagnostics,
         **access,
     }
 
@@ -1071,7 +1276,7 @@ def generate_partial_action_map(
         )
     completion_fraction = float(config.completion_fractions[0])
     completed_count = int(round(completion_fraction * original_dig_count))
-    completed_count = min(max(completed_count, 1), original_dig_count - 2)
+    completed_count = min(max(completed_count, 1), original_dig_count - 1)
     mode = _choose_mode(rng, config.mode_weights)
 
     last_error: Exception | None = None
@@ -1092,6 +1297,7 @@ def generate_partial_action_map(
                 target_map,
                 occupancy.astype(bool),
                 dynamic_dumpability,
+                completed,
                 completed_count,
                 mode,
                 rng,
