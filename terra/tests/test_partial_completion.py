@@ -1,8 +1,11 @@
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
+import terra.env_generation.partial_completion as partial_completion_module
 from terra.env_generation.partial_completion import PartialCompletionConfig
+from terra.env_generation.partial_completion import PartialCompletionError
 from terra.env_generation.partial_completion import RELAY_CENTER_MAX_ROUTE_EXCESS_TILES
 from terra.env_generation.partial_completion import _component_masks
 from terra.env_generation.partial_completion import _maximum_workspace_load
@@ -13,6 +16,7 @@ from terra.env_generation.partial_completion import _select_dump_rooted_complete
 from terra.env_generation.partial_completion import compute_dynamic_dumpability_numpy
 from terra.env_generation.partial_completion import generate_partial_action_map
 from terra.env_generation.partial_completion import validate_partial_state
+from terra.maps_buffer import partial_reset_triplet_sanity_check
 
 
 class PartialCompletionGenerationTest(unittest.TestCase):
@@ -228,6 +232,53 @@ class PartialCompletionGenerationTest(unittest.TestCase):
             first.action_map < 0,
         )
         self.assertFalse(np.any((first.action_map > 0) & ~corridor))
+
+    def test_relay_retry_keeps_prefix_and_same_seed_tiers_are_nested(self):
+        target = np.zeros((64, 64), dtype=np.int8)
+        target[10:22, 8:20] = -1
+        target[42:54, 44:58] = 1
+        seed = 37
+        observed_completed = []
+        original_construct = partial_completion_module._construct_piles
+
+        def fail_first_pile_attempt(*args, **kwargs):
+            observed_completed.append(np.asarray(args[3]).copy())
+            if len(observed_completed) == 1:
+                raise PartialCompletionError("forced first pile retry")
+            return original_construct(*args, **kwargs)
+
+        def generate(fraction):
+            return generate_partial_action_map(
+                target,
+                self.occupancy,
+                self.dumpability,
+                rng=np.random.default_rng(seed),
+                config=self._config(
+                    "relay_corridor",
+                    completion_fractions=(fraction,),
+                    min_piles=1,
+                    max_piles=1,
+                    max_attempts_per_variant=100,
+                ),
+            )
+
+        with patch.object(
+            partial_completion_module,
+            "_construct_piles",
+            side_effect=fail_first_pile_attempt,
+        ):
+            partial_90 = generate(0.90)
+        partial_75 = generate(0.75)
+        partial_50 = generate(0.50)
+
+        self.assertEqual(partial_90.manifest["generation_attempt"], 2)
+        self.assertEqual(len(observed_completed), 2)
+        np.testing.assert_array_equal(observed_completed[0], observed_completed[1])
+        partial_reset_triplet_sanity_check(
+            partial_90.action_map,
+            partial_75.action_map,
+            partial_50.action_map,
+        )
 
     def test_relay_corridor_bends_through_an_obstacle_gap(self):
         target = np.zeros((64, 64), dtype=np.int8)

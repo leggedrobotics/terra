@@ -118,8 +118,12 @@ class State(NamedTuple):
 
     env_steps: int
     productive_workspace_cycles: int
+    material_q_reset: Float
     material_h_reset: Float
     stall_age_steps: int
+    # Tier latched when this episode was reset. Unlike env_cfg.reset_tier, this
+    # does not change when the trainer schedules a different next reset.
+    reset_tier: int
 
 
     @classmethod
@@ -154,11 +158,18 @@ class State(NamedTuple):
                 agent=initial_agent,
                 env_steps=0,
                 productive_workspace_cycles=0,
+                material_q_reset=jnp.float32(0.0),
                 material_h_reset=jnp.float32(0.0),
                 stall_age_steps=jnp.int32(0),
+                reset_tier=jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32),
             )
             return state._replace(
-                material_h_reset=state._compute_material_work()
+                material_q_reset=jnp.where(
+                    jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32) > 0,
+                    state._compute_excavation_completion_fraction(),
+                    jnp.float32(0.0),
+                ),
+                material_h_reset=state._compute_material_work(),
             )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
@@ -196,11 +207,18 @@ class State(NamedTuple):
             agent=agent,
             env_steps=0,
             productive_workspace_cycles=0,
+            material_q_reset=jnp.float32(0.0),
             material_h_reset=jnp.float32(0.0),
             stall_age_steps=jnp.int32(0),
+            reset_tier=jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32),
         )
         return state._replace(
-            material_h_reset=state._compute_material_work()
+            material_q_reset=jnp.where(
+                jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32) > 0,
+                state._compute_excavation_completion_fraction(),
+                jnp.float32(0.0),
+            ),
+            material_h_reset=state._compute_material_work(),
         )
 
     def _reset(
@@ -4132,6 +4150,19 @@ class State(NamedTuple):
         target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
         return jnp.sum(jnp.clip(-target, a_min=jnp.float32(0.0)))
 
+    def _compute_excavation_completion_fraction(self) -> Float:
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
+        required = jnp.clip(-target, a_min=jnp.float32(0.0))
+        completed = jnp.minimum(
+            jnp.clip(-action, a_min=jnp.float32(0.0)),
+            required,
+        )
+        return jnp.sum(completed) / jnp.maximum(
+            jnp.sum(required),
+            jnp.float32(1e-6),
+        )
+
     def _total_carry_work(self) -> Float:
         credits = jnp.stack(
             [
@@ -4171,8 +4202,8 @@ class State(NamedTuple):
             + self._total_carry_work()
         )
 
-    def _reward_v2_state_values(self) -> tuple[Float, Float, Float, Float, Float]:
-        """Return ``(Q, H, P, Phi, valid)`` for the R2 material potential."""
+    def _reward_v2_progress(self) -> tuple[Float, Float, Float]:
+        """Return reset-relative ``(Q, H, P)`` for reward and observation."""
         target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
         action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
         required = jnp.clip(-target, a_min=jnp.float32(0.0))
@@ -4181,9 +4212,18 @@ class State(NamedTuple):
             jnp.clip(-action, a_min=jnp.float32(0.0)),
             required,
         )
-        q = jnp.sum(completed) / jnp.maximum(v0, jnp.float32(1e-6))
+        q_absolute = jnp.sum(completed) / jnp.maximum(v0, jnp.float32(1e-6))
+        q = q_absolute - self.material_q_reset
         h = self._compute_material_work()
         p = (self.material_h_reset - h) / jnp.maximum(v0, jnp.float32(1e-6))
+        return q, h, p
+
+    def _reward_v2_state_values(self) -> tuple[Float, Float, Float, Float, Float]:
+        """Return ``(Q, H, P, Phi, valid)`` for the R2 material potential."""
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        required = jnp.clip(-target, a_min=jnp.float32(0.0))
+        v0 = jnp.sum(required)
+        q, h, p = self._reward_v2_progress()
         bound = jnp.float32(REWARD_V2_DISTANCE_BOUND)
         alpha = jnp.float32(REWARD_V2_ALPHA)
         beta = jnp.float32(REWARD_V2_BETA)
@@ -4236,7 +4276,7 @@ class State(NamedTuple):
                         jnp.logical_and(
                             jnp.max(distance) <= bound + jnp.float32(1e-5),
                             jnp.logical_and(
-                                q >= -jnp.float32(1e-5),
+                                q >= -jnp.float32(1.0) - jnp.float32(1e-5),
                                 jnp.logical_and(
                                     q <= jnp.float32(1.0) + jnp.float32(1e-5),
                                     jnp.logical_and(

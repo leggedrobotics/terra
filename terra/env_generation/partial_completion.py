@@ -1404,16 +1404,24 @@ def generate_partial_action_map(
     completed_count = min(max(completed_count, 1), original_dig_count - 1)
     mode = _choose_mode(rng, config.mode_weights)
 
+    # Relay retries are allowed to explore different pile placements, but they
+    # must not silently redraw the excavated prefix.  Keeping this ranking
+    # fixed is also what makes same-seed 50/75/90 reset triplets nested.
+    relay_completed: np.ndarray | None = None
+    if mode == "relay_corridor":
+        relay_completed = _select_dump_rooted_completed_mask(
+            target_map,
+            occupancy,
+            completed_count,
+            rng,
+        )
+
     last_error: Exception | None = None
     for attempt in range(1, config.max_attempts_per_variant + 1):
         try:
             if mode == "relay_corridor":
-                completed = _select_dump_rooted_completed_mask(
-                    target_map,
-                    occupancy,
-                    completed_count,
-                    rng,
-                )
+                assert relay_completed is not None
+                completed = relay_completed
                 completed_selection = "terminal_rooted_reverse_delete"
             else:
                 completed = _select_completed_mask(

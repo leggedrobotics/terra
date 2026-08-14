@@ -131,6 +131,66 @@ The spawn and connectivity checks are also static feasibility proxies. They do
 not prove that an action sequence exists, and they must not be described as
 Terra action-level certification.
 
+## Training sidecar bank
+
+Training keeps the exact canonical target, obstacle, dumpability, and distance
+layers in memory once and loads only source-bound partial action maps:
+
+```text
+partial_reset_root/
+  partial_reset_bank.json
+  partial_completion_rejections.jsonl
+  train/<condition maps_path>/
+    partial_completion_config.json
+    partial_completion_manifest.jsonl
+    partial_completion_rejections.jsonl
+    actions/img_1.npy
+    actions/img_2.npy
+    ...
+```
+
+Build this bank directly from the accepted exact-bank root:
+
+```bash
+python tools/materialize_partial_reset_bank.py \
+  --input-root /path/to/accepted_bank \
+  --output-root /path/to/relay_partial_sidecars \
+  --seed 0
+```
+
+The materializer requires the accepted bank's root `dataset.json` with schema
+`terra_curriculum_loader_bank_v1` and follows its ordered `train[*].maps_path`
+registry exactly. It neither scans nor admits evaluation/stray leaves. It uses
+`relay_corridor` exclusively and records every rejected source/tier attempt.
+A source is admitted only as a complete 90/75/50 triplet. All three tiers share
+one deterministic source seed and a strictly nested excavation prefix; if one
+tier fails, the other two are discarded. A condition is admitted only when it
+has at least one such triplet, so source coverage may remain sparse but is
+identical across tiers. Each successful row binds its action map to the
+canonical `map_id` and strict reset-array `scenario_id`. The root digest covers
+every leaf config, success manifest, rejection manifest, and action-array byte
+stream and is verified at load time.
+
+The ordinary `generate_partial_completion_dataset.py` output remains the
+fail-loud visual/inspection artifact. It is not itself a training sidecar bank;
+the sparse materializer is the one supported runtime path.
+
+`TerraEnvBatch(partial_reset_root=...)` exposes:
+
+- `partial_reset_supported_levels`, shape `[4, number_of_conditions]`, with
+  tier zero true for every canonical condition and tiers 1-3 sharing the
+  admitted common-support mask;
+- `partial_reset_bank_sha256`, for experiment and checkpoint receipts; and
+- `EnvConfig.reset_tier`: `0=full`, `1=90%`, `2=75%`, `3=50%`.
+
+The selector controls only the next reset. `State.reset_tier` remains latched
+for the active episode, and terminal transition info records
+`ended_reset_tier`, so changing the schedule cannot relabel unfinished or just
+completed episodes. Reward-v2 centers partial episodes on their reset state:
+`q=Q-Q_reset` and `p=(H_reset-H)/V0`, while retaining the full-task `V0`. The
+observation `reward_v2_reset_context=[Q_reset,H_reset/V0]` keeps that reward
+state Markov. Full resets keep `Q_reset=0` and remain bit-identical.
+
 ## Dataset output
 
 The output keeps Terra's ordinary folder layout:
@@ -194,9 +254,11 @@ distribution:
 3. `R2`: 50-75% completed, then ordinary full starts. This bridges cleanup to
    excavation plus cleanup without inventing remote or lateral pile geometry.
 
-Fractions are independently generated compact fronts, not snapshots from one
-demonstration. This is Backplay-inspired start-distribution shaping, not exact
-Backplay, and completion fraction must not be used as a proxy for relay length.
+The 50/75/90 excavation masks are nested prefixes from one deterministic
+terminal-rooted ordering, while pile placement is regenerated and validated at
+each tier. They are not snapshots from one demonstration. This is
+Backplay-inspired start-distribution shaping, not exact Backplay, and completion
+fraction must not be used as a proxy for relay length.
 
 Anneal the partial fraction toward zero and judge promotion only on untouched
 full-start maps. Partial-reset successes must not update the full-start

@@ -15,12 +15,14 @@ from typing import Any
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import ImmutableMapsConfig
+from terra.config import PARTIAL_RESET_FRACTIONS
 from terra.config import REWARD_V2_DISTANCE_BOUND
 from terra.config import REWARD_V2_DISTANCE_REF_M
 from terra.env_generation.distance import REWARD_V2_DISTANCE_METRIC
 from terra.env_generation.distance import REWARD_V2_DISTANCE_NORMALIZATION
 from terra.env_generation.distance import REWARD_V2_DISTANCE_PROTOCOL_ID
 from terra.env_generation.distance import compute_reward_v2_distance_map
+from terra.map import compute_dynamic_dumpability
 from terra.settings import IntMap
 from terra.settings import IntLowDim
 
@@ -44,6 +46,12 @@ class MapsBuffer(NamedTuple):
     primary_cell_ids: Array  # [map_type, n_maps], index into primary_cell_names
     n_maps: int  # number of maps for each map type
     distance_maps: Array  # [map_type, n_maps, W, H] normalized float32
+    # [partial_tier - 1, map_type, n_maps, W, H]. The canonical target,
+    # obstacles, dumpability, and distance arrays remain shared with full resets.
+    partial_action_maps: Array
+    partial_action_available: Array  # [partial_tier - 1, map_type, n_maps]
+    partial_reset_supported_levels: Array  # [reset_tier, map_type]
+    partial_reset_bank_sha256: str
 
     immutable_maps_cfg: ImmutableMapsConfig = ImmutableMapsConfig()
     family_names: tuple[str, ...] = ("unknown",)
@@ -70,6 +78,10 @@ class MapsBuffer(NamedTuple):
         slot_indices: Array | None = None,
         family_ids: Array | None = None,
         primary_cell_ids: Array | None = None,
+        partial_action_maps: Array | None = None,
+        partial_action_available: Array | None = None,
+        partial_reset_supported_levels: Array | None = None,
+        partial_reset_bank_sha256: str = "",
         family_names: tuple[str, ...] = ("unknown",),
         primary_cell_names: tuple[str, ...] = ("unknown",),
     ) -> "MapsBuffer":
@@ -88,6 +100,27 @@ class MapsBuffer(NamedTuple):
                 provenance_shape,
                 dtype=jnp.int32,
             )
+        if partial_action_maps is None:
+            partial_action_maps = jnp.zeros(
+                (0, *maps.shape),
+                dtype=IntLowDim,
+            )
+        if partial_action_available is None:
+            partial_action_available = jnp.zeros(
+                (0, *maps.shape[:2]),
+                dtype=jnp.bool_,
+            )
+        if partial_reset_supported_levels is None:
+            partial_reset_supported_levels = jnp.concatenate(
+                (
+                    jnp.ones((1, maps.shape[0]), dtype=jnp.bool_),
+                    jnp.zeros(
+                        (len(PARTIAL_RESET_FRACTIONS), maps.shape[0]),
+                        dtype=jnp.bool_,
+                    ),
+                ),
+                axis=0,
+            )
         return MapsBuffer(
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
@@ -105,6 +138,13 @@ class MapsBuffer(NamedTuple):
                 dtype=jnp.int32,
             ),
             distance_maps=distance_maps.astype(jnp.float32),
+            partial_action_maps=partial_action_maps.astype(IntLowDim),
+            partial_action_available=partial_action_available.astype(jnp.bool_),
+            partial_reset_supported_levels=jnp.asarray(
+                partial_reset_supported_levels,
+                dtype=jnp.bool_,
+            ),
+            partial_reset_bank_sha256=str(partial_reset_bank_sha256),
             family_names=tuple(family_names),
             primary_cell_names=tuple(primary_cell_names),
         )
@@ -116,7 +156,41 @@ class MapsBuffer(NamedTuple):
     ) -> tuple[Array, Array, Array]:
         curriculum_level = env_cfg.curriculum.level
         key, subkey = jax.random.split(key)
-        idx = jax.random.randint(subkey, (), 0, self.n_maps)
+        full_idx = jax.random.randint(subkey, (), 0, self.n_maps)
+        reset_tier = jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32)
+        # TerraEnvBatch.validate_reset_tiers owns fail-loud validation before
+        # tracing. Effectful checks here are not valid under pmap(vmap(cond)).
+        # The exact benchmark materializer intentionally calls this method on
+        # an index-only namespace; keep that full-reset path byte-identical.
+        partial_action_maps = getattr(self, "partial_action_maps", None)
+        if (
+            partial_action_maps is not None
+            and partial_action_maps.shape[0] == len(PARTIAL_RESET_FRACTIONS)
+        ):
+            safe_tier_index = jnp.clip(
+                reset_tier - 1,
+                0,
+                len(PARTIAL_RESET_FRACTIONS) - 1,
+            )
+            available = self.partial_action_available[
+                safe_tier_index,
+                curriculum_level,
+            ]
+
+            def _select_partial(_: None) -> Array:
+                return jax.random.categorical(
+                    subkey,
+                    jnp.where(available, 0.0, -jnp.inf),
+                ).astype(jnp.int32)
+
+            idx = jax.lax.cond(
+                reset_tier == 0,
+                lambda _: full_idx,
+                _select_partial,
+                operand=None,
+            )
+        else:
+            idx = full_idx
         return curriculum_level, idx, key
 
     def _select_map(self, key: jax.random.PRNGKey, env_cfg: EnvConfig) -> Array:
@@ -132,6 +206,18 @@ class MapsBuffer(NamedTuple):
         foundation_border_type = foundation_border_type.astype(jnp.int32)
         dumpability_mask_init = self.dumpability_masks_init[curriculum_level, idx]
         action_map = self.action_maps[curriculum_level, idx]
+        reset_tier = jnp.asarray(env_cfg.reset_tier, dtype=jnp.int32)
+        if self.partial_action_maps.shape[0] == len(PARTIAL_RESET_FRACTIONS):
+            partial_action_map = self.partial_action_maps[
+                jnp.clip(reset_tier - 1, 0, len(PARTIAL_RESET_FRACTIONS) - 1),
+                curriculum_level,
+                idx,
+            ]
+            action_map = jnp.where(
+                reset_tier == 0,
+                action_map,
+                partial_action_map,
+            )
         distance_map = self.distance_maps[curriculum_level, idx]
         return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
@@ -238,6 +324,401 @@ def actions_sanity_check(map: Array) -> None:
             f"range [-1, {int_low_dim_max}]; got dtype={dtype}, "
             f"min={minimum}, max={maximum}."
         )
+
+
+PARTIAL_COMPLETION_CONFIG = "partial_completion_config.json"
+PARTIAL_COMPLETION_MANIFEST = "partial_completion_manifest.jsonl"
+PARTIAL_COMPLETION_REJECTIONS = "partial_completion_rejections.jsonl"
+PARTIAL_RESET_BANK_INDEX = "partial_reset_bank.json"
+PARTIAL_RESET_BANK_SCHEMA = "terra_sparse_partial_reset_bank_v1"
+PARTIAL_RESET_LEAF_SCHEMA = "terra_sparse_partial_reset_leaf_v1"
+PARTIAL_RESET_TRIPLET_CONTRACT = "strict_nested_source_triplet_v1"
+
+
+def partial_reset_action_sanity_check(
+    target_map: Array,
+    occupancy_map: Array,
+    dumpability_map: Array,
+    action_map: Array,
+    *,
+    expected_fraction: float,
+) -> None:
+    """Validate the load-bearing partial-reset invariants at the runtime boundary."""
+    target = np.asarray(target_map)
+    occupancy = np.asarray(occupancy_map, dtype=np.bool_)
+    dumpability = np.asarray(dumpability_map, dtype=np.bool_)
+    action = np.asarray(action_map)
+    actions_sanity_check(action)
+    if not target.shape == occupancy.shape == dumpability.shape == action.shape:
+        raise RuntimeError(
+            "Partial target, occupancy, dumpability, and action maps must have "
+            "the same shape."
+        )
+
+    completed = action < 0
+    positive = action > 0
+    dig_target = target < 0
+    if np.any(completed & ~dig_target):
+        raise RuntimeError("Partial reset excavates outside the target dig region.")
+    if np.any(positive & dig_target):
+        raise RuntimeError("Partial reset places positive soil on unfinished dig target.")
+    if np.any(positive & occupancy):
+        raise RuntimeError("Partial reset places positive soil on an obstacle.")
+
+    dynamic_dumpability = np.asarray(
+        compute_dynamic_dumpability(dumpability, action),
+        dtype=np.bool_,
+    )
+    if np.any(positive & ~dynamic_dumpability):
+        raise RuntimeError(
+            "Partial reset places positive soil outside initial dynamic dumpability."
+        )
+
+    required_dig_tiles = int(np.count_nonzero(dig_target))
+    expected_completed = int(round(expected_fraction * required_dig_tiles))
+    completed_volume = -int(action[completed].astype(np.int64).sum())
+    positive_volume = int(action[positive].astype(np.int64).sum())
+    if completed_volume != expected_completed:
+        raise RuntimeError(
+            "Partial reset completion does not match its tier: "
+            f"expected {expected_completed}, got {completed_volume}."
+        )
+    if positive_volume != completed_volume:
+        raise RuntimeError(
+            "Partial reset violates mass conservation: "
+            f"positive volume {positive_volume}, completed volume {completed_volume}."
+        )
+    if not np.any(dig_target & ~completed):
+        raise RuntimeError("Partial reset must leave unfinished excavation work.")
+
+
+def partial_reset_triplet_sanity_check(
+    action_90: Array,
+    action_75: Array,
+    action_50: Array,
+) -> None:
+    """Require one strictly nested Backplay prefix for a canonical source."""
+    completed_90 = np.asarray(action_90) < 0
+    completed_75 = np.asarray(action_75) < 0
+    completed_50 = np.asarray(action_50) < 0
+    if not completed_90.shape == completed_75.shape == completed_50.shape:
+        raise RuntimeError("Partial-reset source triplet shapes do not match.")
+    if not (
+        np.all(~completed_50 | completed_75)
+        and np.all(~completed_75 | completed_90)
+    ):
+        raise RuntimeError(
+            "Partial-reset source triplet is not nested as 50% within 75% "
+            "within 90%."
+        )
+    counts = tuple(
+        int(np.count_nonzero(mask))
+        for mask in (completed_50, completed_75, completed_90)
+    )
+    if not counts[0] < counts[1] < counts[2]:
+        raise RuntimeError(
+            "Partial-reset source triplet must have strictly increasing "
+            f"completed prefixes; got 50/75/90 counts {counts}."
+        )
+
+
+def partial_reset_bank_sha256(partial_reset_root: str | Path) -> str:
+    """Hash the sparse sidecar bytes without hashing the self-naming root index."""
+    root = Path(partial_reset_root)
+    selected: list[Path] = []
+    for name in (
+        PARTIAL_COMPLETION_CONFIG,
+        PARTIAL_COMPLETION_MANIFEST,
+        PARTIAL_COMPLETION_REJECTIONS,
+    ):
+        selected.extend(root.rglob(name))
+    selected.extend(root.rglob("actions/img_*.npy"))
+    digest = hashlib.sha256()
+    for path in sorted(selected, key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        data = path.read_bytes()
+        digest.update(len(relative).to_bytes(8, "little"))
+        digest.update(relative)
+        digest.update(len(data).to_bytes(8, "little"))
+        digest.update(data)
+    return digest.hexdigest()
+
+
+def load_partial_reset_action_sidecars(
+    partial_reset_root: str | Path,
+    maps_paths: list[str],
+    maps: list[Array],
+    occupancies: list[Array],
+    dumpability_masks: list[Array],
+    canonical_manifest_rows: list[list[dict[str, Any]]],
+) -> tuple[np.ndarray, np.ndarray, str, np.ndarray]:
+    """Load sparse, source-bound partial action maps over canonical map slots."""
+    root = Path(partial_reset_root)
+    if not root.is_dir():
+        raise RuntimeError(f"Partial-reset root does not exist: {root}")
+    index_path = root / PARTIAL_RESET_BANK_INDEX
+    if not index_path.is_file():
+        raise RuntimeError(f"Missing partial-reset bank index: {index_path}")
+    try:
+        bank_index = json.loads(index_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON in {index_path}: {exc}") from exc
+    if bank_index.get("schema") != PARTIAL_RESET_BANK_SCHEMA:
+        raise RuntimeError(
+            f"{index_path} must use schema {PARTIAL_RESET_BANK_SCHEMA!r}."
+        )
+    if (
+        bank_index.get("source_triplet_contract")
+        != PARTIAL_RESET_TRIPLET_CONTRACT
+    ):
+        raise RuntimeError(
+            f"{index_path} must use source_triplet_contract="
+            f"{PARTIAL_RESET_TRIPLET_CONTRACT!r}."
+        )
+    actual_bank_sha256 = partial_reset_bank_sha256(root)
+    if bank_index.get("bank_sha256") != actual_bank_sha256:
+        raise RuntimeError(
+            "Partial-reset bank digest mismatch: "
+            f"index declares {bank_index.get('bank_sha256')}, observed "
+            f"{actual_bank_sha256}."
+        )
+    if not (
+        len(maps_paths)
+        == len(maps)
+        == len(occupancies)
+        == len(dumpability_masks)
+        == len(canonical_manifest_rows)
+    ):
+        raise RuntimeError("Partial-reset level inputs are inconsistent.")
+
+    level_count = len(maps_paths)
+    source_count = int(maps[0].shape[0])
+    partial_actions = np.zeros(
+        (
+            len(PARTIAL_RESET_FRACTIONS),
+            level_count,
+            source_count,
+            *maps[0].shape[1:],
+        ),
+        dtype=np.int8,
+    )
+    available = np.zeros(
+        (len(PARTIAL_RESET_FRACTIONS), level_count, source_count),
+        dtype=np.bool_,
+    )
+    supported_levels = np.zeros(
+        (len(PARTIAL_RESET_FRACTIONS) + 1, level_count),
+        dtype=np.bool_,
+    )
+    supported_levels[0] = True
+    indexed_paths = bank_index.get("supported_maps_paths")
+    if not isinstance(indexed_paths, list) or any(
+        not isinstance(value, str) for value in indexed_paths
+    ):
+        raise RuntimeError(f"{index_path} has invalid supported_maps_paths.")
+    indexed_paths_set = set(indexed_paths)
+
+    for level_index, maps_path in enumerate(maps_paths):
+        if int(maps[level_index].shape[0]) != source_count:
+            raise RuntimeError("All partial-reset curriculum levels need equal slot counts.")
+        directory = root / maps_path
+        config_path = directory / PARTIAL_COMPLETION_CONFIG
+        manifest_path = directory / PARTIAL_COMPLETION_MANIFEST
+        declared_supported = maps_path in indexed_paths_set
+        if not declared_supported:
+            if config_path.exists() or manifest_path.exists():
+                raise RuntimeError(
+                    f"Undeclared partial-reset leaf exists under {directory}."
+                )
+            continue
+        if not config_path.is_file() or not manifest_path.is_file():
+            raise RuntimeError(
+                "Missing declared partial-reset leaf under "
+                f"{directory}; expected {PARTIAL_COMPLETION_CONFIG} and "
+                f"{PARTIAL_COMPLETION_MANIFEST}."
+            )
+        try:
+            config = json.loads(config_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"Invalid JSON in {config_path}: {exc}") from exc
+
+        if config.get("schema") != PARTIAL_RESET_LEAF_SCHEMA:
+            raise RuntimeError(
+                f"{config_path} must use schema {PARTIAL_RESET_LEAF_SCHEMA!r}."
+            )
+        if config.get("maps_path") != maps_path:
+            raise RuntimeError(f"{config_path} is bound to the wrong maps_path.")
+        configured_fractions = config.get("completion_fractions")
+        if configured_fractions != list(PARTIAL_RESET_FRACTIONS):
+            raise RuntimeError(
+                f"{config_path} must contain exactly the reset fractions "
+                f"{PARTIAL_RESET_FRACTIONS}."
+            )
+        if config.get("pile_mode") != "relay_corridor":
+            raise RuntimeError(
+                f"{config_path} must use pile_mode='relay_corridor'."
+            )
+        if (
+            config.get("source_triplet_contract")
+            != PARTIAL_RESET_TRIPLET_CONTRACT
+        ):
+            raise RuntimeError(
+                f"{config_path} must use source_triplet_contract="
+                f"{PARTIAL_RESET_TRIPLET_CONTRACT!r}."
+            )
+        if config.get("canonical_slot_count") != source_count:
+            raise RuntimeError(
+                f"{config_path} canonical_slot_count="
+                f"{config.get('canonical_slot_count')} "
+                f"does not match the canonical bank count {source_count}."
+            )
+
+        rows = _load_json_lines(manifest_path)
+        if config.get("successful_variant_count") != len(rows):
+            raise RuntimeError(
+                f"{config_path} successful_variant_count does not match "
+                f"{manifest_path}."
+            )
+        observed_sidecar_indices = [row.get("sidecar_index") for row in rows]
+        expected_sidecar_indices = list(range(1, len(rows) + 1))
+        if observed_sidecar_indices != expected_sidecar_indices:
+            raise RuntimeError(
+                f"{manifest_path} must enumerate ordered sidecar indices "
+                f"1..{len(rows)}."
+            )
+        action_indices = _indexed_sidecars(directory / "actions", "img_", ".npy")
+        if action_indices != expected_sidecar_indices:
+            raise RuntimeError(
+                f"Partial action sidecars in {directory / 'actions'} must "
+                f"enumerate exactly 1..{len(rows)}."
+            )
+        seen: set[tuple[int, int]] = set()
+        source_variant_seeds: dict[int, set[int]] = {}
+        for row in rows:
+            source_index = row.get("source_index")
+            reset_tier = row.get("reset_tier")
+            requested_fraction = row.get("requested_completion_fraction")
+            variant_seed = row.get("variant_seed")
+            if (
+                not isinstance(source_index, int)
+                or not 1 <= source_index <= source_count
+                or not isinstance(reset_tier, int)
+                or not 1 <= reset_tier <= len(PARTIAL_RESET_FRACTIONS)
+                or not isinstance(requested_fraction, (int, float))
+                or not isinstance(variant_seed, int)
+                or row.get("pile_mode") != "relay_corridor"
+            ):
+                raise RuntimeError(f"Invalid partial-reset manifest row: {row}")
+            tier_index = reset_tier - 1
+            if not np.isclose(
+                float(requested_fraction),
+                PARTIAL_RESET_FRACTIONS[tier_index],
+                rtol=0.0,
+                atol=1e-9,
+            ):
+                raise RuntimeError(
+                    f"Reset tier {reset_tier} has wrong fraction "
+                    f"{requested_fraction}."
+                )
+            key = (tier_index, source_index - 1)
+            if key in seen:
+                raise RuntimeError(
+                    "Partial-reset manifest contains duplicate source/fraction "
+                    f"entry {key}."
+                )
+
+            canonical_row = canonical_manifest_rows[level_index][source_index - 1]
+            if (
+                row.get("source_map_id") != canonical_row.get("map_id")
+                or row.get("source_scenario_id") != canonical_row.get("scenario_id")
+                or not _is_sha256(row.get("source_scenario_id"))
+            ):
+                raise RuntimeError(
+                    "Partial-reset source identity does not match canonical slot "
+                    f"{maps_path}:{source_index}."
+                )
+
+            action_path = directory / "actions" / f"img_{row['sidecar_index']}.npy"
+            if _sha256_file(action_path) != row.get("action_sha256"):
+                raise RuntimeError(f"Partial action hash mismatch: {action_path}")
+            action = _ensure_spatial_2d(np.load(action_path), str(action_path))
+            partial_reset_action_sanity_check(
+                maps[level_index][source_index - 1],
+                occupancies[level_index][source_index - 1],
+                dumpability_masks[level_index][source_index - 1],
+                action,
+                expected_fraction=PARTIAL_RESET_FRACTIONS[tier_index],
+            )
+            contained_dump_capacity_sanity_check(
+                maps[level_index][source_index - 1],
+                occupancies[level_index][source_index - 1],
+                dumpability_masks[level_index][source_index - 1],
+                action,
+            )
+            achieved_fraction = row.get("achieved_completion_fraction")
+            actual_fraction = (
+                int(np.count_nonzero(action < 0))
+                / int(np.count_nonzero(maps[level_index][source_index - 1] < 0))
+            )
+            if not isinstance(achieved_fraction, (int, float)) or not np.isclose(
+                float(achieved_fraction),
+                actual_fraction,
+                rtol=0.0,
+                atol=1e-12,
+            ):
+                raise RuntimeError(
+                    f"Partial-reset manifest/action mismatch for {action_path}."
+                )
+            partial_actions[tier_index, level_index, source_index - 1] = action.astype(
+                np.int8
+            )
+            available[tier_index, level_index, source_index - 1] = True
+            source_variant_seeds.setdefault(source_index - 1, set()).add(variant_seed)
+            seen.add(key)
+
+        tier_counts = available[:, level_index].sum(axis=1)
+        tier_availability = available[:, level_index]
+        if not (
+            np.array_equal(tier_availability[0], tier_availability[1])
+            and np.array_equal(tier_availability[1], tier_availability[2])
+        ):
+            raise RuntimeError(
+                f"Declared supported level {maps_path} must contain complete "
+                "source triplets with identical availability in every tier."
+            )
+        if not np.all(tier_counts > 0):
+            raise RuntimeError(
+                f"Declared supported level {maps_path} must have at least one "
+                f"sidecar in every tier; got {tier_counts.tolist()}."
+            )
+        for source_slot in np.flatnonzero(tier_availability[0]):
+            source_slot = int(source_slot)
+            if source_variant_seeds.get(source_slot) is None or len(
+                source_variant_seeds[source_slot]
+            ) != 1:
+                raise RuntimeError(
+                    f"Partial-reset source triplet {maps_path}:{source_slot + 1} "
+                    "must share one deterministic variant_seed."
+                )
+            partial_reset_triplet_sanity_check(
+                partial_actions[0, level_index, source_slot],
+                partial_actions[1, level_index, source_slot],
+                partial_actions[2, level_index, source_slot],
+            )
+        supported_levels[1:, level_index] = True
+
+    unknown_indexed_paths = indexed_paths_set - set(maps_paths)
+    if unknown_indexed_paths:
+        raise RuntimeError(
+            "Partial-reset bank contains unknown curriculum paths: "
+            f"{sorted(unknown_indexed_paths)}."
+        )
+    if not np.all(np.any(supported_levels[1:], axis=1)):
+        raise RuntimeError(
+            "Partial-reset bank must support at least one curriculum level for "
+            "every scheduled tier."
+        )
+    return partial_actions, available, actual_bank_sha256, supported_levels
 
 
 def contained_dump_capacity_sanity_check(
@@ -1313,9 +1794,15 @@ def init_maps_buffer(
     shuffle_maps: bool,
     single_map_path: str = None,
     required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
+    partial_reset_root: str | Path | None = None,
 ):
     manifest_rows_per_level: list[list[dict[str, Any]]] | None = None
     if single_map_path is not None:
+        if partial_reset_root is not None:
+            raise RuntimeError(
+                "Partial-reset sidecars require the canonical dataset loader, "
+                "not single_map_path."
+            )
         if required_distance_protocol_id != LEGACY_DISTANCE_PROTOCOL_ID:
             raise RuntimeError(
                 "Reward-v2 accepts only exact datasets with validated physical "
@@ -1402,6 +1889,36 @@ def init_maps_buffer(
             manifest_rows_per_level.append(
                 _load_json_lines(Path(folder_path) / EXACT_DATASET_MANIFEST)
             )
+
+    partial_action_maps = None
+    partial_action_available = None
+    partial_reset_bank_digest = ""
+    partial_reset_supported_levels = np.zeros(
+        (
+            len(PARTIAL_RESET_FRACTIONS) + 1,
+            len(batch_cfg.curriculum_global.levels),
+        ),
+        dtype=np.bool_,
+    )
+    partial_reset_supported_levels[0] = True
+    if partial_reset_root is not None:
+        if manifest_rows_per_level is None:
+            raise RuntimeError(
+                "Partial resets require canonical manifest rows for source identity."
+            )
+        (
+            partial_action_maps,
+            partial_action_available,
+            partial_reset_bank_digest,
+            partial_reset_supported_levels,
+        ) = load_partial_reset_action_sidecars(
+            partial_reset_root,
+            maps_paths,
+            maps_from_disk,
+            occupancies_from_disk,
+            dumpability_masks_init_from_disk,
+            manifest_rows_per_level,
+        )
 
     if manifest_rows_per_level is None:
         family_names = ("unknown",)
@@ -1493,6 +2010,21 @@ def init_maps_buffer(
     foundation_border_axes_list = jnp.array(foundation_border_axes_list)
     foundation_border_types = jnp.array(foundation_border_types)
     actions_from_disk_padded = jnp.array(actions_from_disk_padded)
+    if partial_action_maps is None:
+        partial_action_maps = jnp.zeros(
+            (0, *maps_from_disk_padded.shape),
+            dtype=IntLowDim,
+        )
+        partial_action_available = jnp.zeros(
+            (0, *maps_from_disk_padded.shape[:2]),
+            dtype=jnp.bool_,
+        )
+    else:
+        partial_action_maps = jnp.asarray(partial_action_maps, dtype=IntLowDim)
+        partial_action_available = jnp.asarray(
+            partial_action_available,
+            dtype=jnp.bool_,
+        )
     distances_padded = jnp.array(distances_padded)
     slot_indices = jnp.array(slot_indices, dtype=jnp.int32)
     family_ids = jnp.array(family_ids, dtype=jnp.int32)
@@ -1533,6 +2065,13 @@ def init_maps_buffer(
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (-1, *actions_from_disk_padded.shape[2:])
         )
+        if partial_action_maps.shape[0] > 0:
+            partial_action_maps = partial_action_maps.reshape(
+                (partial_action_maps.shape[0], -1, *partial_action_maps.shape[3:])
+            )
+            partial_action_available = partial_action_available.reshape(
+                (partial_action_available.shape[0], -1)
+            )
         distances_padded = distances_padded.reshape((-1, *distances_padded.shape[2:]))
         slot_indices = slot_indices.reshape((-1,))
         family_ids = family_ids.reshape((-1,))
@@ -1556,6 +2095,13 @@ def init_maps_buffer(
         actions_from_disk_padded = jax.random.permutation(
             rng, actions_from_disk_padded, axis=0
         )
+        if partial_action_maps.shape[0] > 0:
+            partial_action_maps = jax.vmap(
+                lambda values: jax.random.permutation(rng, values, axis=0)
+            )(partial_action_maps)
+            partial_action_available = jax.vmap(
+                lambda values: jax.random.permutation(rng, values, axis=0)
+            )(partial_action_available)
         distances_padded = jax.random.permutation(
             rng, distances_padded, axis=0
         )
@@ -1585,6 +2131,25 @@ def init_maps_buffer(
         actions_from_disk_padded = actions_from_disk_padded.reshape(
             (d0, d1, *actions_from_disk_padded.shape[1:])
         )
+        if partial_action_maps.shape[0] > 0:
+            partial_action_maps = partial_action_maps.reshape(
+                (
+                    partial_action_maps.shape[0],
+                    d0,
+                    d1,
+                    *partial_action_maps.shape[2:],
+                )
+            )
+            partial_action_available = partial_action_available.reshape(
+                (partial_action_available.shape[0], d0, d1)
+            )
+            partial_reset_supported_levels = np.concatenate(
+                (
+                    np.ones((1, d0), dtype=np.bool_),
+                    np.asarray(jnp.any(partial_action_available, axis=2)),
+                ),
+                axis=0,
+            )
         distances_padded = distances_padded.reshape(
             (d0, d1, *distances_padded.shape[1:])
         )
@@ -1607,6 +2172,10 @@ def init_maps_buffer(
         primary_cell_ids=primary_cell_ids,
         family_names=family_names,
         primary_cell_names=primary_cell_names,
+        partial_action_maps=partial_action_maps,
+        partial_action_available=partial_action_available,
+        partial_reset_supported_levels=partial_reset_supported_levels,
+        partial_reset_bank_sha256=partial_reset_bank_digest,
     )
     # Update batch config with the actual map dimensions
     maps_width = maps_from_disk_padded.shape[2]

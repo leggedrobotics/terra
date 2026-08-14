@@ -55,6 +55,11 @@ REWARD_V2_TIMING_V21_ID = "gamma1_stepcost_3.6"
 REWARD_V2_V21_SHAPING_GAMMA = 1.0
 REWARD_V2_V21_STEP_COST_TOTAL = 3.6
 
+# Backplay-inspired reset tiers. Tier zero always selects the canonical full
+# reset; tiers 1-3 substitute only the generated action map for the canonical
+# source slot.
+PARTIAL_RESET_FRACTIONS = (0.90, 0.75, 0.50)
+
 
 class ImmutableMapsConfig(NamedTuple):
     """
@@ -264,6 +269,9 @@ class EnvConfig(NamedTuple):
     # checkpoints stay positionally compatible; 0 is the frozen reward_v2
     # reward, bit for bit, and 1 is the adopted v2.1 timing.
     reward_v2_timing_variant: int = REWARD_V2_TIMING_BASELINE
+    # Desired tier for the next reset: 0=full, 1=90%, 2=75%, 3=50% complete.
+    # State.reset_tier records the tier of the episode already in progress.
+    reset_tier: int = 0
 
     @classmethod
     def new(cls):

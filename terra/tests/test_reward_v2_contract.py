@@ -108,6 +108,11 @@ def _reward_v2(old_state: State, new_state: State):
 
 def test_reward_v2_material_work_and_carry_observation_are_markov():
     state = _state()
+    assert float(state.material_q_reset) == 0.0
+    np.testing.assert_array_equal(
+        np.asarray(state._reward_v2_state_values()[0]),
+        np.asarray(jnp.float32(0.0)),
+    )
     action = np.zeros(SHAPE, dtype=np.int8)
     action[20, 20] = -1
     lifted = _with_material(
@@ -122,6 +127,16 @@ def test_reward_v2_material_work_and_carry_observation_are_markov():
     np.testing.assert_allclose(h, state.material_h_reset, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(q, 0.25, rtol=0.0, atol=0.0)
     np.testing.assert_allclose(p, 0.0, rtol=0.0, atol=0.0)
+    np.testing.assert_array_equal(
+        np.asarray(TerraEnv._state_to_obs_dict(state)["reward_v2_reset_context"]),
+        np.asarray(
+            [
+                state.material_q_reset,
+                state.material_h_reset / state._required_excavation_volume(),
+            ],
+            dtype=np.float32,
+        ),
+    )
     np.testing.assert_allclose(
         phi,
         REWARD_V2_ALPHA * 0.25 + REWARD_V2_BETA * REWARD_V2_DISTANCE_BOUND,

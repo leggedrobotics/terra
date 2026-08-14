@@ -40,29 +40,38 @@ verify them against the current Terra code before implementation.
 
 ## Partial-completion reset distribution
 
-Training should not use only untouched maps with an all-zero action state.
-Every production curriculum should include a controlled minority of
-mass-conserving partial-completion resets so the policy repeatedly encounters
-late excavation, cleanup, and dumping decisions without first solving the full
-exploration problem.
+The supported training treatment is one sparse, source-bound
+`relay_corridor` sidecar bank over the accepted full-start bank. Canonical
+target, obstacle, dumpability, and distance layers remain unchanged; the
+sidecar supplies only a mass-conserving nonzero action map. A source is admitted
+only as a complete, strictly nested 50/75/90% triplet generated with one shared
+source seed. A condition is supported only when at least one complete triplet
+exists, and all three tiers sample the same canonical source pool. Unsupported
+conditions fail instead of falling back to `in_zone`, `mixed`, or `near_zone`.
 
-Initial research distribution:
+The baselines-owned lane schedule is fixed for this treatment. Full starts
+remain the majority throughout:
 
-- keep full-task resets as the majority and begin with roughly 20-30% partial
-  resets;
-- emphasize 50% and 75% completed `in_zone` states in early training;
-- use 25% completed states as a bridge back toward full tasks;
-- introduce `mixed` states after in-zone endgames are reliable, and introduce
-  `near_zone` states later because they retain the largest soil-relocation
-  burden; and
-- downweight 90% completed states until generation rejects tiny disconnected
-  excavation remnants.
+1. updates 0--2,499 hold the partial-reset lane share at 25% and use only
+   90%-complete resets;
+2. updates 2,500--4,999 keep the 25% share and distribute partial lanes across
+   the cumulative 75/90% window;
+3. updates 5,000--7,499 keep the 25% share and distribute partial lanes across
+   the cumulative 50/75/90% window; and
+4. updates 7,500--9,999 retain that cumulative window while fading the total
+   partial-reset share linearly from 25% to zero. Updates 10,000 onward use
+   ordinary full starts only.
 
-This is a starting hypothesis, not a fixed final weighting. Record the exact
-partial-reset probability, completion-fraction distribution, pile mode, and
-generator revision for every experiment. Primary evaluation must remain on
-untouched full-task resets, with partial-reset results reported as a separate
-stratified diagnostic rather than pooled into the main completion metric.
+These are mechanically generated synthetic reset states. The treatment is
+Backplay-inspired start-distribution shaping, not exact trajectory Backplay and
+not a bank of demonstrated successful suffixes.
+
+Full-start evaluation and curriculum mastery remain separate from this
+treatment. Partial episodes must not update the full-start mastery EMA or be
+pooled into the primary completion metric; report them as tier-stratified
+training diagnostics. Record the sidecar digest, generator revision, active
+schedule phase, total partial lane share, and per-tier lane shares for every
+experiment.
 
 ## Experiment identity
 

@@ -129,6 +129,7 @@ class TerraEnv(NamedTuple):
                 (state.world.width * state.world.height,), dtype=jnp.bool_
             ),
             "task_done": jnp.zeros((), dtype=jnp.bool_),
+            "ended_reset_tier": jnp.asarray(state.reset_tier, dtype=jnp.int32),
             "reward_components": self._zero_reward_components(state),
             **self._zero_transition_diagnostics(),
         }
@@ -426,6 +427,7 @@ class TerraEnv(NamedTuple):
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )
+        ended_reset_tier = new_state.reset_tier
 
         def _reset_branch(s, o, cfg):
             s_reset, o_reset = self._reset_existent(
@@ -458,6 +460,7 @@ class TerraEnv(NamedTuple):
         infos = {
             **new_state._get_infos(action, task_done),
             **transition_diagnostics,
+            "ended_reset_tier": ended_reset_tier,
         }
         # Attach reward components for logging
         try:
@@ -512,6 +515,7 @@ class TerraEnv(NamedTuple):
         infos = {
             **new_state._get_infos(action, task_done),
             **transition_diagnostics,
+            "ended_reset_tier": new_state.reset_tier,
         }
         try:
             if isinstance(infos, dict):
@@ -615,6 +619,16 @@ class TerraEnv(NamedTuple):
                 jnp.float32(STALL_AGE_CAP_STEPS),
             )
             / jnp.float32(STALL_AGE_CAP_STEPS),
+            # The two normalized reset baselines needed to reconstruct the
+            # centered R2 potential. These are latched scalars, so legacy
+            # reward modes do not pay another material-work reduction here.
+            "reward_v2_reset_context": jnp.stack(
+                (
+                    state.material_q_reset,
+                    state.material_h_reset
+                    / jnp.maximum(required_volume, jnp.float32(1e-6)),
+                ),
+            ).astype(jnp.float32),
         }
 
 
@@ -633,12 +647,21 @@ class TerraEnvBatch:
         shuffle_maps: bool = False,
         single_map_path: str = None,
         distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
+        partial_reset_root: str | None = None,
     ) -> None:
         self.maps_buffer, self.batch_cfg = init_maps_buffer(
             batch_cfg,
             shuffle_maps,
             single_map_path,
             required_distance_protocol_id=distance_protocol_id,
+            partial_reset_root=partial_reset_root,
+        )
+        self.partial_reset_supported_levels = np.asarray(
+            self.maps_buffer.partial_reset_supported_levels,
+            dtype=np.bool_,
+        )
+        self.partial_reset_bank_sha256 = (
+            self.maps_buffer.partial_reset_bank_sha256
         )
         self.terra_env = TerraEnv.new(
             maps_size_px=self.batch_cfg.maps_dims.maps_edge_length,
@@ -675,6 +698,24 @@ class TerraEnvBatch:
             reward_type_per_level=reward_type_per_level,
             last_level_type=batch_cfg.curriculum_global.last_level_type,
         )
+
+    def validate_reset_tiers(self, env_cfgs: EnvConfig) -> None:
+        """Fail before tracing when a requested tier/condition has no sidecar."""
+        if isinstance(env_cfgs.reset_tier, jax.core.Tracer):
+            return
+        tiers = np.asarray(env_cfgs.reset_tier, dtype=np.int32)
+        levels = np.asarray(env_cfgs.curriculum.level, dtype=np.int32)
+        if np.any((tiers < 0) | (tiers >= self.partial_reset_supported_levels.shape[0])):
+            raise RuntimeError(f"reset_tier must lie in [0, 3]; got {tiers}.")
+        if tiers.shape != levels.shape:
+            tiers, levels = np.broadcast_arrays(tiers, levels)
+        supported = self.partial_reset_supported_levels[tiers, levels]
+        if not np.all(supported):
+            bad = np.argwhere(~supported).reshape(-1).tolist()
+            raise RuntimeError(
+                "Partial reset requested on an unsupported curriculum level; "
+                f"bad flattened lanes {bad[:8]}."
+            )
 
     def update_env_cfgs(self, env_cfgs: EnvConfig) -> EnvConfig:
         tile_size = (
@@ -776,6 +817,7 @@ class TerraEnvBatch:
 
     def prepare_reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey):
         self._validate_foundation_border_metadata_requirements(env_cfgs)
+        self.validate_reset_tiers(env_cfgs)
         return jax.vmap(self._prepare_reset_device)(env_cfgs, rng_key)
 
     @partial(jax.jit, static_argnums=(0,))
@@ -827,6 +869,7 @@ class TerraEnvBatch:
 
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
         self._validate_foundation_border_metadata_requirements(env_cfgs)
+        self.validate_reset_tiers(env_cfgs)
         (
             env_cfgs,
             target_maps,
@@ -938,6 +981,7 @@ class TerraEnvBatch:
                     "transition_mass_residual": item.info["transition_mass_residual"],
                     "target_mutation": item.info["target_mutation"],
                     "obstacle_mutation": item.info["obstacle_mutation"],
+                    "ended_reset_tier": item.info["ended_reset_tier"],
                 }
                 return item._replace(
                     state=state_reset,

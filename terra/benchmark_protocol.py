@@ -123,10 +123,12 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # preserves the original dense behavior, so keep the existing v1 payload
     # and hashes byte-compatible. The reward-v2.1 timing selector is appended
     # for the same reason: it is inert under dense-skill rewards, and its
-    # default is the frozen reward_v2 anyway.
+    # default is the frozen reward_v2 anyway. reset_tier=0 likewise selects the
+    # canonical full reset and is inert for the v1 benchmark.
     payload.pop("reward_stage")
     payload.pop("terminal_reward_mix")
     payload.pop("reward_v2_timing_variant")
+    payload.pop("reset_tier")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(
