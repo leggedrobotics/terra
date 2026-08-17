@@ -206,7 +206,19 @@ class TraversabilityMaskWrapper:
             _single_agent_masks,
             _multi_agent_masks,
         )
-        traversability_mask = jnp.where(combined_agent_mask, -1, traversability_mask)
+        # Keep material blockers visible even when an agent currently overlaps
+        # them.  Only free terrain receives the agent marker.  This prevents an
+        # underlying hole from looking traversable to the policy while movement
+        # physics still rejects it.
+        free_agent_footprint = jnp.logical_and(
+            combined_agent_mask,
+            traversability_mask == 0,
+        )
+        traversability_mask = jnp.where(
+            free_agent_footprint,
+            -1,
+            traversability_mask,
+        )
 
         static_base = state.world.static_traversability_base.map
         tm = jnp.where(static_base == 1, static_base, traversability_mask)

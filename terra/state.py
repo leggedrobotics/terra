@@ -523,6 +523,17 @@ class State(NamedTuple):
 
         return biased_corners
 
+    def _current_base_footprint_mask(self) -> Array:
+        """Return the exact grid footprint occupied by the active agent base."""
+        current = self._get_current_agent_state()
+        corners = self._get_agent_corners(
+            current.pos_base,
+            current.angle_base,
+            self.env_cfg.agent.width,
+            self.env_cfg.agent.height,
+        )
+        return compute_polygon_mask(corners, self.world.width, self.world.height)
+
     @staticmethod
     def _build_traversability_mask(map: Array, static_traversability_base: Array) -> Array:
         """
@@ -2168,6 +2179,9 @@ class State(NamedTuple):
             lambda: self._get_foundation_border_alignment_mask(dig_mask),
             lambda: jnp.ones_like(dig_mask, dtype=jnp.bool_),
         )
+        outside_base_footprint = jnp.logical_not(
+            self._current_base_footprint_mask()
+        ).reshape(-1)
 
         return (
             dig_mask
@@ -2176,6 +2190,7 @@ class State(NamedTuple):
             * max_dig_limit_mask
             * dig_exclusion_mask
             * border_alignment_mask
+            * outside_base_footprint
         ).astype(jnp.bool_)
 
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:

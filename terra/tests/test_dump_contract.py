@@ -15,6 +15,7 @@ from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.state import CORRECTED_DENSE_CONTRACT
 from terra.state import State
+from terra.wrappers import TraversabilityMaskWrapper
 
 
 class ExactDumpContractTest(unittest.TestCase):
@@ -121,6 +122,62 @@ class ExactDumpContractTest(unittest.TestCase):
 
     def test_contract_is_named(self):
         self.assertEqual(CORRECTED_DENSE_CONTRACT, "exact_visible_dump_v1")
+
+    def test_dig_cannot_create_holes_under_rotated_base(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        under_base = np.asarray([[32, 25], [32, 26], [33, 25]])
+        target[under_base[:, 0], under_base[:, 1]] = -1
+        state = self._state(target)
+        current = state._get_current_agent_state()._replace(
+            pos_base=jnp.array([24, 30], dtype=jnp.int16),
+            angle_base=jnp.array([7], dtype=jnp.int8),
+            angle_cabin=jnp.array([1], dtype=jnp.int8),
+        )
+        state = state._set_current_agent_state(current)
+
+        footprint = np.asarray(state._current_base_footprint_mask())
+        workspace = np.asarray(state._build_dig_dump_cone()).reshape(self.SHAPE)
+        for row, column in under_base:
+            self.assertTrue(footprint[row, column])
+            self.assertTrue(workspace[row, column])
+
+        after = state._handle_dig()
+        np.testing.assert_array_equal(
+            np.asarray(after.world.action_map.map),
+            np.asarray(state.world.action_map.map),
+        )
+        self.assertEqual(int(after._get_current_agent_state().loaded[0]), 0)
+
+    def test_agent_overlay_preserves_underlying_hole(self):
+        action = np.zeros(self.SHAPE, dtype=np.int8)
+        action[32, 25] = -1
+        state = self._state(np.zeros(self.SHAPE, dtype=np.int8), action=action)
+        current = state._get_current_agent_state()._replace(
+            pos_base=jnp.array([24, 30], dtype=jnp.int16),
+            angle_base=jnp.array([7], dtype=jnp.int8),
+        )
+        state = state._set_current_agent_state(current)
+        footprint = np.asarray(state._current_base_footprint_mask())
+        free_row, free_column = next(
+            (int(row), int(column))
+            for row, column in np.argwhere(footprint)
+            if action[row, column] == 0
+        )
+
+        wrapped = TraversabilityMaskWrapper.wrap(
+            state,
+            update_reachability=jnp.bool_(False),
+        )
+        visible = np.asarray(wrapped.world.traversability_mask.map)
+        physical = np.asarray(
+            state._build_traversability_mask(
+                state.world.action_map.map,
+                state.world.static_traversability_base.map,
+            )
+        )
+        self.assertEqual(int(physical[32, 25]), 1)
+        self.assertEqual(int(visible[32, 25]), 1)
+        self.assertEqual(int(visible[free_row, free_column]), -1)
 
     def test_exact_zone_is_success_and_former_buffer_is_not(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
