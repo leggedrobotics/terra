@@ -1,0 +1,65 @@
+{
+  "schema": "terra_trench_net4_yaw_probe_v1",
+  "question": "Are the 61 incomplete strict-gate maps in the 2026-08-19 preflight a marginal yaw-band effect or a structural 4-axis junction limit?",
+  "method": "Re-ran only the 61 incomplete maps through the same probe with YAW_TOLERANCE_DEG widened; standoff band, cones, footprint, movement, membership and the all-or-nothing macro rule unchanged.",
+  "input_receipt": "tools/trench_alignment_preflight_pilot_20260819.json",
+  "maps": 61,
+  "sweep": {
+    "15.001": {
+      "complete": 0,
+      "of": 61,
+      "remaining_cells": 219
+    },
+    "20.0": {
+      "complete": 0,
+      "of": 61,
+      "remaining_cells": 219
+    },
+    "25.0": {
+      "complete": 0,
+      "of": 61,
+      "remaining_cells": 219
+    },
+    "30.0": {
+      "complete": 19,
+      "of": 61,
+      "remaining_cells": 132
+    },
+    "45.0": {
+      "complete": 33,
+      "of": 61,
+      "remaining_cells": 108
+    }
+  },
+  "still_incomplete_at_45deg": [
+    "network:trn-net4-side2-s:evaluation/gate_main/sealed:748",
+    "network:trn-net4-side2-s:train/023__trn-net4-side2-s:25",
+    "network:trn-net4-side2-s:train/023__trn-net4-side2-s:35",
+    "network:trn-net4-side2-s:train/023__trn-net4-side2-s:43",
+    "network:trn-net4-side2:evaluation/gate_main/development:353",
+    "network:trn-net4-side2:evaluation/gate_main/development:356",
+    "network:trn-net4-side2:evaluation/gate_main/sealed:726",
+    "network:trn-net4-side2:evaluation/gate_main/sealed:734",
+    "network:trn-net4-side2:train/022__trn-net4-side2:29",
+    "network:trn-net4-side2:train/022__trn-net4-side2:51",
+    "network:trn-net4-side2:train/022__trn-net4-side2:53",
+    "network:trn-net4-side2:train/022__trn-net4-side2:54",
+    "network:trn-net4-side2:train/022__trn-net4-side2:63",
+    "network:trn-net4-side2:train/022__trn-net4-side2:69",
+    "network:trn-net4-side2:train/022__trn-net4-side2:72",
+    "network:trn-net4-side2:train/022__trn-net4-side2:74",
+    "road:trn-net4-side1-road:evaluation/gate_main/development:337",
+    "road:trn-net4-side1-road:evaluation/gate_main/development:340",
+    "road:trn-net4-side1-road:evaluation/gate_main/sealed:694",
+    "road:trn-net4-side1-road:evaluation/gate_main/sealed:702",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:29",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:51",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:53",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:54",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:63",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:69",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:72",
+    "road:trn-net4-side1-road:train/021__trn-net4-side1-road:74"
+  ],
+  "reading": "15/20/25 deg are indistinguishable because 12 discrete base headings quantise yaw error to 30 deg steps, so 15 deg is already the widest single-bin tolerance. Only admitting a second heading bin (>=30 deg) clears 19 of 61, and 28 maps still fail at 45 deg. The residue is a structural 4-axis junction limit, not a tolerance artifact."
+}

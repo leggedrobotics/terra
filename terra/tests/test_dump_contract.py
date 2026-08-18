@@ -1006,7 +1006,7 @@ class ExactDumpContractTest(unittest.TestCase):
     def test_reward_fields_are_appended_for_legacy_positional_checkpoints(self):
         current = EnvConfig()
         self.assertEqual(
-            EnvConfig._fields[-4:],
+            EnvConfig._fields[-8:-4],
             (
                 "reward_stage",
                 "terminal_reward_mix",
@@ -1014,7 +1014,16 @@ class ExactDumpContractTest(unittest.TestCase):
                 "reset_tier",
             ),
         )
-        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-4]))
+        self.assertEqual(
+            EnvConfig._fields[-4:],
+            (
+                "enforce_trench_dig_alignment",
+                "trench_dig_yaw_tolerance_rad",
+                "trench_dig_standoff_min_m",
+                "trench_dig_standoff_max_m",
+            ),
+        )
+        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-8]))
         restored = EnvConfig(*legacy_values)
         self.assertEqual(
             restored.reward_stage,
@@ -1026,14 +1035,33 @@ class ExactDumpContractTest(unittest.TestCase):
             REWARD_V2_TIMING_BASELINE,
         )
         self.assertEqual(restored.reset_tier, 0)
+        self.assertFalse(restored.enforce_trench_dig_alignment)
+        self.assertEqual(restored.trench_dig_yaw_tolerance_rad, 0.2619)
+        self.assertEqual(restored.trench_dig_standoff_min_m, 3.5)
+        self.assertEqual(restored.trench_dig_standoff_max_m, 7.0)
+        # A checkpoint from the immediately preceding revision has all reward
+        # fields but none of the new alignment fields.
+        pre_alignment_values = pickle.loads(
+            pickle.dumps(tuple(current)[:-4])
+        )
+        pre_alignment = EnvConfig(*pre_alignment_values)
+        self.assertFalse(pre_alignment.enforce_trench_dig_alignment)
+        self.assertEqual(pre_alignment.trench_dig_yaw_tolerance_rad, 0.2619)
+        self.assertEqual(pre_alignment.trench_dig_standoff_min_m, 3.5)
+        self.assertEqual(pre_alignment.trench_dig_standoff_max_m, 7.0)
+        for field_name in EnvConfig._fields[:-4]:
+            self.assertEqual(
+                getattr(pre_alignment, field_name),
+                getattr(current, field_name),
+            )
         # A pre-timing checkpoint (reward_stage + mix, no variant) also loads.
-        pre_timing = EnvConfig(*tuple(current)[:-2])
+        pre_timing = EnvConfig(*tuple(current)[:-6])
         self.assertEqual(
             pre_timing.reward_v2_timing_variant,
             REWARD_V2_TIMING_BASELINE,
         )
         self.assertEqual(pre_timing.reset_tier, 0)
-        for field_name in EnvConfig._fields[:-4]:
+        for field_name in EnvConfig._fields[:-8]:
             self.assertEqual(
                 getattr(restored, field_name),
                 getattr(current, field_name),

@@ -129,6 +129,12 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     payload.pop("terminal_reward_mix")
     payload.pop("reward_v2_timing_variant")
     payload.pop("reset_tier")
+    # The opt-in trench-alignment treatment was appended later. Its disabled
+    # default and inert tolerance fields must not mutate the frozen v1 receipt.
+    payload.pop("enforce_trench_dig_alignment")
+    payload.pop("trench_dig_yaw_tolerance_rad")
+    payload.pop("trench_dig_standoff_min_m")
+    payload.pop("trench_dig_standoff_max_m")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

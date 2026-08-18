@@ -539,6 +539,11 @@ class TerraEnv(NamedTuple):
         # Build per-agent features for fixed-size agent array and reorder so current agent is first
         # Feature order mirrors legacy single-agent vector
         required_volume = state._required_excavation_volume()
+        (
+            fresh_trench_dig_alignment_valid,
+            fresh_trench_dig_yaw_error,
+            fresh_trench_dig_standoff_error,
+        ) = state._get_fresh_trench_dig_alignment()
 
         def _feat(a, active):
             carry_work_normalized = jnp.where(
@@ -629,6 +634,13 @@ class TerraEnv(NamedTuple):
                     / jnp.maximum(required_volume, jnp.float32(1e-6)),
                 ),
             ).astype(jnp.float32),
+            "fresh_trench_dig_alignment_valid": (
+                fresh_trench_dig_alignment_valid.astype(jnp.float32)
+            ),
+            "fresh_trench_dig_yaw_error": fresh_trench_dig_yaw_error,
+            "fresh_trench_dig_standoff_error": (
+                fresh_trench_dig_standoff_error
+            ),
         }
 
 
@@ -778,6 +790,86 @@ class TerraEnvBatch:
                 "`enforce_foundation_border_alignment=False`."
             )
 
+    def _validate_trench_alignment_metadata_requirements(
+        self, env_cfgs: EnvConfig
+    ) -> None:
+        """Fail before tracing when a gated trench lacks finite sections."""
+
+        if isinstance(env_cfgs.enforce_trench_dig_alignment, jax.core.Tracer):
+            return
+        if not np.any(np.asarray(env_cfgs.enforce_trench_dig_alignment)):
+            return
+        yaw_tolerance = np.asarray(env_cfgs.trench_dig_yaw_tolerance_rad)
+        standoff_min = np.asarray(env_cfgs.trench_dig_standoff_min_m)
+        standoff_max = np.asarray(env_cfgs.trench_dig_standoff_max_m)
+        if not (
+            np.all(np.isfinite(yaw_tolerance))
+            and np.all(np.isfinite(standoff_min))
+            and np.all(np.isfinite(standoff_max))
+        ):
+            raise RuntimeError("Trench alignment tolerances must be finite.")
+        if np.any((yaw_tolerance < 0.0) | (yaw_tolerance > np.pi / 2.0)):
+            raise RuntimeError(
+                "trench_dig_yaw_tolerance_rad must lie in [0, pi/2]."
+            )
+        if np.any(standoff_min < 0.0) or np.any(standoff_min >= standoff_max):
+            raise RuntimeError(
+                "Trench standoff bounds must satisfy 0 <= min < max."
+            )
+        records = np.asarray(self.maps_buffer.trench_axes)
+        trench_types = np.asarray(self.maps_buffer.trench_types)
+        if records.shape[-1] < 8:
+            raise RuntimeError(
+                "Fresh-trench alignment requires generated finite section "
+                "metadata [A,B,C,y0,x0,y1,x1,half_width]; incomplete records "
+                "were loaded."
+            )
+        axis_indices = np.arange(records.shape[-2])
+        declared = axis_indices.reshape((1,) * trench_types.ndim + (-1,)) < (
+            trench_types[..., None]
+        )
+        endpoints = records[..., 3:7]
+        starts = endpoints[..., :2]
+        ends = endpoints[..., 2:]
+        finite_segments = (
+            np.all(np.isfinite(endpoints), axis=-1)
+            & np.all(endpoints > -96.0, axis=-1)
+            & (np.linalg.norm(ends - starts, axis=-1) > 1e-6)
+            & np.isfinite(records[..., 7])
+            & (records[..., 7] > 0.0)
+        )
+        trench_family_ids = [
+            index
+            for index, name in enumerate(self.maps_buffer.family_names)
+            if str(name).lower().startswith("trn-")
+            or "trench" in str(name).lower()
+        ]
+        if trench_family_ids:
+            family_ids = np.asarray(self.maps_buffer.family_ids)
+            missing_types = np.isin(family_ids, trench_family_ids) & (
+                trench_types <= 0
+            )
+            if np.any(missing_types):
+                raise RuntimeError(
+                    "Fresh-trench alignment is enabled but trench-family maps "
+                    "lack axis metadata at indices "
+                    f"{np.argwhere(missing_types)[:8].tolist()}."
+                )
+        elif not np.any(trench_types > 0):
+            raise RuntimeError(
+                "Fresh-trench alignment was enabled for a dataset with no "
+                "declared trench metadata and no family provenance. Use an "
+                "enriched trench dataset or disable the gate."
+            )
+        missing = np.argwhere(declared & ~finite_segments)
+        if missing.size > 0:
+            raise RuntimeError(
+                "Fresh-trench alignment is enabled but generated finite "
+                "section metadata is missing or invalid at map/axis indices "
+                f"{missing[:8].tolist()}. Regenerate or enrich the dataset; "
+                "do not infer section endpoints from the raster."
+            )
+
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
 
@@ -817,6 +909,7 @@ class TerraEnvBatch:
 
     def prepare_reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey):
         self._validate_foundation_border_metadata_requirements(env_cfgs)
+        self._validate_trench_alignment_metadata_requirements(env_cfgs)
         self.validate_reset_tiers(env_cfgs)
         return jax.vmap(self._prepare_reset_device)(env_cfgs, rng_key)
 
@@ -869,6 +962,7 @@ class TerraEnvBatch:
 
     def reset(self, env_cfgs: EnvConfig, rng_key: jax.random.PRNGKey) -> State:
         self._validate_foundation_border_metadata_requirements(env_cfgs)
+        self._validate_trench_alignment_metadata_requirements(env_cfgs)
         self.validate_reset_tiers(env_cfgs)
         (
             env_cfgs,

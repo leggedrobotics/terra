@@ -272,6 +272,13 @@ class EnvConfig(NamedTuple):
     # Desired tier for the next reset: 0=full, 1=90%, 2=75%, 3=50% complete.
     # State.reset_tier records the tier of the episode already in progress.
     reset_tier: int = 0
+    # Global opt-in treatment: block only empty-excavator DO actions that would
+    # remove fresh trench target soil from a physically misaligned base pose.
+    # This is intentionally not coupled to the legacy reward curriculum.
+    enforce_trench_dig_alignment: bool = False
+    trench_dig_yaw_tolerance_rad: float = 0.2619  # 15 deg plus numerical slack
+    trench_dig_standoff_min_m: float = 3.5
+    trench_dig_standoff_max_m: float = 7.0
 
     @classmethod
     def new(cls):

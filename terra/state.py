@@ -2178,6 +2178,249 @@ class State(NamedTuple):
             * border_alignment_mask
         ).astype(jnp.bool_)
 
+    def _get_fresh_trench_dig_alignment_details(
+        self, dig_mask: Array | None = None
+    ) -> tuple[Array, Array, Array, Array]:
+        """Measure and filter a prospective fresh-trench dig.
+
+        Generated trench records are ``[A,B,C,y0,x0,y1,x1,half_width]``. The
+        finite endpoints identify the local section at T/network junctions;
+        the first three values retain the existing line-equation contract.
+        A junction cell may belong to more than one equally near section and
+        is diggable when at least one of those sections is pose-valid.
+
+        Returns validity, normalized yaw error, signed normalized standoff
+        error, and the subset of ``dig_mask`` admitted by the contract.  The
+        contract is neutral for relifts, loaded agents, non-excavators, and
+        non-trench maps.
+        """
+
+        cur = self._get_current_agent_state()
+        target = _as_2d_map(self.world.target_map.map)
+        action = _as_2d_map(self.world.action_map.map)
+        records = _as_axes_table(self.world.trench_axes).astype(jnp.float32)
+        axes = records[:, :3]
+        max_axes = axes.shape[0]
+        trench_type = jnp.clip(
+            _as_scalar_int(self.world.trench_type),
+            0,
+            max_axes,
+        )
+        if dig_mask is None:
+            dig_mask = self._mask_out_wrong_dig_tiles(
+                self._build_dig_dump_cone()
+            )
+        dig_mask = jnp.asarray(dig_mask, dtype=jnp.bool_).reshape(-1)
+        dig_mask_2d = dig_mask.reshape(target.shape)
+        fresh_target = jnp.logical_and(
+            dig_mask_2d,
+            jnp.logical_and(target < 0, action == 0),
+        )
+        valid_axes = jnp.arange(max_axes) < trench_type
+        if records.shape[1] >= 8:
+            segment_vectors = records[:, 5:7] - records[:, 3:5]
+            finite_section_metadata = jnp.logical_and(
+                jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
+                jnp.logical_and(
+                    records[:, 7] > jnp.float32(0.0),
+                    jnp.linalg.norm(segment_vectors, axis=1)
+                    > jnp.float32(1e-6),
+                ),
+            )
+        else:
+            finite_section_metadata = jnp.zeros(
+                (max_axes,), dtype=jnp.bool_
+            )
+        declared_metadata_valid = jnp.all(
+            jnp.logical_or(~valid_axes, finite_section_metadata)
+        )
+        # TerraEnvBatch rejects incomplete generated metadata before tracing.
+        # Lower-level State/TerraEnv callers do not have that Python validator,
+        # so fail closed instead of silently reclassifying a trench target as
+        # ordinary excavation when its cached membership is empty.
+        fail_closed_metadata = jnp.logical_and(
+            trench_type > 0,
+            ~declared_metadata_valid,
+        )
+        fresh_trench_target = jnp.logical_and(
+            fresh_target,
+            jnp.logical_or(
+                self.world.trench_axis_membership != jnp.uint8(0),
+                fail_closed_metadata,
+            ),
+        )
+        applicable = jnp.logical_and(
+            cur.agent_type[0] == 0,
+            jnp.logical_and(
+                cur.loaded[0] == 0,
+                jnp.logical_and(
+                    trench_type > 0,
+                    jnp.any(fresh_trench_target),
+                ),
+            ),
+        )
+
+        def _measure_alignment() -> tuple[Array, Array, Array, Array]:
+            line_denominators = jnp.maximum(
+                jnp.linalg.norm(axes[:, :2], axis=1),
+                jnp.float32(1e-6),
+            )
+            bit_values = jnp.left_shift(
+                jnp.ones((max_axes,), dtype=jnp.uint8),
+                jnp.arange(max_axes, dtype=jnp.uint8),
+            )
+            section_membership = jnp.logical_and(
+                valid_axes[:, None, None],
+                jnp.bitwise_and(
+                    self.world.trench_axis_membership[None, :, :],
+                    bit_values[:, None, None],
+                )
+                != 0,
+            )
+            axis_has_fresh = jnp.any(
+                jnp.logical_and(
+                    section_membership,
+                    fresh_trench_target[None, :, :],
+                ),
+                axis=(1, 2),
+            )
+
+            base_angle = jnp.ravel(self._get_base_angle_rad())[0]
+            base_forward = jnp.array(
+                [-jnp.sin(base_angle), jnp.cos(base_angle)],
+                dtype=jnp.float32,
+            )
+            # Metadata uses A*col + B*row + C = 0.  In State [row, col]
+            # coordinates, [-A, B] is the corresponding section tangent.
+            trench_tangents = jnp.stack([-axes[:, 0], axes[:, 1]], axis=1)
+            tangent_norms = jnp.maximum(
+                jnp.linalg.norm(trench_tangents, axis=1),
+                jnp.float32(1e-6),
+            )
+            parallel_cosines = jnp.clip(
+                jnp.abs(trench_tangents @ base_forward) / tangent_norms,
+                a_min=jnp.float32(0.0),
+                a_max=jnp.float32(1.0),
+            )
+            yaw_errors = jnp.arccos(parallel_cosines)
+            yaw_errors_normalized = jnp.clip(
+                yaw_errors / (jnp.pi / jnp.float32(2.0)),
+                a_min=jnp.float32(0.0),
+                a_max=jnp.float32(1.0),
+            )
+
+            base_row = cur.pos_base[0].astype(jnp.float32)
+            base_col = cur.pos_base[1].astype(jnp.float32)
+            standoffs_m = (
+                jnp.abs(
+                    axes[:, 0] * base_col
+                    + axes[:, 1] * base_row
+                    + axes[:, 2]
+                )
+                / line_denominators
+                * self.env_cfg.tile_size
+            )
+            standoff_min = jnp.float32(self.env_cfg.trench_dig_standoff_min_m)
+            standoff_max = jnp.float32(self.env_cfg.trench_dig_standoff_max_m)
+            standoff_errors_normalized = jnp.where(
+                standoffs_m < standoff_min,
+                (standoffs_m - standoff_min)
+                / jnp.maximum(standoff_min, jnp.float32(1e-6)),
+                jnp.where(
+                    standoffs_m > standoff_max,
+                    (standoffs_m - standoff_max)
+                    / jnp.maximum(standoff_max, jnp.float32(1e-6)),
+                    jnp.float32(0.0),
+                ),
+            )
+            standoff_errors_normalized = jnp.clip(
+                standoff_errors_normalized,
+                a_min=jnp.float32(-1.0),
+                a_max=jnp.float32(1.0),
+            )
+            axis_pose_valid = jnp.logical_and(
+                valid_axes,
+                jnp.logical_and(
+                    finite_section_metadata,
+                    jnp.logical_and(
+                        axis_has_fresh,
+                        jnp.logical_and(
+                            yaw_errors
+                            <= jnp.float32(
+                                self.env_cfg.trench_dig_yaw_tolerance_rad
+                            ),
+                            jnp.logical_and(
+                                standoffs_m >= standoff_min,
+                                standoffs_m <= standoff_max,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            fresh_cell_pose_valid = jnp.any(
+                jnp.logical_and(
+                    section_membership,
+                    axis_pose_valid[:, None, None],
+                ),
+                axis=0,
+            )
+            # DO remains one macro action: admit its complete selected fresh
+            # workspace or reject it.  Do not turn alignment into a hidden
+            # per-cell action mask at multi-axis junctions.
+            valid = jnp.all(
+                jnp.logical_or(
+                    jnp.logical_not(fresh_trench_target),
+                    fresh_cell_pose_valid,
+                )
+            )
+
+            diagnostic_pool = jnp.where(
+                valid,
+                axis_pose_valid,
+                jnp.logical_and(axis_has_fresh, ~axis_pose_valid),
+            )
+            diagnostic_score = (
+                yaw_errors_normalized + jnp.abs(standoff_errors_normalized)
+            )
+            diagnostic_axis = jnp.argmin(
+                jnp.where(
+                    diagnostic_pool,
+                    diagnostic_score,
+                    jnp.float32(jnp.inf),
+                )
+            )
+            return (
+                valid,
+                yaw_errors_normalized[diagnostic_axis],
+                standoff_errors_normalized[diagnostic_axis],
+                jnp.where(
+                    valid,
+                    dig_mask,
+                    jnp.zeros_like(dig_mask, dtype=jnp.bool_),
+                ),
+            )
+
+        return jax.lax.cond(
+            applicable,
+            _measure_alignment,
+            lambda: (
+                jnp.bool_(True),
+                jnp.float32(0.0),
+                jnp.float32(0.0),
+                dig_mask,
+            ),
+        )
+
+    def _get_fresh_trench_dig_alignment(
+        self, dig_mask: Array | None = None
+    ) -> tuple[Array, Array, Array]:
+        """Return policy-facing fresh-trench alignment diagnostics."""
+
+        valid, yaw_error, standoff_error, _ = (
+            self._get_fresh_trench_dig_alignment_details(dig_mask)
+        )
+        return valid, yaw_error, standoff_error
+
     def _mask_out_wrong_dig_tiles_skidsteer(self, dig_mask: Array) -> Array:
         """
         Allow a skid steer to lift positive soil without digging negative holes.
@@ -2199,6 +2442,14 @@ class State(NamedTuple):
         def _dig_when_clear():
             dig_mask = self._build_dig_dump_cone()
             dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
+            _, _, _, aligned_fresh_dig_mask = (
+                self._get_fresh_trench_dig_alignment_details(dig_mask)
+            )
+            dig_mask = jnp.where(
+                jnp.bool_(self.env_cfg.enforce_trench_dig_alignment),
+                aligned_fresh_dig_mask,
+                dig_mask,
+            )
             action_map_2d = _as_2d_map(self.world.action_map.map)
             flattened_action_map = action_map_2d.reshape(-1)
             # The map is int8, but a workspace may contain more than 127 units.

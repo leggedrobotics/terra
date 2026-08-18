@@ -2696,12 +2696,18 @@ def write_terra_metadata(output: Path, rows: list[dict[str, Any]]) -> None:
     destination = output / "dataset" / "metadata"
     destination.mkdir(parents=True, exist_ok=True)
     for row in rows:
+        trench_segments_yx = [
+            [segment[0], segment[-1]]
+            for segment in row.get("trench_arms", [])
+        ]
         payload = {
             "schema": f"{SCHEMA}_axis_metadata",
             "geometry": row["geometry"],
             "trench_axes_count": int(row.get("trench_axes_count", -1) or -1),
             "trench_topology": row.get("trench_topology", ""),
             "axes_ABC": row.get("axes_ABC", []),
+            "trench_segments_yx": trench_segments_yx,
+            "trench_half_width_tiles": row.get("trench_half_width_tiles"),
         }
         (destination / f"trench_{row['sample_index']}.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"

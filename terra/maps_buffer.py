@@ -36,7 +36,10 @@ class MapsBuffer(NamedTuple):
     maps: Array  # [map_type, n_maps, W, H]
     padding_mask: Array  # [map_type, n_maps, W, H]
     dumpability_masks_init: Array  # [map_type, n_maps, W, H]
-    trench_axes: Array  # [map_type, n_maps, n_axes_per_map, 3] -- (A, B, C) coefficients for trench axes (-97 if not a trench)
+    # [map_type, n_maps, n_axes_per_map, 8]: A,B,C, finite y0,x0,y1,x1,
+    # and the generated trench half-width in cells.
+    # The first three columns preserve the legacy line-equation interface.
+    trench_axes: Array
     trench_types: Array  # [map_type, n_maps], number of trench axes, or -1 if unavailable
     foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
     foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
@@ -868,6 +871,129 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
         raise RuntimeError("Loaded metadata is not valid.")
 
 
+TRENCH_AXIS_RECORD_SIZE = 8
+
+
+def _trench_records_from_metadata(
+    metadata: dict[str, Any],
+    max_trench_type: int,
+    *,
+    require_finite_segments: bool = False,
+) -> tuple[list[list[float]], int]:
+    """Load generator-owned axes and finite endpoints into fixed records."""
+
+    raw_axes = list(metadata.get("axes_ABC", []) or [])
+    declared_count = metadata.get("trench_axes_count")
+    if declared_count not in (None, -1) and int(declared_count) != len(raw_axes):
+        raise RuntimeError(
+            "Trench metadata count disagrees with axes_ABC: "
+            f"declared {declared_count}, found {len(raw_axes)}."
+        )
+    metadata_overflow = len(raw_axes) > max_trench_type
+    if metadata_overflow:
+        if require_finite_segments:
+            raise RuntimeError(
+                f"Alignment metadata has {len(raw_axes)} axes but Terra supports "
+                f"at most {max_trench_type}; refusing to truncate a gated map."
+            )
+        raw_axes = raw_axes[:max_trench_type]
+
+    raw_segments = metadata.get("trench_segments_yx")
+    if raw_segments is None:
+        raw_segments = metadata.get("trench_arms")
+    segments_are_xy = False
+    if raw_segments is None and metadata.get("lines_pts") is not None:
+        raw_segments = metadata.get("lines_pts")
+        segments_are_xy = True
+    raw_segments = list(raw_segments or [])
+    half_width = metadata.get("trench_half_width_tiles")
+    if half_width is not None:
+        half_width = float(half_width)
+        if not np.isfinite(half_width) or half_width <= 0.0:
+            raise RuntimeError(
+                "trench_half_width_tiles must be a positive finite number."
+            )
+    elif require_finite_segments and raw_axes:
+        raise RuntimeError(
+            "Fresh-trench alignment requires generated trench_half_width_tiles."
+        )
+
+    if require_finite_segments and raw_axes and len(raw_segments) != len(raw_axes):
+        raise RuntimeError(
+            "Fresh-trench alignment requires one finite generated segment per "
+            f"axis; found {len(raw_axes)} axes and {len(raw_segments)} segments."
+        )
+
+    records: list[list[float]] = []
+    for index, axis in enumerate(raw_axes):
+        metadata_sanity_check(axis)
+        endpoints = [-97.0, -97.0, -97.0, -97.0]
+        if index < len(raw_segments):
+            segment = np.asarray(raw_segments[index], dtype=np.float64)
+            if segment.ndim != 2 or segment.shape[0] < 2 or segment.shape[1] != 2:
+                raise RuntimeError(
+                    "Trench segment metadata must contain at least two [y, x] "
+                    f"points; axis {index} has shape {segment.shape}."
+                )
+            if not np.all(np.isfinite(segment)):
+                raise RuntimeError(
+                    f"Trench segment {index} contains non-finite endpoints."
+                )
+            start = segment[0]
+            end = segment[-1]
+            if segments_are_xy:
+                start = start[::-1]
+                end = end[::-1]
+            if float(np.linalg.norm(end - start)) <= 1e-6:
+                raise RuntimeError(f"Trench segment {index} has zero length.")
+            denominator = float(np.hypot(axis["A"], axis["B"]))
+            if denominator <= 1e-6:
+                raise RuntimeError(f"Trench axis {index} has zero normal.")
+            endpoint_residuals = [
+                abs(
+                    float(axis["A"]) * float(point[1])
+                    + float(axis["B"]) * float(point[0])
+                    + float(axis["C"])
+                )
+                / denominator
+                for point in (start, end)
+            ]
+            if max(endpoint_residuals) > 0.05:
+                raise RuntimeError(
+                    f"Trench segment {index} does not lie on its paired axis; "
+                    f"endpoint residuals are {endpoint_residuals} tiles."
+                )
+            endpoints = [
+                float(start[0]),
+                float(start[1]),
+                float(end[0]),
+                float(end[1]),
+            ]
+        elif require_finite_segments:
+            raise RuntimeError(
+                f"Fresh-trench alignment is missing finite segment {index}."
+            )
+        records.append(
+            [
+                float(axis["A"]),
+                float(axis["B"]),
+                float(axis["C"]),
+                *endpoints,
+                -97.0 if half_width is None else half_width,
+            ]
+        )
+
+    trench_type = len(records) if records else -1
+    while len(records) < max_trench_type:
+        records.append([-97.0] * TRENCH_AXIS_RECORD_SIZE)
+    if metadata_overflow and records:
+        # Preserve legacy gate-off truncation, but leave a fail-closed marker
+        # in the otherwise unused width field so global gate activation cannot
+        # silently accept incomplete section metadata at reset.
+        records[0][7] = -98.0
+    return records, trench_type
+
+
 EXACT_DATASET_SCHEMA = "terra_exact_map_dataset_v1"
 EXACT_DATASET_MANIFEST = "manifest.jsonl"
 EXACT_DATASET_METADATA = "dataset.json"
@@ -1348,23 +1474,19 @@ def load_single_map(map_path: str) -> Array:
     # Try to load metadata
     max_trench_type = 4
     max_foundation_border_type = 64
-    trench_axes = -97.0 * np.ones((max_trench_type, 3))  # Default values
+    trench_axes = -97.0 * np.ones(
+        (max_trench_type, TRENCH_AXIS_RECORD_SIZE)
+    )
     trench_type = -1
     foundation_border_axes = -97.0 * np.ones((max_foundation_border_type, 3))
     foundation_border_type = -1
-    try:
+    if metadata_file.exists():
         with open(metadata_file) as f:
             metadata = json.load(f)
-        trench_ax = metadata.get("axes_ABC", [])
-        if len(trench_ax) > 0:
-            metadata_sanity_check(trench_ax[0])
-            trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
-            trench_type = len(trench_ax)
-        if len(trench_ax) > max_trench_type:
-            trench_ax = trench_ax[:max_trench_type]
-            trench_type = max_trench_type
-        while len(trench_ax) < max_trench_type:
-            trench_ax.append([-97, -97, -97])
+        trench_ax, trench_type = _trench_records_from_metadata(
+            metadata,
+            max_trench_type,
+        )
         trench_axes = np.array(trench_ax)
         foundation_ax = metadata.get("foundation_border_axes_ABC", [])
         if len(foundation_ax) > 0:
@@ -1377,7 +1499,7 @@ def load_single_map(map_path: str) -> Array:
             while len(foundation_ax) < max_foundation_border_type:
                 foundation_ax.append([-97, -97, -97])
             foundation_border_axes = np.array(foundation_ax)
-    except:
+    else:
         print(f"No metadata found for given map: {map_path}.")
 
     # Convert to single-element arrays
@@ -1406,6 +1528,7 @@ def load_single_map(map_path: str) -> Array:
 def load_maps_from_disk(
     folder_path: str,
     require_trench_metadata: bool = False,
+    require_trench_alignment_metadata: bool = False,
     require_exact_contract: bool = True,
     required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
 ) -> Array:
@@ -1604,22 +1727,11 @@ def load_maps_from_disk(
         if metadata_path.exists():
             with open(metadata_path) as f:
                 metadata = json.load(f)
-            trench_ax = metadata.get("axes_ABC", [])
-            trench_type = -1
-            if len(trench_ax) > 0:
-                metadata_sanity_check(trench_ax[0])
-                trench_ax = [[el["A"], el["B"], el["C"]] for el in trench_ax]
-                trench_type = len(trench_ax)
-            else:
-                trench_ax = []
-
-            # Fill in with dummies the remaining metadata to reach the standard
-            # shape; truncate if the map declares more axes than the buffer holds.
-            if len(trench_ax) > max_trench_type:
-                trench_ax = trench_ax[:max_trench_type]
-                trench_type = max_trench_type
-            while len(trench_ax) < max_trench_type:
-                trench_ax.append([-97, -97, -97])
+            trench_ax, trench_type = _trench_records_from_metadata(
+                metadata,
+                max_trench_type,
+                require_finite_segments=require_trench_alignment_metadata,
+            )
 
             trench_axes.append(trench_ax)
             trench_types.append(trench_type)
@@ -1639,7 +1751,7 @@ def load_maps_from_disk(
             n_loaded_metadata += 1
         else:
             # Missing metadata for this map.
-            if require_trench_metadata:
+            if require_trench_metadata or require_trench_alignment_metadata:
                 # If the curriculum/level requires trench metadata (e.g. trench rewards),
                 # raise immediately so the user can provide the metadata.
                 raise RuntimeError(
@@ -1649,7 +1761,12 @@ def load_maps_from_disk(
             # earlier this is allowed (we treat missing as defaults).
             if n_loaded_metadata > 0:
                 print(f"Warning: missing metadata file {metadata_path}; using defaults for img_{i}.")
-            trench_axes.append([[-97, -97, -97] for _ in range(max_trench_type)])
+            trench_axes.append(
+                [
+                    [-97] * TRENCH_AXIS_RECORD_SIZE
+                    for _ in range(max_trench_type)
+                ]
+            )
             trench_types.append(-1)
             foundation_border_axes.append(
                 [[-97, -97, -97] for _ in range(max_foundation_border_type)]
@@ -1668,7 +1785,7 @@ def load_maps_from_disk(
             (
                 loaded_count,
                 max_trench_type,
-                3,
+                TRENCH_AXIS_RECORD_SIZE,
             )
         )
         trench_types = -1 * jnp.ones((loaded_count,), dtype=jnp.int32)
@@ -1872,8 +1989,10 @@ def init_maps_buffer(
                 distances,
             ) = load_maps_from_disk(
                 folder_path,
-                require_trench_metadata=batch_cfg.curriculum_global.levels[idx].get(
-                    "apply_trench_rewards", False
+                require_trench_metadata=(
+                    batch_cfg.curriculum_global.levels[idx].get(
+                        "apply_trench_rewards", False
+                    )
                 ),
                 required_distance_protocol_id=required_distance_protocol_id,
             )

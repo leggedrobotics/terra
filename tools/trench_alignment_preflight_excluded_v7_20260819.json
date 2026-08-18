@@ -1,0 +1,727 @@
+{
+  "contract": {
+    "terra_revision": "25f855db3d913fd638c4e56b1740437a2b7122ca",
+    "bank": "/home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819",
+    "layout": "exact",
+    "datasets": [
+      "train/040__v7-trn-straight-adjacent",
+      "train/041__v7-trn-dogleg-adjacent",
+      "train/042__v7-trn-tee-adjacent",
+      "train/043__v7-trn-cross-adjacent",
+      "train/044__v7-trn-double-t-adjacent",
+      "train/045__v7-trn-network3-adjacent",
+      "train/046__v7-trn-disconnected-pair-adjacent"
+    ],
+    "maps": 0,
+    "workers": 1,
+    "wall_seconds": 0.0,
+    "incomplete_fresh_cover_maps": [],
+    "incomplete_fresh_cover_count": 0,
+    "missing_finite_metadata_count": 672,
+    "missing_finite_metadata": [
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 1,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0000",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 2,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0001",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 3,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0002",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 4,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0003",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 5,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0004",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 6,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0005",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 7,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0006",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 8,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0007",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 9,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0008",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 10,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0009",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 11,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0010",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 12,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0011",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 13,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0012",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 14,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0013",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 15,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0014",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 16,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0015",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 17,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0016",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 18,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0017",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 19,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0018",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 20,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0019",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 21,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0020",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 22,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0021",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 23,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0022",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 24,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0023",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 25,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0024",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 26,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0025",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 27,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0026",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 28,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0027",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 29,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0028",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 30,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0029",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 31,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0030",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 32,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0031",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 33,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0032",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 34,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0033",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 35,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0034",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 36,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0035",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 37,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0036",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 38,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0037",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 39,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0038",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 40,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0039",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 41,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0040",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 42,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0041",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 43,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0042",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 44,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0043",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 45,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0044",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 46,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0045",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 47,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0046",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 48,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0047",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 49,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0048",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 50,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0049",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 51,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0050",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 52,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0051",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 53,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0052",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 54,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0053",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 55,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0054",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 56,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0055",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 57,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0056",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 58,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0057",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 59,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0058",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 60,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0059",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 61,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0060",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 62,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0061",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 63,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0062",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      },
+      {
+        "dataset": "train/040__v7-trn-straight-adjacent",
+        "slot_index": 64,
+        "map_id": "v8:train:v7-trn-straight-adjacent:0063",
+        "condition": "v7-trn-straight-adjacent",
+        "family": "straight",
+        "declared_axes": 1,
+        "reason": "declared trench axes without finite sections or generated half width"
+      }
+    ],
+    "preflight_passed": false,
+    "metadata_source": "enriched metadata/trench_<slot>.json trench_segments_yx and trench_half_width_tiles",
+    "runtime_metadata_rounding": "float16 in MapsBuffer, float32 in geometry",
+    "tile_size_m": 0.5714285969734192,
+    "agent_width_tiles": 7,
+    "agent_height_tiles": 11,
+    "headings": 12,
+    "dig_cones": "exact State._build_dig_dump_cone table for all 12 base x 12 cabin headings",
+    "yaw_tolerance_deg": 15.001,
+    "standoff_min_m": 3.5,
+    "standoff_max_m": 7.0,
+    "pose_graph": "complete target holes plus padding, endpoint-only Terra movement/rotation",
+    "movement": "deltas obtained through State._handle_move_forward/backward using Terra's float32 path",
+    "macro_dig": "each action removes its full selected remaining-fresh cone and is admitted only when every such cell has a pose-valid finite-section owner",
+    "section_membership": "finite segment plus generated half-width; nearest-only raster fringe bounded to +1.5 tiles",
+    "chain": "each used dig pose has one exact Terra BACKWARD successor sharing a yaw/standoff-valid section",
+    "dump_probe": "same base, any cabin, existence of an accepted target>0 cell after complete-hole 5x5 dynamic dumpability; not a pile/capacity workflow",
+    "limitations": [
+      "Terra endpoint movement only; no physical swept-path check",
+      "no accumulated dumped piles, soil-mechanics trajectory, finite dump capacity proof, or episode-horizon proof",
+      "one generated 16-map bank per representative family"
+    ],
+    "reproduction_command": "JAX_PLATFORMS=cpu PYTHONPATH=/home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818 /home/lorenzo/moleworks/.venv-terra-uv/bin/python tools/audit_trench_alignment_feasibility.py --bank /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819 --layout exact --dataset train/040__v7-trn-straight-adjacent --dataset train/041__v7-trn-dogleg-adjacent --dataset train/042__v7-trn-tee-adjacent --dataset train/043__v7-trn-cross-adjacent --dataset train/044__v7-trn-double-t-adjacent --dataset train/045__v7-trn-network3-adjacent --dataset train/046__v7-trn-disconnected-pair-adjacent --workers 1 --witness-actions counts --output tools/trench_alignment_preflight_excluded_v7_20260819.json",
+    "forward_deltas": [
+      [
+        0,
+        5
+      ],
+      [
+        -2,
+        4
+      ],
+      [
+        -4,
+        2
+      ],
+      [
+        -5,
+        0
+      ],
+      [
+        -4,
+        -2
+      ],
+      [
+        -2,
+        -4
+      ],
+      [
+        0,
+        -5
+      ],
+      [
+        2,
+        -4
+      ],
+      [
+        4,
+        -2
+      ],
+      [
+        5,
+        0
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        2,
+        4
+      ]
+    ],
+    "backward_deltas": [
+      [
+        0,
+        -5
+      ],
+      [
+        2,
+        -4
+      ],
+      [
+        4,
+        -2
+      ],
+      [
+        5,
+        0
+      ],
+      [
+        4,
+        2
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        0,
+        5
+      ],
+      [
+        -2,
+        4
+      ],
+      [
+        -4,
+        2
+      ],
+      [
+        -5,
+        0
+      ],
+      [
+        -4,
+        -2
+      ],
+      [
+        -2,
+        -4
+      ]
+    ]
+  },
+  "summary": [],
+  "summary_by_family": [],
+  "summary_by_condition": [],
+  "results": []
+}
