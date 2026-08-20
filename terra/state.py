@@ -684,6 +684,22 @@ class State(NamedTuple):
         """
         return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
 
+    def _movement_feasibility_tracked(self) -> Array:
+        """Return exact effect bits for the four tracked-base actions."""
+        current = self._get_current_agent_state()
+        forward = self._handle_move_forward()._get_current_agent_state()
+        backward = self._handle_move_backward()._get_current_agent_state()
+        clockwise = self._handle_clock()._get_current_agent_state()
+        anticlockwise = self._handle_anticlock()._get_current_agent_state()
+        return jnp.stack(
+            (
+                jnp.any(forward.pos_base != current.pos_base),
+                jnp.any(backward.pos_base != current.pos_base),
+                jnp.any(clockwise.angle_base != current.angle_base),
+                jnp.any(anticlockwise.angle_base != current.angle_base),
+            )
+        )
+
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
         angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
@@ -1580,11 +1596,8 @@ class State(NamedTuple):
             _lift_positive_soil,
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
-        #Optionally apply soil mechanics using the global flag
-        map_shape = self.world.action_map.map.shape[-2:]
-        map_2d = new_flattened_map.reshape(map_shape)
-        dig_mask_2d = dig_mask.reshape(map_shape)
-        return self._apply_local_soil_mechanics(map_2d, dig_mask_2d).reshape(-1)
+        # The caller applies local soil relaxation once after the map update.
+        return new_flattened_map
 
     def _apply_dump_mask(
         self,

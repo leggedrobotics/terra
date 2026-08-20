@@ -123,7 +123,7 @@ class ExactDumpContractTest(unittest.TestCase):
     def test_contract_is_named(self):
         self.assertEqual(CORRECTED_DENSE_CONTRACT, "exact_visible_dump_v1")
 
-    def test_dig_cannot_create_holes_under_rotated_base(self):
+    def test_dig_and_relift_exclude_the_rotated_base_footprint(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
         under_base = np.asarray([[32, 25], [32, 26], [33, 25]])
         target[under_base[:, 0], under_base[:, 1]] = -1
@@ -147,6 +147,21 @@ class ExactDumpContractTest(unittest.TestCase):
             np.asarray(state.world.action_map.map),
         )
         self.assertEqual(int(after._get_current_agent_state().loaded[0]), 0)
+
+        staged = np.zeros(self.SHAPE, dtype=np.int8)
+        staged[under_base[:, 0], under_base[:, 1]] = 1
+        relift_state = self._state(
+            np.zeros(self.SHAPE, dtype=np.int8),
+            action=staged,
+        )._set_current_agent_state(current)
+        relift_after = relift_state._handle_dig()
+        np.testing.assert_array_equal(
+            np.asarray(relift_after.world.action_map.map),
+            staged,
+        )
+        self.assertEqual(
+            int(relift_after._get_current_agent_state().loaded[0]), 0
+        )
 
     def test_agent_overlay_preserves_underlying_hole(self):
         action = np.zeros(self.SHAPE, dtype=np.int8)
@@ -178,6 +193,107 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(int(physical[32, 25]), 1)
         self.assertEqual(int(visible[32, 25]), 1)
         self.assertEqual(int(visible[free_row, free_column]), -1)
+
+    def test_dig_relaxes_soil_exactly_once(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[0, 0] = 1
+        empty = self._state(target)
+        workspace = np.asarray(empty._build_dig_dump_cone()).reshape(self.SHAPE)
+        action = np.zeros(self.SHAPE, dtype=np.int8)
+        heights = (1, 2, 4, 8, 16, 32, 64, 100)
+        for index, coordinate in enumerate(np.argwhere(workspace)):
+            action[tuple(coordinate)] = heights[index % len(heights)]
+
+        state = self._state(target, action=action)
+        dig_mask = state._mask_out_wrong_dig_tiles(
+            state._build_dig_dump_cone()
+        )
+        raw = state._apply_dig_mask(
+            state.world.action_map.map.reshape(-1),
+            dig_mask,
+            jnp.bool_(True),
+        ).reshape(self.SHAPE)
+        once = state._apply_local_soil_mechanics(
+            raw,
+            dig_mask.reshape(self.SHAPE),
+        )
+        twice = state._apply_local_soil_mechanics(
+            once,
+            dig_mask.reshape(self.SHAPE),
+        )
+        actual = state._handle_dig()
+
+        np.testing.assert_array_equal(
+            np.asarray(actual.world.action_map.map),
+            np.asarray(once),
+        )
+        self.assertFalse(np.array_equal(np.asarray(once), np.asarray(twice)))
+        self.assertEqual(
+            int(np.asarray(actual.world.action_map.map, dtype=np.int32).sum())
+            + int(actual._get_current_agent_state().loaded[0]),
+            int(action.astype(np.int32).sum()),
+        )
+
+    def test_movement_and_previous_outcome_observations_match_physics(self):
+        state = self._state(np.zeros(self.SHAPE, dtype=np.int8))
+        env = TerraEnv.new(
+            maps_size_px=64,
+            movement_feasibility_observation=True,
+            previous_outcome_observation=True,
+        )
+        reset_obs = env._with_feedback_observations(state, {})
+        np.testing.assert_array_equal(
+            np.asarray(reset_obs["previous_action_outcome"]),
+            np.zeros((2,), dtype=np.float32),
+        )
+
+        actions = (
+            TrackedAction.forward(),
+            TrackedAction.backward(),
+            TrackedAction.clock(),
+            TrackedAction.anticlock(),
+        )
+        expected = []
+        for action in actions:
+            candidate = state._step(action, turn=False)
+            expected.append(
+                bool(TerraEnv._transition_diagnostics(state, candidate)["action_had_effect"])
+            )
+        np.testing.assert_array_equal(
+            np.asarray(reset_obs["movement_feasibility"], dtype=bool),
+            np.asarray(expected, dtype=bool),
+        )
+
+        moved = state._handle_move_forward()
+        movement_diagnostics = TerraEnv._transition_diagnostics(state, moved)
+        movement_obs = env._with_feedback_observations(
+            moved,
+            {},
+            movement_diagnostics,
+        )
+        np.testing.assert_array_equal(
+            np.asarray(movement_obs["previous_action_outcome"]),
+            np.asarray([1.0, 0.0], dtype=np.float32),
+        )
+
+        loaded_agent = state._get_current_agent_state()._replace(
+            loaded=jnp.array([1], dtype=jnp.int8)
+        )
+        loaded = state._set_current_agent_state(loaded_agent)
+        material_diagnostics = TerraEnv._transition_diagnostics(state, loaded)
+        material_obs = env._with_feedback_observations(
+            loaded,
+            {},
+            material_diagnostics,
+        )
+        np.testing.assert_array_equal(
+            np.asarray(material_obs["previous_action_outcome"]),
+            np.ones((2,), dtype=np.float32),
+        )
+        np.testing.assert_array_equal(
+            np.asarray(material_obs["movement_feasibility"]),
+            np.zeros((4,), dtype=np.float32),
+        )
 
     def test_exact_zone_is_success_and_former_buffer_is_not(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)

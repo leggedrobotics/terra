@@ -35,6 +35,8 @@ class TimeStep(NamedTuple):
 
 class TerraEnv(NamedTuple):
     rendering_engine: Game | None = None
+    movement_feasibility_observation: bool = False
+    previous_outcome_observation: bool = False
 
     @classmethod
     def new(
@@ -44,6 +46,8 @@ class TerraEnv(NamedTuple):
         n_envs_x: int = 1,
         n_envs_y: int = 1,
         display: bool = False,
+        movement_feasibility_observation: bool = False,
+        previous_outcome_observation: bool = False,
     ) -> "TerraEnv":
         re = None
         baseline_map_size = 64
@@ -79,7 +83,11 @@ class TerraEnv(NamedTuple):
                 n_envs_y=n_envs_y,
                 display=display,
             )
-        return TerraEnv(rendering_engine=re)
+        return TerraEnv(
+            rendering_engine=re,
+            movement_feasibility_observation=movement_feasibility_observation,
+            previous_outcome_observation=previous_outcome_observation,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def reset(
@@ -117,7 +125,10 @@ class TerraEnv(NamedTuple):
         )
         state = self.wrap_state(state)
 
-        observations = self._state_to_obs_dict(state)
+        observations = self._with_feedback_observations(
+            state,
+            self._state_to_obs_dict(state),
+        )
         dummy_action = BatchConfig().action_type.do_nothing()
         dummy_info = {
             # Keep the reset info pytree structure aligned with step() without
@@ -191,6 +202,7 @@ class TerraEnv(NamedTuple):
         return {
             "timeout": jnp.zeros((), dtype=jnp.bool_),
             "action_had_effect": jnp.zeros((), dtype=jnp.bool_),
+            "material_or_load_changed": jnp.zeros((), dtype=jnp.bool_),
             "productive_workspace_cycle": jnp.zeros((), dtype=jnp.int32),
             "productive_workspace_cycles": jnp.zeros((), dtype=jnp.int32),
             "transition_mass_residual": jnp.zeros((), dtype=jnp.int32),
@@ -260,6 +272,10 @@ class TerraEnv(NamedTuple):
                 terrain_changed,
                 jnp.any(jnp.stack(physical_agent_changes)),
             ),
+            "material_or_load_changed": jnp.logical_or(
+                terrain_changed,
+                jnp.any(old_loaded != new_loaded),
+            ),
             "productive_workspace_cycle": productive_workspace_cycle,
             "transition_mass_residual": jnp.abs(new_mass - old_mass),
             "target_mutation": jnp.any(
@@ -321,8 +337,40 @@ class TerraEnv(NamedTuple):
             distance_map_override=distance_map,
         )
         state = self.wrap_state(state)
-        observations = self._state_to_obs_dict(state)
+        observations = self._with_feedback_observations(
+            state,
+            self._state_to_obs_dict(state),
+        )
         return state, observations
+
+    def _with_feedback_observations(
+        self,
+        state: State,
+        observations: dict[str, Array],
+        transition_diagnostics: dict[str, Array] | None = None,
+    ) -> dict[str, Array]:
+        if self.movement_feasibility_observation:
+            observations = {
+                **observations,
+                "movement_feasibility": state._movement_feasibility_tracked().astype(
+                    jnp.float32
+                ),
+            }
+        if self.previous_outcome_observation:
+            if transition_diagnostics is None:
+                previous_outcome = jnp.zeros((2,), dtype=jnp.float32)
+            else:
+                previous_outcome = jnp.stack(
+                    (
+                        transition_diagnostics["action_had_effect"],
+                        transition_diagnostics["material_or_load_changed"],
+                    )
+                ).astype(jnp.float32)
+            observations = {
+                **observations,
+                "previous_action_outcome": previous_outcome,
+            }
+        return observations
 
     def render_obs_pygame(
         self,
@@ -395,7 +443,11 @@ class TerraEnv(NamedTuple):
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
         new_state = self.wrap_state(new_state, update_reachability=update_reachability)
-        obs = self._state_to_obs_dict(new_state)
+        obs = self._with_feedback_observations(
+            new_state,
+            self._state_to_obs_dict(new_state),
+            transition_diagnostics,
+        )
         #print agent agentstate_2
         # jax.debug.print(
         #     "agent_state_2: {agent_state_2}",
@@ -507,7 +559,11 @@ class TerraEnv(NamedTuple):
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
         new_state = self.wrap_state(new_state, update_reachability=update_reachability)
-        obs = self._state_to_obs_dict(new_state)
+        obs = self._with_feedback_observations(
+            new_state,
+            self._state_to_obs_dict(new_state),
+            transition_diagnostics,
+        )
         done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
@@ -648,6 +704,8 @@ class TerraEnvBatch:
         single_map_path: str = None,
         distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
         partial_reset_root: str | None = None,
+        movement_feasibility_observation: bool = False,
+        previous_outcome_observation: bool = False,
     ) -> None:
         self.maps_buffer, self.batch_cfg = init_maps_buffer(
             batch_cfg,
@@ -669,6 +727,8 @@ class TerraEnvBatch:
             n_envs_x=n_envs_x_rendering,
             n_envs_y=n_envs_y_rendering,
             display=display,
+            movement_feasibility_observation=movement_feasibility_observation,
+            previous_outcome_observation=previous_outcome_observation,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
@@ -972,6 +1032,9 @@ class TerraEnvBatch:
                     "reward_components": item.info["reward_components"],
                     "timeout": item.info["timeout"],
                     "action_had_effect": item.info["action_had_effect"],
+                    "material_or_load_changed": item.info[
+                        "material_or_load_changed"
+                    ],
                     "productive_workspace_cycle": item.info[
                         "productive_workspace_cycle"
                     ],
