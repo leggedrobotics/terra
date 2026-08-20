@@ -71,9 +71,19 @@ yaw tol 0.2619 rad, standoff 3.5–7.0 m).
 - Promotion (later, ≥3 matched seeds): seed-stratified paired bootstrap on the
   frozen full-start panel; 95% LCB(T1−C0 exact) > −2 pp AND
   95% LCB(raw ROS physical acceptance) > 0.
-- Primary endpoint: strict exact completion on untouched frozen full-start
-  panel. Mechanism: invalid fresh-DO rate, raw fresh-dig yaw/standoff,
-  completion by family/section.
+- Primary endpoint (panel made concrete 2026-08-20, before any pilot
+  checkpoint existed): strict exact completion on the enriched bank's
+  `evaluation/gate_main/{development,promotion}` panels (608 slots, 38
+  conditions = frozen main minus the 7 unenrichable v7-trn conditions;
+  selected via `eval_fixed_bank.py --panel-family gate_main`, which
+  re-validates through the frozen panel contract), restricted at readout to
+  the trench conditions excluding the 3 net4 conditions; net4 and foundation
+  conditions are reported separately, never pooled into the endpoint.
+  gate_main numbers are NOT comparable to historical 45-condition main-panel
+  results; receipts carry `evaluation_panel_family` to keep this attributable.
+  C0 and T1 are evaluated in separate invocations (fingerprints differ by
+  design) and joined externally. Mechanism: invalid fresh-DO rate, raw
+  fresh-dig yaw/standoff, completion by family/section.
 
 ## Non-interference
 
