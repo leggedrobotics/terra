@@ -498,19 +498,62 @@ of budget left. This readout cannot distinguish "T1 converges to C0-like
 completion, admissibly, by u30k" from "T1 plateaus near 40%." Only more
 training answers it.
 
-**Leading hypothesis for the residual completion gap, not yet tested here:**
-under the gate, continuing a trench past the stretch the current pose admits
-requires relocating and re-yawing into a fresh admissible lane, which C0 never
-has to do. This predicts the observed axis gradient (single-axis straights near
-parity at −6.2 pp raw; junctions −56 to −88 pp) and stalling partway rather
-than at the end (median failure dig_fraction 0.311). The decisive test is
-per-finite-section attribution on stalled episodes — if one section is
-near-complete while siblings are near-zero, the deficit is an unlearned
-re-approach maneuver; if all sections sit near ~31%, it is general slowness.
-Instrumentation for this was added to the probe
-(`summary.section_completion`, using the terminal action map and the per-map
-`trench_axis_membership` bitmask) but the measurement is **not** included in
-this readout.
+### 6.1 Residual completion gap: unlearned re-approach — **tested, supported**
+
+Hypothesis: under the gate, continuing a trench past the stretch the current
+pose admits requires relocating and re-yawing into a fresh admissible lane,
+which C0 never has to do. This predicts the observed axis gradient
+(single-axis straights near parity at −6.2 pp raw; junctions −56 to −88 pp)
+and stalling partway rather than at the end (median failure dig_fraction
+0.311).
+
+Test: per-finite-section completion at the terminal state, attributing dug
+cells to owning sections via the per-map `trench_axis_membership` bitmask.
+Restricted to **stalled episodes with ≥2 generated sections** (single-axis maps
+cannot exhibit the effect). Same 176 slots, seed, horizon.
+
+| stalled multi-section episodes | C0 | T1 |
+|---|---|---|
+| n | 16 | 85 |
+| mean best section | 0.763 | 0.572 |
+| **mean worst section** | **0.394** | **0.101** |
+| median spread (best − worst) | 0.320 | **0.538** |
+| worst section **exactly 0.000** | 4/16 (25%) | **53/85 (62%)** |
+| spread < 0.2 (even "general slowness") | 5/16 | 25/85 (29%) |
+
+**The even-progress null is refuted for T1.** Its stalled episodes do not sit
+at ~31% on every section; they work one section substantially (best 0.572,
+often to completion — 26/85 at ≥0.9) and leave a sibling **completely
+untouched in 62% of cases**. Per condition, `trn-seg3-side2` is the sharpest:
+best 0.767, worst 0.017; `trn-net3-side1-road` 0.835 / 0.203.
+
+The control shows the same sign but much weaker: C0's stalled episodes leave
+their worst section at 0.394, roughly 4× T1's, and fully untouched in only 25%
+of cases. So some concentration is intrinsic to stalling, but T1's is far more
+extreme and of a different kind — *untouched* siblings rather than
+partially-worked ones.
+
+Every successful episode in **both** arms finishes every section (mean best =
+mean worst = 1.000, spread 0.000), as the exact-completion contract requires.
+
+**This supports an unlearned re-approach maneuver rather than infeasibility**:
+T1 can find *an* admissible lane (it is aligned 41.5% of the time, 2.3× C0)
+but does not reliably find the *next* one after exhausting the current lane.
+That is a credit-assignment/exploration deficit, and it is learnable.
+
+Caveats: C0's n = 16 is small and is a biased sample (its 20 hardest maps),
+whereas T1's 85 are typical of its behaviour; the two stalled populations are
+therefore not matched, and the comparison is directional rather than a
+controlled contrast.
+
+**Implication for the remedy** (stated as indicated, not established): this
+strengthens the preregistered broad-to-strict tolerance curriculum for a
+concrete reason — a broad early tolerance lets the policy complete whole
+trenches and learn the re-approach loop with slack, after which tightening
+teaches precision on a behaviour it already has. Cheaper alternatives worth
+naming are a relift/reposition shaping term or a partial-reset curriculum
+seeded mid-trench, but per the research note no reward term should be added
+before the curriculum is tested.
 
 **Measurement that would settle (b) properly:** re-run
 `tools/audit_trench_alignment_feasibility.py`'s strict-gate cover **conditioned
@@ -533,6 +576,8 @@ Receipts, `tools/trench_align_pilot_u10000_receipts/`:
 | `eval_t1_u010000_gate_main_dev.json` | T1 panel receipt, 608 per-map rows |
 | `probe_{c0,t1}_u{000500,010000}.json` | mechanism summaries, per-condition, per-axis-class, per-slot |
 | `probe_{c0,t1}_u{000500,010000}.npz` | full per-step traces (action, active, validity, applicability, raw yaw/standoff, dug cells, divergence) |
+| `section_{c0,t1}_u010000.json` | per-finite-section terminal completion (§6.1) |
+| `readout_join_20260821.json` | joined receipt: endpoints, mechanism 2×2, admissible completion, W&B, rule outcomes |
 
 Tools:
 
@@ -559,7 +604,10 @@ deleted after measurement.
 6. Admissible completion uses Terra's gate as the admissibility oracle — a
    necessary but not sufficient proxy for ROS acceptance. **The deployment
    endpoint (ROS physical acceptance of raw plans) was not measured.**
-7. Section-level attribution of stalled episodes: instrumented, not run.
+7. Section attribution (§6.1) compares unmatched stalled populations
+   (C0 n=16, its hardest maps; T1 n=85, typical) — directional, not controlled.
+   It was run in a separate pass without `--differential-gate`; its episode
+   outcomes reproduce the main probe cells exactly (C0 154/176, T1 68/176).
 8. Non-trench and foundation transition classes are not covered by the
    differential gate check.
 9. Terra runtime is identical between the training pin
