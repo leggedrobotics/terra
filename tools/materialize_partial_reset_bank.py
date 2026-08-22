@@ -20,6 +20,14 @@ def main() -> None:
     parser.add_argument("--max-attempts-per-variant", type=int, default=100)
     parser.add_argument("--min-spawn-centers", type=int, default=16)
     parser.add_argument(
+        "--max-source-triplets-per-condition",
+        type=int,
+        help=(
+            "Stop a condition after this many complete source triplets; "
+            "unsupported sources remain eligible for full starts."
+        ),
+    )
+    parser.add_argument(
         "--pile-mode",
         action="append",
         dest="pile_modes",
@@ -49,6 +57,9 @@ def main() -> None:
         min_spawn_centers=args.min_spawn_centers,
         pile_modes=tuple(args.pile_modes or ("relay_corridor",)),
         include_maps_paths=include_maps_paths,
+        max_source_triplets_per_condition=(
+            args.max_source_triplets_per_condition
+        ),
     )
     print(json.dumps(receipt, indent=2, sort_keys=True))
 
