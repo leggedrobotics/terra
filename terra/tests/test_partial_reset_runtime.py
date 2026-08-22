@@ -11,10 +11,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import terra.env_generation.partial_reset_bank as partial_reset_bank_module
 from terra.config import EnvConfig
 from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
+from terra.env_generation.partial_completion import PartialCompletionError
 from terra.env_generation.partial_reset_bank import _declared_training_leaves
+from terra.env_generation.partial_reset_bank import materialize_sparse_partial_reset_bank
 from terra.maps_buffer import MapsBuffer
 from terra.maps_buffer import PARTIAL_COMPLETION_CONFIG
 from terra.maps_buffer import PARTIAL_COMPLETION_MANIFEST
@@ -51,7 +54,15 @@ def _partial_action(target: np.ndarray, fraction: float) -> np.ndarray:
     return action
 
 
-def _write_sparse_bank(root: Path, *, include_tier3: bool = True):
+def _write_sparse_bank(
+    root: Path,
+    *,
+    include_tier3: bool = True,
+    pile_mode: str = "relay_corridor",
+    pile_mode_policy: tuple[str, ...] | None = None,
+):
+    if pile_mode_policy is None:
+        pile_mode_policy = (pile_mode,)
     maps, occupancies, dumpability = _canonical_layers()
     leaf = root / "condition"
     actions_dir = leaf / "actions"
@@ -82,7 +93,7 @@ def _write_sparse_bank(root: Path, *, include_tier3: bool = True):
                     int(np.count_nonzero(action < 0))
                     / int(np.count_nonzero(maps[source_index - 1] < 0))
                 ),
-                "pile_mode": "relay_corridor",
+                "pile_mode": pile_mode,
                 "source_triplet_contract": PARTIAL_RESET_TRIPLET_CONTRACT,
                 "action_sha256": hashlib.sha256(action_path.read_bytes()).hexdigest(),
             }
@@ -92,7 +103,7 @@ def _write_sparse_bank(root: Path, *, include_tier3: bool = True):
             {
                 "schema": PARTIAL_RESET_LEAF_SCHEMA,
                 "maps_path": "condition",
-                "pile_mode": "relay_corridor",
+                "pile_mode_policy": list(pile_mode_policy),
                 "source_triplet_contract": PARTIAL_RESET_TRIPLET_CONTRACT,
                 "completion_fractions": [0.90, 0.75, 0.50],
                 "canonical_slot_count": 2,
@@ -113,6 +124,7 @@ def _write_sparse_bank(root: Path, *, include_tier3: bool = True):
             {
                 "schema": PARTIAL_RESET_BANK_SCHEMA,
                 "source_triplet_contract": PARTIAL_RESET_TRIPLET_CONTRACT,
+                "pile_mode_policy": list(pile_mode_policy),
                 "supported_maps_paths": ["condition"],
                 "bank_sha256": digest,
             },
@@ -128,6 +140,138 @@ def _write_sparse_bank(root: Path, *, include_tier3: bool = True):
         for index in (1, 2)
     ]
     return maps, occupancies, dumpability, canonical_rows, digest
+
+
+def test_materializer_uses_one_ordered_fallback_mode_for_the_whole_triplet(
+    tmp_path, monkeypatch
+):
+    source_root = tmp_path / "source"
+    source_leaf = source_root / "train" / "condition"
+    source_leaf.mkdir(parents=True)
+    (source_root / "dataset.json").write_text(
+        json.dumps(
+            {
+                "schema": "terra_curriculum_loader_bank_v1",
+                "train": [
+                    {
+                        "level_index": 0,
+                        "maps_path": "train/condition",
+                    }
+                ],
+            }
+        )
+        + "\n"
+    )
+    (source_leaf / "dataset.json").write_text(
+        json.dumps(
+            {
+                "scenario_identity_contract": "terra_reset_arrays_sha256_v1",
+                "slot_count": 1,
+            }
+        )
+        + "\n"
+    )
+    (source_leaf / "manifest.jsonl").write_text("fixture\n")
+    canonical_row = {
+        "map_id": "map-1",
+        "scenario_id": "1" * 64,
+    }
+    target = np.zeros((64, 64), dtype=np.int8)
+    target[2, 2:12] = -1
+    target[48:52, 48:52] = 1
+    occupancy = np.zeros_like(target, dtype=np.int8)
+    dumpability = np.ones_like(target, dtype=np.bool_)
+
+    monkeypatch.setattr(
+        partial_reset_bank_module,
+        "validate_exact_dataset_contract",
+        lambda *_: ([canonical_row], (64, 64), None),
+    )
+    monkeypatch.setattr(
+        partial_reset_bank_module,
+        "_load_source_layers",
+        lambda *_: (target, occupancy, dumpability),
+    )
+
+    def generate(*_, config, **__):
+        mode = config.mode_weights[0][0]
+        if mode == "relay_corridor":
+            raise PartialCompletionError("fixture has no relay corridor")
+        fraction = config.completion_fractions[0]
+        completed = int(round(fraction * 10))
+        action = np.zeros_like(target, dtype=np.int8)
+        for x, y in np.argwhere(target < 0)[:completed]:
+            action[int(x), int(y)] = -1
+        action[49, 49] = completed
+        return SimpleNamespace(
+            action_map=action,
+            manifest={
+                "requested_completion_fraction": fraction,
+                "achieved_completion_fraction": completed / 10,
+                "pile_mode": mode,
+            },
+        )
+
+    monkeypatch.setattr(
+        partial_reset_bank_module,
+        "generate_partial_action_map",
+        generate,
+    )
+
+    output_root = tmp_path / "partial"
+    receipt = materialize_sparse_partial_reset_bank(
+        source_root,
+        output_root,
+        pile_modes=("relay_corridor", "in_zone"),
+        include_maps_paths=("train/condition",),
+        min_spawn_centers=1,
+    )
+    assert receipt["pile_mode_policy"] == ["relay_corridor", "in_zone"]
+    assert receipt["supported_maps_paths"] == ["train/condition"]
+    config = json.loads(
+        (
+            output_root
+            / "train"
+            / "condition"
+            / PARTIAL_COMPLETION_CONFIG
+        ).read_text()
+    )
+    assert config["selected_pile_mode_counts"] == {
+        "relay_corridor": 0,
+        "in_zone": 1,
+    }
+    rows = [
+        json.loads(line)
+        for line in (
+            output_root
+            / "train"
+            / "condition"
+            / PARTIAL_COMPLETION_MANIFEST
+        ).read_text().splitlines()
+    ]
+    assert [row["reset_tier"] for row in rows] == [1, 2, 3]
+    assert {row["pile_mode"] for row in rows} == {"in_zone"}
+    rejected = (
+        output_root
+        / "train"
+        / "condition"
+        / PARTIAL_COMPLETION_REJECTIONS
+    ).read_text()
+    assert "fixture has no relay corridor" in rejected
+
+    maps = np.stack((target,))
+    occupancies = np.stack((occupancy,))
+    dumpability_maps = np.stack((dumpability,))
+    _, available, _, supported = load_partial_reset_action_sidecars(
+        output_root,
+        ["train/condition"],
+        [maps],
+        [occupancies],
+        [dumpability_maps],
+        [[canonical_row]],
+    )
+    assert available[:, 0, 0].tolist() == [True, True, True]
+    assert supported[:, 0].tolist() == [True, True, True, True]
 
 
 def test_sparse_sidecar_is_source_bound_and_samples_only_available_slots():

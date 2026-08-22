@@ -14,6 +14,7 @@ import numpy as np
 from terra.config import PARTIAL_RESET_FRACTIONS
 from terra.env_generation.partial_completion import PartialCompletionConfig
 from terra.env_generation.partial_completion import PartialCompletionError
+from terra.env_generation.partial_completion import SUPPORTED_PILE_MODES
 from terra.env_generation.partial_completion import _load_source_layers
 from terra.env_generation.partial_completion import generate_partial_action_map
 from terra.maps_buffer import LEGACY_SCENARIO_IDENTITY_CONTRACT
@@ -104,15 +105,42 @@ def materialize_sparse_partial_reset_bank(
     seed: int = 0,
     max_attempts_per_variant: int = 100,
     min_spawn_centers: int = 16,
+    pile_modes: tuple[str, ...] = ("relay_corridor",),
+    include_maps_paths: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
-    """Generate one sparse action-only relay bank over every exact condition."""
+    """Generate a sparse action-only bank with an ordered per-source mode policy."""
     input_root = Path(input_root).resolve()
     output_root = Path(output_root).resolve()
     if not input_root.is_dir():
         raise PartialCompletionError(f"Input root does not exist: {input_root}")
     if output_root.exists():
         raise PartialCompletionError(f"Output path already exists: {output_root}")
+    if (
+        not pile_modes
+        or len(set(pile_modes)) != len(pile_modes)
+        or any(mode not in SUPPORTED_PILE_MODES for mode in pile_modes)
+    ):
+        raise PartialCompletionError(
+            "pile_modes must be a nonempty unique ordered subset of "
+            f"{SUPPORTED_PILE_MODES}; got {pile_modes}."
+        )
     leaves = _declared_training_leaves(input_root)
+    declared_paths = tuple(maps_path for maps_path, _ in leaves)
+    if include_maps_paths is not None:
+        include_maps_paths = tuple(include_maps_paths)
+        if not include_maps_paths or len(set(include_maps_paths)) != len(
+            include_maps_paths
+        ):
+            raise PartialCompletionError(
+                "include_maps_paths must contain unique declared paths."
+            )
+        unknown = sorted(set(include_maps_paths) - set(declared_paths))
+        if unknown:
+            raise PartialCompletionError(
+                f"include_maps_paths contains undeclared paths: {unknown}."
+            )
+        included = set(include_maps_paths)
+        leaves = [leaf for leaf in leaves if leaf[0] in included]
 
     output_root.parent.mkdir(parents=True, exist_ok=True)
     temporary_root = Path(
@@ -170,59 +198,102 @@ def materialize_sparse_partial_reset_bank(
                         [seed, condition_seed, source_index]
                     ).generate_state(1, dtype=np.uint64)[0]
                 )
-                triplet_results: list[tuple[int, float, Any]] = []
-                for tier_index, fraction in enumerate(
-                    PARTIAL_RESET_FRACTIONS,
-                    start=1,
-                ):
-                    config = PartialCompletionConfig(
-                        completion_fractions=(fraction,),
-                        variants_per_fraction=1,
-                        mode_weights=(("relay_corridor", 1.0),),
-                        min_piles=1,
-                        max_piles=1,
-                        min_spawn_centers=min_spawn_centers,
-                        max_attempts_per_variant=max_attempts_per_variant,
-                        seed=variant_seed,
-                    )
-                    try:
-                        result = generate_partial_action_map(
-                            target,
-                            occupancy,
-                            dumpability,
-                            rng=np.random.default_rng(variant_seed),
-                            config=config,
+                triplet_results: list[tuple[int, float, Any]] | None = None
+                for pile_mode in pile_modes:
+                    mode_results: list[tuple[int, float, Any]] = []
+                    for tier_index, fraction in enumerate(
+                        PARTIAL_RESET_FRACTIONS,
+                        start=1,
+                    ):
+                        config = PartialCompletionConfig(
+                            completion_fractions=(fraction,),
+                            variants_per_fraction=1,
+                            mode_weights=((pile_mode, 1.0),),
+                            min_piles=1,
+                            max_piles=1,
+                            min_spawn_centers=min_spawn_centers,
+                            max_attempts_per_variant=max_attempts_per_variant,
+                            seed=variant_seed,
                         )
-                        partial_reset_action_sanity_check(
-                            target,
-                            occupancy,
-                            dumpability,
-                            result.action_map,
-                            expected_fraction=fraction,
-                        )
-                        contained_dump_capacity_sanity_check(
-                            target,
-                            occupancy,
-                            dumpability,
-                            result.action_map,
-                        )
-                    except (PartialCompletionError, RuntimeError) as exc:
+                        try:
+                            result = generate_partial_action_map(
+                                target,
+                                occupancy,
+                                dumpability,
+                                rng=np.random.default_rng(variant_seed),
+                                config=config,
+                            )
+                            partial_reset_action_sanity_check(
+                                target,
+                                occupancy,
+                                dumpability,
+                                result.action_map,
+                                expected_fraction=fraction,
+                            )
+                            contained_dump_capacity_sanity_check(
+                                target,
+                                occupancy,
+                                dumpability,
+                                result.action_map,
+                            )
+                        except (PartialCompletionError, RuntimeError) as exc:
+                            rejection_rows.append(
+                                {
+                                    "maps_path": maps_path,
+                                    "source_index": source_index,
+                                    "source_map_id": source_row["map_id"],
+                                    "source_scenario_id": source_row["scenario_id"],
+                                    "reset_tier": tier_index,
+                                    "requested_completion_fraction": fraction,
+                                    "variant_seed": variant_seed,
+                                    "pile_mode": pile_mode,
+                                    "error": str(exc),
+                                }
+                            )
+                            continue
+                        mode_results.append((tier_index, fraction, result))
+
+                    if len(mode_results) != len(PARTIAL_RESET_FRACTIONS):
                         rejection_rows.append(
                             {
                                 "maps_path": maps_path,
                                 "source_index": source_index,
                                 "source_map_id": source_row["map_id"],
                                 "source_scenario_id": source_row["scenario_id"],
-                                "reset_tier": tier_index,
-                                "requested_completion_fraction": fraction,
                                 "variant_seed": variant_seed,
+                                "pile_mode": pile_mode,
+                                "successful_tiers_discarded": [
+                                    tier_index
+                                    for tier_index, _, _ in mode_results
+                                ],
+                                "error": "discarded incomplete source triplet",
+                            }
+                        )
+                        continue
+                    try:
+                        partial_reset_triplet_sanity_check(
+                            mode_results[0][2].action_map,
+                            mode_results[1][2].action_map,
+                            mode_results[2][2].action_map,
+                        )
+                    except RuntimeError as exc:
+                        rejection_rows.append(
+                            {
+                                "maps_path": maps_path,
+                                "source_index": source_index,
+                                "source_map_id": source_row["map_id"],
+                                "source_scenario_id": source_row["scenario_id"],
+                                "variant_seed": variant_seed,
+                                "pile_mode": pile_mode,
+                                "successful_tiers_discarded": [1, 2, 3],
                                 "error": str(exc),
                             }
                         )
                         continue
-                    triplet_results.append((tier_index, fraction, result))
+                    triplet_results = mode_results
+                    break
 
-                if len(triplet_results) != len(PARTIAL_RESET_FRACTIONS):
+                if triplet_results is None:
                     rejected_source_count += 1
                     rejection_rows.append(
                         {
@@ -231,32 +302,8 @@ def materialize_sparse_partial_reset_bank(
                             "source_map_id": source_row["map_id"],
                             "source_scenario_id": source_row["scenario_id"],
                             "variant_seed": variant_seed,
-                            "successful_tiers_discarded": [
-                                tier_index
-                                for tier_index, _, _ in triplet_results
-                            ],
-                            "error": "discarded incomplete source triplet",
-                        }
-                    )
-                    continue
-
-                try:
-                    partial_reset_triplet_sanity_check(
-                        triplet_results[0][2].action_map,
-                        triplet_results[1][2].action_map,
-                        triplet_results[2][2].action_map,
-                    )
-                except RuntimeError as exc:
-                    rejected_source_count += 1
-                    rejection_rows.append(
-                        {
-                            "maps_path": maps_path,
-                            "source_index": source_index,
-                            "source_map_id": source_row["map_id"],
-                            "source_scenario_id": source_row["scenario_id"],
-                            "variant_seed": variant_seed,
-                            "successful_tiers_discarded": [1, 2, 3],
-                            "error": str(exc),
+                            "pile_mode_policy": list(pile_modes),
+                            "error": "no configured pile mode produced a complete triplet",
                         }
                     )
                     continue
@@ -295,7 +342,7 @@ def materialize_sparse_partial_reset_bank(
             leaf_config = {
                 "schema": PARTIAL_RESET_LEAF_SCHEMA,
                 "maps_path": maps_path,
-                "pile_mode": "relay_corridor",
+                "pile_mode_policy": list(pile_modes),
                 "source_triplet_contract": PARTIAL_RESET_TRIPLET_CONTRACT,
                 "completion_fractions": list(PARTIAL_RESET_FRACTIONS),
                 "canonical_slot_count": slot_count,
@@ -312,7 +359,14 @@ def materialize_sparse_partial_reset_bank(
                 "seed": seed,
                 "max_attempts_per_variant": max_attempts_per_variant,
                 "min_spawn_centers": min_spawn_centers,
+                "selected_pile_mode_counts": {
+                    mode: sum(row.get("pile_mode") == mode for row in success_rows)
+                    // len(PARTIAL_RESET_FRACTIONS)
+                    for mode in pile_modes
+                },
             }
+            if len(pile_modes) == 1:
+                leaf_config["pile_mode"] = pile_modes[0]
             (leaf_directory / PARTIAL_COMPLETION_CONFIG).write_text(
                 json.dumps(leaf_config, indent=2, sort_keys=True) + "\n"
             )
@@ -322,7 +376,8 @@ def materialize_sparse_partial_reset_bank(
 
         if not supported_paths:
             raise PartialCompletionError(
-                "No condition has a successful relay partial reset."
+                "No condition has a successful partial reset under the configured "
+                f"pile mode policy {pile_modes}."
             )
         supported_tier_counts = np.zeros(
             (len(PARTIAL_RESET_FRACTIONS),),
@@ -353,12 +408,16 @@ def materialize_sparse_partial_reset_bank(
                 input_root / "dataset.json"
             ),
             "completion_fractions": list(PARTIAL_RESET_FRACTIONS),
-            "pile_mode": "relay_corridor",
+            "pile_mode_policy": list(pile_modes),
             "source_triplet_contract": PARTIAL_RESET_TRIPLET_CONTRACT,
+            "eligible_maps_paths": [maps_path for maps_path, _ in leaves],
             "supported_maps_paths": supported_paths,
             "rejected_condition_count": len(leaves) - len(supported_paths),
+            "excluded_declared_condition_count": len(declared_paths) - len(leaves),
             "bank_sha256": bank_sha256,
         }
+        if len(pile_modes) == 1:
+            bank_index["pile_mode"] = pile_modes[0]
         (temporary_root / PARTIAL_RESET_BANK_INDEX).write_text(
             json.dumps(bank_index, indent=2, sort_keys=True) + "\n"
         )

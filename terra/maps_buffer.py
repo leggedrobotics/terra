@@ -336,6 +336,40 @@ PARTIAL_RESET_BANK_INDEX = "partial_reset_bank.json"
 PARTIAL_RESET_BANK_SCHEMA = "terra_sparse_partial_reset_bank_v1"
 PARTIAL_RESET_LEAF_SCHEMA = "terra_sparse_partial_reset_leaf_v1"
 PARTIAL_RESET_TRIPLET_CONTRACT = "strict_nested_source_triplet_v1"
+PARTIAL_RESET_PILE_MODES = (
+    "relay_corridor",
+    "in_zone",
+    "near_zone",
+    "mixed",
+)
+
+
+def _partial_reset_pile_mode_policy(
+    payload: dict[str, Any], source: Path
+) -> tuple[str, ...]:
+    """Read a new ordered policy while preserving relay-only v1 banks."""
+    raw_policy = payload.get("pile_mode_policy")
+    if raw_policy is None:
+        raw_policy = [payload.get("pile_mode", "relay_corridor")]
+    if (
+        not isinstance(raw_policy, list)
+        or not raw_policy
+        or any(not isinstance(mode, str) for mode in raw_policy)
+        or len(raw_policy) != len(set(raw_policy))
+        or any(mode not in PARTIAL_RESET_PILE_MODES for mode in raw_policy)
+    ):
+        raise RuntimeError(
+            f"{source} has invalid pile_mode_policy {raw_policy!r}; expected a "
+            f"unique ordered subset of {PARTIAL_RESET_PILE_MODES}."
+        )
+    legacy_mode = payload.get("pile_mode")
+    if legacy_mode is not None and (
+        len(raw_policy) != 1 or raw_policy[0] != legacy_mode
+    ):
+        raise RuntimeError(
+            f"{source} has inconsistent pile_mode and pile_mode_policy."
+        )
+    return tuple(raw_policy)
 
 
 def partial_reset_action_sanity_check(
@@ -478,6 +512,10 @@ def load_partial_reset_action_sidecars(
             f"{index_path} must use source_triplet_contract="
             f"{PARTIAL_RESET_TRIPLET_CONTRACT!r}."
         )
+    bank_pile_mode_policy = _partial_reset_pile_mode_policy(
+        bank_index,
+        index_path,
+    )
     actual_bank_sha256 = partial_reset_bank_sha256(root)
     if bank_index.get("bank_sha256") != actual_bank_sha256:
         raise RuntimeError(
@@ -557,9 +595,14 @@ def load_partial_reset_action_sidecars(
                 f"{config_path} must contain exactly the reset fractions "
                 f"{PARTIAL_RESET_FRACTIONS}."
             )
-        if config.get("pile_mode") != "relay_corridor":
+        leaf_pile_mode_policy = _partial_reset_pile_mode_policy(
+            config,
+            config_path,
+        )
+        if leaf_pile_mode_policy != bank_pile_mode_policy:
             raise RuntimeError(
-                f"{config_path} must use pile_mode='relay_corridor'."
+                f"{config_path} pile mode policy {leaf_pile_mode_policy} does "
+                f"not match bank policy {bank_pile_mode_policy}."
             )
         if (
             config.get("source_triplet_contract")
@@ -597,11 +640,13 @@ def load_partial_reset_action_sidecars(
             )
         seen: set[tuple[int, int]] = set()
         source_variant_seeds: dict[int, set[int]] = {}
+        source_pile_modes: dict[int, set[str]] = {}
         for row in rows:
             source_index = row.get("source_index")
             reset_tier = row.get("reset_tier")
             requested_fraction = row.get("requested_completion_fraction")
             variant_seed = row.get("variant_seed")
+            pile_mode = row.get("pile_mode")
             if (
                 not isinstance(source_index, int)
                 or not 1 <= source_index <= source_count
@@ -609,7 +654,7 @@ def load_partial_reset_action_sidecars(
                 or not 1 <= reset_tier <= len(PARTIAL_RESET_FRACTIONS)
                 or not isinstance(requested_fraction, (int, float))
                 or not isinstance(variant_seed, int)
-                or row.get("pile_mode") != "relay_corridor"
+                or pile_mode not in leaf_pile_mode_policy
             ):
                 raise RuntimeError(f"Invalid partial-reset manifest row: {row}")
             tier_index = reset_tier - 1
@@ -677,6 +722,7 @@ def load_partial_reset_action_sidecars(
             )
             available[tier_index, level_index, source_index - 1] = True
             source_variant_seeds.setdefault(source_index - 1, set()).add(variant_seed)
+            source_pile_modes.setdefault(source_index - 1, set()).add(pile_mode)
             seen.add(key)
 
         tier_counts = available[:, level_index].sum(axis=1)
@@ -702,6 +748,13 @@ def load_partial_reset_action_sidecars(
                 raise RuntimeError(
                     f"Partial-reset source triplet {maps_path}:{source_slot + 1} "
                     "must share one deterministic variant_seed."
+                )
+            if source_pile_modes.get(source_slot) is None or len(
+                source_pile_modes[source_slot]
+            ) != 1:
+                raise RuntimeError(
+                    f"Partial-reset source triplet {maps_path}:{source_slot + 1} "
+                    "must use one pile mode across every tier."
                 )
             partial_reset_triplet_sanity_check(
                 partial_actions[0, level_index, source_slot],
