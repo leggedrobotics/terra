@@ -226,10 +226,12 @@ def test_materializer_uses_one_ordered_fallback_mode_for_the_whole_triplet(
         include_maps_paths=("train/condition",),
         min_spawn_centers=1,
         max_source_triplets_per_condition=1,
+        max_sources_scanned_per_condition=1,
     )
     assert receipt["pile_mode_policy"] == ["relay_corridor", "in_zone"]
     assert receipt["supported_maps_paths"] == ["train/condition"]
     assert receipt["max_source_triplets_per_condition"] == 1
+    assert receipt["max_sources_scanned_per_condition"] == 1
     config = json.loads(
         (
             output_root

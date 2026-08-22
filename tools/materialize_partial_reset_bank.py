@@ -28,6 +28,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--max-sources-scanned-per-condition",
+        type=int,
+        help=(
+            "Inspect at most this many canonical sources per condition before "
+            "recording it as unsupported by the partial bank."
+        ),
+    )
+    parser.add_argument(
         "--pile-mode",
         action="append",
         dest="pile_modes",
@@ -59,6 +67,9 @@ def main() -> None:
         include_maps_paths=include_maps_paths,
         max_source_triplets_per_condition=(
             args.max_source_triplets_per_condition
+        ),
+        max_sources_scanned_per_condition=(
+            args.max_sources_scanned_per_condition
         ),
     )
     print(json.dumps(receipt, indent=2, sort_keys=True))

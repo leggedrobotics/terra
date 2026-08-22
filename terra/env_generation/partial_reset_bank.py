@@ -108,6 +108,7 @@ def materialize_sparse_partial_reset_bank(
     pile_modes: tuple[str, ...] = ("relay_corridor",),
     include_maps_paths: tuple[str, ...] | None = None,
     max_source_triplets_per_condition: int | None = None,
+    max_sources_scanned_per_condition: int | None = None,
 ) -> dict[str, Any]:
     """Generate a sparse action-only bank with an ordered per-source mode policy."""
     input_root = Path(input_root).resolve()
@@ -131,6 +132,13 @@ def materialize_sparse_partial_reset_bank(
     ):
         raise PartialCompletionError(
             "max_source_triplets_per_condition must be positive when provided."
+        )
+    if (
+        max_sources_scanned_per_condition is not None
+        and max_sources_scanned_per_condition <= 0
+    ):
+        raise PartialCompletionError(
+            "max_sources_scanned_per_condition must be positive when provided."
         )
     leaves = _declared_training_leaves(input_root)
     declared_paths = tuple(maps_path for maps_path, _ in leaves)
@@ -192,12 +200,19 @@ def materialize_sparse_partial_reset_bank(
             tier_counts = np.zeros((len(PARTIAL_RESET_FRACTIONS),), dtype=np.int32)
             rejected_source_count = 0
             accepted_source_count = 0
+            scanned_source_count = 0
             sidecar_index = 0
             condition_seed = int.from_bytes(
                 hashlib.sha256(maps_path.encode("utf-8")).digest()[:4],
                 "little",
             )
             for source_index, source_row in enumerate(manifest_rows, start=1):
+                if (
+                    max_sources_scanned_per_condition is not None
+                    and source_index > max_sources_scanned_per_condition
+                ):
+                    break
+                scanned_source_count += 1
                 target, occupancy, dumpability = _load_source_layers(
                     source_directory,
                     source_index,
@@ -372,11 +387,15 @@ def materialize_sparse_partial_reset_bank(
                 "rejected_variant_count": len(rejection_rows),
                 "rejected_source_count": rejected_source_count,
                 "accepted_source_count": accepted_source_count,
+                "scanned_source_count": scanned_source_count,
                 "seed": seed,
                 "max_attempts_per_variant": max_attempts_per_variant,
                 "min_spawn_centers": min_spawn_centers,
                 "max_source_triplets_per_condition": (
                     max_source_triplets_per_condition
+                ),
+                "max_sources_scanned_per_condition": (
+                    max_sources_scanned_per_condition
                 ),
                 "selected_pile_mode_counts": {
                     mode: sum(row.get("pile_mode") == mode for row in success_rows)
@@ -434,6 +453,7 @@ def materialize_sparse_partial_reset_bank(
             "rejected_condition_count": len(leaves) - len(supported_paths),
             "excluded_declared_condition_count": len(declared_paths) - len(leaves),
             "max_source_triplets_per_condition": max_source_triplets_per_condition,
+            "max_sources_scanned_per_condition": max_sources_scanned_per_condition,
             "bank_sha256": bank_sha256,
         }
         if len(pile_modes) == 1:
