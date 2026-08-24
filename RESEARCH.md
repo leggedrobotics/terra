@@ -52,6 +52,14 @@ for any physical effect and material-or-load change. Reset observations encode
 the previous outcome as `00`. The sibling baselines repository owns the
 fresh-scratch control-versus-feedback training contract and evaluation gates.
 
+Both paired 4-GPU arms completed 50,000 updates on 2026-08-23 (Slurm
+`11364188` control and `11364189` feedback). Their final 1,000-update online
+success is tied at 0.99019 and 0.99037, while feedback reduces the no-effect
+rate from 0.03152 to 0.01450. This supports promoting the repaired runtime and
+the optional observation path, with feedback disabled by default. It does not
+select the feedback policy: the preregistered fixed development-720 and
+recurrence panels remain pending in terra-baselines.
+
 ## Partial-completion reset distribution
 
 The supported training treatment is one sparse, source-bound
