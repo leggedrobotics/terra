@@ -204,3 +204,34 @@ admissible digs per episode. Do not resurrect them without reading why.
   and asserts it reproduces Terra's exported values at every step
 - `tools/audit_trench_alignment_feasibility.py`, `tools/enrich_trench_finite_metadata.py`,
   `tools/build_trench_pilot_pooled_train.py` — bank construction and preflight
+
+---
+
+## 9. UPDATE 2026-08-25 — pilot complete, this note partly superseded
+
+Both arms hit the 119:45 wall as designed (C0 u86,000, T1 u85,441). Final
+checkpoints archived to `/cluster/project/rsl/alesweber/terra_trench_align_v1_final/`
+with a SHA-256 manifest — scratch purges, do not rely on it.
+
+**Result at matched u85,000** (see `TRENCH_ALIGNMENT_PILOT_U85000_READOUT_20260825.md`,
+Terra `6f608e64`): admissible exact completion **C0 1.14% vs T1 62.50%
+(+61.36 pp)**; raw **94.89% vs 63.07% (−31.82 pp)**. The control *regressed* on
+admissibility with 8.5× more training. Both arms plateaued since ~u30k.
+
+**Three items in this note are now superseded:**
+
+1. §7.3 broad-to-strict curriculum — **evidence retired.** T1's residual
+   invalid attempts moved from exactly 30.00° (one heading bin) at u10k to
+   exactly 60.00° (two bins, all 350) at u85k. Admitting them would need a
+   >60° tolerance. Do not launch that arm on the u10,000 rationale.
+2. §7.4 continuation segment — **do not run.** 14,000 updates is 19.5 h of a
+   120 h allocation for a projected +1.6 pp, inside panel noise.
+3. §7.5 "is the cost transient" — **answered.** T1 did enter the escalation,
+   ~4k updates later and at 1.63× vs 2.63× amplitude. The raw gap closed 36%
+   on held-out but stopped closing after u60k while training-distribution
+   convergence reached ~95%: the residual is a **generalization** gap.
+
+**Priorities now, in order:** (1) two more matched seed pairs to u60,000 — the
+61 pp lead rests on n=1; (2) **ROS physical acceptance**, never measured,
+needs no training, and is the promotion rule's second conjunct; (3) the
+generalization gap. §6 Traps remains valid in full.
