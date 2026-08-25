@@ -239,10 +239,11 @@ def test_exact_full_scenario_duplicate_fails_loudly():
         )
 
 
-def test_planning_map_rerolls_layout_after_attempt_exhaustion(monkeypatch):
+def test_trench_map_rerolls_layout_after_attempt_exhaustion(monkeypatch):
     condition = SimpleNamespace(
-        id="planning-condition",
-        planning=True,
+        id="trench-condition",
+        planning=False,
+        family="trench",
         dig_bank_level="straight",
     )
     dataset = SimpleNamespace()
@@ -292,6 +293,7 @@ def test_planning_map_layout_search_is_bounded(monkeypatch):
     condition = SimpleNamespace(
         id="planning-condition",
         planning=True,
+        family="foundation",
         dig_bank_level="straight",
     )
 

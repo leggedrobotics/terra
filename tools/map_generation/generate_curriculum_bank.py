@@ -157,7 +157,7 @@ def reset_array_scenario_sha256(arrays: dict[str, Any]) -> str:
 R_MIN_TILES = v9.R_MIN_TILES
 R_MAX_TILES = v9.R_MAX_TILES
 SINGLE_STATION_BUDGET_TILES = v9.SINGLE_STATION_BUDGET_TILES
-PLANNING_LAYOUT_ROUNDS = 5
+LAYOUT_SEARCH_ROUNDS = 5
 
 # --------------------------------------------------------------------------
 # D1 -- gapped ring masks (spec v6 section 2)
@@ -1854,9 +1854,13 @@ def make_map(condition, dataset, dig, dig_meta, layout, rng):
 def _generate_map(
     condition, dataset, condition_index, bank, n_maps, max_attempts, map_index
 ):
-    """Generate one deterministic map, with bounded planning-layout fallbacks."""
+    """Generate one deterministic map, with bounded constrained-layout fallbacks."""
     rejections: Counter[str] = Counter()
-    layout_rounds = PLANNING_LAYOUT_ROUNDS if condition.planning else 1
+    layout_rounds = (
+        LAYOUT_SEARCH_ROUNDS
+        if condition.planning or condition.family == "trench"
+        else 1
+    )
     for layout_round in range(layout_rounds):
         layout_map_index = map_index + layout_round * n_maps
         layout = layout_for(condition, layout_map_index)
@@ -1957,7 +1961,9 @@ def generate_condition(
         rejections.update(map_rejections)
         if accepted is None:
             total_attempts = max_attempts * (
-                PLANNING_LAYOUT_ROUNDS if condition.planning else 1
+                LAYOUT_SEARCH_ROUNDS
+                if condition.planning or condition.family == "trench"
+                else 1
             )
             unsatisfied.append(
                 f"{condition.id} map {map_index}: no accepted sample in "
@@ -2234,9 +2240,9 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "  conditions regenerate; `ADJACENT_PROXIMITY_DEFERRED` is empty.",
         "- **axis-contract v2** — trench headings use a 15° lattice and every",
         "  target cell has exact generated owner bits in `trench_axis_owners`.",
-        "- Planning slots deterministically re-draw the layout at most four times",
-        "  only after the preceding layout exhausts every candidate; all admission",
-        "  gates stay unchanged.",
+        "- Trench and planning slots deterministically re-draw the layout at most",
+        "  four times, only after the preceding layout exhausts every candidate;",
+        "  all admission gates stay unchanged.",
         "",
         "The 6 conditions listed as carried in `generation_summary.json` are",
         "byte-for-byte from the v5-main bank; the per-array identity is asserted",
@@ -2661,7 +2667,7 @@ def main() -> None:
         "workers": args.workers,
         "worker_library_threads": 1 if args.workers > 1 else None,
         "max_attempts_per_layout": args.max_attempts,
-        "planning_layout_rounds": PLANNING_LAYOUT_ROUNDS,
+        "layout_search_rounds": LAYOUT_SEARCH_ROUNDS,
         "novelty_rules": {
             "dig_bank": "reject_exact_dig_duplicates",
             "full_bank": "reject_exact_full_scenario_duplicates",
