@@ -1052,8 +1052,8 @@ def verify_artifact(
         )
     loaded_arrays = [np.asarray(jax.device_get(value)) for value in loaded]
     targets, occupancies = loaded_arrays[0], loaded_arrays[1]
-    dumpabilities, actions = loaded_arrays[6], loaded_arrays[7]
-    distances = loaded_arrays[8]
+    dumpabilities, actions = loaded_arrays[7], loaded_arrays[8]
+    distances = loaded_arrays[9]
     records_by_id = {row["map_id"]: row for row in records}
     if len(records_by_id) != count:
         raise RuntimeError("Identity rows contain duplicate map IDs.")

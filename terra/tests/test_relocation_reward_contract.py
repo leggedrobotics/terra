@@ -78,6 +78,7 @@ def _state(
         np.zeros(SHAPE, dtype=np.int8),
         -97.0 * np.ones((3, 3), dtype=np.float32),
         np.int32(-1),
+        np.zeros(SHAPE, dtype=np.uint8),
         -97.0 * np.ones((SHAPE[0], 3), dtype=np.float32),
         np.int32(-1),
         np.ones(SHAPE, dtype=np.bool_),

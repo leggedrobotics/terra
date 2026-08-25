@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the large v6 Terra curriculum bank.
+"""Generate the Terra curriculum bank with exact trench-axis ownership.
 
 This is the one supported generator entry point for the diversity pilot. It
 preserves the reviewed v6 condition, capacity, proximity, lane, obstacle, and
@@ -7,16 +7,17 @@ static-validity rules. The old all-pairs centred-IoU novelty gate is deliberatel
 not an admission rule: exact duplicate dig rasters are rejected, while
 centred-IoU is reported later as a distribution diagnostic.
 
-The implementation below is the exact reviewed v6 generator snapshot. Its
-historical modules are private implementation dependencies; callers use this
-file only.
+Axis-contract v2 changes trench generation only: global trench headings use a
+15 degree lattice, every target cell carries exact generated owner bits, and
+the schema/map IDs are new. Foundation geometry remains on the reviewed v6
+construction and seeds.
 
-Lineage: ``generate_prototypes_v9.py`` (the v5 bank).  Everything the v5
-generator did carries forward **unchanged and byte-for-byte** except the two
-deltas spec v6 defines.  ``SEED_BASE`` is deliberately NOT bumped: the 22
-untouched conditions must reproduce bit-identically from the same seeds, and the
-regenerated ring conditions must keep sharing their dig with the apron / side1 /
-split conditions that draw from the same geometry-level bank slot.
+The implementation retains the reviewed v6 construction gates. Historical
+modules are private implementation dependencies; callers use this file only.
+
+Lineage: ``generate_prototypes_v9.py`` (the v5 bank). The historical v6 deltas
+below retain ``SEED_BASE`` so carried foundation conditions reproduce from the
+same seeds and paired conditions retain their shared geometry slots.
 
 D1 -- **gapped ring masks**.  All seven ring conditions regenerate.  The capped
      3-4x band gains 1-3 forbidden angular sectors of 15-40 deg each (total
@@ -120,7 +121,7 @@ tax = v9.tax
 
 DatasetSpec = v9.DatasetSpec
 
-SCHEMA = "terra_curriculum_diverse_bank_v1"
+SCHEMA = "terra_curriculum_diverse_axis_bank_v2"
 CURRENT_TAXONOMY_PATH = tax.SPEC_PATH
 # NOT bumped: byte-identity of the carried conditions depends on it, and so does
 # the shared dig between the ring conditions and their capacity/layout siblings.
@@ -214,22 +215,28 @@ MINI_CELL_BAND = {
     "net3": (40, MINI_DIG_CELLS_MAX["net3"]),
     "net4": (55, MINI_DIG_CELLS_MAX["net4"]),
 }
-# U7(a) keeps every axis on the 30 deg lattice. `net3` cannot use the two
+# Axis orientations use a 15 degree generation lattice. Terra's 30 degree base
+# headings plus the inclusive 15 degree tolerance make every generated axis
+# locally alignable, including the exact half-bin cases.
+TRENCH_AXES_DEG = tuple(float(value) for value in range(0, 180, 15))
+
+# `net3` cannot use the two
 # CARDINAL headings under the 60% volume cap: its minimum realisable volume at
 # 0 / 90 deg is 79 cells against a cap of 79 (measured over 1 200 draws per
 # heading; yield 0.0008 at 90 deg, 0.0175 at 0 deg — the accepted tail is a
 # single shape and the dig-bank IoU gate then rejects it against itself). Rather
 # than raise the cap to 85 (= 64% of the standard median, i.e. break the spec
-# clause) or let the bank exhaust, `net3` samples the four diagonal lattice
-# headings. `tee` (yield 0.11 / 0.13) and `net4` (0.067 / 0.065) keep all six.
+# clause) or let the bank exhaust, `net3` omits the two cardinal headings.
+# `tee` and `net4` retain all 12 headings on the 15 degree lattice.
 MINI_HEADINGS = {
-    "tee": v9.TRENCH_AXES_DEG,
-    "net3": (30.0, 60.0, 120.0, 150.0),
-    "net4": v9.TRENCH_AXES_DEG,
+    "tee": TRENCH_AXES_DEG,
+    "net3": tuple(value for value in TRENCH_AXES_DEG if value not in (0.0, 90.0)),
+    "net4": TRENCH_AXES_DEG,
 }
 assert all(
-    set(h) <= set(v9.TRENCH_AXES_DEG) for h in MINI_HEADINGS.values()
-), "U7(a): mini headings must stay on the 30 deg lattice"
+    set(headings) <= set(TRENCH_AXES_DEG)
+    for headings in MINI_HEADINGS.values()
+), "Mini headings must stay on the generation lattice"
 
 # ---- the one unsatisfiable spec gate, stated in full -----------------------
 #
@@ -275,9 +282,9 @@ assert all(
 #   tee   0.110 (diagonal) / 0.144 (cardinal)  -> ceiling 0.16
 #   net3  0.168 (diagonal)                     -> ceiling 0.26
 #   net4  0.240 (diagonal) / 0.256 (cardinal)  -> ceiling 0.34
-# `tee` therefore satisfies the spec band on the four diagonal headings and
-# overshoots it by 0.01 on the two cardinal ones; 72% of accepted `tee` draws
-# land inside [0.05, 0.15]. The combs do not come close, per the argument above.
+# The measurements above describe the historical 30 degree lattice. Generation
+# still enforces the same gates for every admitted 15 degree heading; the combs
+# do not approach the requested band, per the argument above.
 MINI_OVERLAP_SPEC_BAND = (0.05, 0.15)
 MINI_OVERLAP_GATE = {
     "tee": (0.05, 0.16),
@@ -347,7 +354,6 @@ TRENCH_MAX_LATERAL_TILES = v9.TRENCH_MAX_LATERAL_TILES
 ARM_MERGE_MAX = v9.ARM_MERGE_MAX
 ARM_FILL_MAX = v9.ARM_FILL_MAX
 ARM_OVERLAP_MIN = v9.ARM_OVERLAP_MIN
-TRENCH_AXES_DEG = v9.TRENCH_AXES_DEG
 NET_TOPOLOGY_CYCLE = v9.NET_TOPOLOGY_CYCLE
 RING_BAND_CAPACITY = v9.RING_BAND_CAPACITY
 RING_BAND_MAX_RADIUS = v8.RING_BAND_MAX_RADIUS
@@ -1044,7 +1050,7 @@ DATASETS = {
         name="main",
         conditions=MAIN_CONDITIONS,
         maps_per_condition=16,
-        map_id_prefix="curriculum-v6m",
+        map_id_prefix="curriculum-v6m-axis-v2",
         release="v6-main",
         gate_turn_dump=True,
         gate_lane_band=True,
@@ -1145,7 +1151,7 @@ def assert_conditions_match_taxonomy(dataset: DatasetSpec) -> None:
 
 class DigBankV10(v9.DigBankV9):
     def _headings(self, level: str) -> list[float]:
-        """U7(a): axes on the 30 deg lattice, permuted per level.
+        """Return the 15 degree trench-axis lattice, permuted per level.
 
         The mini levels may use a SUBSET of the lattice — see MINI_HEADINGS for
         why `net3@s` drops the two cardinal headings — so the axis set is looked
@@ -1969,12 +1975,18 @@ def write_condition(
                 data / folder_name / f"img_{sample_index}.npy",
                 getattr(sample, attribute),
             )
+        owners = v9.trench_axis_owners(sample.target, sample.metadata)
+        np.save(
+            data / v9.TRENCH_AXIS_OWNERS_FOLDER / f"img_{sample_index}.npy",
+            owners,
+        )
         record = {
             "sample_index": sample_index,
             "map_id": map_id,
             "pair_slot_id": f"{condition.dig_bank_level}:{map_index}",
             "source_group_id": source_group_id(sample),
             "scenario_sha256": scenario_identity,
+            "trench_axis_owners_sha256": v9.sha256_mask(owners),
             **sample.metadata,
             **{f"gate_{k}": v for k, v in asdict(sample.gate).items()},
         }
@@ -2046,6 +2058,11 @@ def write_condition(
                         "arrays": {
                             name: f"dataset/{name}/img_{row['sample_index']}.npy"
                             for name in ARRAY_FOLDERS
+                        }
+                        | {
+                            v9.TRENCH_AXIS_OWNERS_FOLDER:
+                                f"dataset/{v9.TRENCH_AXIS_OWNERS_FOLDER}/"
+                                f"img_{row['sample_index']}.npy"
                         },
                         "objectCount": row["object_count"],
                         "digCells": row["dig_cells"],
@@ -2096,7 +2113,7 @@ def write_conditions_csv(output: Path, dataset, counts: dict[str, int]) -> None:
 
 def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
     lines = [
-        f"# Terra curriculum v6 review bank — `{dataset.name}`",
+        f"# Terra curriculum axis-contract v2 bank — `{dataset.name}`",
         "",
         f"Current taxonomy and bank contract: `{CURRENT_TAXONOMY_PATH}`.",
         "",
@@ -2112,7 +2129,7 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "  adjacent banks, own dig-bank entries.",
         "",
         "",
-        "Two in-place revisions since v6.0, same release id:",
+        "Historical in-place revisions since v6.0:",
         "",
         "- **v6.1** — the ADJACENT proximity class is tightened to per map",
         "  `max <= 11.375 AND p95 <= 9.0` tiles, and the five capacity-apron",
@@ -2122,6 +2139,8 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "  fold below 60° at `half_width` 2, and the adjacent gate is enforced at",
         "  generation time on every adjacent-class condition. All 14 trench",
         "  conditions regenerate; `ADJACENT_PROXIMITY_DEFERRED` is empty.",
+        "- **axis-contract v2** — trench headings use a 15° lattice and every",
+        "  target cell has exact generated owner bits in `trench_axis_owners`.",
         "",
         "The 6 conditions listed as carried in `generation_summary.json` are",
         "byte-for-byte from the v5-main bank; the per-array identity is asserted",
@@ -2140,7 +2159,8 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "- `<condition-id>/manifest.json` — factor levels, tier, per-map metrics",
         "- `<condition-id>/previews/*.png` — one labelled composite per map",
         "- `<condition-id>/overview.png` — the whole condition on one sheet",
-        "- `dataset/{images,occupancy,dumpability,actions,distance}/img_N.npy`",
+        "- `dataset/{images,occupancy,dumpability,actions,distance,"
+        "trench_axis_owners}/img_N.npy`",
         "- `manifest.csv` — every map, every measured factor",
         "- `conditions.csv` — spec §4 columns plus `scale`",
         "- `GENERATION_NOTES.md` — per-delta results and honest deviations",
@@ -2156,7 +2176,7 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate the reviewed v6 map bank without a hard IoU gate."
+        description="Generate the axis-contract v2 bank without a hard IoU gate."
     )
     parser.add_argument(
         "--source-foundations",
@@ -2339,8 +2359,8 @@ def write_diversity_report(output: Path, rows: list[dict[str, Any]]) -> None:
             "centered_iou": "diagnostic_only",
         },
         "physical_and_source_gates": (
-            "unchanged reviewed-v6 construction, capacity, proximity, lane, "
-            "obstacle, workspace, and within-level source-reuse gates"
+            "reviewed-v6 capacity, proximity, lane, obstacle, workspace, and "
+            "within-level source-reuse gates retained on the axis-v2 bank"
         ),
         "centered_iou_role": "diagnostic_only",
         "conditions": conditions,
@@ -2367,7 +2387,7 @@ def main() -> None:
     dataset = dataclasses.replace(
         DATASETS["main"],
         maps_per_condition=args.maps,
-        map_id_prefix=f"curriculum-diverse-{args.maps}",
+        map_id_prefix=f"curriculum-axis-v2-{args.maps}",
     )
     assert_conditions_match_taxonomy(dataset)
     selected = set(filter(None, args.only.split(",")))
@@ -2382,6 +2402,7 @@ def main() -> None:
         output,
         output / "review_metadata",
         *(output / "dataset" / name for name in ARRAY_FOLDERS),
+        output / "dataset" / v9.TRENCH_AXIS_OWNERS_FOLDER,
     ):
         folder.mkdir(parents=True, exist_ok=True)
 

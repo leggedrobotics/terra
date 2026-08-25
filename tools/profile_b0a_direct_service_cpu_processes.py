@@ -1129,6 +1129,7 @@ def _worker_main() -> int:
                     jnp.asarray(scenario.padding_mask),
                     jnp.asarray(scenario.trench_axes),
                     jnp.asarray(scenario.trench_type),
+                    jnp.zeros_like(scenario.target, dtype=jnp.uint8),
                     jnp.asarray(scenario.foundation_border_axes),
                     jnp.asarray(scenario.foundation_border_type),
                     jnp.asarray(scenario.dumpability_mask),

@@ -313,6 +313,7 @@ def test_sparse_sidecar_is_source_bound_and_samples_only_available_slots():
             padding_mask=jnp.asarray(occupancies[None]),
             trench_axes=zeros_axes,
             trench_types=jnp.zeros((1, 2), dtype=jnp.int32),
+            trench_axis_owners=jnp.zeros((1, 2, *SHAPE), dtype=jnp.uint8),
             foundation_border_axes=zeros_foundation_axes,
             foundation_border_types=jnp.zeros((1, 2), dtype=jnp.int32),
             dumpability_masks_init=jnp.asarray(dumpability[None]),
@@ -328,6 +329,7 @@ def test_sparse_sidecar_is_source_bound_and_samples_only_available_slots():
             padding_mask=jnp.asarray(occupancies[None]),
             trench_axes=zeros_axes,
             trench_types=jnp.zeros((1, 2), dtype=jnp.int32),
+            trench_axis_owners=jnp.zeros((1, 2, *SHAPE), dtype=jnp.uint8),
             foundation_border_axes=zeros_foundation_axes,
             foundation_border_types=jnp.zeros((1, 2), dtype=jnp.int32),
             dumpability_masks_init=jnp.asarray(dumpability[None]),
@@ -361,7 +363,7 @@ def test_sparse_sidecar_is_source_bound_and_samples_only_available_slots():
             )(keys, tiers)
 
         pmapped = jax.pmap(sample_device)(lane_keys[None], lane_tiers[None])
-        pmapped_actions = np.asarray(pmapped[7][0])
+        pmapped_actions = np.asarray(pmapped[8][0])
         np.testing.assert_array_equal(pmapped_actions[0], np.zeros(SHAPE))
         for tier in (1, 2, 3):
             np.testing.assert_array_equal(
@@ -381,7 +383,7 @@ def test_sparse_sidecar_is_source_bound_and_samples_only_available_slots():
                 EnvConfig()._replace(reset_tier=tier),
             )
             np.testing.assert_array_equal(
-                np.asarray(selected[7]),
+                np.asarray(selected[8]),
                 actions[tier - 1, 0, expected_source],
             )
 
@@ -492,6 +494,7 @@ def test_reset_tier_is_latched_until_the_next_reset():
         np.zeros_like(target),
         -97.0 * np.ones((4, 3), dtype=np.float32),
         np.int32(-1),
+        np.zeros_like(target, dtype=np.uint8),
         -97.0 * np.ones((64, 3), dtype=np.float32),
         np.int32(-1),
         np.ones_like(target, dtype=np.bool_),
@@ -521,6 +524,7 @@ def test_reset_tier_is_latched_until_the_next_reset():
         np.zeros_like(target),
         -97.0 * np.ones((4, 3), dtype=np.float32),
         np.int32(-1),
+        np.zeros_like(target, dtype=np.uint8),
         -97.0 * np.ones((64, 3), dtype=np.float32),
         np.int32(-1),
         np.ones_like(target, dtype=np.bool_),

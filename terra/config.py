@@ -1,4 +1,5 @@
 from enum import IntEnum
+import math
 from typing import NamedTuple
 
 from terra.actions import Action
@@ -59,6 +60,10 @@ REWARD_V2_V21_STEP_COST_TOTAL = 3.6
 # reset; tiers 1-3 substitute only the generated action map for the canonical
 # source slot.
 PARTIAL_RESET_FRACTIONS = (0.90, 0.75, 0.50)
+
+# The tracked base has 12 headings, so half a heading bin is 15 degrees.
+# This single value is shared by runtime gating and offline admission.
+TRENCH_DIG_YAW_TOLERANCE_RAD = math.pi / 12.0
 
 
 class ImmutableMapsConfig(NamedTuple):
@@ -276,7 +281,7 @@ class EnvConfig(NamedTuple):
     # remove fresh trench target soil from a physically misaligned base pose.
     # This is intentionally not coupled to the legacy reward curriculum.
     enforce_trench_dig_alignment: bool = False
-    trench_dig_yaw_tolerance_rad: float = 0.2619  # 15 deg plus numerical slack
+    trench_dig_yaw_tolerance_rad: float = TRENCH_DIG_YAW_TOLERANCE_RAD
     trench_dig_standoff_min_m: float = 3.5
     trench_dig_standoff_max_m: float = 7.0
 

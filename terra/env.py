@@ -14,6 +14,7 @@ from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
 from terra.maps_buffer import LEGACY_DISTANCE_PROTOCOL_ID
+from terra.maps_buffer import trench_axis_owners_sanity_check
 from terra.state import STALL_AGE_CAP_STEPS
 from terra.state import State
 from terra.wrappers import LocalMapWrapper
@@ -89,6 +90,7 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -108,6 +110,7 @@ class TerraEnv(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -298,6 +301,7 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -314,6 +318,7 @@ class TerraEnv(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -361,6 +366,7 @@ class TerraEnv(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -436,6 +442,7 @@ class TerraEnv(NamedTuple):
                 padding_mask,
                 trench_axes,
                 trench_type,
+                trench_axis_owners,
                 foundation_border_axes,
                 foundation_border_type,
                 dumpability_mask_init,
@@ -793,7 +800,7 @@ class TerraEnvBatch:
     def _validate_trench_alignment_metadata_requirements(
         self, env_cfgs: EnvConfig
     ) -> None:
-        """Fail before tracing when a gated trench lacks finite sections."""
+        """Fail before tracing when axes and exact owner maps disagree."""
 
         if isinstance(env_cfgs.enforce_trench_dig_alignment, jax.core.Tracer):
             return
@@ -816,59 +823,43 @@ class TerraEnvBatch:
             raise RuntimeError(
                 "Trench standoff bounds must satisfy 0 <= min < max."
             )
+        if getattr(self, "_trench_axis_contract_validated", False):
+            return
         records = np.asarray(self.maps_buffer.trench_axes)
         trench_types = np.asarray(self.maps_buffer.trench_types)
-        if records.shape[-1] < 8:
+        owners = np.asarray(self.maps_buffer.trench_axis_owners)
+        targets = np.asarray(self.maps_buffer.maps)
+        if records.shape[-1] != 3:
             raise RuntimeError(
-                "Fresh-trench alignment requires generated finite section "
-                "metadata [A,B,C,y0,x0,y1,x1,half_width]; incomplete records "
-                "were loaded."
+                "Fresh-trench alignment requires [A,B,C] axis records."
+            )
+        if owners.shape != targets.shape or owners.shape[:2] != trench_types.shape:
+            raise RuntimeError(
+                "Trench target, owner, and axis-count arrays have inconsistent "
+                "shapes."
             )
         axis_indices = np.arange(records.shape[-2])
         declared = axis_indices.reshape((1,) * trench_types.ndim + (-1,)) < (
             trench_types[..., None]
         )
-        endpoints = records[..., 3:7]
-        starts = endpoints[..., :2]
-        ends = endpoints[..., 2:]
-        finite_segments = (
-            np.all(np.isfinite(endpoints), axis=-1)
-            & np.all(endpoints > -96.0, axis=-1)
-            & (np.linalg.norm(ends - starts, axis=-1) > 1e-6)
-            & np.isfinite(records[..., 7])
-            & (records[..., 7] > 0.0)
+        valid_axes = (
+            np.all(np.isfinite(records), axis=-1)
+            & (np.linalg.norm(records[..., :2], axis=-1) > 1e-6)
         )
-        trench_family_ids = [
-            index
-            for index, name in enumerate(self.maps_buffer.family_names)
-            if str(name).lower().startswith("trn-")
-            or "trench" in str(name).lower()
-        ]
-        if trench_family_ids:
-            family_ids = np.asarray(self.maps_buffer.family_ids)
-            missing_types = np.isin(family_ids, trench_family_ids) & (
-                trench_types <= 0
-            )
-            if np.any(missing_types):
-                raise RuntimeError(
-                    "Fresh-trench alignment is enabled but trench-family maps "
-                    "lack axis metadata at indices "
-                    f"{np.argwhere(missing_types)[:8].tolist()}."
-                )
-        elif not np.any(trench_types > 0):
-            raise RuntimeError(
-                "Fresh-trench alignment was enabled for a dataset with no "
-                "declared trench metadata and no family provenance. Use an "
-                "enriched trench dataset or disable the gate."
-            )
-        missing = np.argwhere(declared & ~finite_segments)
+        missing = np.argwhere(declared & ~valid_axes)
         if missing.size > 0:
             raise RuntimeError(
-                "Fresh-trench alignment is enabled but generated finite "
-                "section metadata is missing or invalid at map/axis indices "
-                f"{missing[:8].tolist()}. Regenerate or enrich the dataset; "
-                "do not infer section endpoints from the raster."
+                "Fresh-trench alignment has an invalid declared axis at "
+                f"indices {missing[:8].tolist()}."
             )
+        for index in np.ndindex(trench_types.shape):
+            trench_axis_owners_sanity_check(
+                targets[index],
+                owners[index],
+                int(trench_types[index]),
+                records.shape[-2],
+            )
+        self._trench_axis_contract_validated = True
 
     def _get_map_init(self, key: jax.random.PRNGKey, env_cfgs: EnvConfig):
         return jax.vmap(self.maps_buffer.get_map_init)(key, env_cfgs)
@@ -887,6 +878,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -900,6 +892,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -922,6 +915,7 @@ class TerraEnvBatch:
         padding_masks: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -936,6 +930,7 @@ class TerraEnvBatch:
                 padding_masks,
                 trench_axes,
                 trench_type,
+                trench_axis_owners,
                 foundation_border_axes,
                 foundation_border_type,
                 dumpability_mask_init,
@@ -950,6 +945,7 @@ class TerraEnvBatch:
                 padding_masks,
                 trench_axes,
                 trench_type,
+                trench_axis_owners,
                 foundation_border_axes,
                 foundation_border_type,
                 dumpability_mask_init,
@@ -970,6 +966,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -983,6 +980,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -1022,6 +1020,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -1037,6 +1036,7 @@ class TerraEnvBatch:
             padding_mask,
             trench_axis,
             trench_kind,
+            trench_owners,
             foundation_border_axis,
             foundation_border_kind,
             dumpability_mask,
@@ -1050,6 +1050,7 @@ class TerraEnvBatch:
                     padding_mask,
                     trench_axis,
                     trench_kind,
+                    trench_owners,
                     foundation_border_axis,
                     foundation_border_kind,
                     dumpability_mask,
@@ -1097,6 +1098,7 @@ class TerraEnvBatch:
             padding_masks,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,

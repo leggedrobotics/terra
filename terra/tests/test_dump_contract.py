@@ -84,6 +84,7 @@ class ExactDumpContractTest(unittest.TestCase):
             padding,
             -97.0 * np.ones((3, 3), dtype=np.float32),
             np.int32(-1),
+            np.zeros(cls.SHAPE, dtype=np.uint8),
             -97.0 * np.ones((64, 3), dtype=np.float32),
             np.int32(-1),
             dumpability,

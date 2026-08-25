@@ -69,7 +69,11 @@ def _write_split_bank(root: Path) -> Path:
     sample_index = 0
     for split, count in REQUESTED.items():
         dataset = root / split / "dataset"
-        for folder in (*loader.ARRAY_FOLDERS, "metadata"):
+        for folder in (
+            *loader.ARRAY_FOLDERS,
+            *loader.TRENCH_METADATA_ARRAY_FOLDERS,
+            "metadata",
+        ):
             (dataset / folder).mkdir(parents=True, exist_ok=True)
         rows = []
         for condition, family, tier in CONDITIONS:
@@ -77,6 +81,12 @@ def _write_split_bank(root: Path) -> Path:
                 arrays = _arrays(sample_index)
                 for folder, array in arrays.items():
                     np.save(dataset / folder / f"img_{sample_index}.npy", array)
+                np.save(
+                    dataset
+                    / "trench_axis_owners"
+                    / f"img_{sample_index}.npy",
+                    np.zeros_like(arrays["images"], dtype=np.uint8),
+                )
                 (dataset / "metadata" / f"trench_{sample_index}.json").write_text(
                     "{}\n"
                 )

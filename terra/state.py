@@ -135,6 +135,7 @@ class State(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -144,7 +145,9 @@ class State(NamedTuple):
     ) -> "State":
 
         world = GridWorld.new(
-            target_map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map,
+            target_map, padding_mask, trench_axes, trench_type,
+            trench_axis_owners, foundation_border_axes, foundation_border_type,
+            dumpability_mask_init, action_map,
             relocation_distance_map_override=distance_map_override,
         )
 
@@ -228,6 +231,7 @@ class State(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_type: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_type: Array,
         dumpability_mask_init: Array,
@@ -245,6 +249,7 @@ class State(NamedTuple):
             padding_mask=padding_mask,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            trench_axis_owners=trench_axis_owners,
             foundation_border_axes=foundation_border_axes,
             foundation_border_type=foundation_border_type,
             dumpability_mask_init=dumpability_mask_init,
@@ -2183,11 +2188,9 @@ class State(NamedTuple):
     ) -> tuple[Array, Array, Array, Array]:
         """Measure and filter a prospective fresh-trench dig.
 
-        Generated trench records are ``[A,B,C,y0,x0,y1,x1,half_width]``. The
-        finite endpoints identify the local section at T/network junctions;
-        the first three values retain the existing line-equation contract.
-        A junction cell may belong to more than one equally near section and
-        is diggable when at least one of those sections is pose-valid.
+        Trench records contain line coefficients ``[A,B,C]``. The generator
+        emits exact per-cell owner bits; a junction cell may have several
+        owners and is diggable when at least one owner is pose-valid.
 
         Returns validity, normalized yaw error, signed normalized standoff
         error, and the subset of ``dig_mask`` admitted by the contract.  The
@@ -2217,37 +2220,9 @@ class State(NamedTuple):
             jnp.logical_and(target < 0, action == 0),
         )
         valid_axes = jnp.arange(max_axes) < trench_type
-        if records.shape[1] >= 8:
-            segment_vectors = records[:, 5:7] - records[:, 3:5]
-            finite_section_metadata = jnp.logical_and(
-                jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
-                jnp.logical_and(
-                    records[:, 7] > jnp.float32(0.0),
-                    jnp.linalg.norm(segment_vectors, axis=1)
-                    > jnp.float32(1e-6),
-                ),
-            )
-        else:
-            finite_section_metadata = jnp.zeros(
-                (max_axes,), dtype=jnp.bool_
-            )
-        declared_metadata_valid = jnp.all(
-            jnp.logical_or(~valid_axes, finite_section_metadata)
-        )
-        # TerraEnvBatch rejects incomplete generated metadata before tracing.
-        # Lower-level State/TerraEnv callers do not have that Python validator,
-        # so fail closed instead of silently reclassifying a trench target as
-        # ordinary excavation when its cached membership is empty.
-        fail_closed_metadata = jnp.logical_and(
-            trench_type > 0,
-            ~declared_metadata_valid,
-        )
         fresh_trench_target = jnp.logical_and(
             fresh_target,
-            jnp.logical_or(
-                self.world.trench_axis_membership != jnp.uint8(0),
-                fail_closed_metadata,
-            ),
+            trench_type > 0,
         )
         applicable = jnp.logical_and(
             cur.agent_type[0] == 0,
@@ -2272,7 +2247,7 @@ class State(NamedTuple):
             section_membership = jnp.logical_and(
                 valid_axes[:, None, None],
                 jnp.bitwise_and(
-                    self.world.trench_axis_membership[None, :, :],
+                    self.world.trench_axis_owners[None, :, :],
                     bit_values[:, None, None],
                 )
                 != 0,
@@ -2341,18 +2316,17 @@ class State(NamedTuple):
             axis_pose_valid = jnp.logical_and(
                 valid_axes,
                 jnp.logical_and(
-                    finite_section_metadata,
+                    axis_has_fresh,
                     jnp.logical_and(
-                        axis_has_fresh,
-                        jnp.logical_and(
-                            yaw_errors
-                            <= jnp.float32(
+                        parallel_cosines + jnp.float32(1e-6)
+                        >= jnp.cos(
+                            jnp.float32(
                                 self.env_cfg.trench_dig_yaw_tolerance_rad
-                            ),
-                            jnp.logical_and(
-                                standoffs_m >= standoff_min,
-                                standoffs_m <= standoff_max,
-                            ),
+                            )
+                        ),
+                        jnp.logical_and(
+                            standoffs_m >= standoff_min,
+                            standoffs_m <= standoff_max,
                         ),
                     ),
                 ),

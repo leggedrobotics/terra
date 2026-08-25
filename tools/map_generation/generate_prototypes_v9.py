@@ -36,6 +36,9 @@ U11  Objects get sparser and graded: obj1 = 1-2, obj = 2-5, with non-overlapping
 
 Spec: ``terra-digging-benchmark-site/docs/CURRICULUM_TAXONOMY_SPEC.md``
 §8, §8.1, §8.2, §8.3, §8.4, §8.5, §8.6.
+
+Axis-contract v2 retains this construction as a private dependency while
+emitting exact trench owner sidecars under new schema and map-ID namespaces.
 """
 
 from __future__ import annotations
@@ -65,7 +68,7 @@ v2 = v8.v2
 base = v8.base
 tax = v8.tax
 
-SCHEMA = "terra_curriculum_v5_review_bank"
+SCHEMA = "terra_curriculum_v5_axis_bank_v2"
 SEED_BASE = 20260729
 SHARED_DIG_ATTEMPTS = 120
 REROLL_DUMP_ATTEMPTS = 20
@@ -79,6 +82,8 @@ MAP_CENTRE = (MAP_SIZE - 1) / 2.0
 TILE_SIZE_M = tgeom.TILE_SIZE
 
 ARRAY_FOLDERS = v6.ARRAY_FOLDERS
+TRENCH_AXIS_OWNERS_FOLDER = "trench_axis_owners"
+TRENCH_AXIS_CONTRACT = "generator_owner_bits_v1"
 SITE_CLASS_TOKENS = v6.SITE_CLASS_TOKENS
 
 CAPACITY_TOKENS = v8.CAPACITY_TOKENS
@@ -367,6 +372,75 @@ distance_apron = v8.distance_apron
 _as_arms = v8._as_arms
 
 
+def _distance_to_polyline(points_yx: np.ndarray, cells_yx: np.ndarray) -> np.ndarray:
+    """Return each cell-centre distance to one generated trench arm."""
+
+    if points_yx.ndim != 2 or points_yx.shape[0] < 2 or points_yx.shape[1] != 2:
+        raise RuntimeError(f"Invalid trench arm shape: {points_yx.shape}.")
+    best = np.full(cells_yx.shape[0], np.inf, dtype=np.float64)
+    for start, end in zip(points_yx[:-1], points_yx[1:]):
+        delta = end - start
+        denominator = float(delta @ delta)
+        if denominator <= 1e-12:
+            continue
+        fraction = np.clip(((cells_yx - start) @ delta) / denominator, 0.0, 1.0)
+        nearest = start + fraction[:, None] * delta
+        best = np.minimum(best, np.linalg.norm(cells_yx - nearest, axis=1))
+    if not np.all(np.isfinite(best)):
+        raise RuntimeError("Trench arm has no non-degenerate segment.")
+    return best
+
+
+def trench_axis_owners(target: np.ndarray, metadata: dict[str, Any]) -> np.ndarray:
+    """Emit exact axis-owner bits for every trench target cell.
+
+    Arm rasters define junction ownership. Edge regularisation can create a few
+    cells outside those raw rasters; those cells are assigned to the nearest
+    finite generated arm, with exact ties retaining multiple owners. This work
+    happens once in the generator. Terra consumes the resulting uint8 map and
+    never reconstructs ownership from geometry.
+    """
+
+    target = np.asarray(target)
+    owners = np.zeros(target.shape, dtype=np.uint8)
+    axes = list(metadata.get("axes_ABC", []) or [])
+    raw_arms = metadata.get("trench_arms", []) or []
+    arms = _as_arms(raw_arms) if raw_arms else []
+    if not axes and not arms:
+        return owners
+    if len(axes) != len(arms):
+        raise RuntimeError(
+            f"Trench axes/arms disagree: {len(axes)} axes, {len(arms)} arms."
+        )
+    if not 0 < len(axes) <= 8:
+        raise RuntimeError(f"uint8 owner maps support 1..8 axes, got {len(axes)}.")
+
+    dig = target < 0
+    half_width = float(metadata["trench_half_width_tiles"])
+    arm_points = [np.asarray(arm, dtype=np.float64) for arm in arms]
+    for axis_index, points in enumerate(arm_points):
+        mask = rasterize_segments(points, half_width) & dig
+        owners[mask] |= np.uint8(1 << axis_index)
+
+    missing = dig & (owners == 0)
+    if np.any(missing):
+        cells = np.argwhere(missing).astype(np.float64)
+        distances = np.stack(
+            [_distance_to_polyline(points, cells) for points in arm_points]
+        )
+        nearest = np.min(distances, axis=0)
+        for axis_index, axis_distances in enumerate(distances):
+            selected = axis_distances <= nearest + 1e-9
+            rows, columns = cells[selected].astype(np.int32).T
+            owners[rows, columns] |= np.uint8(1 << axis_index)
+
+    if np.any(dig & (owners == 0)) or np.any((~dig) & (owners != 0)):
+        raise RuntimeError(
+            "Generated trench owner map does not partition the dig target."
+        )
+    return owners
+
+
 # --------------------------------------------------------------------------
 # condition table
 
@@ -607,7 +681,7 @@ DATASETS = {
         name="main",
         conditions=MAIN_CONDITIONS,
         maps_per_condition=16,
-        map_id_prefix="curriculum-v5m",
+        map_id_prefix="curriculum-v5m-axis-v2",
         release="v5-main",
         gate_turn_dump=True,
         gate_lane_band=True,
@@ -617,7 +691,7 @@ DATASETS = {
         name="transport",
         conditions=TRANSPORT_CONDITIONS,
         maps_per_condition=8,
-        map_id_prefix="curriculum-v5t",
+        map_id_prefix="curriculum-v5t-axis-v2",
         release="v5-transport",
         gate_turn_dump=False,
         gate_lane_band=False,
@@ -1912,9 +1986,15 @@ def write_condition(output, dataset, condition, condition_index, samples):
                 data / folder_name / f"img_{sample_index}.npy",
                 getattr(sample, attribute),
             )
+        owners = trench_axis_owners(sample.target, sample.metadata)
+        np.save(
+            data / TRENCH_AXIS_OWNERS_FOLDER / f"img_{sample_index}.npy",
+            owners,
+        )
         record = {
             "sample_index": sample_index,
             "map_id": map_id,
+            "trench_axis_owners_sha256": sha256_mask(owners),
             **sample.metadata,
             **{f"gate_{k}": v for k, v in asdict(sample.gate).items()},
         }
@@ -1965,6 +2045,11 @@ def write_condition(output, dataset, condition, condition_index, samples):
                         "arrays": {
                             name: f"dataset/{name}/img_{row['sample_index']}.npy"
                             for name in ARRAY_FOLDERS
+                        }
+                        | {
+                            TRENCH_AXIS_OWNERS_FOLDER:
+                                f"dataset/{TRENCH_AXIS_OWNERS_FOLDER}/"
+                                f"img_{row['sample_index']}.npy"
                         },
                         "objectCount": row["object_count"],
                         "digCells": row["dig_cells"],
@@ -2020,18 +2105,15 @@ def write_terra_metadata(output: Path, rows: list[dict[str, Any]]) -> None:
     destination = output / "dataset" / "metadata"
     destination.mkdir(parents=True, exist_ok=True)
     for row in rows:
-        trench_segments_yx = [
-            [segment[0], segment[-1]]
-            for segment in row.get("trench_arms", [])
-        ]
+        axes = row.get("axes_ABC", [])
         payload = {
             "schema": f"{SCHEMA}_axis_metadata",
             "geometry": row["geometry"],
-            "trench_axes_count": int(row.get("trench_axes_count", -1) or -1),
+            "trench_axes_count": len(axes) if axes else -1,
             "trench_topology": row.get("trench_topology", ""),
-            "axes_ABC": row.get("axes_ABC", []),
-            "trench_segments_yx": trench_segments_yx,
-            "trench_half_width_tiles": row.get("trench_half_width_tiles"),
+            "axes_ABC": axes,
+            "trench_axis_contract": TRENCH_AXIS_CONTRACT,
+            "trench_axis_owners_sha256": row["trench_axis_owners_sha256"],
         }
         (destination / f"trench_{row['sample_index']}.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
@@ -2062,7 +2144,7 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
             f"at most {STAGING_MAX_HOPS} reach hops (`staging_max_hops`).",
         ]
     lines = [
-        f"# Terra curriculum v5 review bank — `{dataset.name}`",
+        f"# Terra curriculum v5 axis-contract v2 bank — `{dataset.name}`",
         "",
         "Taxonomy-native bank: one folder per **condition id**, no stage folders.",
         "Difficulty tier is computed from factor levels, never hand-assigned.",
@@ -2085,7 +2167,8 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "- `<condition-id>/manifest.json` — factor levels, tier, per-map metrics",
         "- `<condition-id>/previews/*.png` — one labelled composite per map",
         "- `<condition-id>/overview.png` — the whole condition on one sheet",
-        "- `dataset/{images,occupancy,dumpability,actions,distance}/img_N.npy`"
+        "- `dataset/{images,occupancy,dumpability,actions,distance,"
+        "trench_axis_owners}/img_N.npy`"
         " — Terra arrays, flat and shared across conditions",
         "- `manifest.csv` — every map, every measured factor",
         "- `conditions.csv` — spec section 4 columns",
@@ -2126,6 +2209,7 @@ def main() -> None:
         output,
         output / "review_metadata",
         *(output / "dataset" / name for name in ARRAY_FOLDERS),
+        output / "dataset" / TRENCH_AXIS_OWNERS_FOLDER,
     ):
         folder.mkdir(parents=True, exist_ok=True)
 

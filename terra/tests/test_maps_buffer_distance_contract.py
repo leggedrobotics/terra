@@ -390,6 +390,7 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
             padding_mask=zeros_map,
             trench_axes=zeros_axes,
             trench_types=zeros_types,
+            trench_axis_owners=jnp.zeros_like(maps, dtype=jnp.uint8),
             foundation_border_axes=zeros_foundation_axes,
             foundation_border_types=zeros_types,
             dumpability_masks_init=jnp.ones_like(maps, dtype=jnp.bool_),

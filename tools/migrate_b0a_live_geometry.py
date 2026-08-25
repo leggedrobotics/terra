@@ -1399,6 +1399,7 @@ def load_legacy_scenarios(
             occupancy,
             _trench_axes,
             _trench_types,
+            _trench_axis_owners,
             _foundation_axes,
             _foundation_types,
             dumpability,

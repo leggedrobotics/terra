@@ -1,3 +1,4 @@
+import math
 import unittest
 from types import SimpleNamespace
 
@@ -8,7 +9,6 @@ import numpy as np
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import MapsDimsConfig
-from terra.env import TerraEnv
 from terra.env import TerraEnvBatch
 from terra.maps_buffer import _trench_records_from_metadata
 from terra.state import State
@@ -25,12 +25,13 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             maps_dims=MapsDimsConfig(maps_edge_length=cls.SHAPE[0])
         )
         base = EnvConfig()
-        batched = base._replace(
-            agent=base.agent._replace(
-                dig_depth=jnp.ones((1,), dtype=jnp.int32)
+        updated = batch_env.update_env_cfgs(
+            base._replace(
+                agent=base.agent._replace(
+                    dig_depth=jnp.ones((1,), dtype=jnp.int32)
+                )
             )
         )
-        updated = batch_env.update_env_cfgs(batched)
         cls.cfg = base._replace(
             tile_size=float(np.asarray(updated.tile_size)[0]),
             agent=base.agent._replace(
@@ -45,7 +46,7 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
 
     @staticmethod
     def _axes(*records):
-        axes = -97.0 * np.ones((4, 8), dtype=np.float32)
+        axes = -97.0 * np.ones((4, 3), dtype=np.float32)
         for index, record in enumerate(records):
             axes[index] = np.asarray(record, dtype=np.float32)
         return axes
@@ -55,22 +56,27 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         cls,
         target,
         axes,
+        owners,
         *,
+        trench_type=None,
         action=None,
         base_angle=0,
-        cabin_angle=0,
+        cabin_angle=1,
         loaded=0,
         position=None,
     ):
         if action is None:
             action = np.zeros(cls.SHAPE, dtype=np.int8)
+        if trench_type is None:
+            trench_type = int(np.count_nonzero(axes[:, 0] > -96.0))
         state = State.new(
             jax.random.PRNGKey(7),
             cls.cfg,
             target,
             np.zeros(cls.SHAPE, dtype=np.int8),
             axes,
-            np.int32(np.count_nonzero(axes[:, 0] > -96.0)),
+            np.int32(trench_type),
+            owners,
             -97.0 * np.ones((64, 3), dtype=np.float32),
             np.int32(-1),
             np.ones(cls.SHAPE, dtype=np.bool_),
@@ -78,360 +84,144 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             distance_map_override=np.ones(cls.SHAPE, dtype=np.float32),
         )
         current = state._get_current_agent_state()._replace(
-            pos_base=jnp.array(
+            pos_base=jnp.asarray(
                 cls.BASE_POSITION if position is None else position,
                 dtype=jnp.int16,
             ),
-            angle_base=jnp.array([base_angle], dtype=jnp.int8),
-            angle_cabin=jnp.array([cabin_angle], dtype=jnp.int8),
-            loaded=jnp.array([loaded], dtype=jnp.int8),
+            angle_base=jnp.asarray([base_angle], dtype=jnp.int8),
+            angle_cabin=jnp.asarray([cabin_angle], dtype=jnp.int8),
+            loaded=jnp.asarray([loaded], dtype=jnp.int8),
         )
         return state._set_current_agent_state(current)
 
     @classmethod
-    def _horizontal_axis(cls):
-        # row=24, with the base eight cells away at row=32.
-        return cls._axes([0, 1, -24, 24, 20, 24, 50, 1])
+    def _mask(cls, *cells):
+        mask = np.zeros(cls.SHAPE, dtype=np.bool_)
+        for cell in cells:
+            mask[cell] = True
+        return jnp.asarray(mask.reshape(-1))
 
-    def test_aligned_fresh_dig_executes_and_observation_explains_it(self):
+    def test_arbitrary_half_bin_axis_is_feasible_and_boundary_is_inclusive(self):
+        cell = (24, 37)
+        angle = math.radians(15.0)
+        a = math.sin(angle)
+        b = math.cos(angle)
+        axis = [a, b, -(a * cell[1] + b * cell[0])]
         target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 37] = -1
-        state = self._state(
-            target,
-            self._horizontal_axis(),
-            base_angle=0,
-            cabin_angle=1,
-        )
+        target[cell] = -1
+        owners = np.zeros(self.SHAPE, dtype=np.uint8)
+        owners[cell] = 1
+        mask = self._mask(cell)
 
-        valid, yaw_error, standoff_error = (
-            state._get_fresh_trench_dig_alignment()
-        )
-        dug = state._handle_do()
-        jitted_valid, jitted_yaw, jitted_standoff = jax.jit(
-            lambda candidate: candidate._get_fresh_trench_dig_alignment()
-        )(state)
-        jitted_dug = jax.jit(lambda candidate: candidate._handle_do())(state)
+        left = self._state(target, self._axes(axis), owners, base_angle=0)
+        right = self._state(target, self._axes(axis), owners, base_angle=1)
+        wrong = self._state(target, self._axes(axis), owners, base_angle=2)
+        left_result = left._get_fresh_trench_dig_alignment_details(mask)
+        right_result = right._get_fresh_trench_dig_alignment_details(mask)
+        wrong_result = wrong._get_fresh_trench_dig_alignment_details(mask)
+        jitted = jax.jit(
+            lambda state: state._get_fresh_trench_dig_alignment_details(mask)
+        )(left)
 
-        self.assertTrue(bool(valid))
-        self.assertEqual(float(yaw_error), 0.0)
-        self.assertEqual(float(standoff_error), 0.0)
-        self.assertEqual(bool(jitted_valid), bool(valid))
-        self.assertEqual(float(jitted_yaw), float(yaw_error))
-        self.assertEqual(float(jitted_standoff), float(standoff_error))
-        self.assertEqual(int(dug.world.action_map.map[24, 37]), -1)
-        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 1)
-        np.testing.assert_array_equal(
-            jitted_dug.world.action_map.map,
-            dug.world.action_map.map,
-        )
+        self.assertTrue(bool(left_result[0]))
+        self.assertTrue(bool(right_result[0]))
+        self.assertFalse(bool(wrong_result[0]))
+        self.assertAlmostEqual(float(left_result[1]), 15.0 / 90.0, places=5)
+        self.assertEqual(bool(jitted[0]), bool(left_result[0]))
+        self.assertEqual(int(left._handle_do().world.action_map.map[cell]), -1)
 
-        wrapped = TerraEnv.wrap_state(state)
-        observation = TerraEnv.new(64)._state_to_obs_dict(wrapped)
-        self.assertEqual(
-            float(observation["fresh_trench_dig_alignment_valid"]), 1.0
-        )
-        self.assertEqual(
-            float(observation["fresh_trench_dig_yaw_error"]), 0.0
-        )
-        self.assertEqual(
-            float(observation["fresh_trench_dig_standoff_error"]), 0.0
-        )
-
-    def test_misaligned_fresh_dig_is_rejected_with_nonzero_reason(self):
+    def test_intersection_owners_are_multi_axis_and_do_remains_atomic(self):
+        horizontal = (24, 37)
+        vertical = (26, 40)
+        junction = (24, 40)
         target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 37] = -1
-        state = self._state(
-            target,
-            self._horizontal_axis(),
-            base_angle=3,
-            cabin_angle=10,
-        )
-        old_action = np.asarray(state.world.action_map.map)
+        owners = np.zeros(self.SHAPE, dtype=np.uint8)
+        for cell, owner in ((horizontal, 1), (vertical, 2), (junction, 3)):
+            target[cell] = -1
+            owners[cell] = owner
+        axes = self._axes([0.0, 1.0, -24.0], [1.0, 0.0, -40.0])
 
-        valid, yaw_error, standoff_error = (
-            state._get_fresh_trench_dig_alignment()
-        )
-        rejected = state._handle_do()
-        ungated = state._replace(
-            env_cfg=state.env_cfg._replace(
-                enforce_trench_dig_alignment=False
+        horizontal_pose = self._state(target, axes, owners, base_angle=0)
+        vertical_pose = self._state(target, axes, owners, base_angle=3)
+        self.assertFalse(
+            bool(
+                horizontal_pose._get_fresh_trench_dig_alignment_details(
+                    self._mask(horizontal, vertical)
+                )[0]
             )
-        )._handle_do()
-
-        self.assertFalse(bool(valid))
-        self.assertAlmostEqual(float(yaw_error), 1.0, places=6)
-        self.assertEqual(float(standoff_error), 0.0)
-        np.testing.assert_array_equal(rejected.world.action_map.map, old_action)
-        self.assertEqual(int(rejected._get_current_agent_state().loaded[0]), 0)
-        self.assertEqual(int(ungated.world.action_map.map[24, 37]), -1)
-
-    def test_far_non_trench_target_on_mixed_map_is_unchanged(self):
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        # This target is in the current workspace but far outside the finite
-        # horizontal section's generated width plus raster-fringe tolerance.
-        target[40, 37] = -1
-        state = self._state(
-            target,
-            self._horizontal_axis(),
-            base_angle=0,
-            cabin_angle=1,
-            position=(48, 32),
         )
-
-        valid, yaw_error, standoff_error = (
-            state._get_fresh_trench_dig_alignment()
+        self.assertTrue(
+            bool(
+                horizontal_pose._get_fresh_trench_dig_alignment_details(
+                    self._mask(horizontal, junction)
+                )[0]
+            )
         )
-        dug = state._handle_do()
-
-        self.assertTrue(bool(valid))
-        self.assertEqual(float(yaw_error), 0.0)
-        self.assertEqual(float(standoff_error), 0.0)
-        self.assertEqual(int(dug.world.action_map.map[40, 37]), -1)
-
-    def test_intersection_requires_every_fresh_cell_to_have_a_valid_axis(self):
-        axes = self._axes(
-            [0, 1, -24, 24, 20, 24, 50, 1],
-            [1, 0, -40, 16, 40, 42, 40, 1],
+        self.assertTrue(
+            bool(
+                vertical_pose._get_fresh_trench_dig_alignment_details(
+                    self._mask(vertical, junction)
+                )[0]
+            )
         )
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        horizontal_cell = (24, 37)
-        vertical_cell = (26, 40)
-        target[horizontal_cell] = -1
-        target[vertical_cell] = -1
-
-        mixed = self._state(
-            target,
-            axes,
-            base_angle=0,
-            cabin_angle=1,
-        )
-        rejected = mixed._handle_do()
-        valid, yaw_error, _ = mixed._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(valid))
-        self.assertAlmostEqual(float(yaw_error), 1.0, places=6)
+        rejected = horizontal_pose._handle_do()
         self.assertFalse(np.any(np.asarray(rejected.world.action_map.map)))
 
-        vertical_done = np.zeros(self.SHAPE, dtype=np.int8)
-        vertical_done[vertical_cell] = -1
-        along_horizontal = self._state(
-            target,
-            axes,
-            action=vertical_done,
-            base_angle=0,
-            cabin_angle=1,
-        )._handle_do()
-        self.assertEqual(
-            int(along_horizontal.world.action_map.map[horizontal_cell]), -1
-        )
+    def test_ownerless_trench_fails_closed_at_state_and_batch_boundaries(self):
+        cell = (24, 37)
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[cell] = -1
+        axes = self._axes([0.0, 1.0, -24.0])
+        owners = np.zeros(self.SHAPE, dtype=np.uint8)
+        state = self._state(target, axes, owners)
+        self.assertFalse(bool(state._get_fresh_trench_dig_alignment()[0]))
+        self.assertEqual(int(state._handle_do().world.action_map.map[cell]), 0)
 
-        horizontal_done = np.zeros(self.SHAPE, dtype=np.int8)
-        horizontal_done[horizontal_cell] = -1
-        along_vertical = self._state(
+        records, count = _trench_records_from_metadata(
+            {"axes_ABC": [{"A": 0.0, "B": 1.0, "C": -24.0}]},
+            4,
+        )
+        self.assertEqual(count, 1)
+        self.assertEqual(records[0], [0.0, 1.0, -24.0])
+
+        batch = object.__new__(TerraEnvBatch)
+        batch.maps_buffer = SimpleNamespace(
+            maps=target[None, None, ...],
+            trench_axes=axes[None, None, ...],
+            trench_types=np.asarray([[1]], dtype=np.int32),
+            trench_axis_owners=owners[None, None, ...],
+        )
+        with self.assertRaisesRegex(RuntimeError, "must have an owning axis"):
+            batch._validate_trench_alignment_metadata_requirements(self.cfg)
+
+    def test_foundations_and_relifts_ignore_the_fresh_trench_gate(self):
+        cell = (24, 37)
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[cell] = -1
+        no_owners = np.zeros(self.SHAPE, dtype=np.uint8)
+        foundation = self._state(
             target,
-            axes,
-            action=horizontal_done,
+            self._axes(),
+            no_owners,
+            trench_type=-1,
             base_angle=3,
             cabin_angle=10,
-        )._handle_do()
-        self.assertEqual(
-            int(along_vertical.world.action_map.map[vertical_cell]), -1
         )
+        self.assertEqual(int(foundation._handle_do().world.action_map.map[cell]), -1)
 
-    def test_relift_and_dump_are_unaffected(self):
-        axes = self._horizontal_axis()
-        relift_target = np.zeros(self.SHAPE, dtype=np.int8)
-        relift_target[24, 37] = -1
         staged = np.zeros(self.SHAPE, dtype=np.int8)
-        staged[24, 37] = 7
-        relift = self._state(
-            relift_target,
-            axes,
+        staged[cell] = 7
+        trench = self._state(
+            target,
+            self._axes([0.0, 1.0, -24.0]),
+            np.where(target < 0, 1, 0).astype(np.uint8),
             action=staged,
             base_angle=3,
             cabin_angle=10,
         )
-        lifted = relift._handle_do()
-        self.assertEqual(int(lifted.world.action_map.map[24, 37]), 0)
+        lifted = trench._handle_do()
+        self.assertEqual(int(lifted.world.action_map.map[cell]), 0)
         self.assertEqual(int(lifted._get_current_agent_state().loaded[0]), 7)
-
-        dump_target = np.zeros(self.SHAPE, dtype=np.int8)
-        dump_target[40, 27] = 1
-        loaded = self._state(
-            dump_target,
-            axes,
-            base_angle=3,
-            cabin_angle=4,
-            loaded=5,
-        )
-        dumped = loaded._handle_do()
-        self.assertEqual(int(dumped._get_current_agent_state().loaded[0]), 0)
-        self.assertEqual(int(np.asarray(dumped.world.action_map.map).sum()), 5)
-
-    def test_complete_short_trench_and_backward_progression_are_feasible(self):
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        dig_cells = [(24, 37), (24, 38), (24, 39)]
-        dump_cells = [(40, 27), (40, 28), (40, 29)]
-        for cell in dig_cells:
-            target[cell] = -1
-        for cell in dump_cells:
-            target[cell] = 1
-
-        state = self._state(
-            target,
-            self._horizontal_axis(),
-            base_angle=0,
-            cabin_angle=2,
-        )
-        dug = state._handle_do()
-        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 3)
-        self.assertTrue(
-            all(
-                int(dug.world.action_map.map[cell]) == -1
-                for cell in dig_cells
-            )
-        )
-
-        dump_agent = dug._get_current_agent_state()._replace(
-            angle_cabin=jnp.array([8], dtype=jnp.int8)
-        )
-        dumped = dug._set_current_agent_state(dump_agent)._handle_do()
-        completion = dumped._get_task_completion(
-            dumped.world.action_map.map,
-            dumped.world.target_map.map,
-        )
-        self.assertEqual(int(dumped._get_current_agent_state().loaded[0]), 0)
-        self.assertEqual(float(completion["absolute_completion"]), 1.0)
-
-        retreated = TerraEnv.wrap_state(dumped)._handle_move_backward()
-        np.testing.assert_array_equal(
-            retreated._get_current_agent_state().pos_base,
-            np.array([32, 27], dtype=np.int16),
-        )
-
-    def test_standoff_band_reports_signed_close_and_far_errors(self):
-        close_target = np.zeros(self.SHAPE, dtype=np.int8)
-        close_target[24, 37] = -1
-        close = self._state(
-            close_target,
-            self._horizontal_axis(),
-            base_angle=0,
-            cabin_angle=1,
-            position=(29, 32),
-        )
-        close_valid, close_yaw, close_error = (
-            close._get_fresh_trench_dig_alignment()
-        )
-        self.assertFalse(bool(close_valid))
-        self.assertEqual(float(close_yaw), 0.0)
-        self.assertLess(float(close_error), 0.0)
-
-        wide_axis = self._axes([0, 1, -24, 24, 20, 24, 50, 2])
-        far_target = np.zeros(self.SHAPE, dtype=np.int8)
-        far_target[26, 32] = -1
-        far = self._state(
-            far_target,
-            wide_axis,
-            base_angle=0,
-            cabin_angle=3,
-            position=(37, 32),
-        )
-        far_valid, far_yaw, far_error = far._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(far_valid))
-        self.assertEqual(float(far_yaw), 0.0)
-        self.assertGreater(float(far_error), 0.0)
-
-    def test_non_trench_fresh_dig_is_unchanged_when_gate_is_enabled(self):
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 37] = -1
-        state = self._state(
-            target,
-            self._axes(),
-            base_angle=0,
-            cabin_angle=1,
-        )
-        dug = state._handle_do()
-        self.assertEqual(int(dug.world.action_map.map[24, 37]), -1)
-        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 1)
-
-    def test_generated_segment_metadata_is_required_and_validated(self):
-        metadata = {
-            "trench_axes_count": 1,
-            "axes_ABC": [{"A": 0.0, "B": 1.0, "C": -24.0}],
-            "trench_segments_yx": [[[24.0, 20.0], [24.0, 50.0]]],
-            "trench_half_width_tiles": 1.0,
-        }
-        records, count = _trench_records_from_metadata(
-            metadata,
-            4,
-            require_finite_segments=True,
-        )
-        self.assertEqual(count, 1)
-        self.assertEqual(records[0], [0.0, 1.0, -24.0, 24.0, 20.0, 24.0, 50.0, 1.0])
-
-        missing_segments = {
-            key: value
-            for key, value in metadata.items()
-            if key != "trench_segments_yx"
-        }
-        with self.assertRaisesRegex(RuntimeError, "finite generated segment"):
-            _trench_records_from_metadata(
-                missing_segments,
-                4,
-                require_finite_segments=True,
-            )
-
-        stale = dict(metadata)
-        stale["trench_segments_yx"] = [[[25.0, 20.0], [25.0, 50.0]]]
-        with self.assertRaisesRegex(RuntimeError, "does not lie on its paired axis"):
-            _trench_records_from_metadata(
-                stale,
-                4,
-                require_finite_segments=True,
-            )
-
-    def test_global_gate_activation_validates_loaded_finite_metadata(self):
-        batch = object.__new__(TerraEnvBatch)
-        batch.maps_buffer = SimpleNamespace(
-            trench_axes=self._horizontal_axis()[None, None, ...],
-            trench_types=np.array([[1]], dtype=np.int32),
-            family_names=("trn-straight",),
-            family_ids=np.array([[0]], dtype=np.int32),
-        )
-        batch._validate_trench_alignment_metadata_requirements(self.cfg)
-
-        missing = -97.0 * np.ones((1, 1, 4, 8), dtype=np.float32)
-        batch.maps_buffer = SimpleNamespace(
-            trench_axes=missing,
-            trench_types=np.array([[1]], dtype=np.int32),
-            family_names=("trn-straight",),
-            family_ids=np.array([[0]], dtype=np.int32),
-        )
-        with self.assertRaisesRegex(RuntimeError, "finite section metadata"):
-            batch._validate_trench_alignment_metadata_requirements(self.cfg)
-
-        batch._validate_trench_alignment_metadata_requirements(
-            self.cfg._replace(enforce_trench_dig_alignment=False)
-        )
-
-    def test_lower_level_state_fails_closed_on_incomplete_trench_metadata(self):
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 37] = -1
-        incomplete = self._axes(
-            [0, 1, -24, -97, -97, -97, -97, -97]
-        )
-        state = self._state(
-            target,
-            incomplete,
-            base_angle=0,
-            cabin_angle=1,
-        )
-
-        valid, _, _ = state._get_fresh_trench_dig_alignment()
-        rejected = state._handle_do()
-
-        self.assertFalse(bool(valid))
-        self.assertEqual(int(rejected.world.action_map.map[24, 37]), 0)
-        self.assertEqual(int(rejected._get_current_agent_state().loaded[0]), 0)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,12 @@ the reviewed v6 map semantics while admitting any valid, non-duplicate
 scenario. Centred IoU is written to `diversity_report.json`; it does not reject
 training maps.
 
+Trench targets use the v2 axis contract: `axes_ABC` plus a generated
+`uint8` `trench_axis_owners` sidecar. Junction cells may own several axes;
+foundation owner maps are zero. The current generator samples trench global
+orientations on a 15 degree lattice, while Terra's 12 base headings and
+inclusive 15 degree tolerance keep every generated axis locally alignable.
+
 Before generating a P5 accepted bank, compile the manifest-bound review export
 into an explicit condition list:
 
@@ -95,7 +101,9 @@ panel contains contiguous arrays plus `manifest.jsonl`, and all of them bind to
 the same hashed `source_registry.jsonl`. Evaluation rows add a deterministic
 `reset_seed` that selects that row's exact contiguous map slot and
 `episode_id = hash(scenario_id, reset_seed, environment_protocol_sha256)`.
-`scenario_id` is recomputed from the five reset-consumed arrays. The command
+`scenario_id` is recomputed from the five canonical scenario arrays. Trench
+axis equations and owner bits are geometry metadata, bound separately by the
+owner SHA-256 in each `metadata/trench_N.json`. The command
 rejects review-only inputs, split leakage, count/support mismatches, identity
 collisions, and array/manifest hash disagreement before publishing the output.
 Each published level declares `terra_reset_arrays_sha256_v1`; the live loader

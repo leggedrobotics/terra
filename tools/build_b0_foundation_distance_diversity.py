@@ -59,6 +59,7 @@ LOADER_FIELDS = (
     "occupancy",
     "trench_axes",
     "trench_types",
+    "trench_axis_owners",
     "foundation_border_axes",
     "foundation_border_types",
     "dumpability",

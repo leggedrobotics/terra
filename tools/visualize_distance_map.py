@@ -145,6 +145,9 @@ def main():
             padding_mask=padding_mask,
             trench_axes=trench_axes,
             trench_type=trench_type,
+            trench_axis_owners=np.zeros_like(target_map, dtype=np.uint8),
+            foundation_border_axes=-97.0 * np.ones((64, 3), dtype=np.float32),
+            foundation_border_type=np.int32(-1),
             dumpability_mask_init=dumpability_mask_init,
             action_map=action_map,
         )
@@ -158,4 +161,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main() 
+    main()

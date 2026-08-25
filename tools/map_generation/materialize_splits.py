@@ -19,6 +19,7 @@ ARRAY_FOLDERS = (
     "dumpability",
     "images",
     "occupancy",
+    "trench_axis_owners",
 )
 METADATA_FOLDER = "metadata"
 SCHEMA = "terra_curriculum_split_bank_v1"

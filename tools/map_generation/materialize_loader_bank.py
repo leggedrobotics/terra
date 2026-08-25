@@ -64,6 +64,7 @@ EPISODE_ID_SCHEMA = "terra_episode_id_v1"
 SPLITS = ("train", "promotion", "development", "sealed")
 EVALUATION_SPLITS = SPLITS[1:]
 ARRAY_FOLDERS = RESET_ARRAY_FOLDERS
+TRENCH_METADATA_ARRAY_FOLDERS = ("trench_axis_owners",)
 REQUIRED_COLUMNS = {
     "condition_id",
     "family",
@@ -411,6 +412,10 @@ def _validate_split_bank(
             metadata = dataset / "metadata" / f"trench_{sample_index}.json"
             if not metadata.is_file():
                 raise ValueError(f"{map_id}: missing metadata sidecar {metadata}")
+            for folder in TRENCH_METADATA_ARRAY_FOLDERS:
+                sidecar = dataset / folder / f"img_{sample_index}.npy"
+                if not sidecar.is_file():
+                    raise ValueError(f"{map_id}: missing trench sidecar {sidecar}")
 
         mismatches = {
             condition: count
@@ -496,6 +501,11 @@ def _copy_sidecars(
         source = input_dataset / folder / f"img_{sample_index}.npy"
         destination = output_dataset / folder / f"img_{slot}.npy"
         shutil.copy2(source, destination)
+    for folder in TRENCH_METADATA_ARRAY_FOLDERS:
+        shutil.copy2(
+            input_dataset / folder / f"img_{sample_index}.npy",
+            output_dataset / folder / f"img_{slot}.npy",
+        )
     shutil.copy2(
         input_dataset / "metadata" / f"trench_{sample_index}.json",
         output_dataset / "metadata" / f"trench_{slot}.json",
@@ -554,7 +564,7 @@ def _materialize_dataset(
 ) -> None:
     if not rows:
         raise ValueError(f"cannot materialize an empty loader dataset at {output}")
-    for folder in (*ARRAY_FOLDERS, "metadata"):
+    for folder in (*ARRAY_FOLDERS, *TRENCH_METADATA_ARRAY_FOLDERS, "metadata"):
         (output / folder).mkdir(parents=True, exist_ok=True)
 
     input_dataset = split_bank / rows[0]["split"] / "dataset"

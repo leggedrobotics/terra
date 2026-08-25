@@ -1,4 +1,4 @@
-"""Live-geometry service checks shared by the v4 generator and validator.
+"""Live-geometry service checks shared by the map generator and validator.
 
 Two things live here, both ported from code that already exists elsewhere so the
 numbers are comparable:
@@ -15,9 +15,8 @@ numbers are comparable:
   ``State._move_on_orientation`` (``terra/state.py:625-653``): the base position
   is an integer grid point, the step is ``move_tiles * [cos φ, sin φ]`` with
   ``φ = heading_index * 30° + 90°``, and the SUM is rounded (half-to-even, the
-  jnp/np default). That rounding is the whole point: for the six lattice axes it
-  produces a fixed per-step lateral bias, and the drift over a full trench is
-  what U7 gates on.
+  jnp/np default). For a 15° half-bin trench, the witness may alternate the two
+  equally aligned headings to stay near the trench axis.
 """
 
 from __future__ import annotations
@@ -111,8 +110,8 @@ def direct_service_coverage(
 # U7 — scripted backward drive with the env's own move kinematics
 
 
-def heading_index_for_axis(axis_deg: float) -> int:
-    """Base-angle index whose travel direction is the trench axis.
+def heading_indices_for_axis(axis_deg: float) -> tuple[int, ...]:
+    """Base headings aligned to an axis within the exact 15 degree tolerance.
 
     Array index 0 is the env's `x` and index 1 its `y` — that is the convention
     `terra_geom` already uses for the cone and the footprint (`gx = di * tile`).
@@ -120,15 +119,22 @@ def heading_index_for_axis(axis_deg: float) -> int:
     ``[cos(k*30° + 90°), sin(k*30° + 90°)]`` in (x, y) (`state.py:626-630`), and
     the generator's trench axis h points along ``[sin(h), cos(h)]`` in the same
     index order, so ``cos(phi) = sin(h)``, ``phi = 90° - h`` and ``k = -h/30``.
+    A 15° half-bin axis has two valid headings; a 30° lattice axis has one.
 
     Getting this backwards silently rotates the machine 90 deg against its
     travel: the footprint is 7 tiles across travel and 11 along it, and the
     transposed version has those swapped.
     """
-    steps = -axis_deg / 30.0
-    index = int(round(steps))
-    assert abs(steps - index) < 1e-6, f"axis {axis_deg} is off the 30 deg lattice"
-    return index % geom.ANGLES_BASE
+    continuous = (-axis_deg / 30.0) % geom.ANGLES_BASE
+    indices = np.arange(geom.ANGLES_BASE)
+    distance = np.abs(
+        (indices - continuous + geom.ANGLES_BASE / 2) % geom.ANGLES_BASE
+        - geom.ANGLES_BASE / 2
+    )
+    aligned = tuple(int(index) for index in indices[distance <= 0.5 + 1e-9])
+    if not aligned:
+        raise RuntimeError(f"No base heading aligns to trench axis {axis_deg}°.")
+    return aligned
 
 
 def step_delta(heading_index: int) -> np.ndarray:
@@ -139,47 +145,55 @@ def step_delta(heading_index: int) -> np.ndarray:
 
 def backward_drive_track(
     start_yx: tuple[float, float],
-    heading_index: int,
+    heading_indices: tuple[int, ...],
     steps: int,
-    normal: np.ndarray | None = None,
-) -> np.ndarray:
-    """Positions of a scripted BACKWARD drive, using the env's rounding.
+    normal: np.ndarray,
+    travel_direction: np.ndarray,
+) -> tuple[np.ndarray, tuple[int, ...]]:
+    """Greedy discrete-heading BACKWARD witness using the env's rounding.
 
     BACKWARD is the same primitive with the heading index rolled by half a turn
     (``state.py:417-426``), and ``_move_on_orientation`` rounds ``pos + delta``
     to the integer grid every step (``state.py:634``).
 
-    On the four non-cardinal lattice axes one component of the 5-tile step lands
-    exactly on ``x.5``, so the realised step is decided by the tie rule — and at
-    a tie the answer is set by float noise (``5*sin(330 deg)`` is
-    ``-2.500000000000002`` in float64 and a different last bit in the env's
-    float32), not by anything a policy controls. Ties are therefore resolved
-    **against** the machine: when ``normal`` is given, the branch that increases
-    the lateral offset is taken, so the reported drift is the worst case rather
-    than an artefact of this port's rounding mode.
+    At each step the policy may use any pose-aligned heading. The witness picks
+    the candidate with least centre-line error, then greatest progress. Exact
+    half-cell rounding ties remain conservative: the candidate farther from
+    the centre line is used before comparing headings.
     """
-    delta = step_delta((heading_index + geom.ANGLES_BASE // 2) % geom.ANGLES_BASE)
     position = np.array([round(start_yx[0]), round(start_yx[1])], dtype=float)
     origin = position.copy()
     track = [position.copy()]
+    used_headings: list[int] = []
     for _ in range(steps):
-        raw = position + delta
-        candidate = np.round(raw)
-        if normal is not None:
+        candidates = []
+        for heading_index in heading_indices:
+            backward_index = (
+                heading_index + geom.ANGLES_BASE // 2
+            ) % geom.ANGLES_BASE
+            raw = position + step_delta(backward_index)
+            candidate = np.round(raw)
             for axis in range(2):
                 if abs(raw[axis] - math.floor(raw[axis]) - 0.5) < 1e-6:
                     options = [math.floor(raw[axis]), math.ceil(raw[axis])]
-                    best = None
+                    rounded_options = []
                     for option in options:
                         probe = candidate.copy()
                         probe[axis] = option
-                        offset = abs(float((probe - origin) @ normal))
-                        if best is None or offset > best[0]:
-                            best = (offset, option)
-                    candidate[axis] = best[1]
-        position = candidate
+                        rounded_options.append(
+                            (abs(float((probe - origin) @ normal)), option)
+                        )
+                    candidate[axis] = max(rounded_options)[1]
+            lateral = abs(float((candidate - origin) @ normal))
+            progress = float((candidate - origin) @ travel_direction)
+            candidates.append((lateral, -progress, heading_index, candidate))
+        _, _, heading_index, position = min(
+            candidates,
+            key=lambda item: item[:3],
+        )
+        used_headings.append(heading_index)
         track.append(position.copy())
-    return np.asarray(track)
+    return np.asarray(track), tuple(used_headings)
 
 
 def footprint_cells(centre_yx: np.ndarray, base_index: int) -> np.ndarray:
@@ -216,12 +230,10 @@ def backward_drive_check(
     * ``backward_drive_lane_steps`` — how many consecutive 5-tile steps the
       footprint stays inside the reserved lane. Map-specific.
     * ``backward_drive_drift_tiles`` / ``_per_tile`` — the accumulated lateral
-      drift. This is a property of the AXIS, not of the map: 0 on 0 deg and
-      90 deg, and 0.054-0.135 tiles per tile of travel on 30/60/120/150,
-      because the rounded 5-tile step is (2,4) or (3,4) rather than
-      (2.5, 4.33). Reported, and gated only on the rate.
+      drift of the best pose-aligned discrete-heading witness. It is reported
+      and gated only on the rate.
     """
-    index = heading_index_for_axis(axis_deg)
+    heading_indices = heading_indices_for_axis(axis_deg)
     steps = max(1, int(math.ceil(length_tiles / MOVE_TILES)))
     heading = math.radians(axis_deg)
     direction = np.array([math.sin(heading), math.cos(heading)])
@@ -229,18 +241,27 @@ def backward_drive_check(
 
     # Start half the working length ahead of the centre, so the drive covers it.
     start = np.array(lane_centre_yx) + direction * (length_tiles / 2.0)
-    track = backward_drive_track(tuple(start), index, steps, normal)
+    track, used_headings = backward_drive_track(
+        tuple(start),
+        heading_indices,
+        steps,
+        normal,
+        -direction,
+    )
 
     offsets = (track - track[0]) @ normal
     clear = True
     inside = 0
-    for position in track:
-        cells = footprint_cells(position, index)
-        if len(cells) == 0 or blocked[cells[:, 0], cells[:, 1]].any():
-            clear = False
+    for step, heading_index in enumerate(used_headings):
+        for position in track[step : step + 2]:
+            cells = footprint_cells(position, heading_index)
+            if len(cells) == 0 or blocked[cells[:, 0], cells[:, 1]].any():
+                clear = False
+                break
+        if not clear:
             break
-    for position in track[1:]:
-        cells = footprint_cells(position, index)
+    for position, heading_index in zip(track[1:], used_headings):
+        cells = footprint_cells(position, heading_index)
         if lane is None or len(cells) == 0 or not lane[cells[:, 0], cells[:, 1]].all():
             break
         inside += 1

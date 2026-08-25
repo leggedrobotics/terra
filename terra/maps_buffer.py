@@ -3,15 +3,13 @@ import json
 import os
 from functools import partial
 from pathlib import Path
-from typing import Mapping, NamedTuple
+from typing import Any, Mapping, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
 from tqdm import tqdm
-from typing import Any
-
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.config import ImmutableMapsConfig
@@ -36,11 +34,11 @@ class MapsBuffer(NamedTuple):
     maps: Array  # [map_type, n_maps, W, H]
     padding_mask: Array  # [map_type, n_maps, W, H]
     dumpability_masks_init: Array  # [map_type, n_maps, W, H]
-    # [map_type, n_maps, n_axes_per_map, 8]: A,B,C, finite y0,x0,y1,x1,
-    # and the generated trench half-width in cells.
-    # The first three columns preserve the legacy line-equation interface.
+    # [map_type, n_maps, n_axes_per_map, 3]: A,B,C line coefficients.
     trench_axes: Array
     trench_types: Array  # [map_type, n_maps], number of trench axes, or -1 if unavailable
+    # [map_type, n_maps, W, H]: generator-emitted owner bits for trench cells.
+    trench_axis_owners: Array
     foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
     foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
     action_maps: Array  # [map_type, n_maps, W, H]
@@ -73,6 +71,7 @@ class MapsBuffer(NamedTuple):
         padding_mask: Array,
         trench_axes: Array,
         trench_types: Array,
+        trench_axis_owners: Array,
         foundation_border_axes: Array,
         foundation_border_types: Array,
         dumpability_masks_init: Array,
@@ -128,8 +127,9 @@ class MapsBuffer(NamedTuple):
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
             dumpability_masks_init=dumpability_masks_init.astype(jnp.bool_),
-            trench_axes=trench_axes.astype(jnp.float16),
+            trench_axes=trench_axes.astype(jnp.float32),
             trench_types=trench_types,
+            trench_axis_owners=trench_axis_owners.astype(jnp.uint8),
             foundation_border_axes=foundation_border_axes.astype(jnp.float16),
             foundation_border_types=foundation_border_types,
             n_maps=maps.shape[1],
@@ -202,6 +202,7 @@ class MapsBuffer(NamedTuple):
         padding_mask = self.padding_mask[curriculum_level, idx]
         trench_axes = self.trench_axes[curriculum_level, idx]
         trench_type = self.trench_types[curriculum_level, idx]
+        trench_axis_owners = self.trench_axis_owners[curriculum_level, idx]
         foundation_border_axes = self.foundation_border_axes[curriculum_level, idx]
         foundation_border_type = self.foundation_border_types[curriculum_level, idx]
         # make sure is int 32
@@ -222,7 +223,7 @@ class MapsBuffer(NamedTuple):
                 partial_action_map,
             )
         distance_map = self.distance_maps[curriculum_level, idx]
-        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
+        return map, padding_mask, trench_axes, trench_type, trench_axis_owners, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_provenance(
@@ -250,6 +251,7 @@ class MapsBuffer(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -260,7 +262,7 @@ class MapsBuffer(NamedTuple):
         # Ensure consistent dtypes for all return values
         trench_type = trench_type.astype(jnp.int32)
         foundation_border_type = foundation_border_type.astype(jnp.int32)
-        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
+        return map, padding_mask, trench_axes, trench_type, trench_axis_owners, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     def sample_map(self, key: jax.random.PRNGKey, env_cfg) -> Array:
         (
@@ -268,6 +270,7 @@ class MapsBuffer(NamedTuple):
             padding_mask,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_mask_init,
@@ -277,7 +280,7 @@ class MapsBuffer(NamedTuple):
         ) = self._select_map(key, env_cfg)
         trench_type = trench_type.astype(jnp.int32)
         foundation_border_type = foundation_border_type.astype(jnp.int32)
-        return map, padding_mask, trench_axes, trench_type, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
+        return map, padding_mask, trench_axes, trench_type, trench_axis_owners, foundation_border_axes, foundation_border_type, dumpability_mask_init, action_map, distance_map, key
 
     @partial(jax.jit, static_argnums=(0,))
     def get_map_init(self, key: int, env_cfg):
@@ -924,16 +927,80 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
         raise RuntimeError("Loaded metadata is not valid.")
 
 
-TRENCH_AXIS_RECORD_SIZE = 8
+TRENCH_AXIS_RECORD_SIZE = 3
+TRENCH_AXIS_CONTRACT = "generator_owner_bits_v1"
+
+
+def trench_axis_owners_sanity_check(
+    target_map: Array,
+    owners_map: Array,
+    trench_type: int,
+    max_trench_type: int,
+) -> np.ndarray:
+    """Validate the one supported trench contract at the loader boundary."""
+
+    target = np.asarray(target_map)
+    owners = np.asarray(owners_map)
+    if owners.shape != target.shape:
+        raise RuntimeError(
+            "Trench owner map shape does not match the target map: "
+            f"{owners.shape} != {target.shape}."
+        )
+    if owners.dtype != np.uint8:
+        raise RuntimeError(
+            f"Trench owner maps must use uint8, got {owners.dtype}."
+        )
+    if trench_type > max_trench_type:
+        raise RuntimeError(
+            f"Trench declares {trench_type} axes, maximum is {max_trench_type}."
+        )
+    if trench_type <= 0:
+        if np.any(owners):
+            raise RuntimeError("Non-trench maps must have an all-zero owner map.")
+        return owners
+
+    valid_bits = (1 << trench_type) - 1
+    if np.any(np.bitwise_and(owners, np.uint8(~valid_bits & 0xFF))):
+        raise RuntimeError(
+            "Trench owner map references an undeclared axis bit."
+        )
+    dig_target = target < 0
+    if np.any(dig_target & (owners == 0)):
+        raise RuntimeError("Every trench target cell must have an owning axis.")
+    if np.any((~dig_target) & (owners != 0)):
+        raise RuntimeError("Trench owner bits may appear only on dig target cells.")
+    return owners
+
+
+def trench_axis_contract_sanity_check(
+    metadata: Mapping[str, Any],
+    owners_map: Array,
+    trench_type: int,
+) -> None:
+    """Bind a trench's exact owner sidecar to its axis metadata."""
+
+    if trench_type <= 0:
+        return
+    if metadata.get("trench_axis_contract") != TRENCH_AXIS_CONTRACT:
+        raise RuntimeError(
+            f"Trench metadata must declare {TRENCH_AXIS_CONTRACT!r}."
+        )
+    expected = metadata.get("trench_axis_owners_sha256")
+    actual = hashlib.sha256(
+        np.ascontiguousarray(owners_map, dtype=np.uint8).tobytes()
+    ).hexdigest()
+    if expected != actual:
+        raise RuntimeError(
+            "Trench owner sidecar hash disagrees with its metadata: "
+            f"expected {expected!r}, got {actual}."
+        )
 
 
 def _trench_records_from_metadata(
     metadata: dict[str, Any],
     max_trench_type: int,
-    *,
-    require_finite_segments: bool = False,
 ) -> tuple[list[list[float]], int]:
-    """Load generator-owned axes and finite endpoints into fixed records."""
+    """Load generator-owned line equations into a fixed-width table."""
 
     raw_axes = list(metadata.get("axes_ABC", []) or [])
     declared_count = metadata.get("trench_axes_count")
@@ -942,108 +1009,25 @@ def _trench_records_from_metadata(
             "Trench metadata count disagrees with axes_ABC: "
             f"declared {declared_count}, found {len(raw_axes)}."
         )
-    metadata_overflow = len(raw_axes) > max_trench_type
-    if metadata_overflow:
-        if require_finite_segments:
-            raise RuntimeError(
-                f"Alignment metadata has {len(raw_axes)} axes but Terra supports "
-                f"at most {max_trench_type}; refusing to truncate a gated map."
-            )
-        raw_axes = raw_axes[:max_trench_type]
-
-    raw_segments = metadata.get("trench_segments_yx")
-    if raw_segments is None:
-        raw_segments = metadata.get("trench_arms")
-    segments_are_xy = False
-    if raw_segments is None and metadata.get("lines_pts") is not None:
-        raw_segments = metadata.get("lines_pts")
-        segments_are_xy = True
-    raw_segments = list(raw_segments or [])
-    half_width = metadata.get("trench_half_width_tiles")
-    if half_width is not None:
-        half_width = float(half_width)
-        if not np.isfinite(half_width) or half_width <= 0.0:
-            raise RuntimeError(
-                "trench_half_width_tiles must be a positive finite number."
-            )
-    elif require_finite_segments and raw_axes:
+    if len(raw_axes) > max_trench_type:
         raise RuntimeError(
-            "Fresh-trench alignment requires generated trench_half_width_tiles."
-        )
-
-    if require_finite_segments and raw_axes and len(raw_segments) != len(raw_axes):
-        raise RuntimeError(
-            "Fresh-trench alignment requires one finite generated segment per "
-            f"axis; found {len(raw_axes)} axes and {len(raw_segments)} segments."
+            f"Trench metadata has {len(raw_axes)} axes but Terra supports "
+            f"at most {max_trench_type}."
         )
 
     records: list[list[float]] = []
-    for index, axis in enumerate(raw_axes):
+    for axis in raw_axes:
         metadata_sanity_check(axis)
-        endpoints = [-97.0, -97.0, -97.0, -97.0]
-        if index < len(raw_segments):
-            segment = np.asarray(raw_segments[index], dtype=np.float64)
-            if segment.ndim != 2 or segment.shape[0] < 2 or segment.shape[1] != 2:
-                raise RuntimeError(
-                    "Trench segment metadata must contain at least two [y, x] "
-                    f"points; axis {index} has shape {segment.shape}."
-                )
-            if not np.all(np.isfinite(segment)):
-                raise RuntimeError(
-                    f"Trench segment {index} contains non-finite endpoints."
-                )
-            start = segment[0]
-            end = segment[-1]
-            if segments_are_xy:
-                start = start[::-1]
-                end = end[::-1]
-            if float(np.linalg.norm(end - start)) <= 1e-6:
-                raise RuntimeError(f"Trench segment {index} has zero length.")
-            denominator = float(np.hypot(axis["A"], axis["B"]))
-            if denominator <= 1e-6:
-                raise RuntimeError(f"Trench axis {index} has zero normal.")
-            endpoint_residuals = [
-                abs(
-                    float(axis["A"]) * float(point[1])
-                    + float(axis["B"]) * float(point[0])
-                    + float(axis["C"])
-                )
-                / denominator
-                for point in (start, end)
-            ]
-            if max(endpoint_residuals) > 0.05:
-                raise RuntimeError(
-                    f"Trench segment {index} does not lie on its paired axis; "
-                    f"endpoint residuals are {endpoint_residuals} tiles."
-                )
-            endpoints = [
-                float(start[0]),
-                float(start[1]),
-                float(end[0]),
-                float(end[1]),
-            ]
-        elif require_finite_segments:
-            raise RuntimeError(
-                f"Fresh-trench alignment is missing finite segment {index}."
-            )
+        normal = np.hypot(float(axis["A"]), float(axis["B"]))
+        if not np.isfinite(normal) or normal <= 1e-6:
+            raise RuntimeError("Trench axis has a non-finite or zero normal.")
         records.append(
-            [
-                float(axis["A"]),
-                float(axis["B"]),
-                float(axis["C"]),
-                *endpoints,
-                -97.0 if half_width is None else half_width,
-            ]
+            [float(axis["A"]), float(axis["B"]), float(axis["C"])]
         )
 
     trench_type = len(records) if records else -1
     while len(records) < max_trench_type:
         records.append([-97.0] * TRENCH_AXIS_RECORD_SIZE)
-    if metadata_overflow and records:
-        # Preserve legacy gate-off truncation, but leave a fail-closed marker
-        # in the otherwise unused width field so global gate activation cannot
-        # silently accept incomplete section metadata at reset.
-        records[0][7] = -98.0
     return records, trench_type
 
 
@@ -1420,6 +1404,14 @@ def validate_exact_dataset_contract(
                 f"Dataset sidecars in {path} must enumerate exactly "
                 f"1..{expected_count}; got {observed_indices[:8]}."
             )
+    owners_directory = directory / "trench_axis_owners"
+    if owners_directory.exists():
+        observed_indices = _indexed_sidecars(owners_directory, "img_", ".npy")
+        if observed_indices != required_indices:
+            raise RuntimeError(
+                f"Dataset sidecars in {owners_directory} must enumerate exactly "
+                f"1..{expected_count}; got {observed_indices[:8]}."
+            )
 
     _validate_source_registry(
         directory,
@@ -1484,6 +1476,9 @@ def load_single_map(map_path: str) -> Array:
         dumpability_file = map_path / "dumpability" / "img_1.npy"
         distance_file = map_path / "distance" / "img_1.npy"
         actions_file = map_path / "actions" / "img_1.npy"
+        trench_axis_owners_file = (
+            map_path / "trench_axis_owners" / "img_1.npy"
+        )
         metadata_file = map_path / "metadata" / "map.json"
     else:
         # Load from flat structure (original behavior)
@@ -1492,6 +1487,7 @@ def load_single_map(map_path: str) -> Array:
         dumpability_file = map_path / "dumpability.npy"
         distance_file = map_path / "distance.npy"
         actions_file = map_path / "actions.npy"
+        trench_axis_owners_file = map_path / "trench_axis_owners.npy"
         metadata_file = map_path / "metadata.json"
 
     # Load map
@@ -1517,6 +1513,14 @@ def load_single_map(map_path: str) -> Array:
         actions_sanity_check(actions_map)
     else:
         actions_map = np.zeros_like(image, dtype=IntMap)
+    trench_axis_owners = (
+        _ensure_spatial_2d(
+            np.load(trench_axis_owners_file),
+            str(trench_axis_owners_file),
+        )
+        if trench_axis_owners_file.exists()
+        else np.zeros_like(image, dtype=np.uint8)
+    )
     contained_dump_capacity_sanity_check(
         image,
         occupancy,
@@ -1541,6 +1545,11 @@ def load_single_map(map_path: str) -> Array:
             max_trench_type,
         )
         trench_axes = np.array(trench_ax)
+        trench_axis_contract_sanity_check(
+            metadata,
+            trench_axis_owners,
+            trench_type,
+        )
         foundation_ax = metadata.get("foundation_border_axes_ABC", [])
         if len(foundation_ax) > 0:
             metadata_sanity_check(foundation_ax[0])
@@ -1555,11 +1564,19 @@ def load_single_map(map_path: str) -> Array:
     else:
         print(f"No metadata found for given map: {map_path}.")
 
+    trench_axis_owners_sanity_check(
+        image,
+        trench_axis_owners,
+        trench_type,
+        max_trench_type,
+    )
+
     # Convert to single-element arrays
     maps = jnp.array([image], dtype=IntMap)
     occupancies = jnp.array([occupancy], dtype=IntMap)
     trench_axes = jnp.array([trench_axes])
     trench_types = jnp.array([trench_type], dtype=jnp.int32)
+    trench_axis_owners = jnp.array([trench_axis_owners], dtype=jnp.uint8)
     foundation_border_axes = jnp.array([foundation_border_axes])
     dumpability_masks_init = jnp.array([dumpability_mask_init], dtype=jnp.bool_)
     actions = jnp.array([actions_map], dtype=IntMap)
@@ -1570,6 +1587,7 @@ def load_single_map(map_path: str) -> Array:
         occupancies,
         trench_axes,
         trench_types,
+        trench_axis_owners,
         foundation_border_axes,
         foundation_border_type,
         dumpability_masks_init,
@@ -1581,7 +1599,6 @@ def load_single_map(map_path: str) -> Array:
 def load_maps_from_disk(
     folder_path: str,
     require_trench_metadata: bool = False,
-    require_trench_alignment_metadata: bool = False,
     require_exact_contract: bool = True,
     required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
 ) -> Array:
@@ -1629,6 +1646,7 @@ def load_maps_from_disk(
     dumpability_masks_init = []
     trench_axes = []
     trench_types = []
+    trench_axis_owners = []
     foundation_border_axes = []
     foundation_border_types = []
     actions = []
@@ -1775,6 +1793,17 @@ def load_maps_from_disk(
         found_any_distance = True
         distances.append(dist_map.astype(np.float32))
 
+        owners_path = (
+            Path(folder_path)
+            / "trench_axis_owners"
+            / f"img_{i}.npy"
+        )
+        owners = (
+            _ensure_spatial_2d(np.load(owners_path), str(owners_path))
+            if owners_path.exists()
+            else np.zeros_like(map, dtype=np.uint8)
+        )
+
         # Metadata needs to be loaded only for trenches (A, B, C coefficients)
         metadata_path = Path(folder_path) / "metadata" / f"trench_{i}.json"
         if metadata_path.exists():
@@ -1783,11 +1812,23 @@ def load_maps_from_disk(
             trench_ax, trench_type = _trench_records_from_metadata(
                 metadata,
                 max_trench_type,
-                require_finite_segments=require_trench_alignment_metadata,
             )
+            if trench_type > 0 and not owners_path.exists():
+                raise RuntimeError(
+                    f"Missing required trench owner sidecar: {owners_path}"
+                )
+            trench_axis_contract_sanity_check(metadata, owners, trench_type)
 
             trench_axes.append(trench_ax)
             trench_types.append(trench_type)
+            trench_axis_owners.append(
+                trench_axis_owners_sanity_check(
+                    map,
+                    owners,
+                    trench_type,
+                    max_trench_type,
+                )
+            )
             foundation_ax = metadata.get("foundation_border_axes_ABC", [])
             foundation_border_type = -1
             if len(foundation_ax) > 0:
@@ -1804,7 +1845,7 @@ def load_maps_from_disk(
             n_loaded_metadata += 1
         else:
             # Missing metadata for this map.
-            if require_trench_metadata or require_trench_alignment_metadata:
+            if require_trench_metadata:
                 # If the curriculum/level requires trench metadata (e.g. trench rewards),
                 # raise immediately so the user can provide the metadata.
                 raise RuntimeError(
@@ -1821,6 +1862,14 @@ def load_maps_from_disk(
                 ]
             )
             trench_types.append(-1)
+            trench_axis_owners.append(
+                trench_axis_owners_sanity_check(
+                    map,
+                    owners,
+                    -1,
+                    max_trench_type,
+                )
+            )
             foundation_border_axes.append(
                 [[-97, -97, -97] for _ in range(max_foundation_border_type)]
             )
@@ -1856,6 +1905,7 @@ def load_maps_from_disk(
         jnp.array(occupancies, dtype=IntMap),
         jnp.array(trench_axes),
         jnp.array(trench_types, dtype=jnp.int32),
+        jnp.array(trench_axis_owners, dtype=jnp.uint8),
         jnp.array(foundation_border_axes),
         jnp.array(foundation_border_types, dtype=jnp.int32),
         jnp.array(dumpability_masks_init, dtype=jnp.bool_),
@@ -1984,6 +2034,7 @@ def init_maps_buffer(
         dumpability_masks_init_from_disk = []
         trench_axes_list = []
         trench_types = []
+        trench_axis_owners_list = []
         foundation_border_axes_list = []
         foundation_border_types = []
         actions_from_disk = []
@@ -1995,6 +2046,7 @@ def init_maps_buffer(
             occupancies,
             trench_axes,
             trench_type,
+            trench_axis_owners,
             foundation_border_axes,
             foundation_border_type,
             dumpability_masks_init,
@@ -2009,6 +2061,7 @@ def init_maps_buffer(
         dumpability_masks_init_from_disk = [dumpability_masks_init] * num_levels
         trench_axes_list = [trench_axes] * num_levels
         trench_types = [trench_type] * num_levels
+        trench_axis_owners_list = [trench_axis_owners] * num_levels
         foundation_border_axes_list = [foundation_border_axes] * num_levels
         foundation_border_types = [jnp.array([foundation_border_type], dtype=jnp.int32)] * num_levels
         actions_from_disk = [actions] * num_levels
@@ -2024,6 +2077,7 @@ def init_maps_buffer(
         dumpability_masks_init_from_disk = []
         trench_axes_list = []
         trench_types = []
+        trench_axis_owners_list = []
         foundation_border_axes_list = []
         foundation_border_types = []
         actions_from_disk = []
@@ -2035,6 +2089,7 @@ def init_maps_buffer(
                 occupancies,
                 trench_axes,
                 trench_types_for_level,
+                trench_axis_owners,
                 foundation_border_axes,
                 foundation_border_type,
                 dumpability_masks_init,
@@ -2054,6 +2109,7 @@ def init_maps_buffer(
             dumpability_masks_init_from_disk.append(dumpability_masks_init)
             trench_axes_list.append(trench_axes)
             trench_types.append(trench_types_for_level)
+            trench_axis_owners_list.append(trench_axis_owners)
             foundation_border_axes_list.append(foundation_border_axes)
             foundation_border_types.append(foundation_border_type)
             actions_from_disk.append(actions)
@@ -2170,6 +2226,14 @@ def init_maps_buffer(
         z = np.zeros((d.shape[0], maps_width, maps_height), dtype=np.float32)
         z[:, : d.shape[1], : d.shape[2]] = d
         distances_padded.append(z)
+    trench_axis_owners_padded = []
+    for owners in trench_axis_owners_list:
+        z = np.zeros(
+            (owners.shape[0], maps_width, maps_height),
+            dtype=np.uint8,
+        )
+        z[:, : owners.shape[1], : owners.shape[2]] = owners
+        trench_axis_owners_padded.append(z)
 
     unique_shapes = set([trench_axes.shape for trench_axes in trench_axes_list])
     print(f"Unique shapes of trench_axes_list: {unique_shapes}")
@@ -2179,6 +2243,10 @@ def init_maps_buffer(
     dumpability_masks_init_from_disk = jnp.array(dumpability_masks_init_from_disk_padded)
     trench_axes_list = jnp.array(trench_axes_list)
     trench_types = jnp.array(trench_types)
+    trench_axis_owners = jnp.array(
+        trench_axis_owners_padded,
+        dtype=jnp.uint8,
+    )
     foundation_border_axes_list = jnp.array(foundation_border_axes_list)
     foundation_border_types = jnp.array(foundation_border_types)
     actions_from_disk_padded = jnp.array(actions_from_disk_padded)
@@ -2209,6 +2277,7 @@ def init_maps_buffer(
     print(f"Dumpability mask shape: {dumpability_masks_init_from_disk.shape}.")
     print(f"Trench axes shape: {trench_axes_list.shape}.")
     print(f"Trench types shape: {trench_types.shape}.")
+    print(f"Trench owner maps shape: {trench_axis_owners.shape}.")
     print(f"Foundation border axes shape: {foundation_border_axes_list.shape}.")
     print(f"Foundation border types shape: {foundation_border_types.shape}.")
     print(f"Actions shape: {actions_from_disk_padded.shape}.")
@@ -2230,6 +2299,9 @@ def init_maps_buffer(
         )
         trench_axes_list = trench_axes_list.reshape((-1, *trench_axes_list.shape[2:]))
         trench_types = trench_types.reshape((-1,))
+        trench_axis_owners = trench_axis_owners.reshape(
+            (-1, *trench_axis_owners.shape[2:])
+        )
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (-1, *foundation_border_axes_list.shape[2:])
         )
@@ -2258,6 +2330,11 @@ def init_maps_buffer(
         )
         trench_axes_list = jax.random.permutation(rng, trench_axes_list, axis=0)
         trench_types = jax.random.permutation(rng, trench_types, axis=0)
+        trench_axis_owners = jax.random.permutation(
+            rng,
+            trench_axis_owners,
+            axis=0,
+        )
         foundation_border_axes_list = jax.random.permutation(
             rng, foundation_border_axes_list, axis=0
         )
@@ -2296,6 +2373,9 @@ def init_maps_buffer(
             (d0, d1, *trench_axes_list.shape[1:])
         )
         trench_types = trench_types.reshape((d0, d1))
+        trench_axis_owners = trench_axis_owners.reshape(
+            (d0, d1, *trench_axis_owners.shape[1:])
+        )
         foundation_border_axes_list = foundation_border_axes_list.reshape(
             (d0, d1, *foundation_border_axes_list.shape[1:])
         )
@@ -2334,6 +2414,7 @@ def init_maps_buffer(
         padding_mask=padding_mask,
         trench_axes=trench_axes_list,
         trench_types=trench_types,
+        trench_axis_owners=trench_axis_owners,
         foundation_border_axes=foundation_border_axes_list,
         foundation_border_types=foundation_border_types,
         dumpability_masks_init=dumpability_masks_init_from_disk,

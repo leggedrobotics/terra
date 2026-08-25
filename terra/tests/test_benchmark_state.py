@@ -92,6 +92,7 @@ class BenchmarkAgentStateTest(unittest.TestCase):
             jnp.zeros(cls.SHAPE, dtype=jnp.int8),
             -97.0 * jnp.ones((3, 3), dtype=jnp.float32),
             jnp.asarray(-1, dtype=jnp.int32),
+            jnp.zeros(cls.SHAPE, dtype=jnp.uint8),
             -97.0 * jnp.ones((64, 3), dtype=jnp.float32),
             jnp.asarray(-1, dtype=jnp.int32),
             jnp.ones(cls.SHAPE, dtype=jnp.bool_),

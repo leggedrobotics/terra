@@ -133,6 +133,53 @@ def test_scenario_identity_covers_every_reset_array():
     assert generator.scenario_sha256(original) != generator.scenario_sha256(changed)
 
 
+def test_generator_owns_intersections_and_uses_the_15_degree_lattice():
+    horizontal = np.asarray([[32.0, 15.0], [32.0, 49.0]])
+    vertical = np.asarray([[15.0, 32.0], [49.0, 32.0]])
+    dig = generator.v9.rasterize_segments(horizontal, 1.0)
+    dig |= generator.v9.rasterize_segments(vertical, 1.0)
+    target = np.where(dig, -1, 0).astype(np.int8)
+    metadata = {
+        "trench_half_width_tiles": 1.0,
+        "trench_arms": [horizontal.tolist(), vertical.tolist()],
+        "axes_ABC": [
+            generator.v3.line_coefficients(horizontal[0], horizontal[-1]),
+            generator.v3.line_coefficients(vertical[0], vertical[-1]),
+        ],
+    }
+
+    owners = generator.v9.trench_axis_owners(target, metadata)
+
+    assert owners.dtype == np.uint8
+    assert np.all(owners[target < 0] != 0)
+    assert owners[32, 20] == 1
+    assert owners[20, 32] == 2
+    assert owners[32, 32] == 3
+    assert generator.TRENCH_AXES_DEG == tuple(
+        float(value) for value in range(0, 180, 15)
+    )
+    empty = np.zeros((64, 64), dtype=np.bool_)
+    open_lane = np.ones((64, 64), dtype=np.bool_)
+    for axis_deg in generator.TRENCH_AXES_DEG:
+        aligned = generator.tsvc.heading_indices_for_axis(axis_deg)
+        expected_count = 2 if axis_deg % 30.0 == 15.0 else 1
+        assert len(aligned) == expected_count
+        drive = generator.tsvc.backward_drive_check(
+            empty,
+            empty,
+            axis_deg,
+            (32.0, 32.0),
+            20.0,
+            open_lane,
+            1,
+        )
+        assert drive["backward_drive_footprint_clear"]
+        assert (
+            drive["backward_drive_drift_per_tile"]
+            <= generator.v9.BACKWARD_DRIFT_PER_TILE_MAX
+        )
+
+
 def test_source_group_uses_raw_foundation_source_or_realized_dig():
     raw_source = "b" * 64
     assert (
