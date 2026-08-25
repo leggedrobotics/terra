@@ -87,7 +87,10 @@ import csv
 import hashlib
 import json
 import math
+import multiprocessing
+import os
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
 import dataclasses
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -108,7 +111,6 @@ import generate_prototypes_v9 as v9
 import terra_geom as tgeom  # noqa: F401  (kept for parity with v9's namespace)
 import terra_service as tsvc  # noqa: F401
 import turn_dump as tdump  # noqa: F401
-from terra.maps_buffer import reset_array_scenario_sha256
 
 v8 = v9.v8
 v7 = v9.v7
@@ -135,9 +137,27 @@ SITE_CLASS_TOKENS = v9.SITE_CLASS_TOKENS
 CAPACITY_TOKENS = v9.CAPACITY_TOKENS
 DISTANCE_TOKENS = v9.DISTANCE_TOKENS
 
+
+def reset_array_scenario_sha256(arrays: dict[str, Any]) -> str:
+    """Hash reset arrays without importing the JAX runtime into this CPU tool."""
+    expected = tuple(ARRAY_FOLDERS)
+    if set(arrays) != set(expected):
+        raise ValueError(
+            f"Scenario identity requires exactly {expected}; got {tuple(arrays)}."
+        )
+    digest = hashlib.sha256()
+    for name in expected:
+        array = np.ascontiguousarray(arrays[name])
+        digest.update(name.encode())
+        digest.update(array.dtype.str.encode())
+        digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
+        digest.update(array.tobytes())
+    return digest.hexdigest()
+
 R_MIN_TILES = v9.R_MIN_TILES
 R_MAX_TILES = v9.R_MAX_TILES
 SINGLE_STATION_BUDGET_TILES = v9.SINGLE_STATION_BUDGET_TILES
+PLANNING_LAYOUT_ROUNDS = 5
 
 # --------------------------------------------------------------------------
 # D1 -- gapped ring masks (spec v6 section 2)
@@ -1831,32 +1851,43 @@ def make_map(condition, dataset, dig, dig_meta, layout, rng):
         return None, str(exc)
 
 
-def generate_condition(condition, dataset, condition_index, bank, n_maps, max_attempts):
-    samples: list[base.Sample] = []
+def _generate_map(
+    condition, dataset, condition_index, bank, n_maps, max_attempts, map_index
+):
+    """Generate one deterministic map, with bounded planning-layout fallbacks."""
     rejections: Counter[str] = Counter()
-    unsatisfied: list[str] = []
-    accepted_digs: list[np.ndarray] = []
-    for map_index in range(n_maps):
-        layout = layout_for(condition, map_index)
-        accepted: base.Sample | None = None
-        for attempt in range(max_attempts):
+    layout_rounds = PLANNING_LAYOUT_ROUNDS if condition.planning else 1
+    for layout_round in range(layout_rounds):
+        layout_map_index = map_index + layout_round * n_maps
+        layout = layout_for(condition, layout_map_index)
+        if layout_round:
+            rejections["layout_reroll_after_exhaustion"] += 1
+        for local_attempt in range(max_attempts):
             salt = (
                 0
-                if attempt < v9.SHARED_DIG_ATTEMPTS
-                else 1 + (attempt - v9.SHARED_DIG_ATTEMPTS) // v9.REROLL_DUMP_ATTEMPTS
+                if local_attempt < v9.SHARED_DIG_ATTEMPTS
+                else 1
+                + (local_attempt - v9.SHARED_DIG_ATTEMPTS)
+                // v9.REROLL_DUMP_ATTEMPTS
             )
             dig, dig_meta = bank.get(condition.dig_bank_level, map_index, salt)
             if dig is None:
                 rejections["dig_reroll_exhausted"] += 1
                 continue
-            if salt and any(
-                np.array_equal(dig, other) for other in accepted_digs
-            ):
-                rejections["condition_dig_exact_duplicate"] += 1
-                continue
+            attempt = layout_round * max_attempts + local_attempt
             seed = int(
                 np.random.SeedSequence(
-                    [SEED_BASE, condition_index, map_index, attempt]
+                    (
+                        [SEED_BASE, condition_index, map_index, local_attempt]
+                        if layout_round == 0
+                        else [
+                            SEED_BASE,
+                            condition_index,
+                            map_index,
+                            layout_round,
+                            local_attempt,
+                        ]
+                    )
                 ).generate_state(1)[0]
             )
             sample, reason = make_map(
@@ -1873,20 +1904,82 @@ def generate_condition(condition, dataset, condition_index, bank, n_maps, max_at
                     "seed_base": SEED_BASE,
                     "condition_index": condition_index,
                     "shared_dig": int(salt == 0),
+                    "layout_reroll_round": layout_round,
+                    "layout_map_index": layout_map_index,
                     "dig_sha256": sha256_mask(sample.target < 0),
                     "occupancy_sha256": sha256_mask(sample.occupancy),
                 }
             )
-            accepted = sample
-            accepted_digs.append(sample.target < 0)
-            break
+            return map_index, sample, rejections
+    return map_index, None, rejections
+
+
+_WORKER_BANK = None
+
+
+def _initialize_map_worker(bank):
+    global _WORKER_BANK
+    _WORKER_BANK = bank
+
+
+def _generate_map_worker(task):
+    if _WORKER_BANK is None:
+        raise RuntimeError("map worker started without a dig bank")
+    return _generate_map(*task[:3], _WORKER_BANK, *task[3:])
+
+
+def generate_condition(
+    condition,
+    dataset,
+    condition_index,
+    bank,
+    n_maps,
+    max_attempts,
+    executor=None,
+):
+    tasks = [
+        (condition, dataset, condition_index, n_maps, max_attempts, map_index)
+        for map_index in range(n_maps)
+    ]
+    if executor is None:
+        results = (
+            _generate_map(*task[:3], bank, *task[3:])
+            for task in tasks
+        )
+    else:
+        results = executor.map(_generate_map_worker, tasks)
+
+    samples: list[base.Sample] = []
+    rejections: Counter[str] = Counter()
+    unsatisfied: list[str] = []
+    accepted_digs: dict[str, int] = {}
+    for map_index, accepted, map_rejections in results:
+        rejections.update(map_rejections)
         if accepted is None:
+            total_attempts = max_attempts * (
+                PLANNING_LAYOUT_ROUNDS if condition.planning else 1
+            )
             unsatisfied.append(
                 f"{condition.id} map {map_index}: no accepted sample in "
-                f"{max_attempts} attempts; rejections={dict(rejections)}"
+                f"{total_attempts} attempts; rejections={dict(map_rejections)}"
             )
             continue
+        dig_identity = sha256_mask(accepted.target < 0)
+        if dig_identity in accepted_digs:
+            rejections["condition_dig_exact_duplicate"] += 1
+            unsatisfied.append(
+                f"{condition.id} map {map_index}: exact dig duplicate of map "
+                f"{accepted_digs[dig_identity]}"
+            )
+            continue
+        accepted_digs[dig_identity] = map_index
         samples.append(accepted)
+        completed = map_index + 1
+        if executor is not None and (completed % 40 == 0 or completed == n_maps):
+            print(
+                f"  {condition.id}: evaluated {completed}/{n_maps} map slots",
+                flush=True,
+            )
     return samples, rejections, unsatisfied
 
 
@@ -2141,6 +2234,9 @@ def write_readme(output: Path, dataset, counts: dict[str, int]) -> None:
         "  conditions regenerate; `ADJACENT_PROXIMITY_DEFERRED` is empty.",
         "- **axis-contract v2** — trench headings use a 15° lattice and every",
         "  target cell has exact generated owner bits in `trench_axis_owners`.",
+        "- Planning slots deterministically re-draw the layout at most four times",
+        "  only after the preceding layout exhausts every candidate; all admission",
+        "  gates stay unchanged.",
         "",
         "The 6 conditions listed as carried in `generation_summary.json` are",
         "byte-for-byte from the v5-main bank; the per-array identity is asserted",
@@ -2192,6 +2288,12 @@ def parse_args() -> argparse.Namespace:
         help="number of maps to generate per selected condition",
     )
     parser.add_argument("--max-attempts", type=int, default=v9.MAX_ATTEMPTS)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="spawned CPU workers for independent map slots",
+    )
     parser.add_argument("--only", default="")
     parser.add_argument(
         "--review-examples",
@@ -2376,6 +2478,16 @@ def main() -> None:
         raise SystemExit("--maps must be in [1, 999]")
     if args.max_attempts <= 0:
         raise SystemExit("--max-attempts must be positive")
+    if args.workers <= 0:
+        raise SystemExit("--workers must be positive")
+    if args.workers > 1:
+        for variable in (
+            "OPENBLAS_NUM_THREADS",
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        ):
+            os.environ[variable] = "1"
     if args.review_examples < 0:
         raise SystemExit("--review-examples must be nonnegative")
     source = args.source_foundations.resolve()
@@ -2426,34 +2538,56 @@ def main() -> None:
     rejection_totals: Counter[str] = Counter()
     unsatisfied: list[str] = []
 
-    for condition_index, condition in enumerate(dataset.conditions):
-        if selected and condition.id not in selected:
-            continue
-        n_maps = args.maps
-        samples, rejections, failures = generate_condition(
-            condition, dataset, condition_index, bank, n_maps, args.max_attempts
+    executor = None
+    if args.workers > 1:
+        executor = ProcessPoolExecutor(
+            max_workers=args.workers,
+            mp_context=multiprocessing.get_context("spawn"),
+            initializer=_initialize_map_worker,
+            initargs=(bank,),
         )
-        rejection_totals.update(rejections)
-        unsatisfied.extend(failures)
-        condition_rows = write_condition(
-            output,
-            dataset,
-            condition,
-            condition_index,
-            samples,
-            args.review_examples,
-        )
-        rows.extend(condition_rows)
-        counts[condition.id] = len(condition_rows)
-        rerolled = sum(1 for row in condition_rows if not row["shared_dig"])
-        print(
-            f"[{condition_index + 1:02d}/{len(dataset.conditions)}] {condition.id}: "
-            f"{len(condition_rows)}/{n_maps} maps"
-            + (f" rerolled={rerolled}" if rerolled else "")
-            + (f" UNSATISFIED={len(failures)}" if failures else "")
-            + (f" rejections={dict(rejections.most_common(4))}" if rejections else ""),
-            flush=True,
-        )
+    try:
+        for condition_index, condition in enumerate(dataset.conditions):
+            if selected and condition.id not in selected:
+                continue
+            n_maps = args.maps
+            samples, rejections, failures = generate_condition(
+                condition,
+                dataset,
+                condition_index,
+                bank,
+                n_maps,
+                args.max_attempts,
+                executor,
+            )
+            rejection_totals.update(rejections)
+            unsatisfied.extend(failures)
+            condition_rows = write_condition(
+                output,
+                dataset,
+                condition,
+                condition_index,
+                samples,
+                args.review_examples,
+            )
+            rows.extend(condition_rows)
+            counts[condition.id] = len(condition_rows)
+            rerolled = sum(1 for row in condition_rows if not row["shared_dig"])
+            print(
+                f"[{condition_index + 1:02d}/{len(dataset.conditions)}] "
+                f"{condition.id}: {len(condition_rows)}/{n_maps} maps"
+                + (f" rerolled={rerolled}" if rerolled else "")
+                + (f" UNSATISFIED={len(failures)}" if failures else "")
+                + (
+                    f" rejections={dict(rejections.most_common(4))}"
+                    if rejections
+                    else ""
+                ),
+                flush=True,
+            )
+    finally:
+        if executor is not None:
+            executor.shutdown()
 
     v9.write_terra_metadata(output, rows)
 
@@ -2524,6 +2658,10 @@ def main() -> None:
         "source_foundations": str(source),
         "source_foundations_images": source_count,
         "source_foundations_sha256": source_sha256,
+        "workers": args.workers,
+        "worker_library_threads": 1 if args.workers > 1 else None,
+        "max_attempts_per_layout": args.max_attempts,
+        "planning_layout_rounds": PLANNING_LAYOUT_ROUNDS,
         "novelty_rules": {
             "dig_bank": "reject_exact_dig_duplicates",
             "full_bank": "reject_exact_full_scenario_duplicates",

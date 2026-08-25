@@ -239,6 +239,91 @@ def test_exact_full_scenario_duplicate_fails_loudly():
         )
 
 
+def test_planning_map_rerolls_layout_after_attempt_exhaustion(monkeypatch):
+    condition = SimpleNamespace(
+        id="planning-condition",
+        planning=True,
+        dig_bank_level="straight",
+    )
+    dataset = SimpleNamespace()
+    layout_indices = []
+    salts = []
+
+    class Bank:
+        def get(self, _level, _map_index, salt):
+            salts.append(salt)
+            return _dig(), {}
+
+    def fake_layout(_condition, map_index):
+        layout_indices.append(map_index)
+        return map_index
+
+    def fake_make_map(_condition, _dataset, _dig, _meta, layout, _rng):
+        if layout == 0:
+            return None, "plan_start_side_contract"
+        return _sample(), ""
+
+    monkeypatch.setattr(generator, "layout_for", fake_layout)
+    monkeypatch.setattr(generator, "make_map", fake_make_map)
+
+    samples, rejections, failures = generator.generate_condition(
+        condition,
+        dataset,
+        condition_index=3,
+        bank=Bank(),
+        n_maps=1,
+        max_attempts=2,
+    )
+
+    assert failures == []
+    assert len(samples) == 1
+    assert layout_indices == [0, 1]
+    assert salts == [0, 0, 0]
+    assert rejections == {
+        "plan_start_side_contract": 2,
+        "layout_reroll_after_exhaustion": 1,
+    }
+    assert samples[0].metadata["attempt"] == 2
+    assert samples[0].metadata["layout_reroll_round"] == 1
+    assert samples[0].metadata["layout_map_index"] == 1
+
+
+def test_planning_map_layout_search_is_bounded(monkeypatch):
+    condition = SimpleNamespace(
+        id="planning-condition",
+        planning=True,
+        dig_bank_level="straight",
+    )
+
+    class Bank:
+        def get(self, _level, _map_index, _salt):
+            return _dig(), {}
+
+    monkeypatch.setattr(generator, "layout_for", lambda _condition, index: index)
+    monkeypatch.setattr(
+        generator,
+        "make_map",
+        lambda *_args: (None, "plan_start_side_contract"),
+    )
+
+    samples, rejections, failures = generator.generate_condition(
+        condition,
+        SimpleNamespace(),
+        condition_index=3,
+        bank=Bank(),
+        n_maps=1,
+        max_attempts=2,
+    )
+
+    assert samples == []
+    assert rejections == {
+        "plan_start_side_contract": 10,
+        "layout_reroll_after_exhaustion": 4,
+    }
+    assert len(failures) == 1
+    assert "no accepted sample in 10 attempts" in failures[0]
+
+
 def test_current_taxonomy_document_matches_executable_registry():
     repository = Path(__file__).resolve().parents[2]
     document = repository / taxonomy.SPEC_PATH

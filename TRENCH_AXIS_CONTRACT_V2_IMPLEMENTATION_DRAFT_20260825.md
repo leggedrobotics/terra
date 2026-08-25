@@ -98,6 +98,27 @@ spoil placement, rehandling, dump capacity, or episode horizon. Those are the
 strategic capabilities the policy must learn and the rollout benchmark must
 measure.
 
+## Planning-map admission
+
+The 320-map production pass exposed a separate generator issue in the two U10
+road conditions. A map slot held its one-sided layout fixed across every
+candidate. Four `trn-net3-side1-road` slots exhausted all 320 candidates even
+though different layouts satisfy every unchanged gate; their best fixed-layout
+`plan_delta` values were only 0.074–0.099 against the required 0.10. One
+`trn-net4-side1-road` slot needed a different layout before candidates could
+satisfy the unchanged turn-dump and station-coverage gates.
+
+Planning slots now make at most four deterministic layout re-draws, each only
+after the preceding layout exhausts all 320 candidates. Candidate geometry,
+road, capacity, lane, turn-dump, and planning thresholds are unchanged. The
+four exhausted net3 slots pass the same planning gate after the first re-draw
+(`plan_delta` 0.107–0.214); the net4 slot passes on re-draw four with
+`plan_delta=0.11224`, strict turn-dump coverage `1.0`, and station-dump
+fraction `0.70182`. Independent map slots may run in spawned CPU workers, but
+results are consumed in map-index order. Scenario arrays and manifests must be
+byte-identical between serial and parallel generation; the generation receipt
+records the requested worker count.
+
 ## Data path
 
 The owner sidecar travels through the one supported path:
@@ -119,7 +140,8 @@ not silently upgraded at runtime.
 The implementation removes the runtime membership reconstruction, the finite
 metadata enrichment/validation path, the partial-reset alignment auditor, the
 pilot-specific finite-bank pooler, and the old whole-task feasibility search.
-The replacement auditor reports only A0–A2.
+The replacement auditor reports only A0–A2. Map generation keeps one direct
+entry point; `--workers` changes execution speed, not generated content.
 
 ## Verification gates
 
