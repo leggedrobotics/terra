@@ -326,6 +326,49 @@ def test_planning_map_layout_search_is_bounded(monkeypatch):
     assert "no accepted sample in 10 attempts" in failures[0]
 
 
+def test_parallel_collection_replays_only_a_duplicate_rerolled_dig(monkeypatch):
+    condition = SimpleNamespace(
+        id="condition",
+        planning=False,
+        family="foundation",
+        dig_bank_level="slab",
+    )
+    first = _dig()
+    second = _dig(extra_cell=(9, 8))
+
+    class Bank:
+        def get(self, _level, map_index, salt):
+            if map_index == 0 or salt == 1:
+                return first, {}
+            return second, {}
+
+    def fake_make_map(_condition, _dataset, dig, _meta, _layout, _rng):
+        sample = _sample()
+        sample.target = np.where(dig, -1, 0).astype(np.int8)
+        return sample, ""
+
+    monkeypatch.setattr(generator.v9, "SHARED_DIG_ATTEMPTS", 0)
+    monkeypatch.setattr(generator.v9, "REROLL_DUMP_ATTEMPTS", 1)
+    monkeypatch.setattr(generator, "layout_for", lambda *_args: None)
+    monkeypatch.setattr(generator, "make_map", fake_make_map)
+
+    samples, rejections, failures = generator.generate_condition(
+        condition,
+        SimpleNamespace(),
+        condition_index=0,
+        bank=Bank(),
+        n_maps=2,
+        max_attempts=2,
+    )
+
+    assert failures == []
+    assert len(samples) == 2
+    assert not np.array_equal(samples[0].target, samples[1].target)
+    assert [sample.metadata["shared_dig"] for sample in samples] == [0, 0]
+    assert [sample.metadata["attempt"] for sample in samples] == [0, 1]
+    assert rejections == {"condition_dig_exact_duplicate": 1}
+
+
 def test_current_taxonomy_document_matches_executable_registry():
     repository = Path(__file__).resolve().parents[2]
     document = repository / taxonomy.SPEC_PATH

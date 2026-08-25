@@ -118,9 +118,12 @@ gate after the first re-draw (`plan_delta` 0.107–0.214); the net4 slot passes 
 re-draw four with `plan_delta=0.11224`, strict turn-dump coverage `1.0`, and
 station-dump fraction `0.70182`. Both straight variants pass on re-draw one at
 attempt 120. Independent map slots may run in spawned CPU workers, but results
-are consumed in map-index order. Scenario arrays and manifests must be
-byte-identical between serial and parallel generation; the generation receipt
-records the requested worker count.
+are consumed in map-index order. If a rerolled dig duplicates an earlier
+accepted dig in that condition, only that slot is replayed in the parent with
+the accumulated exact identities so the old serial continue-search semantics
+are preserved. Scenario arrays and manifests must be byte-identical between
+serial and parallel generation; the generation receipt records the requested
+worker count.
 
 ## Data path
 

@@ -1852,7 +1852,14 @@ def make_map(condition, dataset, dig, dig_meta, layout, rng):
 
 
 def _generate_map(
-    condition, dataset, condition_index, bank, n_maps, max_attempts, map_index
+    condition,
+    dataset,
+    condition_index,
+    bank,
+    n_maps,
+    max_attempts,
+    map_index,
+    forbidden_dig_identities=frozenset(),
 ):
     """Generate one deterministic map, with bounded constrained-layout fallbacks."""
     rejections: Counter[str] = Counter()
@@ -1877,6 +1884,10 @@ def _generate_map(
             dig, dig_meta = bank.get(condition.dig_bank_level, map_index, salt)
             if dig is None:
                 rejections["dig_reroll_exhausted"] += 1
+                continue
+            dig_identity = sha256_mask(dig)
+            if salt and dig_identity in forbidden_dig_identities:
+                rejections["condition_dig_exact_duplicate"] += 1
                 continue
             attempt = layout_round * max_attempts + local_attempt
             seed = int(
@@ -1958,6 +1969,22 @@ def generate_condition(
     unsatisfied: list[str] = []
     accepted_digs: dict[str, int] = {}
     for map_index, accepted, map_rejections in results:
+        if accepted is not None:
+            dig_identity = sha256_mask(accepted.target < 0)
+            if (
+                not accepted.metadata["shared_dig"]
+                and dig_identity in accepted_digs
+            ):
+                map_index, accepted, map_rejections = _generate_map(
+                    condition,
+                    dataset,
+                    condition_index,
+                    bank,
+                    n_maps,
+                    max_attempts,
+                    map_index,
+                    frozenset(accepted_digs),
+                )
         rejections.update(map_rejections)
         if accepted is None:
             total_attempts = max_attempts * (
@@ -1971,13 +1998,6 @@ def generate_condition(
             )
             continue
         dig_identity = sha256_mask(accepted.target < 0)
-        if dig_identity in accepted_digs:
-            rejections["condition_dig_exact_duplicate"] += 1
-            unsatisfied.append(
-                f"{condition.id} map {map_index}: exact dig duplicate of map "
-                f"{accepted_digs[dig_identity]}"
-            )
-            continue
         accepted_digs[dig_identity] = map_index
         samples.append(accepted)
         completed = map_index + 1
