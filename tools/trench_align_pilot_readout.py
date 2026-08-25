@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import gzip
 import json
 from pathlib import Path
 
@@ -222,16 +223,33 @@ def condition_table(per_map: list[dict]) -> dict:
 
 
 def wandb_series(path: Path, keys: list[str]) -> dict:
+    """Read a W&B history JSONL, plain or gzipped.
+
+    The full histories are ~18 MB each uncompressed and ~3.4 MB gzipped, so the
+    receipts keep the ``.gz``.
+    """
+    if path.suffix == ".gz":
+        with gzip.open(path, "rt") as handle:
+            text = handle.read()
+    else:
+        text = path.read_text()
     series: dict[str, dict[int, float]] = {}
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         row = json.loads(line)
         update = row.get("train/update")
         if update is None:
             continue
         for key in keys:
             value = row.get(key)
-            if value is not None:
-                series.setdefault(key, {})[int(update)] = float(value)
+            if value is None:
+                continue
+            # W&B serialises NaN as the *string* "NaN", which float() happily
+            # turns into a real NaN and then silently poisons every mean and
+            # least-squares fit downstream.  Drop them here, once.
+            value = float(value)
+            if not np.isfinite(value):
+                continue
+            series.setdefault(key, {})[int(update)] = value
     return series
 
 
@@ -256,6 +274,24 @@ def main() -> None:
     parser.add_argument("--probe-t1-late", type=Path, required=True)
     parser.add_argument("--wandb-c0", type=Path, required=True)
     parser.add_argument("--wandb-t1", type=Path, required=True)
+    parser.add_argument(
+        "--matched-update",
+        type=int,
+        default=10000,
+        help=(
+            "the matched update both arms are read at; W&B rows are taken at "
+            "the nearest logged point and the trajectory windows run to it"
+        ),
+    )
+    parser.add_argument(
+        "--prior-readout",
+        type=Path,
+        help=(
+            "an earlier readout join for the same pilot.  Supplying it makes "
+            "the pilot stop rule's 'two successive scheduled evaluations' "
+            "clause evaluable: clause 1 is then read at both points."
+        ),
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -434,7 +470,7 @@ def main() -> None:
     for key in keys:
         row = {}
         for arm in ("c0", "t1"):
-            row[arm] = nearest(histories[arm], key, 10000)
+            row[arm] = nearest(histories[arm], key, args.matched_update)
         if row["c0"] and row["t1"]:
             row["delta_t1_minus_c0"] = row["t1"]["value"] - row["c0"]["value"]
         matched[key] = row
@@ -458,8 +494,79 @@ def main() -> None:
                     if any(low <= update < low + 1000 for update in points)
                     else None
                 )
-                for low in range(0, 11000, 1000)
+                for low in range(0, args.matched_update + 1000, 1000)
             ]
+
+    # Plateau instrument.  A metric is "still improving" only if its trend over
+    # the tail is large next to the run-to-run noise it sits in, so the slope is
+    # reported alongside the residual scatter it was fitted through and the
+    # change it projects over the updates that remain to the target.
+    tail_low = max(0, args.matched_update - 20000)
+    tail_trend = {}
+    for key in keys:
+        tail_trend[key] = {}
+        for arm in ("c0", "t1"):
+            points = sorted(
+                (update, value)
+                for update, value in histories[arm].get(key, {}).items()
+                if update >= tail_low
+            )
+            if len(points) < 10:
+                tail_trend[key][arm] = None
+                continue
+            updates = np.asarray([point[0] for point in points], dtype=float)
+            values = np.asarray([point[1] for point in points], dtype=float)
+            fit = np.polyfit(updates, values, 1)
+            residual = values - np.polyval(fit, updates)
+            tail_trend[key][arm] = {
+                "window_low": tail_low,
+                "window_high": int(updates.max()),
+                "points": len(points),
+                "slope_per_10k_updates": float(fit[0] * 10000.0),
+                "residual_sd": float(residual.std()),
+                "value_at_window_low": float(values[:20].mean()),
+                "value_at_window_high": float(values[-20:].mean()),
+            }
+
+    # Admissible exact completion is the endpoint the pilot reports; raw is
+    # reported alongside it and never alone, because the two arms do not
+    # produce the same kind of output.
+    admissible_fraction = {
+        arm: deterrence[f"{arm}_late"]["admissible_completion"][
+            "admissible_exact_fraction"
+        ]
+        for arm in ("c0", "t1")
+    }
+    delta_pp_admissible = 100.0 * (
+        admissible_fraction["t1"] - admissible_fraction["c0"]
+    )
+
+    prior = None
+    if args.prior_readout is not None:
+        prior_record = json.loads(args.prior_readout.read_text())
+        prior_deterrence = prior_record["deterrence_test"]["by_arm_checkpoint"]
+        prior_admissible = {
+            arm: prior_deterrence[f"{arm}_late"]["admissible_completion"][
+                "admissible_exact_fraction"
+            ]
+            for arm in ("c0", "t1")
+        }
+        prior = {
+            "source": str(args.prior_readout),
+            "c0_update": prior_record["panels"]["c0"]["checkpoint_update"],
+            "t1_update": prior_record["panels"]["t1"]["checkpoint_update"],
+            "delta_pp_raw": prior_record["primary_endpoint"]["delta_t1_minus_c0_pp"],
+            "delta_pp_admissible": 100.0
+            * (prior_admissible["t1"] - prior_admissible["c0"]),
+            "c0_exact_fraction_raw": prior_record["primary_endpoint"]["c0"][
+                "exact_fraction"
+            ],
+            "t1_exact_fraction_raw": prior_record["primary_endpoint"]["t1"][
+                "exact_fraction"
+            ],
+            "c0_exact_fraction_admissible": prior_admissible["c0"],
+            "t1_exact_fraction_admissible": prior_admissible["t1"],
+        }
 
     code_stop_flags = {
         name: block["code_stop"]
@@ -485,6 +592,16 @@ def main() -> None:
             "c0": endpoint["c0"],
             "t1": endpoint["t1"],
             "delta_t1_minus_c0_pp": delta_pp,
+            "admissible": {
+                "definition": (
+                    "completed exactly AND used only pose-valid fresh trench "
+                    "digs; probe-derived, so it is read against the probe's own "
+                    "episode outcomes rather than the panel's"
+                ),
+                "c0_exact_fraction": admissible_fraction["c0"],
+                "t1_exact_fraction": admissible_fraction["t1"],
+                "delta_t1_minus_c0_pp": delta_pp_admissible,
+            },
         },
         "panels": primary,
         "mechanism_endpoint": mechanism,
@@ -515,8 +632,9 @@ def main() -> None:
             "t1_first": t1_first_applicable,
             "t1_late": t1_late_applicable,
         },
-        "wandb_matched_u10000": matched,
+        f"wandb_matched_u{args.matched_update}": matched,
         "wandb_trajectory_1k_windows": trajectory,
+        "wandb_tail_trend": tail_trend,
         "rule_outcomes": {
             "mechanism_check": {
                 "statement": (
@@ -554,12 +672,33 @@ def main() -> None:
                     "successive scheduled evaluations AND the invalid-DO "
                     "attempt fraction has not halved"
                 ),
-                "scheduled_evaluations_available": 1,
+                "scheduled_evaluations_available": 1 + int(prior is not None),
                 "t1_more_than_5pp_below_c0_at_this_point": bool(
                     delta_pp < -STOP_RULE_PP
                 ),
                 "delta_pp": delta_pp,
-                "second_successive_evaluation_available": False,
+                "second_successive_evaluation_available": prior is not None,
+                "prior_evaluation": prior,
+                "clause_1_raw_at_both_evaluations": (
+                    None
+                    if prior is None
+                    else bool(
+                        prior["delta_pp_raw"] < -STOP_RULE_PP
+                        and delta_pp < -STOP_RULE_PP
+                    )
+                ),
+                "clause_1_admissible_at_both_evaluations": (
+                    None
+                    if prior is None or prior["delta_pp_admissible"] is None
+                    else bool(
+                        prior["delta_pp_admissible"] < -STOP_RULE_PP
+                        and delta_pp_admissible < -STOP_RULE_PP
+                    )
+                ),
+                "delta_pp_admissible": delta_pp_admissible,
+                # Clause 2 is ill-posed for this pilot: the u500 baseline it
+                # divides by is exactly 0.0000, and that zero is competence
+                # (T1 refused every misaligned opportunity), not incompetence.
                 "conjunction_evaluable": False,
             },
             "code_stop": {
