@@ -232,7 +232,9 @@ def _choose_shared_split(
 
 
 def assign_splits(
-    rows: list[dict[str, str]], requested: dict[str, int]
+    rows: list[dict[str, str]],
+    requested: dict[str, int],
+    fixed_source_splits: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Assign each declared pair slot to one split or fail without a solver."""
     if set(requested) != set(SPLITS):
@@ -242,13 +244,22 @@ def assign_splits(
     requested_total = sum(requested.values())
     if requested_total == 0:
         raise ValueError("at least one split count must be positive")
+    fixed_source_splits = fixed_source_splits or {}
+    invalid_fixed_splits = sorted(set(fixed_source_splits.values()) - set(SPLITS))
+    if invalid_fixed_splits:
+        raise ValueError(
+            "fixed source assignments name invalid splits: "
+            + ", ".join(invalid_fixed_splits)
+        )
 
     group_conditions: dict[str, set[str]] = defaultdict(set)
+    group_sources: dict[str, set[str]] = defaultdict(set)
     condition_groups: dict[str, set[str]] = defaultdict(set)
     for row in rows:
         group_id = row["split_group_id"]
         condition = row["condition_id"]
         group_conditions[group_id].add(condition)
+        group_sources[group_id].add(row["source_group_id"])
         condition_groups[condition].add(group_id)
 
     for condition, groups in sorted(condition_groups.items()):
@@ -262,10 +273,33 @@ def assign_splits(
         condition: dict(requested) for condition in sorted(condition_groups)
     }
     assignments: dict[str, str] = {}
+    for group_id in sorted(group_conditions):
+        forced = {
+            fixed_source_splits[source]
+            for source in group_sources[group_id]
+            if source in fixed_source_splits
+        }
+        if len(forced) > 1:
+            raise RuntimeError(
+                f"fixed source assignments conflict within pair slot {group_id}: "
+                + ", ".join(sorted(forced))
+            )
+        if not forced:
+            continue
+        split = next(iter(forced))
+        assignments[group_id] = split
+        for condition in group_conditions[group_id]:
+            remaining[condition][split] -= 1
+            if remaining[condition][split] < 0:
+                raise RuntimeError(
+                    f"fixed source assignments exceed the {split} quota for "
+                    f"{condition}"
+                )
+
     shared_groups = [
         group_id
         for group_id, conditions in group_conditions.items()
-        if len(conditions) > 1
+        if len(conditions) > 1 and group_id not in assignments
     ]
     shared_groups.sort(
         key=lambda group_id: (
@@ -288,7 +322,7 @@ def assign_splits(
         private_groups = [
             group_id
             for group_id in condition_groups[condition]
-            if len(group_conditions[group_id]) == 1
+            if len(group_conditions[group_id]) == 1 and group_id not in assignments
         ]
         private_groups.sort(key=lambda value: (_stable_hash(value), value))
         needed = sum(remaining[condition].values())
@@ -330,12 +364,13 @@ def materialize_splits(
     dataset_path: Path,
     output_path: Path,
     requested: dict[str, int],
+    fixed_source_splits: dict[str, str] | None = None,
 ) -> dict:
     rows, input_fieldnames = _read_rows(manifest_path)
     _validate_arrays(rows, dataset_path)
     input_scenarios = len(rows)
     rows, pair_audit = select_complete_pair_slots(rows, sum(requested.values()))
-    assignments = assign_splits(rows, requested)
+    assignments = assign_splits(rows, requested, fixed_source_splits)
 
     if output_path.exists():
         raise FileExistsError(f"output already exists: {output_path}")
@@ -433,6 +468,20 @@ def materialize_splits(
             manifest_path.read_bytes()
         ).hexdigest(),
     }
+    if fixed_source_splits:
+        matched_sources = sorted(
+            {row["source_group_id"] for row in rows} & set(fixed_source_splits)
+        )
+        summary["fixed_source_assignments"] = {
+            "requested_sources": len(fixed_source_splits),
+            "matched_sources": len(matched_sources),
+            "sha256": hashlib.sha256(
+                "".join(
+                    f"{source},{fixed_source_splits[source]}\n"
+                    for source in matched_sources
+                ).encode("utf-8")
+            ).hexdigest(),
+        }
     (output_path / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )

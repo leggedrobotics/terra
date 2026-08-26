@@ -143,6 +143,59 @@ def test_materialization_is_deterministic(tmp_path):
         ).read_bytes()
 
 
+def test_preserves_fixed_source_split_assignments(tmp_path):
+    rows = [
+        _row("fnd-a", 0, "source:shared-0", "slab:0"),
+        _row("fnd-b", 1, "source:shared-0", "slab:0"),
+        _row("fnd-a", 2, "source:shared-1", "slab:1"),
+        _row("fnd-b", 3, "source:shared-1", "slab:1"),
+    ]
+    manifest, dataset = _write_bank(tmp_path / "input", rows)
+
+    summary = splits.materialize_splits(
+        manifest,
+        dataset,
+        tmp_path / "output",
+        {
+            "train": 1,
+            "promotion": 1,
+            "development": 0,
+            "sealed": 0,
+        },
+        {"source:shared-0": "promotion"},
+    )
+
+    materialized = _read_rows(tmp_path / "output" / "manifest.csv")
+    assert {
+        row["split"]
+        for row in materialized
+        if row["source_group_id"] == "source:shared-0"
+    } == {"promotion"}
+    assert summary["fixed_source_assignments"]["matched_sources"] == 1
+
+
+def test_fails_if_fixed_sources_conflict_within_pair_slot(tmp_path):
+    rows = [
+        _row("fnd-a", 0, "source:a", "slab:0"),
+        _row("fnd-b", 1, "source:b", "slab:0"),
+    ]
+    manifest, dataset = _write_bank(tmp_path / "input", rows)
+
+    with pytest.raises(RuntimeError, match="conflict within pair slot"):
+        splits.materialize_splits(
+            manifest,
+            dataset,
+            tmp_path / "output",
+            {
+                "train": 1,
+                "promotion": 0,
+                "development": 0,
+                "sealed": 0,
+            },
+            {"source:a": "train", "source:b": "sealed"},
+        )
+
+
 def test_fails_when_exact_per_condition_counts_are_unavailable(tmp_path):
     rows = [_row("condition", 0, "source:0")]
     manifest, dataset = _write_bank(tmp_path / "input", rows)
