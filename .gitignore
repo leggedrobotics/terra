@@ -20,4 +20,4 @@ data/*
 *.pkl
 *.png
 !assets/*
-*.gif
+*.gifterra/tests/__pycache__/

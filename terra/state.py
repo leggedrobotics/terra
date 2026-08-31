@@ -2479,9 +2479,38 @@ class State(NamedTuple):
                     action_map_2d.shape
                 )
 
-                # Now apply soil mechanics using the saved cone mask (always enabled)
+                # Now apply soil mechanics using the saved cone mask (always enabled).
+                # Contain the relaxation to the declared dump zone plus the dig
+                # target itself.  The dump path already passes a containment mask
+                # and gates its commit on ``stayed_contained``; this path did not,
+                # so an uncontained collapse could push a unit of an existing pile
+                # onto neutral ground outside ``target > 0``.  Positive soil there
+                # is unrecoverable for ``exact_visible_dump_v1``: ``dump_purity``
+                # and ``dump_volume_completion`` can then never reach 1.0 and the
+                # episode cannot complete even after 100% of the trench is dug.
+                # Containment is the declared dump zone only.  Allowing the trench
+                # itself (target < 0) is not enough: a unit that collapses into a
+                # not-yet-dug trench cell becomes positive soil at a cell outside
+                # ``target > 0``, which is both illegal spoil and a pile that then
+                # trips ``ambiguity_mask_dig_movesoil`` and blocks digging there.
+                # Measured on the 176-slot trench panel: uncontained 31 units of
+                # illegal spoil from 10 events, all of them digs (loaded_before
+                # == 0), and 11 purity-short failures; contained to
+                # dump-zone-or-trench 23 units and 3 purity-short failures.  The
+                # dump-zone-only figure quoted by construction below is an
+                # argument, not yet a measurement: containment is a hard
+                # guarantee because _expand_mask_for_soil_mechanics ends with
+                # logical_and(expanded_valid, containment_mask) and collapse_body
+                # uses that same mask for both `mask` and `neighbor_mask`, so
+                # both the source and the destination of a relocated unit must
+                # lie inside the containment set.  The confirming 176-slot run
+                # did not complete; re-run it before quoting a number here.
                 cone_mask_2d = dig_mask.reshape(action_map_2d.shape)
-                final_map = self._apply_local_soil_mechanics(new_map_global_coords, cone_mask_2d)
+                final_map = self._apply_local_soil_mechanics(
+                    new_map_global_coords,
+                    cone_mask_2d,
+                    containment_mask=self._accepted_dump_mask(),
+                )
 
                 # CONSERVATION FIX: Calculate the actual amount removed after soil mechanics
                 original_total = jnp.sum(fam)

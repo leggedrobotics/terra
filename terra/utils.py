@@ -210,9 +210,19 @@ def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Arr
     # Test cell centers against the continuous polygon. Integer grid points are
     # cell corners and shrink an axis-aligned W x H footprint to (W-1) x (H-1)
     # when strict half-plane tests are used.
+    #
+    # Indexing contract: Terra's flattened map order is k = x * height + y (see
+    # State._map_to_flattened_global_coords and _get_current_pos_vector_idx), so
+    # a map array element [i, j] carries x = i and y = j -- x is the ROW and y is
+    # the COLUMN, and pos_base is [x, y] = [row, col].  The mask returned here is
+    # consumed as an ordinary map array (State._is_valid_move indexes it against
+    # the traversability map, TraversabilityMaskWrapper stamps the agent into an
+    # observation channel with it), so it must be built in the same [x, y] order.
+    # Building it as [y, x] transposes the footprint about the map diagonal,
+    # which tests occupancy at the mirror position (row, col) -> (col, row).
     xs = jnp.arange(map_width, dtype=jnp.float32) + jnp.float32(0.5)
     ys = jnp.arange(map_height, dtype=jnp.float32) + jnp.float32(0.5)
-    X, Y = jnp.meshgrid(xs, ys, indexing="xy")
+    X, Y = jnp.meshgrid(xs, ys, indexing="ij")
     pts = jnp.stack([X, Y], axis=-1).reshape((-1, 2))  # (N,2) as [x,y]
     edges = jnp.roll(corners, -1, axis=0) - corners  # (4,2)
     diff = pts[None, :, :] - corners[:, None, :]  # (4, N, 2)
@@ -221,5 +231,5 @@ def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Arr
         edges_exp[..., 0] * diff[..., 1] - edges_exp[..., 1] * diff[..., 0]
     )  # (4, N)
     inside = jnp.logical_or(jnp.all(cross > 0, axis=0), jnp.all(cross < 0, axis=0))
-    mask = inside.reshape((map_height, map_width))
+    mask = inside.reshape((map_width, map_height))
     return mask
