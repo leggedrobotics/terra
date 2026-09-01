@@ -29,6 +29,8 @@ KEYS
     R               reset this slot to its frozen full start
     1 2 3 4 5       jump to recommended slots 296 / 405 / 294 / 455 / 458
     [ / ]           previous / next slot index
+    P               suggest the shortest key sequence to a legal dig station,
+                    or say that none exists within its search depth
     O               overlays on/off        G   geometry (bands, axes) on/off
     T               tint remaining trench cells by owning section on/off
     H               help / legend           ESC / window close   quit
@@ -98,6 +100,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -613,6 +616,7 @@ def make_probe(batch_cfg):
             "standoff_min_m": standoff_min,
             "standoff_max_m": standoff_max,
             "tile_size": jnp.float32(state.env_cfg.tile_size),
+            "move_tiles": jnp.float32(state.env_cfg.agent.move_tiles),
             "gate_enabled": jnp.bool_(state.env_cfg.enforce_trench_dig_alignment),
             # cone content
             "cone": cone2d,
@@ -711,6 +715,29 @@ def make_probe(batch_cfg):
 
 def to_host(tree):
     return jax.tree_util.tree_map(lambda value: np.asarray(value)[0], tree)
+
+
+def make_footprint_fn():
+    """Terra's rasterised chassis footprint alone (compiles in well under a second).
+
+    The full probe owns this too, but it takes ~55 s to trace; this tiny version
+    lets the startup splash draw the real, rotated machine instead of a blob.
+    """
+    from terra.state import _as_2d_map
+    from terra.utils import compute_polygon_mask
+
+    def one(state):
+        cur = state._get_current_agent_state()
+        height, width = _as_2d_map(state.world.action_map.map).shape
+        corners = state._get_agent_corners(
+            cur.pos_base,
+            base_orientation=cur.angle_base,
+            agent_width=state.env_cfg.agent.width,
+            agent_height=state.env_cfg.agent.height,
+        )
+        return compute_polygon_mask(corners, width, height)
+
+    return jax.jit(lambda state: jax.vmap(one)(state))
 
 
 # --------------------------------------------------------------------------- #
@@ -902,9 +929,27 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
             lines.append("  fix: rotate the base (LEFT/RIGHT) until yaw <= 15deg")
         elif band_fail and not yaw_fail:
             code, head = "out_of_band", "perpendicular standoff outside 3.5-7.0 m"
+            tile = float(probe["tile_size"])
+            for axis in band_fail:
+                standoff = float(probe["standoffs_m"][axis])
+                low = float(probe["standoff_min_m"])
+                high = float(probe["standoff_max_m"])
+                if standoff < low:
+                    need, sense = low - standoff, "further from"
+                else:
+                    need, sense = standoff - high, "closer to"
+                lines.append(
+                    f"  section {axis}: move at least {need:.2f} m "
+                    f"({need / tile:.1f} cells) {sense} the axis"
+                )
             lines.append(
-                "  fix: drive along the dotted band edges of that section's colour "
-                "(FORWARD/BACKWARD) until the standoff is inside the band"
+                "  NOTE: your chassis is already parallel, so FORWARD/BACKWARD "
+                "slides ALONG the section and leaves the standoff unchanged."
+            )
+            lines.append(
+                "  fix: rotate the base off-axis (LEFT/RIGHT), drive one or two "
+                "5-cell moves to cross into the dotted band, then rotate back "
+                "onto the axis -- 12 headings x 5 cells, so it takes a detour"
             )
         else:
             code, head = "misaligned_and_out_of_band", "yaw AND standoff both fail"
@@ -1194,35 +1239,36 @@ class View:
              self.map_origin[1] - self.border_px * self.zoom),
         )
 
-    def splash(self, lines: list[str], env=None, timestep=None) -> None:
+    def draw_machine(self, footprint, row: float, col: float, base: int, cabin: int) -> None:
+        """The machine: Terra's own footprint cells plus chassis and cabin arrows."""
+        self._cells(footprint, (0, 43, 91), 0)
+        self._cells(footprint, (255, 255, 255), 1)
+        centre = self.point(row, col)
+        angle = 2.0 * np.pi * base / ANGLES_BASE
+        arm = 2.0 * np.pi * (base + cabin) / ANGLES_BASE
+        head = self.point(row - 4.5 * np.sin(angle), col + 4.5 * np.cos(angle))
+        pg.draw.line(self.window, (255, 255, 255), centre, head, 3)
+        pg.draw.circle(self.window, (255, 255, 255), head, 4)
+        arm_tip = self.point(row - 6.5 * np.sin(arm), col + 6.5 * np.cos(arm))
+        pg.draw.line(self.window, (255, 120, 120), centre, arm_tip, 2)
+        pg.draw.circle(self.window, (255, 120, 120), arm_tip, 3)
+
+    def splash(
+        self, lines: list[str], env=None, timestep=None, footprint=None
+    ) -> None:
         """Paint the window during startup so it is never a black rectangle."""
         self.window.fill((24, 24, 28))
         if env is not None and timestep is not None:
             self._blit_map(env, timestep)
-            # Terra's sprite is suppressed and the probe (which owns the exact
-            # footprint) has not compiled yet, so mark the machine directly from
-            # the observation so the startup frame is not a map with no machine.
             state = np.asarray(timestep.observation["agent_states"])[0][0]
-            row, col = float(state[0]), float(state[1])
-            angle = 2.0 * np.pi * float(state[2]) / ANGLES_BASE
-            arm = 2.0 * np.pi * (float(state[2]) + float(state[3])) / ANGLES_BASE
-            centre = self.point(row, col)
-            pg.draw.circle(self.window, (0, 43, 91), centre, int(2.5 * self.cell))
-            pg.draw.circle(self.window, (255, 255, 255), centre, int(2.5 * self.cell), 2)
-            pg.draw.line(
-                self.window,
-                (255, 255, 255),
-                centre,
-                self.point(row - 4.5 * np.sin(angle), col + 4.5 * np.cos(angle)),
-                3,
-            )
-            pg.draw.line(
-                self.window,
-                (255, 120, 120),
-                centre,
-                self.point(row - 6.5 * np.sin(arm), col + 6.5 * np.cos(arm)),
-                2,
-            )
+            if footprint is not None:
+                self.draw_machine(
+                    footprint,
+                    float(state[0]),
+                    float(state[1]),
+                    int(state[2]),
+                    int(state[3]),
+                )
         self.draw_panel(lines)
         pg.event.pump()
         pg.display.flip()
@@ -1326,22 +1372,13 @@ class View:
 
         # the machine, drawn from Terra's own rasterised footprint so it sits on
         # the same lattice as the cells the env actually tests
-        self._cells(probe["footprint"], (0, 43, 91), 0)
-        self._cells(probe["footprint"], (255, 255, 255), 1)
-        row = float(probe["pos_base"][0])
-        col = float(probe["pos_base"][1])
-        centre = self.point(row, col)
-        angle = float(probe["base_angle_rad"])
-        head = self.point(row - 4.5 * np.sin(angle), col + 4.5 * np.cos(angle))
-        pg.draw.line(self.window, (255, 255, 255), centre, head, 3)
-        pg.draw.circle(self.window, (255, 255, 255), head, 4)
-        # where the cabin (and therefore the workspace cone) points
-        arm = 2.0 * np.pi * (
-            int(probe["angle_base"]) + int(probe["angle_cabin"])
-        ) / ANGLES_BASE
-        arm_tip = self.point(row - 6.5 * np.sin(arm), col + 6.5 * np.cos(arm))
-        pg.draw.line(self.window, (255, 120, 120), centre, arm_tip, 2)
-        pg.draw.circle(self.window, (255, 120, 120), arm_tip, 3)
+        self.draw_machine(
+            probe["footprint"],
+            float(probe["pos_base"][0]),
+            float(probe["pos_base"][1]),
+            int(probe["angle_base"]),
+            int(probe["angle_cabin"]),
+        )
 
     def _draw_band(self, probe: dict, axis: int, color) -> None:
         """Draw the 3.5 m / 7.0 m standoff band edges for one section."""
@@ -1491,6 +1528,7 @@ SCRIPT_KEYS = {
     "G": pg.K_g,
     "T": pg.K_t,
     "H": pg.K_h,
+    "P": pg.K_p,
     "ESC": pg.K_ESCAPE,
     "1": pg.K_1,
     "2": pg.K_2,
@@ -1516,6 +1554,8 @@ class Session:
         print(f"env built in {time.time() - t0:.1f}s", flush=True)
         self.loader = SlotLoader(self.env, self.env_cfgs, args.bank, args.panel, self.rows)
         self.probe_fn = make_probe(self.batch_cfg)
+        self.footprint_fn = make_footprint_fn()
+        self.footprint = None
         self.action_type = self.batch_cfg.action_type
         self.step_keys = jax.vmap(jax.random.PRNGKey)(jnp.asarray([0], dtype=jnp.uint32))
 
@@ -1528,6 +1568,7 @@ class Session:
         self.seq = 0
         self.timing = {"step": 0.0, "probe": 0.0, "render": 0.0}
         self.dirty = True
+        self.suggestion: list[str] = []
         self.last_event = "reset"
         self.verdict = ""
         self.reason_code = ""
@@ -1546,6 +1587,52 @@ class Session:
         self.load_slot(self.slot, warm=True)
 
     # ---------------- environment plumbing ---------------- #
+    def compile_with_splash(self, work, header: list[str], what: str, expected: float):
+        """Run one blocking JAX trace off-thread, keeping the window alive.
+
+        A ~100 s trace on the main thread stops answering the window manager's
+        ping, so X marks the window "not responding" and greys it out.  XLA
+        releases the GIL for the compile itself, so the main thread can keep
+        pumping events, repainting the splash and counting seconds.
+        """
+        result: dict = {}
+        finished = threading.Event()
+
+        def _run():
+            try:
+                result["value"] = work()
+            except BaseException as error:  # surfaced on the main thread below
+                result["error"] = error
+            finally:
+                finished.set()
+
+        worker = threading.Thread(target=_run, name=f"compile-{what}", daemon=True)
+        started = time.time()
+        worker.start()
+        while not finished.wait(0.15):
+            elapsed = time.time() - started
+            self.view.splash(
+                header
+                + [
+                    f"compiling {what} ...  {elapsed:5.0f} s elapsed "
+                    f"(expect ~{expected:.0f} s on CPU, once per launch)",
+                    "",
+                    "This is JAX tracing Terra, not a hang.  The window stays",
+                    "live; keys you press now are queued and will all fire when",
+                    "play starts -- press R afterwards to reset the slot.",
+                ],
+                self.env,
+                self.timestep,
+                self.footprint,
+            )
+            for event in pg.event.get(pg.QUIT):
+                if event.type == pg.QUIT:
+                    raise SystemExit("closed during startup compile")
+        worker.join()
+        if "error" in result:
+            raise result["error"]
+        return result.get("value")
+
     def load_slot(self, slot: int, warm: bool = False) -> None:
         t0 = time.time()
         self.slot = slot
@@ -1566,41 +1653,38 @@ class Session:
         self.reward = 0.0
         self.done = False
         self.last_event = f"load_slot_{slot}"
-        self.view.splash(
-            header
-            + [
-                "map loaded.  Compiling the gate/refusal probe (~55 s on CPU,",
-                "one trace per launch).  The window stays up; keys are queued.",
-            ],
-            self.env,
-            self.timestep,
-        )
         t1 = time.time()
-        self.refresh(assert_replica=True)
         if warm:
-            print(f"probe compiled in {time.time() - t1:.1f}s", flush=True)
-            self.view.splash(
-                header
-                + [
-                    "probe ready.  Compiling Terra's env step (~105 s on CPU,",
-                    "one trace per launch).  Play starts as soon as it lands.",
-                ],
-                self.env,
-                self.timestep,
+            self.compile_with_splash(
+                lambda: self.refresh(assert_replica=True),
+                header,
+                "the gate/refusal probe",
+                55.0,
             )
+            print(f"probe compiled in {time.time() - t1:.1f}s", flush=True)
+        else:
+            self.refresh(assert_replica=True)
+        if warm:
             # Terra's reset and step timesteps do not share one pytree/aval
             # signature (the reset info block is a zero stand-in), so the step
             # is traced twice: once from a reset state and once from a stepped
             # state.  Pay both here instead of during play.
             action = self.wrap(self.action_type.do_nothing())
+            warm_timestep = self.timestep
             for index in range(2):
                 t2 = time.time()
-                warm_timestep = self.env.step_no_reset(
-                    self.timestep if index == 0 else warm_timestep,
-                    action,
-                    self.step_keys,
+
+                def _step(source=warm_timestep):
+                    stepped = self.env.step_no_reset(source, action, self.step_keys)
+                    jax.block_until_ready(stepped.reward)
+                    return stepped
+
+                warm_timestep = self.compile_with_splash(
+                    _step,
+                    header,
+                    "Terra's env step",
+                    105.0,
                 )
-                jax.block_until_ready(warm_timestep.reward)
                 print(
                     f"step variant {index} compiled in {time.time() - t2:.1f}s",
                     flush=True,
@@ -1613,6 +1697,144 @@ class Session:
 
     def wrap(self, action):
         return action.new(action.action[None].repeat(1, 0))
+
+    # ---------------- station suggester (P) ---------------- #
+    SUGGEST_KEYS = (
+        ("RIGHT", "CLOCK"),
+        ("LEFT", "ANTICLOCK"),
+        ("UP", "FORWARD"),
+        ("DOWN", "BACKWARD"),
+        ("E", "CABIN_CLOCK"),
+        ("Q", "CABIN_ANTICLOCK"),
+    )
+
+    def pose_valid_geometry(self, row: float, col: float, base: int) -> bool:
+        """Necessary condition for an admitted DO: some section is pose-valid.
+
+        Pure host geometry on the same axis records and tolerances the gate
+        uses, so it can prune the search without an env probe.  It ignores
+        whether that section actually has fresh cells in the cone, which is why
+        every surviving candidate is still confirmed with the real probe.
+        """
+        axes = np.asarray(self.probe["axes"])
+        tile = float(self.probe["tile_size"])
+        tolerance = float(self.probe["yaw_tolerance_rad"])
+        low = float(self.probe["standoff_min_m"])
+        high = float(self.probe["standoff_max_m"])
+        angle = 2.0 * np.pi * base / ANGLES_BASE
+        forward = np.array([-np.sin(angle), np.cos(angle)])
+        for axis in range(int(self.probe["trench_type"])):
+            a, b, c = [float(v) for v in axes[axis]]
+            denominator = float(np.hypot(a, b)) or 1.0
+            tangent = np.array([-a, b]) / denominator
+            yaw = float(np.arccos(np.clip(abs(tangent @ forward), 0.0, 1.0)))
+            standoff = abs(a * col + b * row + c) / denominator * tile
+            if yaw <= tolerance and low <= standoff <= high:
+                return True
+        return False
+
+    def suggest_station(self, depth: int = 5, budget: int = 1500) -> list[str]:
+        """Breadth-first search for the shortest key sequence to an admitted DO.
+
+        Uses the real env step for every candidate and the real probe for every
+        candidate that passes the geometric pre-filter, then rewinds, so what it
+        reports is what the keys will actually do.  It deliberately reports the
+        sequence instead of jumping there: the point is to show the shape of the
+        manoeuvre (rotate off-axis, drive, rotate back onto it), which is the
+        thing the 12-heading / 5-cell lattice makes expensive.
+        """
+        t0 = time.time()
+        baseline = (self.timestep, self.reward, self.done)
+        frontier = [([], self.timestep)]
+        seen = {state_digest(self.timestep)}
+        stepped = 0
+        probed = 0
+        best = None
+        exhausted = False
+        for _ in range(depth):
+            if best is not None or exhausted:
+                break
+            next_frontier = []
+            for sequence, timestep in frontier:
+                for token, action_name in self.SUGGEST_KEYS:
+                    if stepped >= budget:
+                        exhausted = True
+                        break
+                    action = getattr(self.action_type, action_name.lower())()
+                    candidate = self.env.step_no_reset(
+                        timestep, self.wrap(action), self.step_keys
+                    )
+                    stepped += 1
+                    digest = state_digest(candidate)
+                    if digest in seen:
+                        continue
+                    seen.add(digest)
+                    path = sequence + [token]
+                    next_frontier.append((path, candidate))
+                    agent = np.asarray(candidate.observation["agent_states"])[0][0]
+                    if not self.pose_valid_geometry(
+                        float(agent[0]), float(agent[1]), int(agent[2])
+                    ):
+                        continue
+                    probe = to_host(self.probe_fn(candidate.state))
+                    probed += 1
+                    if explain_do(probe)[1] == "admitted":
+                        best = (path, probe)
+                        break
+                if best is not None or exhausted:
+                    break
+            frontier = next_frontier
+        self.timestep, self.reward, self.done = baseline
+        self.refresh(assert_replica=True)
+        elapsed = time.time() - t0
+        if best is None:
+            lines = [
+                "P: NO admitted DO found -- "
+                + (
+                    f"search budget of {budget} poses ran out (INCONCLUSIVE: the "
+                    f"{depth}-action set was not fully explored)"
+                    if exhausted
+                    else f"no legal station exists within {depth} actions (search "
+                    "completed)"
+                ),
+                f"  ({stepped} poses stepped, {probed} fully probed, {elapsed:.1f}s)",
+            ]
+            if probed == 0:
+                lines.append(
+                    "  Not one pose reached even passed the geometric necessary"
+                )
+                lines.append(
+                    "  condition (some section yaw-aligned AND in band), so the"
+                )
+                lines.append(
+                    "  machine has to relocate before it can dig at all."
+                )
+            else:
+                lines.append(
+                    "  Poses were pose-valid but no cone held admissible fresh"
+                )
+                lines.append(
+                    "  cells -- aim (cabin) as well as position is the problem."
+                )
+        else:
+            path, probe = best
+            lines = [
+                f"P: shortest legal station = {len(path)} actions: "
+                + " ".join(path),
+                f"  on arrival DO removes {int(probe['do_cells_removed'])} fresh "
+                f"trench cells ({int(probe['do_volume_removed'])}u), load becomes "
+                f"{int(probe['do_loaded_after'])}u",
+            ]
+            for axis in range(int(probe["trench_type"])):
+                if bool(probe["axis_pose_valid"][axis]):
+                    lines.append("  " + section_line(probe, axis).strip())
+            lines.append(
+                f"  ({stepped} poses stepped, {probed} probed, {elapsed:.1f}s; the "
+                "shape is rotate off-axis, drive, rotate back -- no lateral move)"
+            )
+        for line in lines:
+            print(line, flush=True)
+        return lines
 
     def refresh(self, assert_replica: bool = True) -> None:
         t0 = time.time()
@@ -1637,6 +1859,7 @@ class Session:
         self.reward = float(np.asarray(self.timestep.reward).reshape(-1)[0])
         self.done = bool(np.asarray(self.timestep.done).reshape(-1)[0])
         self.last_event = name
+        self.suggestion = []
         self.refresh(assert_replica=True)
         self.log(name)
 
@@ -1699,6 +1922,9 @@ class Session:
         lines.append("-" * 74)
         lines.append(self.verdict)
         lines.extend(self.detail)
+        if self.suggestion:
+            lines.append("-" * 74)
+            lines.extend(self.suggestion)
         lines.append("-" * 74)
         lines.append("legal actions:")
         lines.extend(move_lines(self.probe))
@@ -1803,6 +2029,9 @@ class Session:
             self.apply(KEY_ACTIONS[key][0])
         elif key in (pg.K_u, pg.K_BACKSPACE):
             self.undo()
+        elif key == pg.K_p:
+            self.suggestion = self.suggest_station()
+            self.last_event = "suggest_station"
         elif key == pg.K_r:
             self.load_slot(self.slot)
         elif key == pg.K_o:
