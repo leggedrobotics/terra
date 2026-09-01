@@ -18,6 +18,40 @@ CPU; both are traced exactly once and the window is interactive after that,
 at roughly 5 ms per keypress (4 ms step + 5 ms probe + ~25 ms redraw).  A
 persistent JAX compilation cache is kept under ``data/jax_compile_cache``.
 
+GATE SEMANTICS -- READ THIS FIRST
+---------------------------------
+The tool plays **v2** by default (Terra's shipped default,
+``EnvConfig.trench_dig_standoff_enforced=False``): a section is pose-valid when
+the chassis yaw is parallel to its axis within 15 deg, and *that is the whole
+positional clause*.  Working distance is the dig cone's job and is tested
+RADIALLY, machine -> cell, over 3.64-6.50 m within +-30 deg of the cabin.  So
+standing ON the trench line, aligned, and digging the cells ahead of you is
+legal -- the dig-ahead-retreat pose.
+
+``--gate-v1`` restores the retired v1 semantics, which ALSO required the
+PERPENDICULAR base-centre-to-axis distance to lie in a 3.5-7.0 m lateral band.
+That band forbids the on-axis pose (perpendicular ~ 0 < 3.5) for a reason no
+physics supports; it is kept selectable only so the C0/T1 pilot replays as
+trained.  See ``TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md``.
+
+Under v2 the band edges are still drawn, dim and captioned "v1 band
+(diagnostic only)", and the status line reports the SIGNED perpendicular offset
+in metres as information.  ``out_of_band`` is not a refusal this tool can emit
+under v2.  Under ``--gate-v1`` the band is drawn in the section colour, the
+status line says "standoff band ENFORCED", and the old refusal explanations
+come back.
+
+``--replica-sweep N`` synthesizes N poses on the loaded slot (pose, load and a
+partially dug action map overwritten directly, half of them on or near a
+section axis) and asserts the per-section replica, Terra's
+``_get_fresh_trench_dig_alignment_details`` and the observation-facing export
+agree on every one, then exits.  Run it under BOTH flags after touching the
+gate: the per-frame assertion only samples the pose space, this covers it.
+
+``--script`` runs are hermetic: while a script is playing the window ignores
+every keystroke it did not post itself, so a shared X display (:1 has a human
+on it) cannot inject actions into a verification run.
+
 KEYS
 ----
     UP / W          FORWARD                 DOWN / S      BACKWARD
@@ -43,16 +77,37 @@ OVERLAYS
                             occupancy the move legality check actually tests)
     white arrow             chassis forward direction (the yaw the gate tests)
     salmon arrow            cabin/arm direction (where the cone points)
-    yellow outline          the workspace cone Terra would act in
+    yellow outline          the workspace cone Terra would act in: cells whose
+                            RADIAL distance from the base centre is 3.64-6.50 m
+                            within +-30 deg of the cabin heading.  Under v2 this
+                            IS the working-distance test, and the only one.  Do
+                            NOT confuse it with the retired v1 band's 3.5-7.0 m,
+                            a PERPENDICULAR distance from the base centre to a
+                            section LINE, drawn as the dotted edges.  The two
+                            numbers are similar on purpose -- the v1 lane band
+                            was sized to this reach annulus -- but they
+                            constrain different things, and conflating them is
+                            the bug v2 fixes.
     bright green fill       cells this DO would actually remove (admitted)
+    teal fill               remaining trench cells that ARE diggable from the
+                            current base pose by swinging the cabin only (union
+                            over all 12 cabin angles of Terra's own admitted
+                            set, so a cabin angle whose DO is vetoed does not
+                            count)
+    dark red X              remaining trench cells NOT diggable from this base
+                            pose at any cabin angle -- these need a MOVE
     orange hatch            fresh trench cells the cone selects but the gate
                             refuses (the cells that cost you the macro action)
     section colours         yellow / cyan / magenta / orange = finite trench
       (axis 0..3)           sections.  Solid line = pose-valid from here,
                             dashed = not pose-valid.  Small arrow = axis
-                            direction.  Same colour, thin dotted lines = the
-                            3.5 m and 7.0 m standoff band edges for that
-                            section: stand between them.
+                            direction.  Thin dotted lines = the 3.5 m / 7.0 m
+                            band edges: under ``--gate-v1`` they are drawn in
+                            the section colour and you must stand between them;
+                            under v2 (default) they are DIM GREY and captioned
+                            "v1 band (diagnostic only)" -- they constrain
+                            nothing, and the pose you want is usually the one
+                            they would have forbidden.
     colour tint (T)         remaining (undug) trench cells, tinted by owning
                             section; a white dot marks a junction cell owned
                             by more than one section
@@ -133,7 +188,14 @@ SECTION_COLORS = ((255, 235, 59), (0, 229, 255), (255, 64, 255), (0, 255, 180))
 # --------------------------------------------------------------------------- #
 # environment construction                                                    #
 # --------------------------------------------------------------------------- #
-def build_env(bank: str, panel: str, slot_count: int, gate: bool, rendering: bool):
+def build_env(
+    bank: str,
+    panel: str,
+    slot_count: int,
+    gate: bool,
+    rendering: bool,
+    gate_v1: bool = False,
+):
     """Build the T1-arm environment for one frozen evaluation panel."""
     os.environ["DATASET_PATH"] = bank
     os.environ["DATASET_SIZE"] = str(slot_count)
@@ -168,6 +230,9 @@ def build_env(bank: str, panel: str, slot_count: int, gate: bool, rendering: boo
             agent_types=(0,),
             action_types=(0,),
             enforce_trench_dig_alignment=bool(gate),
+            # False (default) = v2, yaw-parallel only.  True = the retired v1
+            # lateral standoff band, kept so the C0/T1 pilot stays replayable.
+            trench_dig_standoff_enforced=bool(gate_v1),
             reward_stage=int(RewardStage.REWARD_V2),
         )
     )(jnp.arange(1))
@@ -310,6 +375,14 @@ def make_probe(batch_cfg):
             terra_standoff_norm,
             admitted,
         ) = state._get_fresh_trench_dig_alignment_details(selected)
+        # The exact entry point TerraEnv._state_to_obs_dict uses for the three
+        # policy-facing scalars.  Carried separately so a replica sweep that
+        # never steps the env can still assert against the observation contract.
+        (
+            export_valid,
+            export_yaw_norm,
+            export_standoff_norm,
+        ) = state._get_fresh_trench_dig_alignment()
 
         cone2d = cone.reshape(shape)
         selected2d = selected.reshape(shape)
@@ -382,10 +455,19 @@ def make_probe(batch_cfg):
         signed_cells = (
             axes[:, 0] * base_col + axes[:, 1] * base_row + axes[:, 2]
         ) / line_denominators
-        standoffs_m = jnp.abs(signed_cells) * state.env_cfg.tile_size
+        signed_standoffs_m = signed_cells * state.env_cfg.tile_size
+        standoffs_m = jnp.abs(signed_standoffs_m)
         standoff_min = jnp.float32(state.env_cfg.trench_dig_standoff_min_m)
         standoff_max = jnp.float32(state.env_cfg.trench_dig_standoff_max_m)
-        standoff_errors_normalized = jnp.clip(
+        # Gate semantics selector.  v1 (True) adds the lateral standoff band to
+        # the yaw-parallel clause and exports a band-relative error; v2 (False,
+        # the shipped default) is yaw-parallel only and exports the SIGNED
+        # perpendicular offset in units of the dig cone's own outer reach.  See
+        # State._get_fresh_trench_dig_alignment_details.
+        standoff_enforced = jnp.bool_(state.env_cfg.trench_dig_standoff_enforced)
+        _, cone_r_max = state._dig_cone_radius_bounds()
+        cone_r_max = jnp.float32(cone_r_max)
+        band_errors_normalized = jnp.clip(
             jnp.where(
                 standoffs_m < standoff_min,
                 (standoffs_m - standoff_min) / jnp.maximum(standoff_min, 1e-6),
@@ -398,15 +480,28 @@ def make_probe(batch_cfg):
             -1.0,
             1.0,
         )
+        offset_errors_normalized = jnp.clip(
+            signed_standoffs_m / jnp.maximum(cone_r_max, jnp.float32(1e-6)),
+            -1.0,
+            1.0,
+        )
+        standoff_errors_normalized = jnp.where(
+            standoff_enforced, band_errors_normalized, offset_errors_normalized
+        )
         yaw_ok = yaw_errors <= jnp.float32(state.env_cfg.trench_dig_yaw_tolerance_rad)
         band_ok = jnp.logical_and(
             standoffs_m >= standoff_min, standoffs_m <= standoff_max
         )
+        # Under v2 the band is not a validity clause at all -- working distance
+        # is the dig cone's job, radially, machine -> cell.
+        standoff_clause = jnp.logical_or(~standoff_enforced, band_ok)
         axis_pose_valid = jnp.logical_and(
             valid_axes,
             jnp.logical_and(
                 finite_metadata,
-                jnp.logical_and(axis_has_fresh, jnp.logical_and(yaw_ok, band_ok)),
+                jnp.logical_and(
+                    axis_has_fresh, jnp.logical_and(yaw_ok, standoff_clause)
+                ),
             ),
         )
         fresh_cell_pose_valid = jnp.any(
@@ -509,6 +604,41 @@ def make_probe(batch_cfg):
             dump_for_cabin, jnp.arange(ANGLES_BASE, dtype=jnp.int32)
         )
 
+        # ---- what is diggable from THIS base pose, cabin free ------------- #
+        # For each of the 12 cabin angles, run Terra's own cone + dig selection
+        # + gate and keep the fresh trench cells that the macro DO would
+        # actually remove.  An angle whose DO is refused contributes nothing
+        # (admitted is all-zero), so the union is exactly "cells I can dig from
+        # here without moving the chassis", and remaining cells outside it are
+        # "you must relocate".
+        def diggable_for_cabin(angle):
+            probe_state = state._set_current_agent_state(
+                cur._replace(
+                    angle_cabin=jnp.asarray([angle], dtype=cur.angle_cabin.dtype)
+                )
+            )
+            cone_angle = probe_state._build_dig_dump_cone()
+            selected_angle = probe_state._mask_out_wrong_dig_tiles(cone_angle)
+            _, _, _, admitted_angle = (
+                probe_state._get_fresh_trench_dig_alignment_details(selected_angle)
+            )
+            effective = jnp.where(
+                jnp.bool_(state.env_cfg.enforce_trench_dig_alignment),
+                admitted_angle,
+                selected_angle,
+            ).reshape(shape)
+            return jnp.logical_and(
+                effective, jnp.logical_and(target < 0, action == 0)
+            )
+
+        diggable_by_cabin = jax.lax.map(
+            diggable_for_cabin, jnp.arange(ANGLES_BASE, dtype=jnp.int32)
+        )
+        diggable_now = jnp.any(diggable_by_cabin, axis=0)
+        diggable_counts = jnp.sum(
+            diggable_by_cabin.astype(jnp.int32), axis=(1, 2)
+        )
+
         # ---- movement legality and the reason a move is refused ----------- #
         traversability = state._build_traversability_mask(
             _as_2d_map(state.world.action_map.map),
@@ -590,6 +720,9 @@ def make_probe(batch_cfg):
             "terra_valid": terra_valid,
             "terra_yaw_norm": terra_yaw_norm,
             "terra_standoff_norm": terra_standoff_norm,
+            "export_valid": export_valid,
+            "export_yaw_norm": export_yaw_norm,
+            "export_standoff_norm": export_standoff_norm,
             "admitted_cells": jnp.sum(admitted.astype(jnp.int32)),
             # gate: replica
             "replica_valid": replica_valid,
@@ -603,9 +736,11 @@ def make_probe(batch_cfg):
             "axis_pose_valid": axis_pose_valid,
             "yaw_errors_rad": yaw_errors,
             "standoffs_m": standoffs_m,
+            "signed_standoffs_m": signed_standoffs_m,
             "signed_cells": signed_cells,
             "yaw_ok": yaw_ok,
             "band_ok": band_ok,
+            "standoff_clause": standoff_clause,
             "axes": axes,
             "segments": records[:, 3:7],
             "half_widths": records[:, 7],
@@ -615,6 +750,8 @@ def make_probe(batch_cfg):
             "yaw_tolerance_rad": jnp.float32(state.env_cfg.trench_dig_yaw_tolerance_rad),
             "standoff_min_m": standoff_min,
             "standoff_max_m": standoff_max,
+            "standoff_enforced": standoff_enforced,
+            "cone_r_max_m": cone_r_max,
             "tile_size": jnp.float32(state.env_cfg.tile_size),
             "move_tiles": jnp.float32(state.env_cfg.agent.move_tiles),
             "gate_enabled": jnp.bool_(state.env_cfg.enforce_trench_dig_alignment),
@@ -669,6 +806,8 @@ def make_probe(batch_cfg):
             "dump_wrong": jnp.sum(dump_wrong.astype(jnp.int32)),
             "dump_lacks_space": dump_lacks_space,
             "dump_by_cabin": dump_by_cabin,
+            "diggable_now": diggable_now,
+            "diggable_counts": diggable_counts,
             "accepted_mask": accepted,
             "accepted_free": jnp.sum(
                 jnp.logical_and(accepted, dumpability).astype(jnp.int32)
@@ -717,6 +856,45 @@ def to_host(tree):
     return jax.tree_util.tree_map(lambda value: np.asarray(value)[0], tree)
 
 
+def make_synth_fn():
+    """Pose/map surgery on a loaded slot, for the replica sweep.
+
+    The gate depends on the pose, the target map, the action map, the section
+    metadata and the load; nothing else.  Overwriting exactly those leaves lets
+    the sweep visit poses no key sequence can reach (mid-episode partial digs at
+    arbitrary standoffs and headings), which is the point: the replica has to
+    match Terra everywhere in the pose space, not only along a played path.
+    """
+
+    def one(state, row, col, bh, cb, loaded, action_map):
+        cur = state._get_current_agent_state()
+        cur = cur._replace(
+            pos_base=jnp.stack([row, col]).astype(cur.pos_base.dtype),
+            angle_base=jnp.reshape(bh, (1,)).astype(cur.angle_base.dtype),
+            angle_cabin=jnp.reshape(cb, (1,)).astype(cur.angle_cabin.dtype),
+            loaded=jnp.reshape(loaded, (1,)).astype(cur.loaded.dtype),
+        )
+        moved = state._set_current_agent_state(cur)
+        new_map = jnp.reshape(
+            action_map, moved.world.action_map.map.shape
+        ).astype(moved.world.action_map.map.dtype)
+        return moved._replace(
+            world=moved.world._replace(
+                action_map=moved.world.action_map._replace(map=new_map),
+                dumpability_mask=moved.world.dumpability_mask._replace(
+                    map=jnp.reshape(
+                        moved._get_new_dumpability_mask(_as_2d_map(new_map)),
+                        moved.world.dumpability_mask.map.shape,
+                    ).astype(jnp.bool_)
+                ),
+            )
+        )
+
+    from terra.state import _as_2d_map
+
+    return jax.jit(jax.vmap(one))
+
+
 def make_footprint_fn():
     """Terra's rasterised chassis footprint alone (compiles in well under a second).
 
@@ -755,6 +933,17 @@ def check_replica(probe: dict, observation) -> None:
         b = float(probe[f"replica_{name}"])
         if abs(a - b) > 1e-5:
             problems.append(f"{name}: terra={a:.7f} replica={b:.7f}")
+    # The observation contract itself, reachable without stepping the env: this
+    # is the exact triple TerraEnv._state_to_obs_dict publishes.
+    if bool(probe["export_valid"]) != terra_valid:
+        problems.append(
+            f"export valid={bool(probe['export_valid'])} != details {terra_valid}"
+        )
+    for name in ("yaw_norm", "standoff_norm"):
+        a = float(probe[f"terra_{name}"])
+        b = float(probe[f"export_{name}"])
+        if abs(a - b) > 1e-5:
+            problems.append(f"export {name}: details={a:.7f} export={b:.7f}")
     if observation is not None:
         obs_valid = bool(np.asarray(observation["fresh_trench_dig_alignment_valid"])[0] > 0.5)
         obs_yaw = float(np.asarray(observation["fresh_trench_dig_yaw_error"])[0])
@@ -787,23 +976,29 @@ def check_replica(probe: dict, observation) -> None:
 
 
 def section_line(probe: dict, axis: int) -> str:
-    a, b, _ = [float(v) for v in probe["axes"][axis]]
     yaw_deg = np.degrees(float(probe["yaw_errors_rad"][axis]))
     tol_deg = np.degrees(float(probe["yaw_tolerance_rad"]))
     standoff = float(probe["standoffs_m"][axis])
+    signed = float(probe["signed_standoffs_m"][axis])
     lo = float(probe["standoff_min_m"])
     hi = float(probe["standoff_max_m"])
     yaw_flag = "OK  " if bool(probe["yaw_ok"][axis]) else "FAIL"
-    if bool(probe["band_ok"][axis]):
-        band_flag = "OK  "
-    elif standoff < lo:
-        band_flag = "TOO CLOSE"
-    else:
-        band_flag = "TOO FAR"
     verdict = "POSE-VALID" if bool(probe["axis_pose_valid"][axis]) else "not usable"
+    if bool(probe["standoff_enforced"]):
+        if bool(probe["band_ok"][axis]):
+            band_flag = "OK  "
+        elif standoff < lo:
+            band_flag = "TOO CLOSE"
+        else:
+            band_flag = "TOO FAR"
+        middle = f"standoff {standoff:5.2f}m [{lo:.1f},{hi:.1f}] {band_flag}"
+    else:
+        # v2: the perpendicular offset is information, not a clause.  Reach is
+        # the dig cone's business and it is tested radially, cell by cell.
+        middle = f"offset {signed:+6.2f}m (not a clause; reach = cone)"
     return (
         f"  S{axis} yaw {yaw_deg:5.1f}/{tol_deg:.1f}deg {yaw_flag} | "
-        f"standoff {standoff:5.2f}m [{lo:.1f},{hi:.1f}] {band_flag} | {verdict} | "
+        f"{middle} | {verdict} | "
         f"fresh-in-cone {int(probe['per_axis_fresh'][axis])}"
     )
 
@@ -876,6 +1071,10 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
     ):
         fresh = int(probe["fresh_trench"].sum())
         blocked = int(probe["blocked_cells"].sum())
+        # v1 = the retired lateral standoff band is a validity clause;
+        # v2 (default) = yaw-parallel only, so "out of band" is not a refusal
+        # reason this tool can ever report.
+        enforced = bool(probe["standoff_enforced"])
         pose_valid_any = bool(np.asarray(probe["axis_pose_valid"]).any())
         exclusive = np.asarray(probe["per_axis_exclusive_blocked"])
         offenders = [
@@ -897,8 +1096,10 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
                 why = []
                 if not bool(probe["yaw_ok"][axis]):
                     why.append(f"misaligned by {yaw_deg:.1f}deg")
-                if not bool(probe["band_ok"][axis]):
+                if enforced and not bool(probe["band_ok"][axis]):
                     why.append(f"standoff {standoff:.2f}m out of band")
+                if not why:
+                    why.append("not pose-valid (section metadata)")
                 lines.append(
                     f"  JUNCTION VETO: the cone contains {int(exclusive[axis])} cells "
                     f"owned EXCLUSIVELY by section {axis}, which is "
@@ -919,14 +1120,31 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
             for axis in range(n_axes)
             if bool(probe["axis_has_fresh"][axis]) and not bool(probe["yaw_ok"][axis])
         ]
-        band_fail = [
-            axis
-            for axis in range(n_axes)
-            if bool(probe["axis_has_fresh"][axis]) and not bool(probe["band_ok"][axis])
-        ]
+        band_fail = (
+            [
+                axis
+                for axis in range(n_axes)
+                if bool(probe["axis_has_fresh"][axis])
+                and not bool(probe["band_ok"][axis])
+            ]
+            if enforced
+            else []
+        )
         if yaw_fail and not band_fail:
             code, head = "misaligned", "chassis yaw outside 15deg of every owning section"
             lines.append("  fix: rotate the base (LEFT/RIGHT) until yaw <= 15deg")
+        elif not yaw_fail and not band_fail:
+            # Under v2 the only positional clause is yaw, so reaching here means
+            # a section carries fresh cells yet is not pose-valid for a reason
+            # that is not geometric: declared-metadata fail-closed.
+            code, head = (
+                "pose_invalid_metadata",
+                "no owning section is pose-valid, and it is not the yaw",
+            )
+            lines.append(
+                "  every owning section is yaw-parallel, so the refusal comes from "
+                "the declared section metadata (fail-closed), not the pose"
+            )
         elif band_fail and not yaw_fail:
             code, head = "out_of_band", "perpendicular standoff outside 3.5-7.0 m"
             tile = float(probe["tile_size"])
@@ -1097,6 +1315,32 @@ def status_lines(probe: dict, slot: int, row: dict, reward: float, done: bool) -
         f"{int(probe['dump_physical'])}  cabin angles with legal dump "
         f"{int((by_cabin[:, 0] > 0).sum())}/12  absolute completion {absolute:.3f}",
     ]
+    n_axes = int(probe["trench_type"])
+    offsets = " ".join(
+        f"S{axis} {float(probe['signed_standoffs_m'][axis]):+.2f}m"
+        for axis in range(n_axes)
+    )
+    if bool(probe["standoff_enforced"]):
+        lines.append(
+            f"GATE v1 (standoff band ENFORCED [{float(probe['standoff_min_m']):.1f},"
+            f"{float(probe['standoff_max_m']):.1f}] m): perpendicular "
+            + (offsets or "no sections")
+        )
+    else:
+        lines.append(
+            "GATE v2 (yaw-parallel only; reach = dig cone, radial "
+            f"<= {float(probe['cone_r_max_m']):.2f} m): perpendicular offset "
+            + (offsets or "no sections")
+            + "  [information, not a clause]"
+        )
+    counts = np.asarray(probe["diggable_counts"])
+    reachable = int((np.asarray(probe["remaining_mask"]) & np.asarray(probe["diggable_now"])).sum())
+    best_angle = int(np.argmax(counts))
+    lines.append(
+        f"FROM THIS BASE POSE: {reachable} of {fresh} remaining cells are diggable "
+        f"(cabin {best_angle}/12 is best: {int(counts[best_angle])} cells); "
+        + ("the rest need a MOVE" if reachable < fresh else "all of them")
+    )
     warnings = []
     if illegal > 0:
         warnings.append(
@@ -1291,11 +1535,30 @@ class View:
                 rect = rect.inflate(-inset, -inset)
             pg.draw.rect(self.window, color, rect, width)
 
+    def _label_region(self, mask, text: str, color) -> None:
+        """Caption a mask at its centroid, so a colour cannot be read as its
+        opposite (the dump zone was mistaken for the dig target in a live
+        session, 2026-09-01)."""
+        rows, cols = np.nonzero(mask)
+        if rows.size == 0:
+            return
+        px, py = self.point(float(rows.mean()), float(cols.mean()))
+        label = self.font_small.render(text, True, color, (0, 0, 0))
+        self.window.blit(label, (px - label.get_width() // 2, py - 7))
+
     def draw_overlays(self, probe: dict) -> None:
         n_axes = int(probe["trench_type"])
 
-        # accepted dump zone
-        self._cells(probe["accepted_mask"], (60, 130, 255), 1)
+        # accepted dump zone.  Dimmer than the dig overlays and labelled on the
+        # map: a bright blue grid over the beige zone reads as "the cells to
+        # work", which is the opposite of what it is (target > 0, spoil goes
+        # here).  Observed misreading in a live session, 2026-09-01.
+        accepted = np.asarray(probe["accepted_mask"])
+        self._cells(accepted, (40, 85, 150), 1)
+        self._label_region(accepted, "DUMP HERE (target>0)", (120, 170, 255))
+        self._label_region(
+            np.asarray(probe["remaining_mask"]), "DIG THIS (target<0)", (220, 150, 255)
+        )
 
         # remaining trench cells tinted per owning section, junctions dotted
         if self.show_tint:
@@ -1326,6 +1589,19 @@ class View:
             pg.draw.line(self.window, (0, 0, 0), rect.topleft, rect.bottomright, 2)
             pg.draw.line(self.window, (0, 0, 0), rect.topright, rect.bottomleft, 2)
 
+        # Is the dig zone diggable from THIS base pose (cabin free)?
+        # teal fill  = yes, swing the cabin and DO
+        # dark red X = no, not at any of the 12 cabin angles -> must relocate
+        remaining_all = np.asarray(probe["remaining_mask"])
+        reachable_here = np.asarray(probe["diggable_now"])
+        for row, col in zip(*np.nonzero(remaining_all & reachable_here)):
+            rect = self.cell_rect(int(row), int(col))
+            pg.draw.rect(self.window, (0, 200, 190), rect.inflate(-2, -2), 0)
+        for row, col in zip(*np.nonzero(remaining_all & ~reachable_here)):
+            rect = self.cell_rect(int(row), int(col))
+            pg.draw.line(self.window, (140, 0, 40), rect.topleft, rect.bottomright, 2)
+            pg.draw.line(self.window, (140, 0, 40), rect.topright, rect.bottomleft, 2)
+
         # cone, admitted cells, blocked cells
         self._cells(probe["cone"], (255, 255, 120), 2)
         rows, cols = np.nonzero(probe["admitted_mask"] & probe["fresh_trench"])
@@ -1339,6 +1615,7 @@ class View:
 
         # geometry: sections, axis direction, standoff band edges
         if self.show_geometry:
+            band_labelled = False
             for axis in range(n_axes):
                 color = SECTION_COLORS[axis % 4]
                 a, b, c = [float(v) for v in probe["axes"][axis]]
@@ -1368,7 +1645,9 @@ class View:
                     (0, 0, 0),
                 )
                 self.window.blit(label, (mid[0] + 8, mid[1] - 8))
-                self._draw_band(probe, axis, color)
+                band_labelled = self._draw_band(
+                    probe, axis, color, band_labelled
+                )
 
         # the machine, drawn from Terra's own rasterised footprint so it sits on
         # the same lattice as the cells the env actually tests
@@ -1380,16 +1659,25 @@ class View:
             int(probe["angle_cabin"]),
         )
 
-    def _draw_band(self, probe: dict, axis: int, color) -> None:
-        """Draw the 3.5 m / 7.0 m standoff band edges for one section."""
+    def _draw_band(
+        self, probe: dict, axis: int, color, band_labelled: bool = True
+    ) -> bool:
+        """Draw the 3.5 m / 7.0 m standoff band edges for one section.
+
+        Under the v1 gate the band is a validity clause and is drawn in the
+        section colour: stand between the dotted lines.  Under v2 (the default)
+        it constrains nothing -- reach is the dig cone's job, tested radially --
+        so it is drawn dim and captioned, to stay readable as a diagnostic
+        without inviting the reader to treat it as a rule.
+        """
         a, b, c = [float(v) for v in probe["axes"][axis]]
         denom = float(np.hypot(a, b))
         if denom < 1e-6:
-            return
+            return band_labelled
+        enforced = bool(probe["standoff_enforced"])
+        band_color = color if enforced else (78, 78, 78)
         tile = float(probe["tile_size"])
         seg = [float(v) for v in probe["segments"][axis]]
-        # unit tangent in (row, col)
-        tangent = np.array([-a, b]) / denom
         normal = np.array([b, a]) / denom  # (row, col) normal to the line
         p0 = np.array([seg[0], seg[1]])
         p1 = np.array([seg[2], seg[3]])
@@ -1398,7 +1686,22 @@ class View:
             for sign in (-1.0, 1.0):
                 q0 = p0 + sign * offset_cells * normal
                 q1 = p1 + sign * offset_cells * normal
-                self._dashed(self.point(*q0), self.point(*q1), color)
+                start = self.point(*q0)
+                end = self.point(*q1)
+                self._dashed(start, end, band_color)
+                if not enforced and not band_labelled and sign > 0 and metres > 5.0:
+                    label = self.font_small.render(
+                        "v1 band (diagnostic only)", True, (150, 150, 150), (0, 0, 0)
+                    )
+                    self.window.blit(
+                        label,
+                        (
+                            (start[0] + end[0]) // 2 - label.get_width() // 2,
+                            (start[1] + end[1]) // 2 - 6,
+                        ),
+                    )
+                    band_labelled = True
+        return band_labelled
 
     def _dashed(self, start, end, color, dash=7, gap=6) -> None:
         start = np.array(start, dtype=float)
@@ -1549,12 +1852,19 @@ class Session:
 
         t0 = time.time()
         self.env, self.env_cfgs, self.batch_cfg = build_env(
-            args.bank, args.panel, self.slot_count, not args.gate_off, rendering=True
+            args.bank,
+            args.panel,
+            self.slot_count,
+            not args.gate_off,
+            rendering=True,
+            gate_v1=bool(args.gate_v1),
         )
         print(f"env built in {time.time() - t0:.1f}s", flush=True)
         self.loader = SlotLoader(self.env, self.env_cfgs, args.bank, args.panel, self.rows)
         self.probe_fn = make_probe(self.batch_cfg)
         self.footprint_fn = make_footprint_fn()
+        # traced only when --replica-sweep asks for it
+        self.synth_fn = None
         self.footprint = None
         self.action_type = self.batch_cfg.action_type
         self.step_keys = jax.vmap(jax.random.PRNGKey)(jnp.asarray([0], dtype=jnp.uint32))
@@ -1646,6 +1956,10 @@ class Session:
         )
         self.timestep, _ = self.loader.reset(slot)
         jax.block_until_ready(self.timestep.reward)
+        # The splash frames draw the machine from this; the probe owns the
+        # authoritative copy once it exists, but that is ~55 s away and the
+        # window must not show a map with no excavator in it.
+        self.footprint = np.asarray(self.footprint_fn(self.timestep.state))[0]
         if warm:
             print(f"reset compiled in {time.time() - t0:.1f}s", flush=True)
             print("compiling the diagnostic probe (one-off; cached)...", flush=True)
@@ -1719,6 +2033,7 @@ class Session:
         axes = np.asarray(self.probe["axes"])
         tile = float(self.probe["tile_size"])
         tolerance = float(self.probe["yaw_tolerance_rad"])
+        enforced = bool(self.probe["standoff_enforced"])
         low = float(self.probe["standoff_min_m"])
         high = float(self.probe["standoff_max_m"])
         angle = 2.0 * np.pi * base / ANGLES_BASE
@@ -1728,8 +2043,12 @@ class Session:
             denominator = float(np.hypot(a, b)) or 1.0
             tangent = np.array([-a, b]) / denominator
             yaw = float(np.arccos(np.clip(abs(tangent @ forward), 0.0, 1.0)))
+            if yaw > tolerance:
+                continue
+            if not enforced:
+                return True  # v2: yaw-parallel is the whole positional clause
             standoff = abs(a * col + b * row + c) / denominator * tile
-            if yaw <= tolerance and low <= standoff <= high:
+            if low <= standoff <= high:
                 return True
         return False
 
@@ -1804,7 +2123,10 @@ class Session:
                     "  Not one pose reached even passed the geometric necessary"
                 )
                 lines.append(
-                    "  condition (some section yaw-aligned AND in band), so the"
+                    "  condition (some section yaw-aligned"
+                    + (" AND in band)" if bool(self.probe["standoff_enforced"])
+                       else ")")
+                    + ", so the"
                 )
                 lines.append(
                     "  machine has to relocate before it can dig at all."
@@ -1835,6 +2157,185 @@ class Session:
         for line in lines:
             print(line, flush=True)
         return lines
+
+    # ---------------- replica sweep (--replica-sweep) ---------------- #
+    def replica_sweep(self, count: int, seed: int = 20260901) -> dict:
+        """Assert the gate replica against Terra over ``count`` synthesized poses.
+
+        Playing the slot by hand visits a few hundred poses along one path and
+        never a mid-episode partial dig at an arbitrary standoff, so it cannot
+        show that the replica in this tool matches Terra *everywhere*.  This
+        overwrites the pose, the load and the action map directly on the loaded
+        slot (see ``make_synth_fn``) and compares, on every synthesized state,
+        the per-section replica, ``_get_fresh_trench_dig_alignment_details``
+        and the observation-facing ``_get_fresh_trench_dig_alignment`` export.
+        ``check_replica`` raises on the first divergence, so a clean sweep is
+        the contract test the per-frame assertion only samples.
+
+        Half the poses are drawn ON or NEAR a declared section axis with a
+        yaw-parallel heading -- exactly the region where v1 and v2 disagree, and
+        the region a played path reaches least often.
+        """
+        rng = np.random.default_rng(seed)
+        state0 = self.timestep.state
+        accepted = np.asarray(self.probe["accepted_mask"]).astype(bool)
+        height, width = accepted.shape
+        target = np.asarray(state0.world.target_map.map).reshape(
+            height, width
+        ).astype(np.int32)
+        dig_cells = np.argwhere(target < 0)
+        accepted_cells = np.argwhere(accepted)
+        axes = np.asarray(self.probe["axes"])
+        segments = np.asarray(self.probe["segments"])
+        n_axes = int(self.probe["trench_type"])
+        tile = float(self.probe["tile_size"])
+
+        if self.synth_fn is None:
+            print(
+                "compiling the pose/map surgery kernel (one-off)...", flush=True
+            )
+            self.synth_fn = make_synth_fn()
+
+        def sample_pose():
+            """(row, col, base heading) -- half on-axis, half uniform."""
+            if n_axes > 0 and rng.random() < 0.5:
+                axis = int(rng.integers(n_axes))
+                a, b, _ = [float(v) for v in axes[axis]]
+                denom = float(np.hypot(a, b)) or 1.0
+                seg = [float(v) for v in segments[axis]]
+                t = float(rng.random())
+                base = np.array(
+                    [
+                        seg[0] + t * (seg[2] - seg[0]),
+                        seg[1] + t * (seg[3] - seg[1]),
+                    ]
+                )
+                # extend past the segment ends too: the dig-ahead-retreat pose
+                # sits on the axis LINE, often beyond the trench itself.
+                tangent = np.array([-a, b]) / denom
+                normal = np.array([b, a]) / denom
+                base = (
+                    base
+                    + tangent * float(rng.uniform(-16.0, 16.0))
+                    + normal * float(rng.uniform(-14.0, 14.0))
+                )
+                row = int(np.clip(round(base[0]), 6, height - 7))
+                col = int(np.clip(round(base[1]), 6, width - 7))
+                # bias to the two headings parallel to this axis
+                if rng.random() < 0.7:
+                    best = min(
+                        range(ANGLES_BASE),
+                        key=lambda bh: abs(
+                            float(
+                                np.arccos(
+                                    np.clip(
+                                        abs(
+                                            tangent
+                                            @ np.array(
+                                                [
+                                                    -np.sin(
+                                                        2 * np.pi * bh / ANGLES_BASE
+                                                    ),
+                                                    np.cos(
+                                                        2 * np.pi * bh / ANGLES_BASE
+                                                    ),
+                                                ]
+                                            )
+                                        ),
+                                        0.0,
+                                        1.0,
+                                    )
+                                )
+                            )
+                        ),
+                    )
+                    heading = best if rng.random() < 0.5 else (best + 6) % ANGLES_BASE
+                else:
+                    heading = int(rng.integers(ANGLES_BASE))
+                return row, col, heading
+            return (
+                int(rng.integers(6, height - 6)),
+                int(rng.integers(6, width - 6)),
+                int(rng.integers(ANGLES_BASE)),
+            )
+
+        def sample_map():
+            """A partially dug action map, sometimes with spoil in the zone."""
+            action = np.zeros((height, width), dtype=np.int32)
+            if dig_cells.shape[0]:
+                fraction = float(rng.random())
+                keep = rng.random(dig_cells.shape[0]) < fraction
+                chosen = dig_cells[keep]
+                action[chosen[:, 0], chosen[:, 1]] = -1
+            if accepted_cells.shape[0] and rng.random() < 0.5:
+                n_spoil = int(rng.integers(1, 25))
+                pick = rng.integers(0, accepted_cells.shape[0], size=n_spoil)
+                spots = accepted_cells[pick]
+                action[spots[:, 0], spots[:, 1]] = int(rng.integers(1, 4))
+            return action
+
+        t0 = time.time()
+        on_axis = 0
+        applicable = 0
+        valid = 0
+        standoffs = []
+        for index in range(count):
+            row, col, heading = sample_pose()
+            cabin = int(rng.integers(ANGLES_BASE))
+            loaded = 0 if rng.random() < 0.75 else int(rng.integers(1, 40))
+            action = sample_map()
+            synth = self.synth_fn(
+                state0,
+                jnp.asarray([row], dtype=jnp.int32),
+                jnp.asarray([col], dtype=jnp.int32),
+                jnp.asarray([heading], dtype=jnp.int32),
+                jnp.asarray([cabin], dtype=jnp.int32),
+                jnp.asarray([loaded], dtype=jnp.int32),
+                jnp.asarray(action.reshape(1, -1), dtype=jnp.int32),
+            )
+            probe = to_host(self.probe_fn(synth))
+            check_replica(probe, None)
+            if bool(probe["applicable"]):
+                applicable += 1
+                if bool(probe["terra_valid"]):
+                    valid += 1
+            for axis in range(int(probe["trench_type"])):
+                offset = abs(float(probe["signed_standoffs_m"][axis]))
+                standoffs.append(offset)
+                if offset < float(probe["standoff_min_m"]):
+                    on_axis += 1
+            if (index + 1) % 50 == 0:
+                print(
+                    f"  replica sweep {index + 1}/{count} poses, "
+                    f"0 divergences ({time.time() - t0:.1f}s)",
+                    flush=True,
+                )
+        report = {
+            "poses": count,
+            "divergences": 0,
+            "gate_applicable_poses": applicable,
+            "gate_valid_poses": valid,
+            "section_views_inside_the_v1_floor": on_axis,
+            "median_abs_standoff_m": (
+                float(np.median(standoffs)) if standoffs else None
+            ),
+            "standoff_enforced": bool(self.probe["standoff_enforced"]),
+            "tile_size_m": tile,
+            "seconds": round(time.time() - t0, 1),
+        }
+        print(
+            "REPLICA SWEEP: "
+            + json.dumps(report, sort_keys=False),
+            flush=True,
+        )
+        print(
+            f"  0 divergences over {count} synthesized poses "
+            f"({'v1' if report['standoff_enforced'] else 'v2'} semantics); "
+            f"{applicable} were gate-applicable, {valid} of those admitted; "
+            f"{on_axis} section views sat inside the retired 3.5 m floor",
+            flush=True,
+        )
+        return report
 
     def refresh(self, assert_replica: bool = True) -> None:
         t0 = time.time()
@@ -1888,10 +2389,14 @@ class Session:
             f"{int(probe['accepted_mask'].sum())}   horizon {int(probe['max_steps'])}",
             flush=True,
         )
+        enforced = bool(probe["standoff_enforced"])
         print(
             f"  gate {'ON' if bool(probe['gate_enabled']) else 'OFF'}  "
+            f"semantics {'v1 (standoff band ENFORCED)' if enforced else 'v2 (yaw-parallel only)'}  "
             f"yaw tol {np.degrees(float(probe['yaw_tolerance_rad'])):.2f}deg  "
-            f"standoff band {float(probe['standoff_min_m'])}-{float(probe['standoff_max_m'])} m  "
+            f"band {float(probe['standoff_min_m'])}-{float(probe['standoff_max_m'])} m "
+            f"{'enforced' if enforced else 'DIAGNOSTIC ONLY'}  "
+            f"cone reach <= {float(probe['cone_r_max_m']):.4f} m  "
             f"tile {float(probe['tile_size']):.4f} m",
             flush=True,
         )
@@ -1978,9 +2483,14 @@ class Session:
                     round(float(np.degrees(v)), 3)
                     for v in probe["yaw_errors_rad"][: int(probe["trench_type"])]
                 ],
+                "standoff_enforced": bool(probe["standoff_enforced"]),
                 "standoffs_m": [
                     round(float(v), 3)
                     for v in probe["standoffs_m"][: int(probe["trench_type"])]
+                ],
+                "signed_standoffs_m": [
+                    round(float(v), 3)
+                    for v in probe["signed_standoffs_m"][: int(probe["trench_type"])]
                 ],
                 "axis_pose_valid": [
                     bool(v) for v in probe["axis_pose_valid"][: int(probe["trench_type"])]
@@ -2082,12 +2592,25 @@ class Session:
                     raise SystemExit(f"unknown script token {token!r}")
                 else:
                     pg.event.post(
-                        pg.event.Event(pg.KEYDOWN, key=SCRIPT_KEYS[token], mod=0)
+                        pg.event.Event(
+                            pg.KEYDOWN,
+                            key=SCRIPT_KEYS[token],
+                            mod=0,
+                            scripted=True,
+                        )
                     )
             for event in pg.event.get():
                 if event.type == pg.QUIT:
                     playing = False
                 elif event.type == pg.KEYDOWN:
+                    # A scripted run must be reproducible.  The window still
+                    # takes focus on a shared X display, so a stray keystroke
+                    # from whoever is at the machine would otherwise be replayed
+                    # into the episode -- observed on :1 (26 spurious actions and
+                    # an R reset in the middle of a verification run,
+                    # 2026-09-01).  Only events this loop posted are obeyed.
+                    if script is not None and not getattr(event, "scripted", False):
+                        continue
                     if not self.handle_key(event.key):
                         playing = False
             # Only recompose the window when something changed: Terra's own
@@ -2129,6 +2652,19 @@ def parse_args(argv=None):
         "--jax-cache", default=str(WORKTREE / "data" / "jax_compile_cache")
     )
     parser.add_argument("--gate-off", action="store_true", help="disable the gate (A/B)")
+    parser.add_argument(
+        "--gate-v1",
+        action="store_true",
+        help="restore the retired v1 lateral standoff band "
+        "(trench_dig_standoff_enforced=True); default is v2, yaw-parallel only",
+    )
+    parser.add_argument(
+        "--replica-sweep",
+        type=int,
+        default=0,
+        help="synthesize N poses on the loaded slot and assert the gate replica, "
+        "the details entry point and the observation export agree on every one",
+    )
     parser.add_argument("--headless", action="store_true", help="SDL dummy driver (tests only)")
     parser.add_argument("--script", default=None, help="comma-separated key tokens")
     parser.add_argument("--script-delay", type=float, default=0.0)
@@ -2152,6 +2688,12 @@ def main(argv=None) -> int:
         script = [t.strip().upper() for t in args.script.replace(",", " ").split() if t.strip()]
 
     session = Session(args)
+    if args.replica_sweep > 0:
+        session.replica_sweep(args.replica_sweep)
+        if script is None and not args.hold:
+            session.log_file.close()
+            print(f"session log written: {session.log_path}", flush=True)
+            return 0
     session.run(script, args.script_delay)
     return 0
 
