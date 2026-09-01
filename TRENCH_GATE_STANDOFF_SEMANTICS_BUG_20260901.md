@@ -141,17 +141,83 @@ pre-v2 fingerprints stay byte-identical), and `eval_fixed_bank.py --gate-v1`
 forces v1 with a loud warning whenever a gate-on checkpoint lacks the field.
 The two pilot presets are pinned `trench_dig_standoff_enforced: true`.
 
-## 6. Re-validation under v2 (filled as results land)
+## 6. Re-validation under v2
 
-PENDING: over-restriction audit, order-independent station cover, axis sweep
-(on-axis lane completability per family), full 15-condition preflight incl. net4,
-scripted oracle with persistent-pose navigation and dig+dump pairing.
+All numbers v1 vs v2 on identical code; receipts in
+`tools/trench_align_v2_revalidation_20260901/` (tables in its README) and
+`tools/trench_align_oracle_receipts_20260831/`.
+
+**The gate never bound coverage under either semantics.** Every one of the
+13,428 panel cells and 86,933 pooled-training cells is admissibly diggable under
+v1 and v2; `cells_reachable_but_never_admissible = 0`. What v2 changes is the
+size of the admissible set: 2.4x the applicable candidates, 2.2x the admissible
+stations (204,835 -> 459,383 on the panel). Persistent station cover 176/176
+under both. Axis sweep with 12 cabins 176/176 under both.
+
+**The on-axis lane, quantified.** Dig-ahead-and-retreat alone (perpendicular
+~0, cabin ahead/behind, forward/backward only, dumping removed):
+
+| family | v1 cells | v2 cells | v2 maps complete (tol 1.14 m) |
+|---|---:|---:|---:|
+| straight | 0 | 4,408/4,408 (100%) | 64/64 |
+| tee | 0 | 2,417/2,465 (98.1%) | 5/32 |
+| network | 0 | 2,121/2,193 (96.7%) | 6/32 |
+| road | 0 | 1,353/1,394 (97.1%) | 0/16 |
+| segmented | 0 | 2,754/2,968 (92.8%) | 5/32 |
+
+Under v1 the on-axis lane digs exactly zero cells on every row -- that is the
+design error in one number. Under v2 straight trenches are fully completable by
+the retreat pattern alone; the multi-section residual is the junction
+all-or-nothing veto (straight is the single-section control), not standoff.
+Note the on-axis model uses a padding-only blocked set: a machine on the line
+stands in its own hole under the order-independent set, but retreat is
+provably safe because the cone starts at 3.64 m while the chassis reaches only
+3.14 m ahead.
+
+**net4 verdict: re-admitted.** Full 2,400-map preflight, net4 included: maps
+without a complete fresh cover old-v1 61, branch-v1 89, **v2 0**
+(`preflight_passed = True`; net4 conditions 160/160/160). The matched v1 on the
+same branch is worse than the original, so the gain is the semantics, not the
+footprint fix. The generalist training pool is therefore the full 40-condition
+set (25 foundation + 15 trench, 3,840 maps); v7-trn stays out (no finite
+provenance).
+
+**Scripted oracle** (persistent-pose navigation, airtight dig+dump pairs,
+49,551 per-step checks against Terra's exported alignment scalars with zero
+divergence): v2 134/176 within horizon 450 (median 80.5 steps, max 183 -- no
+success needed the extended horizon), v1 132/176 with the identical fixed
+controller, net4 15/48 under v2. The old 147/176 was inflated: it counted
+completions reachable only through poses the controller's own excavation
+deletes. Holding the controller fixed, v2 beats v1 by +2 slots and adds 382
+on-axis stations (37.3% of 1,025) that v1 forbids outright. Residual stalls are
+pose-graph connectivity (476 of 489 remaining cells at `pose_reachable`), i.e.
+the oracle's conservative navigation, not any gate clause; the static covers
+above are the ceiling evidence. One loaded-no-legal-dump deadlock survives in
+176 (slot 455).
+
+**Spoil leak root-caused.** Every surviving illegal-spoil event in all three
+oracle runs has `loaded_before == 0`: the dig relaxes TWICE (`_apply_dig_mask`,
+then `_handle_dig`), and only the second pass had been contained. Both passes
+now carry the accepted-dump-zone containment. Confirming v2 oracle run on the
+same 176 slots: **146/176 within horizon (83.0%)**, median 78.5 steps, p90
+130, **illegal spoil 0 units / 0 slots, loaded-no-legal-dump deadlocks 0**
+(the slot-455 deadlock was the uncontained relaxation consuming the
+planner's dump cells), 366 of 988 stations on-axis. Receipt:
+`tools/trench_align_oracle_receipts_20260831/oracle_176slot_v2_contained_dig.json`.
+
+**Two tool corrections worth knowing.** The tools' two footprint models had
+been inverted relative to Terra after commit 566867db (verified against
+`State._is_valid_move` over 4,000 poses; the right model agrees 0.9995), and
+the shared module's Terra selfcheck built Terra's state from the config default
+while the replica forced v1, producing 8/512 phantom mismatches under
+`--gate-v1`. Both fixed; zero mismatches under both flags everywhere.
 
 ## 7. Recommendation
 
 1. New matched training pair under v2 semantics (this is the only way to make a
    clean v2 claim). Both arms carry the v2 observation semantics.
-2. Re-admit net4 to the bank if the v2 preflight shows complete covers.
+2. net4 re-admitted (v2 preflight: 0 of 2,400 maps without a complete cover).
+   The v2 generalist trains on the full 40-condition pool, 3,840 maps.
 3. ROS physical acceptance remains the ground-truth arbiter of which stations
    are executable and is STILL unmeasured. v2 widens what the simulator admits;
    it does not prove the real stack accepts on-axis stations. Measure it before

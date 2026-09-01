@@ -1536,7 +1536,8 @@ class State(NamedTuple):
         return jnp.logical_and(mask_2d, jnp.logical_not(remove)).reshape(-1)
 
     def _apply_dig_mask(
-        self, flattened_map: Array, dig_mask: Array, lifting_positive_soil: bool
+        self, flattened_map: Array, dig_mask: Array, lifting_positive_soil: bool,
+        containment_mask: Array | None = None,
     ) -> Array:
         """
         this function does the following:
@@ -1584,7 +1585,13 @@ class State(NamedTuple):
         map_shape = self.world.action_map.map.shape[-2:]
         map_2d = new_flattened_map.reshape(map_shape)
         dig_mask_2d = dig_mask.reshape(map_shape)
-        return self._apply_local_soil_mechanics(map_2d, dig_mask_2d).reshape(-1)
+        # Contain the first relaxation pass too: uncontained, it pushed units of
+        # an adjacent pile onto neutral ground (24 units in 176 oracle episodes,
+        # every event with the agent empty), which exact_visible_dump_v1 can
+        # never recover.
+        return self._apply_local_soil_mechanics(
+            map_2d, dig_mask_2d, containment_mask=containment_mask
+        ).reshape(-1)
 
     def _apply_dump_mask(
         self,
@@ -2550,7 +2557,10 @@ class State(NamedTuple):
             def _apply_dig(volume, fam):
                 # First remove dirt cleanly (without soil mechanics)
                 new_map_global_coords = self._apply_dig_mask(
-                    fam, dig_mask, lifting_positive_soil
+                    fam,
+                    dig_mask,
+                    lifting_positive_soil,
+                    containment_mask=self._accepted_dump_mask(),
                 )
                 new_map_global_coords = new_map_global_coords.reshape(
                     action_map_2d.shape
@@ -2573,15 +2583,16 @@ class State(NamedTuple):
                 # Measured on the 176-slot trench panel: uncontained 31 units of
                 # illegal spoil from 10 events, all of them digs (loaded_before
                 # == 0), and 11 purity-short failures; contained to
-                # dump-zone-or-trench 23 units and 3 purity-short failures.  The
-                # dump-zone-only figure quoted by construction below is an
-                # argument, not yet a measurement: containment is a hard
-                # guarantee because _expand_mask_for_soil_mechanics ends with
+                # dump-zone-or-trench 23 units and 3 purity-short failures.
+                # Containing only this second pass still left 24 units: the dig
+                # relaxes TWICE, first inside _apply_dig_mask above, and that
+                # first pass was the remaining leak (all events with the agent
+                # empty).  Both passes now carry the same containment.  It is a
+                # hard guarantee: _expand_mask_for_soil_mechanics ends with
                 # logical_and(expanded_valid, containment_mask) and collapse_body
-                # uses that same mask for both `mask` and `neighbor_mask`, so
-                # both the source and the destination of a relocated unit must
-                # lie inside the containment set.  The confirming 176-slot run
-                # did not complete; re-run it before quoting a number here.
+                # uses that mask for both `mask` and `neighbor_mask`, so the
+                # source and the destination of a relocated unit must both lie
+                # inside the containment set.
                 cone_mask_2d = dig_mask.reshape(action_map_2d.shape)
                 final_map = self._apply_local_soil_mechanics(
                     new_map_global_coords,
