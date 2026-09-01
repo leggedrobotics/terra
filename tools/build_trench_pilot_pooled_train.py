@@ -110,7 +110,6 @@ UNIFORM_FIELDS: tuple[str, ...] = (
     "distance_normalization",
     "distance_protocol_id",
     "distance_ref_m",
-    "lineage",
     "scenario_identity_contract",
     "schema",
     "shape",
@@ -234,7 +233,8 @@ def main() -> int:
             )
         if [row.get("slot_index") for row in rows] != list(range(1, len(rows) + 1)):
             raise RuntimeError(f"{condition}: manifest slots are not 1..N")
-        if "trench_finite_enrichment" not in dataset:
+        is_trench = "trn-" in condition
+        if is_trench and "trench_finite_enrichment" not in dataset:
             raise RuntimeError(
                 f"{condition} is not finite-enriched; refusing to pool it."
             )
@@ -244,6 +244,8 @@ def main() -> int:
                 "dir": source_dir,
                 "dataset": dataset,
                 "rows": rows,
+                "lineage": dataset.get("lineage"),
+                "is_trench": is_trench,
             }
         )
 
@@ -313,27 +315,27 @@ def main() -> int:
                 len(metadata_payload.get("axes_ABC") or []),
                 int(metadata_payload.get("trench_axes_count") or 0),
             )
-            if declared_axes <= 0:
-                # Foundation map: no trench sections, nothing for the gate to
-                # scope. The loader still reads trench_{i}.json by index, so the
-                # (axis-less) sidecar is copied as-is.
-                metadata_sha[f"trench_{slot}.json"] = sha256_file(metadata_target)
-                continue
-            if metadata_origin.is_symlink():
-                raise RuntimeError(
-                    "Trench sidecar must be the enriched regular file, not a "
-                    f"symlink to the un-enriched original: {metadata_origin}"
-                )
-            finite = metadata_payload.get("trench_finite_metadata")
-            if (
-                finite is None
-                or metadata_payload.get("trench_segments_yx") is None
-                or metadata_payload.get("trench_half_width_tiles") is None
-            ):
-                raise RuntimeError(
-                    "Pooled metadata is missing finite trench sections: "
-                    f"{metadata_origin}"
-                )
+            if declared_axes > 0:
+                # Trench map: the sidecar must be the enriched regular file with
+                # finite sections, never a symlink to the un-enriched original.
+                if metadata_origin.is_symlink():
+                    raise RuntimeError(
+                        "Trench sidecar must be the enriched regular file, not a "
+                        f"symlink to the un-enriched original: {metadata_origin}"
+                    )
+                finite = metadata_payload.get("trench_finite_metadata")
+                if (
+                    finite is None
+                    or metadata_payload.get("trench_segments_yx") is None
+                    or metadata_payload.get("trench_half_width_tiles") is None
+                ):
+                    raise RuntimeError(
+                        "Pooled metadata is missing finite trench sections: "
+                        f"{metadata_origin}"
+                    )
+            # else: foundation map (axes_ABC=[], trench_axes_count=-1) -- nothing
+            # for the gate to scope; the loader still reads trench_{i}.json by
+            # index, so the axis-less sidecar is copied as-is.
             metadata_sha[f"trench_{slot}.json"] = sha256_file(metadata_target)
 
             pooled_row = dict(row)
