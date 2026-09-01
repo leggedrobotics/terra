@@ -1,0 +1,7 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+  fp_true_untransposed (the tools' 'terra' model)          agree=0.9995
+  fp_masked_transposed (the tools' 'legacy_mirror' model)  agree=0.5270
+  fp_masked_untransposed                                   agree=0.8832
+  fp_true_transposed                                       agree=0.5450
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_revalidation_20260901/footprint_model_check.json

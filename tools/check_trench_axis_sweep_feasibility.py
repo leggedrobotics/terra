@@ -20,9 +20,38 @@ Two questions, both purely geometric (no controller, no policy):
      produce a gate-admitted dig for every target cell?
 
 Blocked space is the order-independent worst case ``padding | all target<0``,
-so the answer cannot depend on the order cells are dug in.  Both Terra's actual
-(transposed) footprint test and a correct ``(row, col)`` footprint are reported,
-because they differ (see tools/check_trench_persistent_station_cover.py).
+so the answer cannot depend on the order cells are dug in.  Two footprint models
+are reported: ``terra`` -- the ``(row, col)`` raster Terra has used since commit
+566867db, 0.9995 agreement with ``State._is_valid_move`` -- and
+``legacy_mirror``, the retired ``(col, row)`` raster that tested occupancy at the
+mirror position, kept for comparison with the pre-fix receipts.
+
+  C. The ON-AXIS LANE (v2 only, by construction).  Restrict B further to the
+     poses the v1 band forbade outright: base centre within a few tiles of the
+     section line (perpendicular ~ 0), chassis yaw parallel, and only the two
+     cabin headings that look straight ahead of and straight behind the chassis
+     (cb = 0 and cb = 6; cabin indices are chassis-relative at every base
+     heading).  Motion is still FORWARD/BACKWARD only.  That is exactly
+     "stand on the trench line, dig what is ahead of you, back up" -- the
+     manoeuvre the v1 standoff floor refused.  Is every section completable
+     that way alone?  Reported per family, at three "perpendicular ~ 0"
+     tolerances, because the integer grid and oblique axes make an exact zero
+     unattainable.  Under ``--gate-v1`` this lane is empty by construction
+     (perpendicular <= 2 tiles = 1.14 m is below the 3.5 m floor), which is the
+     comparison.
+
+     Blocked space matters here in a way it does not for A/B.  The
+     order-independent worst case ``padding | all target<0`` treats the whole
+     trench as already dug, and a machine ON the line is then standing in its
+     own hole -- so that model answers "no" for a reason that has nothing to do
+     with the gate.  Dig-ahead-and-retreat is inherently ordered: the cone
+     starts 3.64 m from the base centre while the chassis only reaches 3.14 m
+     ahead, so a machine that moves monotonically BACKWARD always digs strictly
+     ahead of every pose it will ever occupy and never stands on a cell it has
+     dug.  Both models are therefore reported: ``fresh`` (blocked = padding,
+     the correct model for a monotone retreat, and the primary number) and
+     ``persistent`` (blocked = padding | all target<0, the pessimistic bound
+     used by A and B).
 
 Coverage is screened with the translation-invariant cone offset table and then
 every claimed cell is re-verified with an exact per-pose Terra cone, so the
@@ -40,23 +69,36 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from terra.config import EnvConfig
 from terra.map import compute_trench_axis_membership
 from terra.state import State
 
+from audit_trench_alignment_feasibility import note_family
 from audit_trench_gate_overrestriction import (
-    NH, SHAPE, cases_from_panel, dilate, env_config, free_poses, geometry,
-    records_from_metadata,
+    NH, SHAPE, cases_from_panel, dilate, env_config, free_poses, gate_contract,
+    geometry, records_from_metadata, standoff_bands, terra_gate_selfcheck,
 )
 
 MAX_AXES = 4
 MAX_WITNESSES = 12
+# The on-axis lane is checked at three tolerances, so its exact
+# re-verification budget per cell is smaller.
+MAX_ONAXIS_WITNESSES = 6
+# Cabin indices are RELATIVE to the chassis for every base heading (verified
+# against the cone table: cb=0 centroid is the forward direction, cb=6 the
+# backward one), so the on-axis lane's "cabin ahead / behind" is exactly these.
+ONAXIS_CABINS = (0, 6)
+# "perpendicular ~ 0": the base centre within this many tiles of the section
+# line.  The integer grid and oblique axes make an exact 0 unattainable, so the
+# claim is reported at three tolerances.
+ONAXIS_TOL_TILES = (0.5, 1.0, 2.0)
 _W = {}
 
 
-def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max):
+def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max,
+          enforce_band=True):
     _W.update(cfg=cfg, cones=cones, fp_true=fp_true, fp_masked=fp_masked,
-              fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max)
+              fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max,
+              enforce_band=bool(enforce_band))
     _W["cone_fn"] = _make_cone_fn(cfg)
     _W["succ"] = move_tables(cfg)
 
@@ -145,16 +187,188 @@ def lane_components(pose_ok_2d, succ_bh):
     return poses, labels.astype(np.int32), int(labels.max()) + 1
 
 
-def sweep_map(case, use_terra_footprint: bool):
+def exact_verify(witness, n, *, cells, dig, padding, membership, yaw_ok, band,
+                 naxes):
+    """Re-check screened coverage with real per-pose Terra cones.
+
+    The translation-invariant offset table is only ~81% translation exact, so
+    several candidate witnesses per cell are checked and the cell counts as
+    covered if any one of them holds under the FULL admissibility test: the
+    cell is in the cone, no padding is in the cone, and every fresh owned cell
+    in the cone has an owner the pose is valid for (the junction veto).  A
+    single witness per cell produced ~1.5% false negatives.
+    """
+    exact = np.zeros(n, dtype=bool)
+    flat = [(cid, w) for cid in sorted(witness) for w in witness[cid]]
+    if not flat:
+        return exact
+    w = np.array([x[1] for x in flat], dtype=np.int32)
+    masks = np.asarray(_W["cone_fn"](
+        jnp.asarray(w[:, 0]), jnp.asarray(w[:, 1]),
+        jnp.asarray(w[:, 2]), jnp.asarray(w[:, 3])))
+    for j, (cid, _w) in enumerate(flat):
+        if exact[cid]:
+            continue
+        cone = masks[j].astype(bool)
+        r, c = cells[cid]
+        if not cone[r, c]:
+            continue
+        if np.any(padding[cone]):
+            continue
+        bits = 0
+        for a in range(naxes):
+            if yaw_ok[int(w[j, 2]), a] and band[a, int(w[j, 0]), int(w[j, 1])]:
+                bits |= 1 << a
+        fresh = cone & dig
+        mem = membership[fresh]
+        tr = mem != 0
+        if tr.any() and not ((mem[tr] & np.uint8(bits)) != 0).all():
+            continue
+        exact[cid] = True
+    return exact
+
+
+def _cover_from_poses(cpose, cabins, *, cones, bh, dig, padding, membership,
+                      index, n, axis, witness, max_witnesses):
+    """Screen coverage of one pose set at one heading over ``cabins``.
+
+    Same admissibility screen as the main sweep: the cone must hold a fresh
+    cell, no padding, and no fresh cell owned exclusively by another section.
+    """
+    cov = np.zeros(n, dtype=bool)
+    for cb in cabins:
+        offs = cones[bh][cb]
+        rr = cpose[:, 0:1] + offs[None, :, 0]
+        cc = cpose[:, 1:2] + offs[None, :, 1]
+        ok = (rr >= 0) & (rr < SHAPE[0]) & (cc >= 0) & (cc < SHAPE[1])
+        rrc, ccc = np.clip(rr, 0, SHAPE[0] - 1), np.clip(cc, 0, SHAPE[1] - 1)
+        freshm = dig[rrc, ccc] & ok
+        live = freshm.any(1)
+        nopad = ~np.any(padding[rrc, ccc] & ok, axis=1)
+        mem = membership[rrc, ccc]
+        bad = np.any(freshm & (mem != 0)
+                     & ((mem & np.uint8(1 << axis)) == 0), axis=1)
+        good = live & nopad & ~bad
+        for i in np.flatnonzero(good):
+            ids = index[rrc[i][freshm[i]], ccc[i][freshm[i]]]
+            ids = ids[ids >= 0]
+            cov[ids] = True
+            for cid in ids:
+                wl = witness.setdefault(int(cid), [])
+                if len(wl) < max_witnesses:
+                    wl.append((int(cpose[i, 0]), int(cpose[i, 1]), bh, cb))
+    return cov
+
+
+def onaxis_lane(*, naxes, membership, dig, index, cells, n, padding, free_models,
+                band, yaw_ok, perp_tiles, cones, succ):
+    """(C) Is every section completable by dig-ahead-and-retreat on the line?
+
+    For each blocked-space model and tolerance, per section: the poses within
+    ``tol`` tiles of the section axis that are yaw-parallel, Terra-legal, and
+    inside the gate band (all-True under v2; under v1 the band alone empties
+    this lane); lanes connected by FORWARD/BACKWARD only; cabin restricted to
+    straight ahead and straight behind the chassis.  Screened coverage is then
+    re-verified per section with exact Terra cones.
+
+    ``free_models`` maps a model name to its (12, 64, 64) legal-pose array.
+    ``fresh`` (blocked = padding) is the model that matches a monotone retreat;
+    ``persistent`` (blocked = padding | all target<0) is the pessimistic bound.
+    """
+    near_axis = []
+    own_ids = []
+    for a in range(naxes):
+        own = (membership & np.uint8(1 << a)) != 0
+        sec = dig & own
+        near_axis.append(dilate(sec, 12))
+        ids = index[sec]
+        own_ids.append(ids[ids >= 0])
+
+    out = []
+    for model, free in free_models.items():
+        for tol_tiles in ONAXIS_TOL_TILES:
+            union_exact = np.zeros(n, dtype=bool)
+            axis_rows = []
+            for a in range(naxes):
+                onaxis = perp_tiles[a] <= float(tol_tiles)
+                witness = {}
+                axis_screen = np.zeros(n, dtype=bool)
+                best_comp_hits = -1
+                lanes = 0
+                poses_total = 0
+                for bh in range(NH):
+                    if not yaw_ok[bh, a]:
+                        continue
+                    pose_ok = band[a] & free[bh] & near_axis[a] & onaxis
+                    poses, labels, ncomp = lane_components(pose_ok, succ[bh])
+                    if poses.shape[0] == 0:
+                        continue
+                    for comp in range(ncomp):
+                        cpose = poses[labels == comp]
+                        if cpose.shape[0] == 0:
+                            continue
+                        lanes += 1
+                        poses_total += int(cpose.shape[0])
+                        cov = _cover_from_poses(
+                            cpose, ONAXIS_CABINS, cones=cones, bh=bh, dig=dig,
+                            padding=padding, membership=membership, index=index,
+                            n=n, axis=a, witness=witness,
+                            max_witnesses=MAX_ONAXIS_WITNESSES)
+                        axis_screen |= cov
+                        hits = (int(cov[own_ids[a]].sum())
+                                if own_ids[a].size else 0)
+                        best_comp_hits = max(best_comp_hits, hits)
+                axis_exact = exact_verify(
+                    witness, n, cells=cells, dig=dig, padding=padding,
+                    membership=membership, yaw_ok=yaw_ok, band=band, naxes=naxes)
+                union_exact |= axis_exact
+                sec_n = int(own_ids[a].size)
+                own_exact = int(axis_exact[own_ids[a]].sum()) if sec_n else 0
+                axis_rows.append({
+                    "axis": a,
+                    "section_cells": sec_n,
+                    "lanes": lanes,
+                    "lane_poses": poses_total,
+                    "own_cells_covered_screen":
+                        int(axis_screen[own_ids[a]].sum()) if sec_n else 0,
+                    "own_cells_covered_exact": own_exact,
+                    "own_lane_complete_exact": bool(sec_n and own_exact == sec_n),
+                    "best_single_component_own_share_screen":
+                        (max(best_comp_hits, 0) / sec_n) if sec_n else 0.0,
+                })
+            out.append({
+                "blocked_model": model,
+                "tolerance_tiles": float(tol_tiles),
+                "cabins": list(ONAXIS_CABINS),
+                "cells_covered_exact": int(union_exact.sum()),
+                "complete_exact": bool(union_exact.sum() == n),
+                "sections": len(axis_rows),
+                "sections_own_lane_complete_exact":
+                    sum(r["own_lane_complete_exact"] for r in axis_rows),
+                "min_section_own_share_exact":
+                    min((r["own_cells_covered_exact"] / max(r["section_cells"], 1)
+                         for r in axis_rows), default=0.0),
+                "min_best_single_component_own_share_screen":
+                    min((r["best_single_component_own_share_screen"]
+                         for r in axis_rows), default=0.0),
+                "per_axis": axis_rows,
+            })
+    return out
+
+
+def sweep_map(case, use_legacy_mirror: bool):
     cones = _W["cones"]
     tile = _W["cfg"].tile_size
     tol, so_min, so_max = _W["tol"], _W["so_min"], _W["so_max"]
+    enforce_band = _W["enforce_band"]
     fwd, bwd = _W["fwd"], _W["bwd"]
 
     target = np.load(case["images"], allow_pickle=False).astype(np.int32)
     padding = np.load(case["occupancy"], allow_pickle=False).astype(bool)
     metadata = json.loads(Path(case["metadata"]).read_text())
     records, naxes, half = records_from_metadata(metadata)
+    family = note_family(case["condition"],
+                         str(metadata.get("trench_topology", "")))
     membership = np.asarray(compute_trench_axis_membership(
         jnp.asarray(target.astype(np.int8)), jnp.asarray(records), jnp.int32(naxes)
     )).astype(np.uint8)
@@ -172,7 +386,8 @@ def sweep_map(case, use_terra_footprint: bool):
     standoff = np.stack([
         np.abs(axes3[a, 0] * cols + axes3[a, 1] * rows + axes3[a, 2]) / den[a] * tile
         for a in range(naxes)])
-    band = (standoff >= so_min) & (standoff <= so_max)
+    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band)
+    perp_tiles = standoff / max(tile, 1e-9)
     tg = np.stack([-axes3[:, 0], axes3[:, 1]], axis=1)
     tn = np.maximum(np.linalg.norm(tg, axis=1), 1e-6)
     yaw_ok = np.zeros((NH, naxes), dtype=bool)
@@ -182,8 +397,14 @@ def sweep_map(case, use_terra_footprint: bool):
         yaw_ok[bh] = np.arccos(np.clip(np.abs(tg @ f) / tn, 0, 1)) <= tol
 
     blocked = padding | dig
-    offsets = _W["fp_masked"] if use_terra_footprint else _W["fp_true"]
-    free = free_poses(blocked, offsets, transposed=use_terra_footprint)
+    offsets = _W["fp_masked"] if use_legacy_mirror else _W["fp_true"]
+    free = free_poses(blocked, offsets, transposed=use_legacy_mirror)
+    # The on-axis lane is the one question where "assume the whole trench is
+    # already dug" is the wrong model: a machine ON the line would be standing
+    # in its own hole.  A monotone retreat never does that (the cone starts at
+    # 3.64 m, the chassis reaches 3.14 m ahead), so the fresh map is the right
+    # blocked space for it.  Both are reported.
+    free_fresh = free_poses(padding, offsets, transposed=use_legacy_mirror)
 
     covered = np.zeros(n, dtype=bool)
     witness = {}                       # cell -> (row, col, bh, cb)
@@ -204,28 +425,10 @@ def sweep_map(case, use_terra_footprint: bool):
                 cpose = poses[sel]
                 if cpose.shape[0] == 0:
                     continue
-                comp_cov = np.zeros(n, dtype=bool)
-                for cb in range(NH):
-                    offs = cones[bh][cb]
-                    rr = cpose[:, 0:1] + offs[None, :, 0]
-                    cc = cpose[:, 1:2] + offs[None, :, 1]
-                    ok = (rr >= 0) & (rr < SHAPE[0]) & (cc >= 0) & (cc < SHAPE[1])
-                    rrc, ccc = np.clip(rr, 0, SHAPE[0] - 1), np.clip(cc, 0, SHAPE[1] - 1)
-                    freshm = dig[rrc, ccc] & ok
-                    live = freshm.any(1)
-                    nopad = ~np.any(padding[rrc, ccc] & ok, axis=1)
-                    mem = membership[rrc, ccc]
-                    bad = np.any(freshm & (mem != 0)
-                                 & ((mem & np.uint8(1 << a)) == 0), axis=1)
-                    good = live & nopad & ~bad
-                    for i in np.flatnonzero(good):
-                        ids = index[rrc[i][freshm[i]], ccc[i][freshm[i]]]
-                        ids = ids[ids >= 0]
-                        comp_cov[ids] = True
-                        for cid in ids:
-                            w = witness.setdefault(int(cid), [])
-                            if len(w) < MAX_WITNESSES:
-                                w.append((int(cpose[i, 0]), int(cpose[i, 1]), bh, cb))
+                comp_cov = _cover_from_poses(
+                    cpose, range(NH), cones=cones, bh=bh, dig=dig,
+                    padding=padding, membership=membership, index=index, n=n,
+                    axis=a, witness=witness, max_witnesses=MAX_WITNESSES)
                 covered |= comp_cov
                 along = cpose @ np.array([-axes3[a, 0], axes3[a, 1]]) / den[a]
                 lane_stats.append({
@@ -235,36 +438,9 @@ def sweep_map(case, use_terra_footprint: bool):
                     "section_cells_covered": int(np.sum(comp_cov & own[cells[:, 0], cells[:, 1]])),
                 })
 
-    # Exact re-verification: the offset-table screen is only ~81% translation
-    # exact, so several candidate witnesses per cell are checked with a real
-    # per-pose Terra cone and the cell counts as covered if any one of them
-    # holds.  A single witness per cell produced ~1.5% false negatives.
-    exact_covered = np.zeros(n, dtype=bool)
-    flat = [(cid, w) for cid in sorted(witness) for w in witness[cid]]
-    if flat:
-        w = np.array([x[1] for x in flat], dtype=np.int32)
-        masks = np.asarray(_W["cone_fn"](
-            jnp.asarray(w[:, 0]), jnp.asarray(w[:, 1]),
-            jnp.asarray(w[:, 2]), jnp.asarray(w[:, 3])))
-        for j, (cid, _w) in enumerate(flat):
-            if exact_covered[cid]:
-                continue
-            cone = masks[j].astype(bool)
-            r, c = cells[cid]
-            if not cone[r, c]:
-                continue
-            if np.any(padding[cone]):
-                continue
-            bits = 0
-            for a in range(naxes):
-                if yaw_ok[int(w[j, 2]), a] and band[a, int(w[j, 0]), int(w[j, 1])]:
-                    bits |= 1 << a
-            fresh = cone & dig
-            mem = membership[fresh]
-            tr = mem != 0
-            if tr.any() and not ((mem[tr] & np.uint8(bits)) != 0).all():
-                continue
-            exact_covered[cid] = True
+    exact_covered = exact_verify(
+        witness, n, cells=cells, dig=dig, padding=padding, membership=membership,
+        yaw_ok=yaw_ok, band=band, naxes=naxes)
 
     best_lane = {}
     for ls in lane_stats:
@@ -272,10 +448,19 @@ def sweep_map(case, use_terra_footprint: bool):
         cur = best_lane.get(k)
         if cur is None or ls["section_cells_covered"] > cur["section_cells_covered"]:
             best_lane[k] = ls
+    onaxis = onaxis_lane(
+        naxes=naxes, membership=membership, dig=dig, index=index, cells=cells,
+        n=n, padding=padding,
+        free_models={"fresh": free_fresh, "persistent": free},
+        band=band, yaw_ok=yaw_ok, perp_tiles=perp_tiles, cones=cones,
+        succ=_W["succ"])
+
     return {
         "label": case["label"], "condition": case["condition"],
+        "family": family,
         "map_id": case["map_id"], "axes": naxes, "target_cells": n,
-        "footprint": "terra_transposed" if use_terra_footprint else "corrected",
+        "onaxis_lane": onaxis,
+        "footprint": "legacy_mirror" if use_legacy_mirror else "terra",
         "cells_covered_screen": int(covered.sum()),
         "cells_covered_exact": int(exact_covered.sum()),
         "complete_screen": bool(covered.sum() == n),
@@ -338,15 +523,26 @@ def main():
     ap.add_argument("--dataset", default="evaluation/gate_main/development")
     ap.add_argument("--exclude-prefix", nargs="*", default=["trn-net4-"])
     ap.add_argument("--workers", type=int, default=10)
+    ap.add_argument("--limit", type=int, default=None,
+                    help="analyze only the first N maps (timing slice)")
+    ap.add_argument("--gate-v1", action="store_true",
+                    help="force the retired v1 semantics (perpendicular "
+                         "standoff band enforced on top of yaw-parallel); the "
+                         "on-axis lane is empty under it, by construction")
+    ap.add_argument("--selfcheck-maps", type=int, default=2,
+                    help="maps on which the numpy replica is asserted against "
+                         "Terra's exported verdict (0 disables)")
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
 
     cfg = env_config()
     cones, fp_true, fp_masked, fwd, bwd = geometry(cfg)
-    base = EnvConfig()
-    tol = float(base.trench_dig_yaw_tolerance_rad)
-    so_min = float(base.trench_dig_standoff_min_m)
-    so_max = float(base.trench_dig_standoff_max_m)
+    gate = gate_contract(args.gate_v1)
+    tol, so_min, so_max = gate["tol"], gate["so_min"], gate["so_max"]
+    enforce_band = gate["enforce_band"]
+    print(f"gate semantics {gate['semantics']} "
+          f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+          flush=True)
     succ = move_tables(cfg)
     drift = move_drift_table(cfg, succ)
     print("along-axis motion: exact Terra steps and two-move perpendicular drift",
@@ -358,11 +554,25 @@ def main():
               f"max|.| {d['two_move_perp_drift_tiles']['max_abs']:.4f}", flush=True)
 
     cases = cases_from_panel(args.bank_root, args.dataset, None, args.exclude_prefix)
+    if args.limit is not None:
+        cases = cases[: args.limit]
     print(f"{len(cases)} trench maps", flush=True)
+
+    selfcheck = []
+    for case in cases[: max(args.selfcheck_maps, 0)]:
+        row = terra_gate_selfcheck(cfg, case, tol=tol, so_min=so_min,
+                                   so_max=so_max, enforce_band=enforce_band)
+        selfcheck.append(row)
+        print(f"selfcheck {row['map']}: probes={row['probes']} "
+              f"applicable={row['applicable_probes']} "
+              f"mismatches={row['mismatches']}", flush=True)
+    if any(row["mismatches"] for row in selfcheck):
+        raise SystemExit("replica disagrees with Terra's exported gate verdict")
+
     ctx = mp.get_context("spawn")
     with ctx.Pool(args.workers, initializer=_init,
                   initargs=(cfg, cones, fp_true, fp_masked, fwd, bwd,
-                            tol, so_min, so_max)) as pool:
+                            tol, so_min, so_max, enforce_band)) as pool:
         results = []
         for i, pair in enumerate(pool.imap_unordered(analyze, cases, chunksize=1)):
             results.extend(pair)
@@ -370,7 +580,7 @@ def main():
                 print(f"{i + 1}/{len(cases)}", flush=True)
 
     summary = []
-    for fp in ("terra_transposed", "corrected"):
+    for fp in ("terra", "legacy_mirror"):
         rs = [r for r in results if r["footprint"] == fp]
         by = {}
         for r in rs:
@@ -389,6 +599,37 @@ def main():
                 "max_along_axis_extent_tiles":
                     float(max(r["max_along_axis_extent_tiles"] for r in g)),
             })
+    onaxis_summary = []
+    for fp in ("terra", "legacy_mirror"):
+        rs = [r for r in results if r["footprint"] == fp]
+        by = {}
+        for r in rs:
+            by.setdefault(r["family"], []).append(r)
+        for fam in sorted(by):
+            g = by[fam]
+            for k in range(len(g[0]["onaxis_lane"])):
+                rows = [r["onaxis_lane"][k] for r in g]
+                sections = sum(r["sections"] for r in rows)
+                onaxis_summary.append({
+                    "footprint": fp, "family": fam, "maps": len(g),
+                    "blocked_model": rows[0]["blocked_model"],
+                    "tolerance_tiles": rows[0]["tolerance_tiles"],
+                    "tolerance_m": round(rows[0]["tolerance_tiles"] * cfg.tile_size, 3),
+                    "target_cells": sum(r["target_cells"] for r in g),
+                    "cells_covered_exact": sum(r["cells_covered_exact"] for r in rows),
+                    "maps_complete_exact": sum(r["complete_exact"] for r in rows),
+                    "sections": sections,
+                    "sections_own_lane_complete_exact":
+                        sum(r["sections_own_lane_complete_exact"] for r in rows),
+                    "min_section_own_share_exact":
+                        float(min(r["min_section_own_share_exact"] for r in rows)),
+                    "mean_section_own_share_exact":
+                        float(np.mean([r["min_section_own_share_exact"] for r in rows])),
+                    "min_best_single_component_own_share_screen":
+                        float(min(r["min_best_single_component_own_share_screen"]
+                                  for r in rows)),
+                })
+
     payload = {
         "schema": "terra_trench_axis_sweep_feasibility_v1",
         "contract": {
@@ -397,15 +638,44 @@ def main():
             "dump_constraints": "removed (no dumpability, accepted zone, dump reach, "
                                 "spoil, pile-in-cone; previous-dig mask cleared between digs)",
             "motion": "FORWARD/BACKWARD at a fixed heading only, plus free cabin rotation",
+            "footprint_models": {
+                "terra": "compute_polygon_mask offsets in (row, col) -- Terra "
+                         "since commit 566867db",
+                "legacy_mirror": "the retired (col, row) raster",
+            },
+            "gate_semantics": gate["semantics"],
+            "standoff_band_enforced": enforce_band,
+            "gate_v1_forced": gate["forced"],
+            "config_trench_dig_standoff_enforced": gate["config_default_enforced"],
+            "terra_replica_selfcheck": selfcheck,
+            "onaxis_lane": {
+                "definition": "perpendicular <= tolerance tiles of the section "
+                              "axis, chassis yaw parallel, cabin straight ahead "
+                              "or straight behind the chassis, FORWARD/BACKWARD "
+                              "motion only, dumping removed",
+                "cabins": list(ONAXIS_CABINS),
+                "tolerances_tiles": list(ONAXIS_TOL_TILES),
+                "tolerances_m": [round(t * cfg.tile_size, 3) for t in ONAXIS_TOL_TILES],
+                "blocked_models": {
+                    "fresh": "padding only -- the correct model for a monotone "
+                             "retreat, since the cone (>= 3.64 m) never reaches "
+                             "the chassis (<= 3.14 m ahead)",
+                    "persistent": "padding | all target<0 -- the pessimistic "
+                                  "order-independent bound used by A and B; a "
+                                  "machine on the line stands in its own hole",
+                },
+                "note": "empty by construction under v1 (the 3.5 m floor)",
+            },
             "yaw_tolerance_rad": tol, "standoff_band_m": [so_min, so_max],
             "maps": len(cases),
         },
         "move_drift": drift,
         "summary_by_condition": summary,
+        "onaxis_summary_by_family": onaxis_summary,
         "results": results,
     }
     args.output.write_text(json.dumps(payload, indent=1))
-    for fp in ("terra_transposed", "corrected"):
+    for fp in ("terra", "legacy_mirror"):
         rows = [r for r in summary if r["footprint"] == fp]
         tot_m = sum(r["maps"] for r in rows)
         tot_c = sum(r["complete_exact"] for r in rows)
@@ -418,6 +688,19 @@ def main():
                   f"min_single_lane_share {r['min_axis_best_single_lane_share']:.3f} "
                   f"lane_extent {r['max_along_axis_extent_tiles']:.1f}")
         print(f"  TOTAL complete {tot_c}/{tot_m}  cells {tot_cov}/{tot_cells}")
+
+    for fp in ("terra", "legacy_mirror"):
+        print(f"\n=== on-axis lane (cabin ahead/behind, fwd/bwd only) "
+              f"footprint: {fp} ===")
+        rows = [r for r in onaxis_summary if r["footprint"] == fp]
+        for r in rows:
+            print(f"  {r['blocked_model']:10s} {r['family']:10s} "
+                  f"tol {r['tolerance_tiles']:.1f}t "
+                  f"({r['tolerance_m']:.2f} m)  maps_complete "
+                  f"{r['maps_complete_exact']:3d}/{r['maps']:3d}  sections_complete "
+                  f"{r['sections_own_lane_complete_exact']:4d}/{r['sections']:4d}  "
+                  f"cells {r['cells_covered_exact']:6d}/{r['target_cells']:6d}  "
+                  f"min_section_share {r['min_section_own_share_exact']:.3f}")
     print(f"wrote {args.output}")
 
 

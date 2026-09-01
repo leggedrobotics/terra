@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """Is a gate-admissible fresh-dig cover reachable under Terra's runtime pose rules?
 
-``tools/audit_trench_alignment_feasibility.py`` builds its pose graph from the
-agent footprint rasterised in ``(row, col)``.  Terra does not: ``_is_valid_move``
-tests the footprint polygon returned by ``compute_polygon_mask``, which is a
-``(col, row)`` raster, so occupancy is evaluated at the transposed position and
-the *mirror image* of the trench acts as the obstacle field.  This tool redoes
-the cover question under Terra's actual rule.
+This tool answers the cover question under Terra's actual footprint rule, and
+under the retired one.  ``compute_polygon_mask`` used to return a ``(col, row)``
+raster while ``pos_base`` is ``(row, col)``, so ``_is_valid_move`` evaluated
+occupancy at the mirror position and the *mirror image* of the trench acted as
+the obstacle field.  terra commit 566867db fixed that, so the ``terra`` columns
+below are now the correct ``(row, col)`` model (0.9995 agreement with
+``State._is_valid_move``) and the ``legacy_mirror`` columns are the retired
+behaviour the pre-fix receipts measured.
 
 For every trench map it computes, with ``blocked = padding | all target<0``
 (the order-independent worst case, so a controller using only these stations can
 never wall itself off):
 
   * the gate-admissible (pose, cabin) dig stations;
-  * which of them are legal poses under Terra's transposed footprint test, and
-    which under a correct ``(row, col)`` footprint;
+  * which of them are legal poses under Terra's footprint test today, and which
+    under the retired mirror model;
   * the target cells covered by each of those two station sets;
-  * whether the Terra-legal station set is connected and reachable from the
-    frozen episode spawn pose.
+  * whether the Terra-legal station set is connected.
 
-The gap between the two cover numbers is the cost of the transposition.
+The gap between the two cover numbers is what the transposition used to cost.
 """
 
 from __future__ import annotations
@@ -33,20 +34,22 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from terra.config import EnvConfig
 from terra.map import compute_trench_axis_membership
 
 from audit_trench_gate_overrestriction import (
-    NH, SHAPE, cases_from_panel, dilate, env_config, free_poses, gather, geometry,
-    records_from_metadata,
+    NH, SHAPE, cases_from_panel, dilate, env_config, free_poses, gate_contract,
+    gather, geometry, records_from_metadata, standoff_bands,
+    terra_gate_selfcheck,
 )
 
 _W = {}
 
 
-def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max):
+def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max,
+          enforce_band=True):
     _W.update(cfg=cfg, cones=cones, fp_true=fp_true, fp_masked=fp_masked,
-              fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max)
+              fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max,
+              enforce_band=bool(enforce_band))
 
 
 def components(free, fwd, bwd):
@@ -77,6 +80,7 @@ def components(free, fwd, bwd):
 def analyze(case):
     cones, tile = _W["cones"], _W["cfg"].tile_size
     tol, so_min, so_max = _W["tol"], _W["so_min"], _W["so_max"]
+    enforce_band = _W["enforce_band"]
     fwd, bwd = _W["fwd"], _W["bwd"]
 
     target = np.load(case["images"], allow_pickle=False).astype(np.int32)
@@ -100,7 +104,7 @@ def analyze(case):
     standoff = np.stack([
         np.abs(axes3[a, 0] * cols + axes3[a, 1] * rows + axes3[a, 2]) / den[a] * tile
         for a in range(naxes)])
-    band = (standoff >= so_min) & (standoff <= so_max)
+    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band)
     tg = np.stack([-axes3[:, 0], axes3[:, 1]], axis=1)
     tn = np.maximum(np.linalg.norm(tg, axis=1), 1e-6)
     yaw_ok = np.zeros((NH, naxes), dtype=bool)
@@ -115,12 +119,12 @@ def analyze(case):
                 bits[bh] |= np.where(band[a], np.uint8(1 << a), np.uint8(0))
 
     blocked = padding | dig                     # order-independent worst case
-    free_terra = free_poses(blocked, _W["fp_masked"], transposed=True)
-    free_true = free_poses(blocked, _W["fp_true"], transposed=False)
+    free_terra = free_poses(blocked, _W["fp_true"], transposed=False)
+    free_legacy = free_poses(blocked, _W["fp_masked"], transposed=True)
 
     cov_any = np.zeros(n, dtype=bool)
     cov_terra = np.zeros(n, dtype=bool)
-    cov_true = np.zeros(n, dtype=bool)
+    cov_legacy = np.zeros(n, dtype=bool)
     station_terra = np.zeros((NH,) + SHAPE, dtype=bool)
     near = dilate(dig, 12)
     for bh in range(NH):
@@ -130,7 +134,7 @@ def analyze(case):
             continue
         pbits = bits[bh][pm]
         okt = free_terra[bh][pm]
-        okr = free_true[bh][pm]
+        okr = free_legacy[bh][pm]
         for cb in range(NH):
             counts, (rrc, ccc, ok) = gather(poses, cones[bh][cb], [dig, padding])
             nfresh, npad = counts
@@ -154,7 +158,7 @@ def analyze(case):
                     cov_terra[ids] = True
                     station_terra[bh, poses[i, 0], poses[i, 1]] = True
                 if okr[i]:
-                    cov_true[ids] = True
+                    cov_legacy[ids] = True
 
     comp, ncomp = components(free_terra, fwd, bwd)
     st_nodes = np.argwhere(station_terra)
@@ -169,15 +173,15 @@ def analyze(case):
         "axes": naxes, "target_cells": n,
         "cells_admissible_any_pose": int(cov_any.sum()),
         "cells_admissible_terra_legal_persistent_station": int(cov_terra.sum()),
-        "cells_admissible_true_footprint_persistent_station": int(cov_true.sum()),
-        "cells_lost_to_footprint_transposition": int(np.sum(cov_true & ~cov_terra)),
-        "cells_gained_by_transposition": int(np.sum(cov_terra & ~cov_true)),
+        "cells_admissible_legacy_mirror_persistent_station": int(cov_legacy.sum()),
+        "cells_lost_to_legacy_mirror": int(np.sum(cov_terra & ~cov_legacy)),
+        "cells_gained_by_legacy_mirror": int(np.sum(cov_legacy & ~cov_terra)),
         "terra_legal_stations": int(station_terra.sum()),
         "station_components": len(st_comps),
         "largest_station_component_share":
             float(max(sizes.values()) / max(len(st_nodes), 1)) if st_nodes.size else 0.0,
         "complete_terra": bool(cov_terra.sum() == n),
-        "complete_true": bool(cov_true.sum() == n),
+        "complete_legacy_mirror": bool(cov_legacy.sum() == n),
         "complete_any": bool(cov_any.sum() == n),
     }
 
@@ -188,22 +192,45 @@ def main():
     ap.add_argument("--dataset", default="evaluation/gate_main/development")
     ap.add_argument("--exclude-prefix", nargs="*", default=["trn-net4-"])
     ap.add_argument("--workers", type=int, default=10)
+    ap.add_argument("--limit", type=int, default=None,
+                    help="analyze only the first N maps (timing slice)")
+    ap.add_argument("--selfcheck-maps", type=int, default=2,
+                    help="maps on which the numpy replica is asserted against "
+                         "Terra's exported verdict (0 disables)")
+    ap.add_argument("--gate-v1", action="store_true",
+                    help="force the retired v1 semantics (perpendicular "
+                         "standoff band enforced on top of yaw-parallel)")
     ap.add_argument("--output", type=Path, required=True)
     args = ap.parse_args()
 
     cfg = env_config()
     cones, fp_true, fp_masked, fwd, bwd = geometry(cfg)
-    base = EnvConfig()
-    tol = float(base.trench_dig_yaw_tolerance_rad)
-    so_min = float(base.trench_dig_standoff_min_m)
-    so_max = float(base.trench_dig_standoff_max_m)
+    gate = gate_contract(args.gate_v1)
+    tol, so_min, so_max = gate["tol"], gate["so_min"], gate["so_max"]
+    enforce_band = gate["enforce_band"]
+    print(f"gate semantics {gate['semantics']} "
+          f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+          flush=True)
     cases = cases_from_panel(args.bank_root, args.dataset, None, args.exclude_prefix)
+    if args.limit is not None:
+        cases = cases[: args.limit]
     print(f"{len(cases)} trench maps", flush=True)
+
+    selfcheck = []
+    for case in cases[: max(args.selfcheck_maps, 0)]:
+        row = terra_gate_selfcheck(cfg, case, tol=tol, so_min=so_min,
+                                   so_max=so_max, enforce_band=enforce_band)
+        selfcheck.append(row)
+        print(f"selfcheck {row['map']}: probes={row['probes']} "
+              f"applicable={row['applicable_probes']} "
+              f"mismatches={row['mismatches']}", flush=True)
+    if any(row["mismatches"] for row in selfcheck):
+        raise SystemExit("replica disagrees with Terra's exported gate verdict")
 
     ctx = mp.get_context("spawn")
     with ctx.Pool(args.workers, initializer=_init,
                   initargs=(cfg, cones, fp_true, fp_masked, fwd, bwd,
-                            tol, so_min, so_max)) as pool:
+                            tol, so_min, so_max, enforce_band)) as pool:
         results = []
         for i, res in enumerate(pool.imap_unordered(analyze, cases, chunksize=1)):
             results.append(res)
@@ -220,12 +247,13 @@ def main():
             "condition": cond, "maps": len(g),
             "target_cells": sum(r["target_cells"] for r in g),
             "complete_any": sum(r["complete_any"] for r in g),
-            "complete_true_footprint": sum(r["complete_true"] for r in g),
             "complete_terra_footprint": sum(r["complete_terra"] for r in g),
-            "cells_lost_to_footprint_transposition":
-                sum(r["cells_lost_to_footprint_transposition"] for r in g),
-            "cells_gained_by_transposition":
-                sum(r["cells_gained_by_transposition"] for r in g),
+            "complete_legacy_mirror_footprint":
+                sum(r["complete_legacy_mirror"] for r in g),
+            "cells_lost_to_legacy_mirror":
+                sum(r["cells_lost_to_legacy_mirror"] for r in g),
+            "cells_gained_by_legacy_mirror":
+                sum(r["cells_gained_by_legacy_mirror"] for r in g),
             "mean_station_components": float(np.mean([r["station_components"] for r in g])),
             "min_largest_station_component_share":
                 float(min(r["largest_station_component_share"] for r in g)),
@@ -234,15 +262,27 @@ def main():
         "schema": "terra_trench_persistent_station_cover_v1",
         "contract": {"bank": str(args.bank_root), "dataset": args.dataset,
                      "blocked": "padding | all target<0 (order independent)",
+                     "footprint_terra": "compute_polygon_mask offsets in "
+                                        "(row, col) -- Terra since 566867db",
+                     "footprint_legacy_mirror": "the retired (col, row) raster",
+                     "gate_semantics": gate["semantics"],
+                     "standoff_band_enforced": enforce_band,
+                     "gate_v1_forced": gate["forced"],
+                     "config_trench_dig_standoff_enforced":
+                         gate["config_default_enforced"],
+                     "terra_replica_selfcheck": selfcheck,
+                     "yaw_tolerance_rad": tol,
+                     "standoff_band_m": [so_min, so_max],
                      "maps": len(cases)},
         "summary_by_condition": summary, "results": results,
     }
     args.output.write_text(json.dumps(payload, indent=1))
     for r in summary:
         print(f"{r['condition']:24s} maps={r['maps']:3d} complete: any={r['complete_any']:3d} "
-              f"true_fp={r['complete_true_footprint']:3d} terra_fp={r['complete_terra_footprint']:3d} "
-              f"cells_lost={r['cells_lost_to_footprint_transposition']:4d} "
-              f"gained={r['cells_gained_by_transposition']:4d} "
+              f"terra_fp={r['complete_terra_footprint']:3d} "
+              f"legacy_fp={r['complete_legacy_mirror_footprint']:3d} "
+              f"cells_lost_to_legacy={r['cells_lost_to_legacy_mirror']:4d} "
+              f"gained_by_legacy={r['cells_gained_by_legacy_mirror']:4d} "
               f"ncomp={r['mean_station_components']:.2f} minshare={r['min_largest_station_component_share']:.3f}")
     print(f"wrote {args.output}")
 

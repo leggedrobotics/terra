@@ -1,0 +1,22 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+gate semantics v2 (standoff band enforced=False, forced=False)
+geometry {"tile_size_m": 0.5714285969734192, "agent_width_tiles": 7, "agent_height_tiles": 11, "forward_deltas": [[0, 5], [-2, 4], [-4, 2], [-5, 0], [-4, -2], [-2, -4], [0, -5], [2, -4], [4, -2], [5, 0], [4, 2], [2, 4]], "backward_deltas": [[0, -5], [2, -4], [4, -2], [5, 0], [4, 2], [2, 4], [0, 5], [-2, 4], [-4, 2], [-5, 0], [-4, -2], [-2, -4]], "maps": 64, "workers": 8}
+[50/64] 41s
+[64/64] 46s
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html

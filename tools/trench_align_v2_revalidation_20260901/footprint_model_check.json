@@ -1,0 +1,32 @@
+{
+ "schema": "terra_trench_footprint_model_check_v1",
+ "contract": {
+  "probes": 4000,
+  "obstacle_density": 0.004,
+  "terra_legal_fraction": 0.717,
+  "reference": "State._is_valid_move on the same random obstacle field",
+  "note": "free_poses does not model the corner-in-bounds clause, which accounts for the small residual on the exact model"
+ },
+ "models": {
+  "fp_true_untransposed (the tools' 'terra' model)": {
+   "agreement": 0.9995,
+   "false_legal": 2,
+   "false_illegal": 0
+  },
+  "fp_masked_transposed (the tools' 'legacy_mirror' model)": {
+   "agreement": 0.527,
+   "false_legal": 951,
+   "false_illegal": 941
+  },
+  "fp_masked_untransposed": {
+   "agreement": 0.88325,
+   "false_legal": 241,
+   "false_illegal": 226
+  },
+  "fp_true_transposed": {
+   "agreement": 0.545,
+   "false_legal": 922,
+   "false_illegal": 898
+  }
+ }
+}

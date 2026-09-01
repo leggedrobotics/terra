@@ -4,7 +4,15 @@
 The probe uses Terra's JAX cone, footprint, movement, finite-section
 membership, and dynamic-dumpability implementations.  A fresh DO is
 all-or-nothing: every still-fresh target cell in its cone must belong to at
-least one section for which the base pose satisfies yaw and standoff.
+least one section for which the base pose is pose-valid.
+
+Pose validity follows ``EnvConfig.trench_dig_standoff_enforced``.  Under v2
+(the shipped default) that is the yaw-parallel clause alone -- working distance
+is the dig cone's job, tested radially machine -> cell, not perpendicular
+machine -> axis.  ``--gate-v1`` forces the retired perpendicular standoff band
+back on so the pre-2026-09-01 numbers (``tools/trench_alignment_feasibility_
+20260818.json``, ``tools/trench_alignment_preflight_pilot_20260819.json``) stay
+reproducible.  See TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
 """
 
 from __future__ import annotations
@@ -35,6 +43,22 @@ YAW_TOLERANCE_DEG = 15.001
 STANDOFF_MIN_M = 3.5
 STANDOFF_MAX_M = 7.0
 MAX_AXES = 4
+
+
+def gate_contract(force_v1: bool = False) -> dict:
+    """Which pose semantics this run enforces.
+
+    v2 (the shipped default) drops the perpendicular standoff band entirely;
+    v1 keeps it.  ``force_v1`` is the ``--gate-v1`` override.
+    """
+    base = EnvConfig()
+    enforce = bool(force_v1 or base.trench_dig_standoff_enforced)
+    return {
+        "enforce_band": enforce,
+        "semantics": "v1" if enforce else "v2",
+        "forced": bool(force_v1),
+        "config_default_enforced": bool(base.trench_dig_standoff_enforced),
+    }
 
 
 def env_config() -> EnvConfig:
@@ -238,7 +262,13 @@ def base_axis_bits(
     records: np.ndarray,
     axis_count: int,
     tile_size: float,
+    enforce_band: bool = True,
 ) -> dict[tuple[int, int, int], int]:
+    """Per pose, the bitmask of sections the pose is valid for.
+
+    ``enforce_band`` selects the semantics: v1 adds the perpendicular standoff
+    band on top of the yaw-parallel clause, v2 uses yaw alone.
+    """
     result: dict[tuple[int, int, int], int] = {}
     axes = records[:axis_count, :3].astype(np.float32)
     denominators = np.maximum(np.linalg.norm(axes[:, :2], axis=1), np.float32(1e-6))
@@ -259,11 +289,12 @@ def base_axis_bits(
             / denominators
             * np.float32(tile_size)
         )
-        valid = (
-            (yaw <= np.float32(YAW_TOLERANCE_DEG))
-            & (standoff >= np.float32(STANDOFF_MIN_M))
-            & (standoff <= np.float32(STANDOFF_MAX_M))
-        )
+        valid = yaw <= np.float32(YAW_TOLERANCE_DEG)
+        if enforce_band:
+            valid = valid & (
+                (standoff >= np.float32(STANDOFF_MIN_M))
+                & (standoff <= np.float32(STANDOFF_MAX_M))
+            )
         bits = 0
         for axis_index in np.flatnonzero(valid):
             bits |= 1 << int(axis_index)
@@ -567,13 +598,15 @@ def exact_cases(root: Path, relatives: list[str]) -> tuple[list[dict], list[dict
 _WORKER: dict = {}
 
 
-def _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas) -> None:
+def _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas,
+                 enforce_band=True) -> None:
     _WORKER.update(
         cfg=cfg,
         cones=cones,
         footprints=footprints,
         forward_deltas=forward_deltas,
         backward_deltas=backward_deltas,
+        enforce_band=bool(enforce_band),
     )
 
 
@@ -590,6 +623,7 @@ def _run_case(case: dict) -> dict:
         footprints=_WORKER["footprints"],
         forward_deltas=_WORKER["forward_deltas"],
         backward_deltas=_WORKER["backward_deltas"],
+        enforce_band=_WORKER["enforce_band"],
     )
     result["family"] = case["family"]
     result["condition"] = case["condition"]
@@ -654,6 +688,7 @@ def analyze_map(
     footprints: list[np.ndarray],
     forward_deltas: list[tuple[int, int]],
     backward_deltas: list[tuple[int, int]],
+    enforce_band: bool = True,
 ) -> dict:
     records, membership, axis_count = records_and_membership(target, metadata)
     target_count = int(np.count_nonzero(target < 0))
@@ -661,7 +696,8 @@ def analyze_map(
     valid_poses, components = valid_pose_graph(
         persistent_blocked, footprints, forward_deltas, backward_deltas
     )
-    axis_bits = base_axis_bits(valid_poses, records, axis_count, cfg.tile_size)
+    axis_bits = base_axis_bits(valid_poses, records, axis_count, cfg.tile_size,
+                               enforce_band=enforce_band)
     dump_reachable = dump_reachable_bases(
         target=target,
         padding=padding,
@@ -764,6 +800,12 @@ def main() -> None:
     )
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument(
+        "--gate-v1",
+        action="store_true",
+        help="force the retired v1 semantics (perpendicular standoff band "
+        "enforced on top of yaw-parallel)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -789,6 +831,13 @@ def main() -> None:
         raise RuntimeError(f"No trench maps found under {root}.")
 
     cfg = env_config()
+    gate = gate_contract(args.gate_v1)
+    enforce_band = gate["enforce_band"]
+    print(
+        f"gate semantics {gate['semantics']} "
+        f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+        flush=True,
+    )
     cones, footprints, forward_deltas, backward_deltas = terra_geometry(cfg)
     print(
         "geometry",
@@ -811,7 +860,8 @@ def main() -> None:
         with context.Pool(
             processes=args.workers,
             initializer=_init_worker,
-            initargs=(cfg, cones, footprints, forward_deltas, backward_deltas),
+            initargs=(cfg, cones, footprints, forward_deltas, backward_deltas,
+                      enforce_band),
         ) as pool:
             results = []
             for index, result in enumerate(
@@ -825,7 +875,8 @@ def main() -> None:
                     )
         results.sort(key=lambda item: item["label"])
     else:
-        _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas)
+        _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas,
+                     enforce_band)
         results = []
         for case in cases:
             result = _run_case(case)
@@ -884,6 +935,10 @@ def main() -> None:
             "yaw_tolerance_deg": YAW_TOLERANCE_DEG,
             "standoff_min_m": STANDOFF_MIN_M,
             "standoff_max_m": STANDOFF_MAX_M,
+            "gate_semantics": gate["semantics"],
+            "standoff_band_enforced": enforce_band,
+            "gate_v1_forced": gate["forced"],
+            "config_trench_dig_standoff_enforced": gate["config_default_enforced"],
             "pose_graph": (
                 "complete target holes plus padding, endpoint-only Terra "
                 "movement/rotation"
@@ -903,7 +958,7 @@ def main() -> None:
             ),
             "chain": (
                 "each used dig pose has one exact Terra BACKWARD successor "
-                "sharing a yaw/standoff-valid section"
+                "sharing a pose-valid section"
             ),
             "dump_probe": (
                 "same base, any cabin, existence of an accepted target>0 cell "

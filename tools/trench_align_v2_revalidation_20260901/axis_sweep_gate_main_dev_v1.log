@@ -1,0 +1,169 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+gate semantics v1 (standoff band enforced=True, forced=True)
+along-axis motion: exact Terra steps and two-move perpendicular drift
+  heading  0 ideal [0.0, 5.0] terra_steps [[0, 5]] two_move_perp_drift mean +0.0000 max|.| 0.0000
+  heading  1 ideal [-2.5, 4.3301] terra_steps [[-3, 4], [-2, 4]] two_move_perp_drift mean -0.1029 max|.| 0.5359
+  heading  2 ideal [-4.3301, 2.5] terra_steps [[-4, 2], [-4, 3]] two_move_perp_drift mean +0.1029 max|.| 0.5359
+  heading  3 ideal [-5.0, 0.0] terra_steps [[-5, 0]] two_move_perp_drift mean +0.0000 max|.| 0.0000
+  heading  4 ideal [-4.3301, -2.5] terra_steps [[-4, -3], [-4, -2]] two_move_perp_drift mean -0.0307 max|.| 1.1962
+  heading  5 ideal [-2.5, -4.3301] terra_steps [[-3, -4], [-2, -4]] two_move_perp_drift mean +0.1029 max|.| 0.5359
+  heading  6 ideal [-0.0, -5.0] terra_steps [[0, -5]] two_move_perp_drift mean +0.0000 max|.| 0.0000
+  heading  7 ideal [2.5, -4.3301] terra_steps [[2, -4], [3, -4]] two_move_perp_drift mean +0.3662 max|.| 1.1962
+  heading  8 ideal [4.3301, -2.5] terra_steps [[4, -3], [4, -2]] two_move_perp_drift mean +0.3555 max|.| 0.5359
+  heading  9 ideal [5.0, -0.0] terra_steps [[5, 0]] two_move_perp_drift mean +0.0000 max|.| 0.0000
+  heading 10 ideal [4.3301, 2.5] terra_steps [[4, 2], [4, 3]] two_move_perp_drift mean -0.1029 max|.| 0.5359
+  heading 11 ideal [2.5, 4.3301] terra_steps [[2, 4], [3, 4]] two_move_perp_drift mean +0.2472 max|.| 0.5359
+176 trench maps
+selfcheck trn-net3-side1-road:evaluation/gate_main/development:289: probes=512 applicable=197 mismatches=0
+selfcheck trn-net3-side1-road:evaluation/gate_main/development:290: probes=512 applicable=176 mismatches=0
+1/176
+21/176
+41/176
+61/176
+81/176
+101/176
+121/176
+141/176
+161/176
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+
+=== footprint: terra ===
+  trn-net3-side1-road        complete  16/ 16 cells   1394/  1394 min_single_lane_share 0.800 lane_extent 43.2
+  trn-net3-side2             complete  16/ 16 cells   1394/  1394 min_single_lane_share 0.800 lane_extent 43.2
+  trn-net3-side2-s           complete  16/ 16 cells    799/   799 min_single_lane_share 0.786 lane_extent 30.3
+  trn-seg2-side2             complete  16/ 16 cells   1261/  1261 min_single_lane_share 1.000 lane_extent 37.7
+  trn-seg3-side2             complete  16/ 16 cells   1707/  1707 min_single_lane_share 1.000 lane_extent 39.2
+  trn-straight-altsides      complete  16/ 16 cells   1102/  1102 min_single_lane_share 1.000 lane_extent 57.1
+  trn-straight-side1         complete  16/ 16 cells   1102/  1102 min_single_lane_share 1.000 lane_extent 57.1
+  trn-straight-side1-tight   complete  16/ 16 cells   1102/  1102 min_single_lane_share 1.000 lane_extent 57.1
+  trn-straight-side2         complete  16/ 16 cells   1102/  1102 min_single_lane_share 1.000 lane_extent 57.1
+  trn-tee-side2              complete  16/ 16 cells   1480/  1480 min_single_lane_share 0.893 lane_extent 47.6
+  trn-tee-side2-s            complete  16/ 16 cells    985/   985 min_single_lane_share 0.895 lane_extent 30.8
+  TOTAL complete 176/176  cells 13428/13428
+
+=== footprint: legacy_mirror ===
+  trn-net3-side1-road        complete  13/ 16 cells   1388/  1394 min_single_lane_share 0.526 lane_extent 38.7
+  trn-net3-side2             complete  13/ 16 cells   1388/  1394 min_single_lane_share 0.526 lane_extent 38.7
+  trn-net3-side2-s           complete  16/ 16 cells    799/   799 min_single_lane_share 0.857 lane_extent 30.3
+  trn-seg2-side2             complete  16/ 16 cells   1261/  1261 min_single_lane_share 0.533 lane_extent 38.2
+  trn-seg3-side2             complete  14/ 16 cells   1698/  1707 min_single_lane_share 0.444 lane_extent 37.2
+  trn-straight-altsides      complete  16/ 16 cells   1102/  1102 min_single_lane_share 0.588 lane_extent 44.2
+  trn-straight-side1         complete  16/ 16 cells   1102/  1102 min_single_lane_share 0.588 lane_extent 44.2
+  trn-straight-side1-tight   complete  16/ 16 cells   1102/  1102 min_single_lane_share 0.588 lane_extent 44.2
+  trn-straight-side2         complete  16/ 16 cells   1102/  1102 min_single_lane_share 0.588 lane_extent 44.2
+  trn-tee-side2              complete  16/ 16 cells   1480/  1480 min_single_lane_share 0.475 lane_extent 43.2
+  trn-tee-side2-s            complete  15/ 16 cells    984/   985 min_single_lane_share 0.725 lane_extent 34.7
+  TOTAL complete 167/176  cells 13406/13428
+
+=== on-axis lane (cabin ahead/behind, fwd/bwd only) footprint: terra ===
+  fresh      network    tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      network    tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      network    tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      road       tol 0.5t (0.29 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      road       tol 1.0t (0.57 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      road       tol 2.0t (1.14 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 0.5t (0.29 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 1.0t (0.57 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 2.0t (1.14 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      segmented  tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      segmented  tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      segmented  tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      straight   tol 0.5t (0.29 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      straight   tol 1.0t (0.57 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      straight   tol 2.0t (1.14 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 0.5t (0.29 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 1.0t (0.57 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 2.0t (1.14 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      tee        tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  fresh      tee        tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  fresh      tee        tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+
+=== on-axis lane (cabin ahead/behind, fwd/bwd only) footprint: legacy_mirror ===
+  fresh      network    tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      network    tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      network    tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  persistent network    tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  96  cells      0/  2193  min_section_share 0.000
+  fresh      road       tol 0.5t (0.29 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      road       tol 1.0t (0.57 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      road       tol 2.0t (1.14 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 0.5t (0.29 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 1.0t (0.57 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  persistent road       tol 2.0t (1.14 m)  maps_complete   0/ 16  sections_complete    0/  48  cells      0/  1394  min_section_share 0.000
+  fresh      segmented  tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      segmented  tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      segmented  tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  persistent segmented  tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  80  cells      0/  2968  min_section_share 0.000
+  fresh      straight   tol 0.5t (0.29 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      straight   tol 1.0t (0.57 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      straight   tol 2.0t (1.14 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 0.5t (0.29 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 1.0t (0.57 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  persistent straight   tol 2.0t (1.14 m)  maps_complete   0/ 64  sections_complete    0/  64  cells      0/  4408  min_section_share 0.000
+  fresh      tee        tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  fresh      tee        tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  fresh      tee        tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 0.5t (0.29 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 1.0t (0.57 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+  persistent tee        tol 2.0t (1.14 m)  maps_complete   0/ 32  sections_complete    0/  64  cells      0/  2465  min_section_share 0.000
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_revalidation_20260901/axis_sweep_gate_main_dev_v1.json

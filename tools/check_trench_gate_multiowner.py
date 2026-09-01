@@ -15,12 +15,20 @@ valid for either one.  That is the clause an over-restrictive implementation
 would silently drop (e.g. by using an argmin owner instead of a bitmask), so it
 is checked directly here, together with the +0.5 membership slack.
 
+Both junction clauses are independent of the standoff semantics, so the checks
+run under whichever ``EnvConfig.trench_dig_standoff_enforced`` says (v2, the
+default: yaw-parallel only) and under ``--gate-v1`` (the retired perpendicular
+band).  The lane positions below are in the v1 band, so both must pass; that is
+the point of running it twice.  See TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
+
 Run:
   JAX_PLATFORMS=cpu PYTHONPATH=<terra> python tools/check_trench_gate_multiowner.py
+  JAX_PLATFORMS=cpu PYTHONPATH=<terra> python tools/check_trench_gate_multiowner.py --gate-v1
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 
 import jax
@@ -41,11 +49,20 @@ def check(name, condition, detail=""):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--gate-v1", action="store_true",
+                    help="force the retired v1 semantics (perpendicular "
+                         "standoff band enforced on top of yaw-parallel)")
+    args = ap.parse_args()
     T.setUpClass()
-    print(f"tile_size={T.cfg.tile_size:.6f} agent={T.cfg.agent.width}x{T.cfg.agent.height} "
-          f"gate={T.cfg.enforce_trench_dig_alignment} "
-          f"yaw_tol={T.cfg.trench_dig_yaw_tolerance_rad} "
-          f"standoff=[{T.cfg.trench_dig_standoff_min_m}, {T.cfg.trench_dig_standoff_max_m}]")
+    cfg = T.cfg_v1 if args.gate_v1 else T.cfg
+    semantics = "v1" if cfg.trench_dig_standoff_enforced else "v2"
+    print(f"tile_size={cfg.tile_size:.6f} agent={cfg.agent.width}x{cfg.agent.height} "
+          f"gate={cfg.enforce_trench_dig_alignment} "
+          f"semantics={semantics} "
+          f"standoff_band_enforced={cfg.trench_dig_standoff_enforced} "
+          f"yaw_tol={cfg.trench_dig_yaw_tolerance_rad} "
+          f"standoff=[{cfg.trench_dig_standoff_min_m}, {cfg.trench_dig_standoff_max_m}]")
 
     # A cross: horizontal section at row 24, vertical section at col 40.
     # (24, 40) is the shared cell -- within half-width of BOTH sections.
@@ -77,7 +94,8 @@ def main():
     print("\n2. the shared cell is diggable from a pose valid for EITHER section")
     for label, bh, pos in (("A (row=24)", 0, (32, 40)), ("B (col=40)", 3, (24, 32))):
         cb, st = cabin_containing(
-            lambda c: T._state(target, axes, base_angle=bh, cabin_angle=c, position=pos),
+            lambda c: T._state(target, axes, base_angle=bh, cabin_angle=c,
+                               position=pos, cfg=cfg),
             shared,
         )
         check(f"a cabin heading reaches the shared cell from the {label} lane",
@@ -99,7 +117,8 @@ def main():
     target2[exclusive] = -1
     found = None
     for cb in range(12):
-        st = T._state(target2, axes, base_angle=0, cabin_angle=cb, position=(32, 40))
+        st = T._state(target2, axes, base_angle=0, cabin_angle=cb,
+                      position=(32, 40), cfg=cfg)
         cone = np.asarray(st._build_dig_dump_cone()).reshape(SHAPE)
         if cone[shared] and cone[exclusive]:
             found = (cb, st)
@@ -135,7 +154,7 @@ def main():
     t2 = np.zeros(SHAPE, dtype=np.int8)
     t2[28, 33] = -1
     st = T._state(t2, T._axes([0, 1, -24, 24, 20, 24, 50, 1]),
-                  base_angle=3, cabin_angle=0, position=(28, 25))
+                  base_angle=3, cabin_angle=0, position=(28, 25), cfg=cfg)
     v, _, _ = st._get_fresh_trench_dig_alignment()
     check("unowned target cell reports valid (gate not applicable)", bool(v))
 
@@ -143,7 +162,7 @@ def main():
     if FAILURES:
         print(f"FAILED: {FAILURES}")
         sys.exit(1)
-    print("all multi-owner contract checks passed")
+    print(f"all multi-owner contract checks passed under gate semantics {semantics}")
 
 
 if __name__ == "__main__":
