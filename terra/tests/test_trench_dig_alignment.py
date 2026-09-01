@@ -31,6 +31,9 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             )
         )
         updated = batch_env.update_env_cfgs(batched)
+        # ``cls.cfg`` is the v2 contract: yaw-parallel only, no standoff band.
+        # ``cls.cfg_v1`` restores the retired lateral band so the C0/T1 pilot
+        # stays replayable. See TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
         cls.cfg = base._replace(
             tile_size=float(np.asarray(updated.tile_size)[0]),
             agent=base.agent._replace(
@@ -41,6 +44,15 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             agent_types=(0,),
             action_types=(0,),
             enforce_trench_dig_alignment=True,
+        )
+        cls.cfg_v1 = cls.cfg._replace(trench_dig_standoff_enforced=True)
+        assert not cls.cfg.trench_dig_standoff_enforced
+        cls.tile = float(cls.cfg.tile_size)
+        # The cone's outer reach, the v2 standoff normalizer.
+        cls.cone_r_max = (
+            0.5
+            + cls.tile * max(cls.cfg.agent.width / 2, cls.cfg.agent.height / 2)
+            + cls.cfg.agent.dig_radius_tiles * cls.tile
         )
 
     @staticmethod
@@ -61,12 +73,13 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         cabin_angle=0,
         loaded=0,
         position=None,
+        cfg=None,
     ):
         if action is None:
             action = np.zeros(cls.SHAPE, dtype=np.int8)
         state = State.new(
             jax.random.PRNGKey(7),
-            cls.cfg,
+            cls.cfg if cfg is None else cfg,
             target,
             np.zeros(cls.SHAPE, dtype=np.int8),
             axes,
@@ -93,6 +106,10 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         # row=24, with the base eight cells away at row=32.
         return cls._axes([0, 1, -24, 24, 20, 24, 50, 1])
 
+    def _expected_v2_standoff(self, base_row, axis_row=24.0):
+        """Signed perpendicular offset / cone reach, the v2 obs semantics."""
+        return (base_row - axis_row) * self.tile / self.cone_r_max
+
     def test_aligned_fresh_dig_executes_and_observation_explains_it(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
         target[24, 37] = -1
@@ -114,10 +131,20 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
 
         self.assertTrue(bool(valid))
         self.assertEqual(float(yaw_error), 0.0)
-        self.assertEqual(float(standoff_error), 0.0)
+        # v2: the base sits 8 cells (4.57 m) off the axis, well inside reach,
+        # and the diagnostic reports that offset instead of a flat in-band 0.
+        self.assertAlmostEqual(
+            float(standoff_error), self._expected_v2_standoff(32.0), places=6
+        )
         self.assertEqual(bool(jitted_valid), bool(valid))
         self.assertEqual(float(jitted_yaw), float(yaw_error))
-        self.assertEqual(float(jitted_standoff), float(standoff_error))
+        # The v2 diagnostic is a float32 division, so XLA's fused form and the
+        # eager form can disagree in the last ULP (~6e-8 here).  v1's in-band
+        # error was an exact 0.0 and had no such freedom.  The gate verdict is
+        # a comparison on the yaw only and is bit-stable either way.
+        self.assertAlmostEqual(
+            float(jitted_standoff), float(standoff_error), places=6
+        )
         self.assertEqual(int(dug.world.action_map.map[24, 37]), -1)
         self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 1)
         np.testing.assert_array_equal(
@@ -133,37 +160,71 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertEqual(
             float(observation["fresh_trench_dig_yaw_error"]), 0.0
         )
-        self.assertEqual(
-            float(observation["fresh_trench_dig_standoff_error"]), 0.0
+        self.assertAlmostEqual(
+            float(observation["fresh_trench_dig_standoff_error"]),
+            self._expected_v2_standoff(32.0),
+            places=6,
         )
+
+        # Same pose under v1: admitted too (it is inside the retired band), but
+        # the exported standoff collapses to the band-relative 0.0.
+        v1_state = self._state(
+            target,
+            self._horizontal_axis(),
+            base_angle=0,
+            cabin_angle=1,
+            cfg=self.cfg_v1,
+        )
+        v1_valid, v1_yaw, v1_standoff = (
+            v1_state._get_fresh_trench_dig_alignment()
+        )
+        self.assertTrue(bool(v1_valid))
+        self.assertEqual(float(v1_yaw), 0.0)
+        self.assertEqual(float(v1_standoff), 0.0)
 
     def test_misaligned_fresh_dig_is_rejected_with_nonzero_reason(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
         target[24, 37] = -1
-        state = self._state(
-            target,
-            self._horizontal_axis(),
-            base_angle=3,
-            cabin_angle=10,
-        )
-        old_action = np.asarray(state.world.action_map.map)
+        for label, cfg in (("v2", self.cfg), ("v1", self.cfg_v1)):
+            with self.subTest(gate=label):
+                state = self._state(
+                    target,
+                    self._horizontal_axis(),
+                    base_angle=3,
+                    cabin_angle=10,
+                    cfg=cfg,
+                )
+                old_action = np.asarray(state.world.action_map.map)
 
-        valid, yaw_error, standoff_error = (
-            state._get_fresh_trench_dig_alignment()
-        )
-        rejected = state._handle_do()
-        ungated = state._replace(
-            env_cfg=state.env_cfg._replace(
-                enforce_trench_dig_alignment=False
-            )
-        )._handle_do()
+                valid, yaw_error, standoff_error = (
+                    state._get_fresh_trench_dig_alignment()
+                )
+                rejected = state._handle_do()
+                ungated = state._replace(
+                    env_cfg=state.env_cfg._replace(
+                        enforce_trench_dig_alignment=False
+                    )
+                )._handle_do()
 
-        self.assertFalse(bool(valid))
-        self.assertAlmostEqual(float(yaw_error), 1.0, places=6)
-        self.assertEqual(float(standoff_error), 0.0)
-        np.testing.assert_array_equal(rejected.world.action_map.map, old_action)
-        self.assertEqual(int(rejected._get_current_agent_state().loaded[0]), 0)
-        self.assertEqual(int(ungated.world.action_map.map[24, 37]), -1)
+                self.assertFalse(bool(valid))
+                self.assertAlmostEqual(float(yaw_error), 1.0, places=6)
+                if label == "v1":
+                    self.assertEqual(float(standoff_error), 0.0)
+                else:
+                    self.assertAlmostEqual(
+                        float(standoff_error),
+                        self._expected_v2_standoff(32.0),
+                        places=6,
+                    )
+                np.testing.assert_array_equal(
+                    rejected.world.action_map.map, old_action
+                )
+                self.assertEqual(
+                    int(rejected._get_current_agent_state().loaded[0]), 0
+                )
+                self.assertEqual(
+                    int(ungated.world.action_map.map[24, 37]), -1
+                )
 
     def test_far_non_trench_target_on_mixed_map_is_unchanged(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
@@ -308,7 +369,8 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             np.array([32, 27], dtype=np.int16),
         )
 
-    def test_standoff_band_reports_signed_close_and_far_errors(self):
+    def test_v1_standoff_band_reports_signed_close_and_far_errors(self):
+        """The retired v1 band, kept selectable for pilot replay."""
         close_target = np.zeros(self.SHAPE, dtype=np.int8)
         close_target[24, 37] = -1
         close = self._state(
@@ -317,6 +379,7 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             base_angle=0,
             cabin_angle=1,
             position=(29, 32),
+            cfg=self.cfg_v1,
         )
         close_valid, close_yaw, close_error = (
             close._get_fresh_trench_dig_alignment()
@@ -334,11 +397,209 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             base_angle=0,
             cabin_angle=3,
             position=(37, 32),
+            cfg=self.cfg_v1,
         )
         far_valid, far_yaw, far_error = far._get_fresh_trench_dig_alignment()
         self.assertFalse(bool(far_valid))
         self.assertEqual(float(far_yaw), 0.0)
         self.assertGreater(float(far_error), 0.0)
+
+    def test_v2_admits_the_poses_the_band_refused_and_reports_the_offset(self):
+        """Same two poses under v2: reach is the cone's job, so both dig."""
+        close_target = np.zeros(self.SHAPE, dtype=np.int8)
+        close_target[24, 37] = -1
+        close = self._state(
+            close_target,
+            self._horizontal_axis(),
+            base_angle=0,
+            cabin_angle=1,
+            position=(29, 32),
+        )
+        close_valid, close_yaw, close_error = (
+            close._get_fresh_trench_dig_alignment()
+        )
+        self.assertTrue(bool(close_valid))
+        self.assertEqual(float(close_yaw), 0.0)
+        # 5 cells = 2.86 m off the axis: no longer an error, just an offset.
+        self.assertAlmostEqual(
+            float(close_error), self._expected_v2_standoff(29.0), places=6
+        )
+        self.assertEqual(int(close._handle_do().world.action_map.map[24, 37]), -1)
+
+        wide_axis = self._axes([0, 1, -24, 24, 20, 24, 50, 2])
+        far_target = np.zeros(self.SHAPE, dtype=np.int8)
+        far_target[26, 32] = -1
+        far = self._state(
+            far_target,
+            wide_axis,
+            base_angle=0,
+            cabin_angle=3,
+            position=(37, 32),
+        )
+        far_valid, far_yaw, far_error = far._get_fresh_trench_dig_alignment()
+        self.assertTrue(bool(far_valid))
+        self.assertEqual(float(far_yaw), 0.0)
+        # 13 cells = 7.43 m off the axis is past the cone's 6.50 m reach, so the
+        # normalized offset saturates at exactly +1.0.  The cell it digs is
+        # nonetheless radially reachable, which is the point: the cone decides.
+        self.assertEqual(float(far_error), 1.0)
+        self.assertEqual(int(far._handle_do().world.action_map.map[26, 32]), -1)
+
+    # ---------------------------------------------------------------- #
+    # v2 semantics: the on-axis dig-ahead pattern v1 wrongly refused    #
+    # ---------------------------------------------------------------- #
+    def _on_axis_strip_target(self):
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[24, 20:51] = -1
+        return target
+
+    def test_v1_refuses_the_on_axis_dig_ahead_pose_that_v2_admits(self):
+        """The design error, reproduced.
+
+        The machine sits ON the trench axis (row 24), chassis parallel to it,
+        empty, cabin pointing straight ahead along the trench.  Terra's own dig
+        cone selects five fresh trench cells at 4.00-6.29 m RADIAL distance,
+        i.e. inside the 3.64-6.50 m reach annulus the cone enforces.  Nothing
+        physical objects.  v1 refuses the whole macro action because the
+        PERPENDICULAR base-to-axis distance is 0.00 m, below its 3.5 m floor.
+        """
+        target = self._on_axis_strip_target()
+        axes = self._horizontal_axis()
+
+        v1 = self._state(
+            target, axes, base_angle=0, cabin_angle=0,
+            position=(24, 32), cfg=self.cfg_v1,
+        )
+        v1_valid, v1_yaw, v1_standoff = v1._get_fresh_trench_dig_alignment()
+        v1_dug = v1._handle_do()
+
+        # The pose is aligned and the cone is loaded with reachable fresh soil.
+        self.assertEqual(float(v1_yaw), 0.0)
+        selected = np.asarray(
+            v1._mask_out_wrong_dig_tiles(v1._build_dig_dump_cone())
+        ).reshape(self.SHAPE)
+        self.assertEqual(int(selected.sum()), 5)
+        np.testing.assert_array_equal(
+            np.nonzero(selected[24])[0], np.array([39, 40, 41, 42, 43])
+        )
+        # ... and v1 refuses it, purely on the lateral band.
+        self.assertFalse(bool(v1_valid))
+        self.assertEqual(float(v1_standoff), -1.0)
+        self.assertEqual(int((np.asarray(v1_dug.world.action_map.map) < 0).sum()), 0)
+        self.assertEqual(int(v1_dug._get_current_agent_state().loaded[0]), 0)
+
+        v2 = self._state(
+            target, axes, base_angle=0, cabin_angle=0, position=(24, 32)
+        )
+        v2_valid, v2_yaw, v2_standoff = v2._get_fresh_trench_dig_alignment()
+        v2_dug = v2._handle_do()
+
+        self.assertTrue(bool(v2_valid))
+        self.assertEqual(float(v2_yaw), 0.0)
+        # Exactly on the line: the v2 diagnostic is 0.0 here, where v1's was the
+        # saturated -1.0.  Same pose, opposite reading.
+        self.assertEqual(float(v2_standoff), 0.0)
+        dug_cols = np.nonzero(np.asarray(v2_dug.world.action_map.map)[24] < 0)[0]
+        np.testing.assert_array_equal(dug_cols, np.array([39, 40, 41, 42, 43]))
+        self.assertEqual(int(v2_dug._get_current_agent_state().loaded[0]), 5)
+
+    def test_v2_dig_ahead_then_retreat_backward_clears_a_strip(self):
+        """Lorenzo's pattern: sit on the trench, dig ahead, back up, repeat.
+
+        The machine never drives over its own hole (the cells it removes are
+        always ahead of it), so this is exactly the manoeuvre the lane band was
+        supposedly protecting against, executed without a lane.
+        """
+        state = TerraEnv.wrap_state(
+            self._state(
+                self._on_axis_strip_target(),
+                self._horizontal_axis(),
+                base_angle=0,
+                cabin_angle=0,
+                position=(24, 32),
+            )
+        )
+        for _ in range(4):
+            valid, yaw, standoff = state._get_fresh_trench_dig_alignment()
+            self.assertTrue(bool(valid))
+            self.assertEqual(float(yaw), 0.0)
+            self.assertEqual(float(standoff), 0.0)
+            dug = state._handle_do()
+            self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 5)
+            # Unload in place: this test is about the dig/retreat geometry, not
+            # about the dump contract, which has its own suite.
+            emptied = dug._set_current_agent_state(
+                dug._get_current_agent_state()._replace(
+                    loaded=jnp.array([0], dtype=jnp.int8)
+                )
+            )
+            state = emptied._handle_move_backward()
+            # The chassis stays on the axis; only its column changes.
+            self.assertEqual(int(state._get_current_agent_state().pos_base[0]), 24)
+
+        dug_cols = np.nonzero(np.asarray(state.world.action_map.map)[24] < 0)[0]
+        np.testing.assert_array_equal(dug_cols, np.arange(24, 44))
+
+    def test_v2_junction_veto_still_fires_from_an_on_axis_pose(self):
+        """The all-or-nothing junction clause is untouched by v2."""
+        axes = self._axes(
+            [0, 1, -24, 24, 20, 24, 50, 1],
+            [1, 0, -40, 16, 40, 42, 40, 1],
+        )
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[24, 20:51] = -1
+        target[16:43, 40] = -1
+
+        # On axis 0, aligned to it, digging ahead into the T junction: the cone
+        # reaches cells owned EXCLUSIVELY by the perpendicular axis 1, which is
+        # 90 deg off, so the complete DO is refused.
+        into_junction = self._state(
+            target, axes, base_angle=0, cabin_angle=0, position=(24, 32)
+        )
+        valid, _, _ = into_junction._get_fresh_trench_dig_alignment()
+        self.assertFalse(bool(valid))
+        self.assertEqual(
+            int((np.asarray(into_junction._handle_do().world.action_map.map) < 0).sum()),
+            0,
+        )
+
+        # Same pose, cabin turned around to dig away from the junction: only
+        # axis-0 cells are selected and the dig is admitted.
+        away = self._state(
+            target, axes, base_angle=0, cabin_angle=6, position=(24, 32)
+        )
+        away_valid, _, _ = away._get_fresh_trench_dig_alignment()
+        self.assertTrue(bool(away_valid))
+        dug_cols = np.nonzero(np.asarray(away._handle_do().world.action_map.map)[24] < 0)[0]
+        np.testing.assert_array_equal(dug_cols, np.array([21, 22, 23, 24, 25]))
+
+    def test_v2_still_refuses_a_misaligned_pose_on_the_axis(self):
+        """Dropping the band does not weaken the yaw clause.
+
+        Chassis at 90 deg to the trench, standing on the axis.  The cabin is
+        swung so the cone points back along the trench (cabin 0 would point it
+        perpendicular, where there is no trench soil and the gate is simply
+        inapplicable).  Five fresh cells are selected; yaw refuses them.
+        """
+        target = self._on_axis_strip_target()
+        state = self._state(
+            target,
+            self._horizontal_axis(),
+            base_angle=3,
+            cabin_angle=9,
+            position=(24, 32),
+        )
+        selected = np.asarray(
+            state._mask_out_wrong_dig_tiles(state._build_dig_dump_cone())
+        ).reshape(self.SHAPE)
+        self.assertEqual(int(selected.sum()), 5)
+        valid, yaw, standoff = state._get_fresh_trench_dig_alignment()
+        self.assertFalse(bool(valid))
+        self.assertAlmostEqual(float(yaw), 1.0, places=6)
+        self.assertEqual(float(standoff), 0.0)
+        self.assertEqual(
+            int((np.asarray(state._handle_do().world.action_map.map) < 0).sum()), 0
+        )
 
     def test_non_trench_fresh_dig_is_unchanged_when_gate_is_enabled(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)

@@ -279,6 +279,25 @@ class EnvConfig(NamedTuple):
     trench_dig_yaw_tolerance_rad: float = 0.2619  # 15 deg plus numerical slack
     trench_dig_standoff_min_m: float = 3.5
     trench_dig_standoff_max_m: float = 7.0
+    # Gate semantics selector, appended last for positional checkpoint
+    # compatibility.
+    #
+    # v1 (True): a section is pose-valid only when the PERPENDICULAR distance
+    #   from the base centre to its axis lies in
+    #   [trench_dig_standoff_min_m, trench_dig_standoff_max_m]. That band is a
+    #   lateral lane constraint. Combined with the yaw-parallel clause it
+    #   refuses the on-axis pose (perpendicular ~ 0) even though Terra's dig
+    #   cone already enforces working distance RADIALLY (3.64-6.50 m, +-30 deg
+    #   of the cabin heading), so a machine standing on the trench line and
+    #   digging cells ahead of it was refused for a reason no physics supports.
+    #   Kept selectable so the C0/T1 pilot stays reproducible.
+    #
+    # v2 (False, the default): validity is yaw-parallel only. Working distance
+    #   is left entirely to the dig cone and cell scoping to the existing
+    #   membership/junction logic. The two band bounds above then only shape the
+    #   v1 replay path; ``fresh_trench_dig_standoff_error`` becomes a pure
+    #   diagnostic (see State._get_fresh_trench_dig_alignment_details).
+    trench_dig_standoff_enforced: bool = False
 
     @classmethod
     def new(cls):

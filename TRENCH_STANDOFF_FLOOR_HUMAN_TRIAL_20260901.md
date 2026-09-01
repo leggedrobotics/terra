@@ -29,6 +29,25 @@ His objection, recorded verbatim because it is the useful part: *"the 3.5 to 7
 is along the chassis major axis, not lateral distance — otherwise how are we
 supposed to dig the trench if we are not on top of the trench?"*
 
+The session then continued past the numbers in that table. Final totals: **457
+actions, 27 `DO` presses (22 out-of-band, 2 both, 3 not-applicable), 0 of 185
+cells dug**, and the slot-294 episode reached step 295 of its 450-step horizon
+without a single admitted dig.
+
+**Discoverability, measured the hard way.** During the session an assistant with
+the frozen metadata, the receipts and a scripted geometry search computed three
+separate "shortest legal station" sequences for the operator's live pose. The
+first two (`RIGHT RIGHT UP`, then `RIGHT RIGHT`) were valid on the gate's own two
+clauses — yaw ≤ 15° and standoff in band — and still would not have produced a
+dig, because neither checked the two conditions the gate does not name: that the
+perpendicular foot lies **within the section's finite segment**, and that undug
+cells of that section fall inside the **reach annulus** (3.64–6.50 m). Only the
+third attempt (`DOWN DOWN LEFT LEFT`, arriving at `S0 yaw 0.0°, standoff 4.86 m`
+with 36 fresh cells in the annulus and the foot on the segment) was complete.
+If the two-clause reading of the contract misleads someone who is reading the
+implementation, it is not a reasonable thing to expect a policy to infer from an
+all-or-nothing no-op.
+
 **The second half of the observation matters more than the first.** He was stuck
 against section 2 at 0.25 m — hopeless without a long detour — while at the same
 pose **section 1 was already in band at 6.90 m and two rotations from aligned**:

@@ -1406,15 +1406,17 @@ class State(NamedTuple):
 
     
     
-    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
-        """
-        Note: the map is assumed to be local -> the area to dig is in front of us.
+    def _dig_cone_radius_bounds(self) -> tuple[Array, Array]:
+        """Radial reach annulus of the excavator dig/dump cone, in metres.
 
-        Args:
-            - map_cyl_coords: (2, N) Array with [r, theta] rows
-        Returns:
-            - dig_mask: (N, ) Array of bools, where True means dig here
+        This is the ONE place the excavator working distance is defined. With
+        the shipped agent (7x11 tiles, tile 0.5714 m, dig radius 5 tiles) it is
+        3.6429-6.5000 m, measured RADIALLY from the base centre to the cell,
+        and it is combined with a +-30 deg cabin sector by the caller. The
+        fresh-trench alignment diagnostic normalises its perpendicular distance
+        by ``r_max`` so both quantities are expressed in the same reach.
         """
+
         dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
         tile_size = self.env_cfg.tile_size
 
@@ -1427,15 +1429,27 @@ class State(NamedTuple):
         # Fixed middle-point arm extension (halfway between 0 and 1)
         fixed_extension = 0.5 # in meters
 
+        r_min = fixed_extension + min_distance_from_agent
+        r_max = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
+        return r_min, r_max
+
+    def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
+        """
+        Note: the map is assumed to be local -> the area to dig is in front of us.
+
+        Args:
+            - map_cyl_coords: (2, N) Array with [r, theta] rows
+        Returns:
+            - dig_mask: (N, ) Array of bools, where True means dig here
+        """
         #r_min = fixed_extension * dig_portion_radius * tile_size + min_distance_from_agent
         #r_max = (fixed_extension + 1) * dig_portion_radius * tile_size + min_distance_from_agent
 
         #r_min = min_distance_from_agent
         #r_max = min_distance_from_agent + dig_portion_radius * tile_size
 
-        r_min = fixed_extension + min_distance_from_agent
-        r_max = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
-        
+        r_min, r_max = self._dig_cone_radius_bounds()
+
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
@@ -1506,10 +1520,7 @@ class State(NamedTuple):
         radius_2d = map_cyl_coords[0].reshape(map_shape)
 
         tile_size = self.env_cfg.tile_size
-        max_agent_dim = jnp.max(
-            jnp.array([self.env_cfg.agent.width / 2, self.env_cfg.agent.height / 2])
-        )
-        r_min = 0.5 + tile_size * max_agent_dim
+        r_min, _ = self._dig_cone_radius_bounds()
         inner_band = radius_2d < r_min + tile_size
 
         padded = jnp.pad(mask_2d.astype(jnp.int32), ((1, 1), (1, 1)))
@@ -2193,6 +2204,29 @@ class State(NamedTuple):
         error, and the subset of ``dig_mask`` admitted by the contract.  The
         contract is neutral for relifts, loaded agents, non-excavators, and
         non-trench maps.
+
+        Pose validity (v2, ``trench_dig_standoff_enforced=False``, default):
+        a section is pose-valid when the chassis yaw is parallel to its axis
+        within ``trench_dig_yaw_tolerance_rad``.  That is the whole positional
+        clause.  Working distance is NOT re-tested here: Terra's dig cone
+        already enforces it radially, machine -> cell, over
+        ``_dig_cone_radius_bounds()`` (3.64-6.50 m) within +-30 deg of the cabin
+        heading, and cell scoping is the membership/junction logic below.  So a
+        machine standing ON the trench line, aligned, digging the cells ahead of
+        it and retreating backward is admitted -- the pattern v1 refused.
+
+        Pose validity (v1, ``trench_dig_standoff_enforced=True``): additionally
+        requires the perpendicular base-centre-to-axis distance to lie in
+        ``[trench_dig_standoff_min_m, trench_dig_standoff_max_m]``.  Kept only
+        so the C0/T1 alignment pilot stays replayable; see
+        ``TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md``.
+
+        ``fresh_trench_dig_standoff_error`` therefore has two meanings:
+        under v1 it is the band-relative error (negative too close, positive
+        too far, exactly 0.0 anywhere inside the band); under v2 the band is
+        gone and it is the SIGNED perpendicular offset divided by the cone's
+        outer reach ``r_max``, clipped to [-1, 1] -- 0.0 exactly on the line,
+        |1.0| when the axis is at or past the far edge of reach.
         """
 
         cur = self._get_current_agent_state()
@@ -2311,8 +2345,14 @@ class State(NamedTuple):
 
             base_row = cur.pos_base[0].astype(jnp.float32)
             base_col = cur.pos_base[1].astype(jnp.float32)
-            standoffs_m = (
-                jnp.abs(
+            # Signed perpendicular offset of the base centre from each section
+            # axis, in metres. The sign is the section's own line-equation side
+            # (positive where A*col + B*row + C > 0); it is a per-section
+            # generator convention, constant within an episode, so it says
+            # "which side of this section am I on / did I cross it", not
+            # "left or right of the machine".
+            signed_standoffs_m = (
+                (
                     axes[:, 0] * base_col
                     + axes[:, 1] * base_row
                     + axes[:, 2]
@@ -2320,23 +2360,58 @@ class State(NamedTuple):
                 / line_denominators
                 * self.env_cfg.tile_size
             )
+            standoffs_m = jnp.abs(signed_standoffs_m)
             standoff_min = jnp.float32(self.env_cfg.trench_dig_standoff_min_m)
             standoff_max = jnp.float32(self.env_cfg.trench_dig_standoff_max_m)
-            standoff_errors_normalized = jnp.where(
-                standoffs_m < standoff_min,
-                (standoffs_m - standoff_min)
-                / jnp.maximum(standoff_min, jnp.float32(1e-6)),
-                jnp.where(
-                    standoffs_m > standoff_max,
-                    (standoffs_m - standoff_max)
-                    / jnp.maximum(standoff_max, jnp.float32(1e-6)),
-                    jnp.float32(0.0),
-                ),
+            standoff_enforced = jnp.bool_(
+                self.env_cfg.trench_dig_standoff_enforced
             )
-            standoff_errors_normalized = jnp.clip(
-                standoff_errors_normalized,
+            # v1 diagnostic: signed distance to the nearest band edge,
+            # normalized by that edge (negative too close, positive too far,
+            # zero in band).
+            band_errors_normalized = jnp.clip(
+                jnp.where(
+                    standoffs_m < standoff_min,
+                    (standoffs_m - standoff_min)
+                    / jnp.maximum(standoff_min, jnp.float32(1e-6)),
+                    jnp.where(
+                        standoffs_m > standoff_max,
+                        (standoffs_m - standoff_max)
+                        / jnp.maximum(standoff_max, jnp.float32(1e-6)),
+                        jnp.float32(0.0),
+                    ),
+                ),
                 a_min=jnp.float32(-1.0),
                 a_max=jnp.float32(1.0),
+            )
+            # v2 diagnostic: the same signed perpendicular offset expressed in
+            # units of the dig cone's own outer reach, clipped to [-1, 1]. Zero
+            # is on the section line (legal under v2 and the pose the operator
+            # actually wants); |value| = 1 saturates at "the axis is at or
+            # beyond the far edge of my reach". This carries a gradient
+            # everywhere, unlike the v1 error, which is flat at 0 across the
+            # whole band.
+            _, cone_r_max = self._dig_cone_radius_bounds()
+            offset_errors_normalized = jnp.clip(
+                signed_standoffs_m
+                / jnp.maximum(jnp.float32(cone_r_max), jnp.float32(1e-6)),
+                a_min=jnp.float32(-1.0),
+                a_max=jnp.float32(1.0),
+            )
+            standoff_errors_normalized = jnp.where(
+                standoff_enforced,
+                band_errors_normalized,
+                offset_errors_normalized,
+            )
+            # v1 required the perpendicular standoff to sit in a lateral band.
+            # v2 leaves working distance to the dig cone, which already tests it
+            # radially, machine -> cell, and keeps only the yaw-parallel clause.
+            standoff_clause = jnp.logical_or(
+                ~standoff_enforced,
+                jnp.logical_and(
+                    standoffs_m >= standoff_min,
+                    standoffs_m <= standoff_max,
+                ),
             )
             axis_pose_valid = jnp.logical_and(
                 valid_axes,
@@ -2349,10 +2424,7 @@ class State(NamedTuple):
                             <= jnp.float32(
                                 self.env_cfg.trench_dig_yaw_tolerance_rad
                             ),
-                            jnp.logical_and(
-                                standoffs_m >= standoff_min,
-                                standoffs_m <= standoff_max,
-                            ),
+                            standoff_clause,
                         ),
                     ),
                 ),
@@ -2379,6 +2451,11 @@ class State(NamedTuple):
                 axis_pose_valid,
                 jnp.logical_and(axis_has_fresh, ~axis_pose_valid),
             )
+            # Tie-break for the exported diagnostic pair.  The expression is
+            # unchanged between v1 and v2, but the second term changes meaning
+            # with the metric: under v1 it is 0 for every in-band section, so
+            # the pick is yaw-first; under v2 it is distance/r_max, so among
+            # equally aligned sections the NEAREST one is reported.
             diagnostic_score = (
                 yaw_errors_normalized + jnp.abs(standoff_errors_normalized)
             )

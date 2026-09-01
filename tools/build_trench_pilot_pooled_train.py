@@ -32,6 +32,43 @@ from pathlib import Path
 # The 12 fully-preflight-covered trench train conditions: the 15 enriched train
 # conditions minus the three net4 conditions (excluded by the yaw-tolerance
 # probe). v7-trn conditions are unenriched and are never eligible.
+# Named condition sets. "pilot12" is the C0/T1 pilot slice. "trench15" adds the
+# three net4 conditions (admissible once the v2 preflight shows complete covers).
+# "generalist" is every V8 condition with finite trench provenance: all 25
+# foundation conditions plus the 15 trench conditions; the seven v7-trn
+# conditions (040-046) have no finite provenance and are never eligible.
+NET4_CONDITIONS: tuple[str, ...] = (
+    "021__trn-net4-side1-road",
+    "022__trn-net4-side2",
+    "023__trn-net4-side2-s",
+)
+FOUNDATION_CONDITIONS: tuple[str, ...] = (
+    "000__fnd-proc-ring3x",
+    "001__fnd-proc-side1-road",
+    "002__fnd-slab-apron-c1p2",
+    "003__fnd-slab-apron-c1p6",
+    "004__fnd-slab-apron-c2x",
+    "005__fnd-slab-apron-c3x",
+    "006__fnd-slab-apron-d12",
+    "007__fnd-slab-apron-d16",
+    "008__fnd-slab-apron-near",
+    "009__fnd-slab-lg-ring3x",
+    "010__fnd-slab-ring3x",
+    "011__fnd-slab-ring3x-obj",
+    "012__fnd-slab-ring3x-obj1",
+    "013__fnd-slab-ring3x-road",
+    "014__fnd-slab-side1",
+    "015__fnd-slab-side1-obj",
+    "016__fnd-slab-split",
+    "017__fnd-strips-ring3x",
+    "032__fnd-slab-allfree",
+    "034__v7-fnd-slab-adjacent",
+    "035__v7-fnd-irregular-adjacent",
+    "036__v7-fnd-courtyard-adjacent",
+    "037__v7-fnd-bearing-walls-adjacent",
+    "038__v7-fnd-pads-adjacent",
+    "039__v7-fnd-courtyard-pads-adjacent",
+)
 PILOT_CONDITIONS: tuple[str, ...] = (
     "018__trn-net3-side1-road",
     "019__trn-net3-side2",
@@ -54,6 +91,14 @@ ARRAY_FOLDERS: tuple[str, ...] = (
     "actions",
     "distance",
 )
+CONDITION_SETS: dict[str, tuple[str, ...]] = {
+    "pilot12": PILOT_CONDITIONS,
+    "trench15": tuple(sorted(PILOT_CONDITIONS + NET4_CONDITIONS)),
+    "generalist": tuple(
+        sorted(FOUNDATION_CONDITIONS + PILOT_CONDITIONS + NET4_CONDITIONS)
+    ),
+    "generalist_no_net4": tuple(sorted(FOUNDATION_CONDITIONS + PILOT_CONDITIONS)),
+}
 METADATA_FOLDER = "metadata"
 POOLING_SCHEMA = "terra_trench_pilot_pooled_train_v1"
 
@@ -132,6 +177,14 @@ def main() -> int:
         help="Pooling manifest path (default: <bank-root>/<pooled-name>_manifest.json).",
     )
     parser.add_argument(
+        "--conditions",
+        default="pilot12",
+        help=(
+            "Named set (" + ", ".join(CONDITION_SETS) + ") or a comma-separated "
+            "list of train/ condition folder names."
+        ),
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Remove an existing pooled folder before rebuilding.",
@@ -154,9 +207,15 @@ def main() -> int:
         raise RuntimeError(f"Missing bank source registry: {registry_path}")
     registry_sha = sha256_file(registry_path)
 
-    conditions = tuple(sorted(PILOT_CONDITIONS))
-    if conditions != tuple(PILOT_CONDITIONS):
-        raise RuntimeError("PILOT_CONDITIONS must already be in sorted order")
+    if args.conditions in CONDITION_SETS:
+        conditions = tuple(sorted(CONDITION_SETS[args.conditions]))
+    else:
+        conditions = tuple(sorted(c.strip() for c in args.conditions.split(",") if c.strip()))
+    if len(set(conditions)) != len(conditions) or not conditions:
+        raise RuntimeError(f"bad condition selection: {args.conditions!r}")
+    for c in conditions:
+        if c.startswith(("040__", "041__", "042__", "043__", "044__", "045__", "046__")):
+            raise RuntimeError(f"{c}: v7-trn has no finite trench provenance; never pool it")
 
     # ---- read and cross-check every source condition -------------------------
     sources: list[dict] = []
@@ -244,14 +303,27 @@ def main() -> int:
             metadata_origin = (
                 source["dir"] / METADATA_FOLDER / f"trench_{source_slot}.json"
             )
-            if metadata_origin.is_symlink() or not metadata_origin.is_file():
-                raise RuntimeError(
-                    "Expected an enriched regular-file trench metadata sidecar: "
-                    f"{metadata_origin}"
-                )
+            if not metadata_origin.is_file():
+                raise RuntimeError(f"Missing metadata sidecar: {metadata_origin}")
             metadata_target = pooled_dir / METADATA_FOLDER / f"trench_{slot}.json"
-            shutil.copyfile(metadata_origin, metadata_target)
+            shutil.copyfile(metadata_origin, metadata_target)  # follows symlinks
             metadata_payload = json.loads(metadata_target.read_text())
+            # Foundation sidecars declare axes_ABC=[] and trench_axes_count=-1.
+            declared_axes = max(
+                len(metadata_payload.get("axes_ABC") or []),
+                int(metadata_payload.get("trench_axes_count") or 0),
+            )
+            if declared_axes <= 0:
+                # Foundation map: no trench sections, nothing for the gate to
+                # scope. The loader still reads trench_{i}.json by index, so the
+                # (axis-less) sidecar is copied as-is.
+                metadata_sha[f"trench_{slot}.json"] = sha256_file(metadata_target)
+                continue
+            if metadata_origin.is_symlink():
+                raise RuntimeError(
+                    "Trench sidecar must be the enriched regular file, not a "
+                    f"symlink to the un-enriched original: {metadata_origin}"
+                )
             finite = metadata_payload.get("trench_finite_metadata")
             if (
                 finite is None

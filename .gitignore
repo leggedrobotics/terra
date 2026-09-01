@@ -21,3 +21,4 @@ data/*
 *.png
 !assets/*
 *.gifterra/tests/__pycache__/
+terra/tests/__pycache__/
