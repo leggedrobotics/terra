@@ -235,3 +235,28 @@ admissibility with 8.5× more training. Both arms plateaued since ~u30k.
 61 pp lead rests on n=1; (2) **ROS physical acceptance**, never measured,
 needs no training, and is the promotion rule's second conjunct; (3) the
 generalization gap. §6 Traps remains valid in full.
+
+---
+
+## 10. UPDATE 2026-09-02 — gate v2, generalist staged, launch account changed
+
+Lorenzo found by manual play that the standoff band was applied sideways
+(perpendicular to the axis), forbidding the on-axis dig-ahead-and-retreat
+pattern. Full account: `TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md`.
+Gate v2 (yaw-parallel only; `EnvConfig.trench_dig_standoff_enforced=False`
+default; v1 behind the flag for pilot replay) is Terra `fd719575` on the epoch
+branch, with BOTH dig relaxation passes contained. Under v2 all 2,400 trench
+maps have complete covers (net4 re-admitted); the pilot's admissible verdict
+survives at +52..+57 pp. Evaluating the pilot checkpoints on this branch needs
+`eval_fixed_bank.py --gate-v1`.
+
+**Staged, not submitted:** v2 generalist (foundation + trench, 40 conditions,
+3,840 maps, gate on), baselines `64825f7`, `scripts/euler_trench_align_v2/`.
+Submit with `TERRA_EULER_USER=lterenzi SUBMIT=1 bash scripts/euler_trench_align_v2/submit.sh`.
+
+**Euler permission change (2026-09-01 17:37, root):** `/cluster/project/rsl`
+is now group-only (`MAVT-RSL-HPC`). `alesweber` is not in that group and can
+no longer read the pinned venv or even `/cluster/project/rsl/alesweber`
+(the pilot's archived checkpoints). Use `lterenzi` (in the group) for any
+Terra work that touches project storage; `TERRA_EULER_USER=lterenzi` switches
+the launcher. §6 Traps still applies in full.
