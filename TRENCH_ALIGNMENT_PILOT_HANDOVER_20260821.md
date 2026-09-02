@@ -274,3 +274,7 @@ stands on the trench, i.e. the v1 lane). Everything is on `main`: Terra
 `facc44e6`, baselines `445ad79` (+ ledger). Job `12505854` under `lterenzi`.
 The manual debugger (`tools/manual_trench_debugger.py`) plays v2 by default,
 `--gate-v1` for the old band, `--max-offset-m` to vary the bound.
+
+Also submitted 2026-09-02: v2 trench specialist, job `12506562` (lterenzi,
+4 x RTX 3090), preset `trench_align_v2_specialist_spec`, 15-condition pool
+`train_v2_pooled_trench15`; launcher takes `ARMS`, `GPU_TYPE`, `CAMPAIGN`.
