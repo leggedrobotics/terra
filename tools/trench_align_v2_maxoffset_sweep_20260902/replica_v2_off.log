@@ -1,0 +1,56 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+panel evaluation/gate_main/development: 608 slots
+Loading maps from ['/home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development'].
+Loaded 608 maps from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Loaded 608 metadata files from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Maps width: 64
+Maps height: 64
+Unique shapes of trench_axes_list: {(608, 4, 8)}
+Maps shape: (1, 608, 64, 64).
+Padding mask shape: (1, 608, 64, 64).
+Dumpability mask shape: (1, 608, 64, 64).
+Trench axes shape: (1, 608, 4, 8).
+Trench types shape: (1, 608).
+Foundation border axes shape: (1, 608, 64, 3).
+Foundation border types shape: (1, 608).
+Actions shape: (1, 608, 64, 64).
+Distance maps shape: (1, 608, 64, 64).
+Map provenance shape: (1, 608).
+Agent size (in rendering): 11x7
+Tile size (in rendering): 0.571428571428125
+Rendering tile size: 3
+Total display size: 192x192
+Map size: 64x64
+Number of possible base rotations: 12
+Number of possible cabin rotations: 12
+env built in 5.0s
+session log -> /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/data/manual_trench_logs/manual_trench_slot455_20260902_100237.jsonl
+reset compiled in 3.1s
+compiling the diagnostic probe (one-off; cached)...
+probe compiled in 73.1s
+step variant 0 compiled in 130.0s
+step variant 1 compiled in 0.0s
+==============================================================================
+SLOT 455 / 608   condition trn-straight-side1-tight   family trench   map curriculum-diverse-320-21108
+  finite sections 1   required cells 78   accepted dump cells 148   horizon 450
+  gate ON  semantics v2 (yaw-parallel only; ON-THE-LINE CLAUSE DISABLED)  yaw tol 15.01deg  band 3.5-7.0 m DIAGNOSTIC ONLY  cone reach <= 6.5000 m  tile 0.5714 m
+  bank /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819
+  protocol terra_revision a6e6e5bc1cd29e4f3a5c8d99a7fbd9fe855ba1b4, reset_seed 337
+  ORACLE [corrected footprint (fix 1 only)]: dug 73/78 (dig 0.936)  succeeded False  spoil 63u of which accepted 56u  stations 4  digs 4 dumps 3  reasons {'loaded_no_legal_dump': 859}
+  ORACLE [pre-fix baseline]: dug 73/78 (dig 0.936)  succeeded False  spoil 63u of which accepted 56u  stations 4  digs 4 dumps 3  reasons {'loaded_no_legal_dump': 859}
+  YOUR TARGET: beat the oracle's dug-cell count, and finish with every spoil unit inside the accepted zone.
+==============================================================================
+[0000] START          step   0 r +0.0000 | DO -> NOTHING HAPPENS (no-op)
+        cone covers 43 cells: 0 fresh trench, 0u loose spoil, 0 already at target depth, 0 in the last-dig exclusion; Terra selects 0
+        reason: NOT APPLICABLE -- no fresh (target<0, undug) trench cell is in the cone at all.  Drive/rotate until purple cells enter the yellow cone.
+compiling the pose/map surgery kernel (one-off)...
+  replica sweep 50/300 poses, 0 divergences (0.7s)
+  replica sweep 100/300 poses, 0 divergences (1.1s)
+  replica sweep 150/300 poses, 0 divergences (1.5s)
+  replica sweep 200/300 poses, 0 divergences (2.0s)
+  replica sweep 250/300 poses, 0 divergences (2.4s)
+  replica sweep 300/300 poses, 0 divergences (2.8s)
+REPLICA SWEEP: {"poses": 300, "divergences": 0, "gate_applicable_poses": 28, "gate_valid_poses": 20, "section_views_inside_the_v1_floor": 104, "median_abs_standoff_m": 5.185773611068726, "standoff_enforced": false, "tile_size_m": 0.5714285969734192, "seconds": 2.8}
+  0 divergences over 300 synthesized poses (v2 semantics); 28 were gate-applicable, 20 of those admitted; 104 section views sat inside the retired 3.5 m floor
+session log written: /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/data/manual_trench_logs/manual_trench_slot455_20260902_100237.jsonl

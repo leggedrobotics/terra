@@ -19,8 +19,10 @@ Two questions, both purely geometric (no controller, no policy):
      magically emptied -- does sweeping those lanes with all 12 cabin headings
      produce a gate-admitted dig for every target cell?
 
-Blocked space is the order-independent worst case ``padding | all target<0``,
-so the answer cannot depend on the order cells are dug in.  Two footprint models
+Blocked space for A and B is the order-independent worst case
+``padding | all target<0``, so the answer cannot depend on the order cells are
+dug in.  That model and the "on the line" bound pull against each other -- see
+C -- so read A/B as the pessimistic bound, not as the retreat pattern.  Two footprint models
 are reported: ``terra`` -- the ``(row, col)`` raster Terra has used since commit
 566867db, 0.9995 agreement with ``State._is_valid_move`` -- and
 ``legacy_mirror``, the retired ``(col, row)`` raster that tested occupancy at the
@@ -38,7 +40,10 @@ mirror position, kept for comparison with the pre-fix receipts.
      tolerances, because the integer grid and oblique axes make an exact zero
      unattainable.  Under ``--gate-v1`` this lane is empty by construction
      (perpendicular <= 2 tiles = 1.14 m is below the 3.5 m floor), which is the
-     comparison.
+     comparison.  Under v2 the gate's own "on the line" bound
+     (``EnvConfig.trench_dig_max_offset_m``, ``--max-offset-m``, <= 0 disables
+     it) applies on top of the tolerance, so a bound below a tolerance simply
+     truncates that row.
 
      Blocked space matters here in a way it does not for A/B.  The
      order-independent worst case ``padding | all target<0`` treats the whole
@@ -95,10 +100,10 @@ _W = {}
 
 
 def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max,
-          enforce_band=True):
+          enforce_band=True, max_offset=0.0):
     _W.update(cfg=cfg, cones=cones, fp_true=fp_true, fp_masked=fp_masked,
               fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max,
-              enforce_band=bool(enforce_band))
+              enforce_band=bool(enforce_band), max_offset=float(max_offset))
     _W["cone_fn"] = _make_cone_fn(cfg)
     _W["succ"] = move_tables(cfg)
 
@@ -361,6 +366,7 @@ def sweep_map(case, use_legacy_mirror: bool):
     tile = _W["cfg"].tile_size
     tol, so_min, so_max = _W["tol"], _W["so_min"], _W["so_max"]
     enforce_band = _W["enforce_band"]
+    max_offset = _W["max_offset"]
     fwd, bwd = _W["fwd"], _W["bwd"]
 
     target = np.load(case["images"], allow_pickle=False).astype(np.int32)
@@ -386,7 +392,8 @@ def sweep_map(case, use_legacy_mirror: bool):
     standoff = np.stack([
         np.abs(axes3[a, 0] * cols + axes3[a, 1] * rows + axes3[a, 2]) / den[a] * tile
         for a in range(naxes)])
-    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band)
+    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band,
+                                      max_offset)
     perp_tiles = standoff / max(tile, 1e-9)
     tg = np.stack([-axes3[:, 0], axes3[:, 1]], axis=1)
     tn = np.maximum(np.linalg.norm(tg, axis=1), 1e-6)
@@ -529,6 +536,11 @@ def main():
                     help="force the retired v1 semantics (perpendicular "
                          "standoff band enforced on top of yaw-parallel); the "
                          "on-axis lane is empty under it, by construction")
+    ap.add_argument("--max-offset-m", type=float, default=None,
+                    help="override the v2 'on the line' bound "
+                         "(EnvConfig.trench_dig_max_offset_m, metres); "
+                         "<= 0 disables the clause (yaw-parallel only). "
+                         "Inert under --gate-v1.")
     ap.add_argument("--selfcheck-maps", type=int, default=2,
                     help="maps on which the numpy replica is asserted against "
                          "Terra's exported verdict (0 disables)")
@@ -537,11 +549,13 @@ def main():
 
     cfg = env_config()
     cones, fp_true, fp_masked, fwd, bwd = geometry(cfg)
-    gate = gate_contract(args.gate_v1)
+    gate = gate_contract(args.gate_v1, args.max_offset_m)
     tol, so_min, so_max = gate["tol"], gate["so_min"], gate["so_max"]
     enforce_band = gate["enforce_band"]
+    max_offset = gate["max_offset"]
     print(f"gate semantics {gate['semantics']} "
-          f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+          f"(standoff band enforced={enforce_band}, forced={gate['forced']}; "
+          f"on-line clause: {gate['on_line_clause']})",
           flush=True)
     succ = move_tables(cfg)
     drift = move_drift_table(cfg, succ)
@@ -561,7 +575,8 @@ def main():
     selfcheck = []
     for case in cases[: max(args.selfcheck_maps, 0)]:
         row = terra_gate_selfcheck(cfg, case, tol=tol, so_min=so_min,
-                                   so_max=so_max, enforce_band=enforce_band)
+                                   so_max=so_max, enforce_band=enforce_band,
+                                   max_offset=max_offset)
         selfcheck.append(row)
         print(f"selfcheck {row['map']}: probes={row['probes']} "
               f"applicable={row['applicable_probes']} "
@@ -572,7 +587,8 @@ def main():
     ctx = mp.get_context("spawn")
     with ctx.Pool(args.workers, initializer=_init,
                   initargs=(cfg, cones, fp_true, fp_masked, fwd, bwd,
-                            tol, so_min, so_max, enforce_band)) as pool:
+                            tol, so_min, so_max, enforce_band,
+                            max_offset)) as pool:
         results = []
         for i, pair in enumerate(pool.imap_unordered(analyze, cases, chunksize=1)):
             results.extend(pair)
@@ -647,6 +663,10 @@ def main():
             "standoff_band_enforced": enforce_band,
             "gate_v1_forced": gate["forced"],
             "config_trench_dig_standoff_enforced": gate["config_default_enforced"],
+            "max_offset_m": max_offset,
+            "max_offset_forced": gate["max_offset_forced"],
+            "config_trench_dig_max_offset_m": gate["config_default_max_offset"],
+            "on_line_clause": gate["on_line_clause"],
             "terra_replica_selfcheck": selfcheck,
             "onaxis_lane": {
                 "definition": "perpendicular <= tolerance tiles of the section "

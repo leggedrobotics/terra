@@ -22,24 +22,30 @@ GATE SEMANTICS -- READ THIS FIRST
 ---------------------------------
 The tool plays **v2** by default (Terra's shipped default,
 ``EnvConfig.trench_dig_standoff_enforced=False``): a section is pose-valid when
-the chassis yaw is parallel to its axis within 15 deg, and *that is the whole
-positional clause*.  Working distance is the dig cone's job and is tested
-RADIALLY, machine -> cell, over 3.64-6.50 m within +-30 deg of the cabin.  So
-standing ON the trench line, aligned, and digging the cells ahead of you is
-legal -- the dig-ahead-retreat pose.
+the chassis yaw is parallel to its axis within 15 deg AND the base centre is
+ON THE LINE -- perpendicular offset from the axis at most
+``EnvConfig.trench_dig_max_offset_m`` (``--max-offset-m``; any value <= 0
+disables that clause and restores yaw-only v2).  Working distance is the dig
+cone's job and is tested RADIALLY, machine -> cell, over 3.64-6.50 m within
++-30 deg of the cabin.  So standing ON the trench line, aligned, and digging
+the cells ahead of you is legal -- the dig-ahead-retreat pose -- while standing
+parallel but several metres to the SIDE, cabin swung, is not: that was the v1
+sideways lane, and yaw-only v2 still admitted it.
 
-``--gate-v1`` restores the retired v1 semantics, which ALSO required the
-PERPENDICULAR base-centre-to-axis distance to lie in a 3.5-7.0 m lateral band.
-That band forbids the on-axis pose (perpendicular ~ 0 < 3.5) for a reason no
-physics supports; it is kept selectable only so the C0/T1 pilot replays as
-trained.  See ``TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md``.
+``--gate-v1`` restores the retired v1 semantics, which instead required the
+PERPENDICULAR base-centre-to-axis distance to lie in a 3.5-7.0 m lateral band
+(and ignores the offset bound).  That band forbids the on-axis pose
+(perpendicular ~ 0 < 3.5) for a reason no physics supports; it is kept
+selectable only so the C0/T1 pilot replays as trained.  See
+``TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md``.
 
-Under v2 the band edges are still drawn, dim and captioned "v1 band
-(diagnostic only)", and the status line reports the SIGNED perpendicular offset
-in metres as information.  ``out_of_band`` is not a refusal this tool can emit
-under v2.  Under ``--gate-v1`` the band is drawn in the section colour, the
-status line says "standoff band ENFORCED", and the old refusal explanations
-come back.
+Under v2 the v1 band edges are still drawn, dim and captioned "v1 band
+(diagnostic only)", the +-max-offset lines that DO bind are drawn in the
+section colour, and the status line reports the SIGNED perpendicular offset in
+metres against the limit.  ``out_of_band`` is not a refusal this tool can emit
+under v2; ``off_the_line`` and ``misaligned_and_off_the_line`` are.  Under
+``--gate-v1`` the band is drawn in the section colour, the status line says
+"standoff band ENFORCED", and the old refusal explanations come back.
 
 ``--replica-sweep N`` synthesizes N poses on the loaded slot (pose, load and a
 partially dug action map overwritten directly, half of them on or near a
@@ -195,6 +201,7 @@ def build_env(
     gate: bool,
     rendering: bool,
     gate_v1: bool = False,
+    max_offset_m=None,
 ):
     """Build the T1-arm environment for one frozen evaluation panel."""
     os.environ["DATASET_PATH"] = bank
@@ -225,14 +232,22 @@ def build_env(
         display=False,  # we own the window; Game draws into an offscreen surface
         distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
     )
+    offset_bound = (
+        float(EnvConfig().trench_dig_max_offset_m)
+        if max_offset_m is None
+        else float(max_offset_m)
+    )
     env_cfgs = jax.vmap(
         lambda _: EnvConfig.new()._replace(
             agent_types=(0,),
             action_types=(0,),
             enforce_trench_dig_alignment=bool(gate),
-            # False (default) = v2, yaw-parallel only.  True = the retired v1
-            # lateral standoff band, kept so the C0/T1 pilot stays replayable.
+            # False (default) = v2: yaw-parallel AND "on the line" (base centre
+            # within trench_dig_max_offset_m of the axis; <= 0 disables that
+            # clause).  True = the retired v1 lateral standoff band, kept so the
+            # C0/T1 pilot stays replayable.
             trench_dig_standoff_enforced=bool(gate_v1),
+            trench_dig_max_offset_m=offset_bound,
             reward_stage=int(RewardStage.REWARD_V2),
         )
     )(jnp.arange(1))
@@ -492,9 +507,17 @@ def make_probe(batch_cfg):
         band_ok = jnp.logical_and(
             standoffs_m >= standoff_min, standoffs_m <= standoff_max
         )
-        # Under v2 the band is not a validity clause at all -- working distance
-        # is the dig cone's job, radially, machine -> cell.
-        standoff_clause = jnp.logical_or(~standoff_enforced, band_ok)
+        # Under v2 the [3.5, 7.0] band is not a validity clause at all --
+        # working distance is the dig cone's job, radially, machine -> cell.
+        # What v2 does require is the "on the line" clause: the base centre's
+        # perpendicular offset from the axis is at most
+        # trench_dig_max_offset_m (any value <= 0 disables it).  Without it,
+        # yaw-parallel alone still admits the old sideways lane.
+        max_offset = jnp.float32(state.env_cfg.trench_dig_max_offset_m)
+        on_line_ok = jnp.logical_or(
+            max_offset <= jnp.float32(0.0), standoffs_m <= max_offset
+        )
+        standoff_clause = jnp.where(standoff_enforced, band_ok, on_line_ok)
         axis_pose_valid = jnp.logical_and(
             valid_axes,
             jnp.logical_and(
@@ -740,6 +763,7 @@ def make_probe(batch_cfg):
             "signed_cells": signed_cells,
             "yaw_ok": yaw_ok,
             "band_ok": band_ok,
+            "on_line_ok": on_line_ok,
             "standoff_clause": standoff_clause,
             "axes": axes,
             "segments": records[:, 3:7],
@@ -751,6 +775,7 @@ def make_probe(batch_cfg):
             "standoff_min_m": standoff_min,
             "standoff_max_m": standoff_max,
             "standoff_enforced": standoff_enforced,
+            "max_offset_m": max_offset,
             "cone_r_max_m": cone_r_max,
             "tile_size": jnp.float32(state.env_cfg.tile_size),
             "move_tiles": jnp.float32(state.env_cfg.agent.move_tiles),
@@ -993,9 +1018,15 @@ def section_line(probe: dict, axis: int) -> str:
             band_flag = "TOO FAR"
         middle = f"standoff {standoff:5.2f}m [{lo:.1f},{hi:.1f}] {band_flag}"
     else:
-        # v2: the perpendicular offset is information, not a clause.  Reach is
-        # the dig cone's business and it is tested radially, cell by cell.
-        middle = f"offset {signed:+6.2f}m (not a clause; reach = cone)"
+        # v2: reach is the dig cone's business and it is tested radially, cell
+        # by cell.  What the offset DOES gate is "am I on the line": the base
+        # centre must sit within max_offset metres of the axis.
+        limit = float(probe["max_offset_m"])
+        if limit <= 0.0:
+            middle = f"offset {signed:+6.2f}m (clause disabled; reach = cone)"
+        else:
+            flag = "OK  " if bool(probe["on_line_ok"][axis]) else "OFF THE LINE"
+            middle = f"offset {signed:+6.2f}m limit {limit:.2f}m {flag}"
     return (
         f"  S{axis} yaw {yaw_deg:5.1f}/{tol_deg:.1f}deg {yaw_flag} | "
         f"{middle} | {verdict} | "
@@ -1098,6 +1129,15 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
                     why.append(f"misaligned by {yaw_deg:.1f}deg")
                 if enforced and not bool(probe["band_ok"][axis]):
                     why.append(f"standoff {standoff:.2f}m out of band")
+                if (
+                    not enforced
+                    and float(probe["max_offset_m"]) > 0.0
+                    and not bool(probe["on_line_ok"][axis])
+                ):
+                    why.append(
+                        f"off the line: {standoff:.2f} m from the axis, "
+                        f"limit {float(probe['max_offset_m']):.2f} m"
+                    )
                 if not why:
                     why.append("not pose-valid (section metadata)")
                 lines.append(
@@ -1130,13 +1170,66 @@ def explain_do(probe: dict) -> tuple[str, str, list[str]]:
             if enforced
             else []
         )
+        # v2 "on the line": the base centre is further from the axis than
+        # trench_dig_max_offset_m.  This is the sideways-lane refusal -- the
+        # pose Lorenzo could still dig from under the yaw-only v2 gate.
+        offset_limit = float(probe["max_offset_m"])
+        offline_fail = (
+            [
+                axis
+                for axis in range(n_axes)
+                if bool(probe["axis_has_fresh"][axis])
+                and not bool(probe["on_line_ok"][axis])
+            ]
+            if (not enforced and offset_limit > 0.0)
+            else []
+        )
+        if offline_fail and not yaw_fail:
+            tile = float(probe["tile_size"])
+            worst = min(
+                float(probe["standoffs_m"][axis]) for axis in offline_fail
+            )
+            code, head = (
+                "off_the_line",
+                f"off the line: {worst:.2f} m from the axis, "
+                f"limit {offset_limit:.2f} m",
+            )
+            for axis in offline_fail:
+                standoff = float(probe["standoffs_m"][axis])
+                need = standoff - offset_limit
+                lines.append(
+                    f"  section {axis}: off the line: {standoff:.2f} m from the "
+                    f"axis, limit {offset_limit:.2f} m -- move at least "
+                    f"{need:.2f} m ({need / tile:.1f} cells) TOWARDS the axis"
+                )
+            lines.append(
+                "  NOTE: your chassis is already parallel, so FORWARD/BACKWARD "
+                "slides ALONG the section and leaves the offset unchanged."
+            )
+            lines.append(
+                "  fix: get ON the trench line -- rotate the base off-axis "
+                "(LEFT/RIGHT), drive in, then rotate back onto the axis, and "
+                "dig AHEAD of you, retreating backward as the trench opens"
+            )
+            return (f"DO -> REFUSED (no-op): {head}", code, lines)
+        if offline_fail and yaw_fail:
+            code, head = (
+                "misaligned_and_off_the_line",
+                "yaw AND the on-the-line clause both fail",
+            )
+            lines.append(
+                "  fix: re-aim the chassis parallel first, then drive onto the "
+                f"trench line (limit {offset_limit:.2f} m from the axis)"
+            )
+            return (f"DO -> REFUSED (no-op): {head}", code, lines)
         if yaw_fail and not band_fail:
             code, head = "misaligned", "chassis yaw outside 15deg of every owning section"
             lines.append("  fix: rotate the base (LEFT/RIGHT) until yaw <= 15deg")
         elif not yaw_fail and not band_fail:
-            # Under v2 the only positional clause is yaw, so reaching here means
-            # a section carries fresh cells yet is not pose-valid for a reason
-            # that is not geometric: declared-metadata fail-closed.
+            # Both geometric clauses hold on every owning section that carries
+            # fresh cells (yaw, and under v2 the on-the-line bound), so a
+            # section that is still not pose-valid fails for a reason that is
+            # not geometric: declared-metadata fail-closed.
             code, head = (
                 "pose_invalid_metadata",
                 "no owning section is pose-valid, and it is not the yaw",
@@ -1327,11 +1420,17 @@ def status_lines(probe: dict, slot: int, row: dict, reward: float, done: bool) -
             + (offsets or "no sections")
         )
     else:
+        limit = float(probe["max_offset_m"])
+        clause = (
+            "yaw-parallel only; ON-THE-LINE CLAUSE DISABLED"
+            if limit <= 0.0
+            else f"yaw-parallel AND on the line, |offset| <= {limit:.2f} m"
+        )
         lines.append(
-            "GATE v2 (yaw-parallel only; reach = dig cone, radial "
+            f"GATE v2 ({clause}; reach = dig cone, radial "
             f"<= {float(probe['cone_r_max_m']):.2f} m): perpendicular offset "
             + (offsets or "no sections")
-            + "  [information, not a clause]"
+            + ("  [information, not a clause]" if limit <= 0.0 else "")
         )
     counts = np.asarray(probe["diggable_counts"])
     reachable = int((np.asarray(probe["remaining_mask"]) & np.asarray(probe["diggable_now"])).sum())
@@ -1662,13 +1761,14 @@ class View:
     def _draw_band(
         self, probe: dict, axis: int, color, band_labelled: bool = True
     ) -> bool:
-        """Draw the 3.5 m / 7.0 m standoff band edges for one section.
+        """Draw the standoff clause edges for one section.
 
-        Under the v1 gate the band is a validity clause and is drawn in the
-        section colour: stand between the dotted lines.  Under v2 (the default)
+        Under the v1 gate the [3.5, 7.0] m band is a validity clause and is
+        drawn in the section colour: stand between the dotted lines.  Under v2
         it constrains nothing -- reach is the dig cone's job, tested radially --
-        so it is drawn dim and captioned, to stay readable as a diagnostic
-        without inviting the reader to treat it as a rule.
+        so it is drawn dim and captioned, and the lines that DO bind, the
+        "on the line" bound at +-trench_dig_max_offset_m, are drawn in the
+        section colour instead: stand between THOSE.
         """
         a, b, c = [float(v) for v in probe["axes"][axis]]
         denom = float(np.hypot(a, b))
@@ -1681,6 +1781,13 @@ class View:
         normal = np.array([b, a]) / denom  # (row, col) normal to the line
         p0 = np.array([seg[0], seg[1]])
         p1 = np.array([seg[2], seg[3]])
+        limit = float(probe["max_offset_m"])
+        if not enforced and limit > 0.0:
+            offset_cells = limit / tile
+            for sign in (-1.0, 1.0):
+                q0 = p0 + sign * offset_cells * normal
+                q1 = p1 + sign * offset_cells * normal
+                self._dashed(self.point(*q0), self.point(*q1), color)
         for metres in (float(probe["standoff_min_m"]), float(probe["standoff_max_m"])):
             offset_cells = metres / tile
             for sign in (-1.0, 1.0):
@@ -1858,6 +1965,7 @@ class Session:
             not args.gate_off,
             rendering=True,
             gate_v1=bool(args.gate_v1),
+            max_offset_m=args.max_offset_m,
         )
         print(f"env built in {time.time() - t0:.1f}s", flush=True)
         self.loader = SlotLoader(self.env, self.env_cfgs, args.bank, args.panel, self.rows)
@@ -2036,6 +2144,7 @@ class Session:
         enforced = bool(self.probe["standoff_enforced"])
         low = float(self.probe["standoff_min_m"])
         high = float(self.probe["standoff_max_m"])
+        limit = float(self.probe["max_offset_m"])
         angle = 2.0 * np.pi * base / ANGLES_BASE
         forward = np.array([-np.sin(angle), np.cos(angle)])
         for axis in range(int(self.probe["trench_type"])):
@@ -2045,9 +2154,13 @@ class Session:
             yaw = float(np.arccos(np.clip(abs(tangent @ forward), 0.0, 1.0)))
             if yaw > tolerance:
                 continue
-            if not enforced:
-                return True  # v2: yaw-parallel is the whole positional clause
             standoff = abs(a * col + b * row + c) / denominator * tile
+            if not enforced:
+                # v2: yaw-parallel plus the "on the line" bound (disabled at
+                # <= 0), which is what keeps the old sideways lane out.
+                if limit <= 0.0 or standoff <= limit:
+                    return True
+                continue
             if low <= standoff <= high:
                 return True
         return False
@@ -2390,9 +2503,16 @@ class Session:
             flush=True,
         )
         enforced = bool(probe["standoff_enforced"])
+        limit = float(probe["max_offset_m"])
+        if enforced:
+            semantics = "v1 (standoff band ENFORCED)"
+        elif limit > 0.0:
+            semantics = f"v2 (yaw-parallel AND on the line, |offset| <= {limit:.2f} m)"
+        else:
+            semantics = "v2 (yaw-parallel only; ON-THE-LINE CLAUSE DISABLED)"
         print(
             f"  gate {'ON' if bool(probe['gate_enabled']) else 'OFF'}  "
-            f"semantics {'v1 (standoff band ENFORCED)' if enforced else 'v2 (yaw-parallel only)'}  "
+            f"semantics {semantics}  "
             f"yaw tol {np.degrees(float(probe['yaw_tolerance_rad'])):.2f}deg  "
             f"band {float(probe['standoff_min_m'])}-{float(probe['standoff_max_m'])} m "
             f"{'enforced' if enforced else 'DIAGNOSTIC ONLY'}  "
@@ -2657,6 +2777,14 @@ def parse_args(argv=None):
         action="store_true",
         help="restore the retired v1 lateral standoff band "
         "(trench_dig_standoff_enforced=True); default is v2, yaw-parallel only",
+    )
+    parser.add_argument(
+        "--max-offset-m",
+        type=float,
+        default=None,
+        help="override the v2 'on the line' bound "
+        "(EnvConfig.trench_dig_max_offset_m, metres); <= 0 disables the clause "
+        "(yaw-parallel only). Inert under --gate-v1.",
     )
     parser.add_argument(
         "--replica-sweep",

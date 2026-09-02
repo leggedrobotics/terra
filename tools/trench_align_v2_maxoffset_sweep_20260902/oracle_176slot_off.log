@@ -1,0 +1,195 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+slots=176 conditions=11
+Loaded data from /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_oracle_receipts_20260831/oracle_t1_arm_train_config_only.pkl.
+gate semantics: v2 (yaw-parallel + on the line)
+📍 Using maps from config: ['evaluation/gate_main/development']
+📍 Curriculum: promote after 3 task success(es), demote after 3 failure(s), last_level_type='none'
+Loading maps from ['/home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development'].
+Data Loader:   0%|          | 0/608 [00:00<?, ?it/s]Data Loader:   3%|▎         | 16/608 [00:00<00:03, 154.83it/s]Data Loader:   5%|▌         | 32/608 [00:00<00:03, 155.01it/s]Data Loader:   8%|▊         | 48/608 [00:00<00:03, 152.13it/s]Data Loader:  11%|█         | 64/608 [00:00<00:03, 149.55it/s]Data Loader:  13%|█▎        | 80/608 [00:00<00:03, 150.07it/s]Data Loader:  16%|█▌        | 96/608 [00:00<00:03, 148.53it/s]Data Loader:  18%|█▊        | 112/608 [00:00<00:03, 150.79it/s]Data Loader:  21%|██        | 128/608 [00:00<00:03, 136.26it/s]Data Loader:  23%|██▎       | 142/608 [00:00<00:03, 134.54it/s]Data Loader:  26%|██▌       | 159/608 [00:01<00:03, 142.28it/s]Data Loader:  29%|██▉       | 176/608 [00:01<00:02, 148.64it/s]Data Loader:  32%|███▏      | 193/608 [00:01<00:02, 153.64it/s]Data Loader:  35%|███▍      | 210/608 [00:01<00:02, 156.54it/s]Data Loader:  37%|███▋      | 227/608 [00:01<00:02, 158.65it/s]Data Loader:  40%|████      | 245/608 [00:01<00:02, 162.26it/s]Data Loader:  43%|████▎     | 263/608 [00:01<00:02, 165.24it/s]Data Loader:  46%|████▌     | 280/608 [00:01<00:02, 148.26it/s]Data Loader:  49%|████▊     | 296/608 [00:01<00:02, 148.30it/s]Data Loader:  51%|█████▏    | 312/608 [00:02<00:01, 148.11it/s]Data Loader:  54%|█████▍    | 327/608 [00:02<00:01, 148.52it/s]Data Loader:  56%|█████▋    | 343/608 [00:02<00:01, 149.22it/s]Data Loader:  59%|█████▉    | 359/608 [00:02<00:01, 148.97it/s]Data Loader:  62%|██████▏   | 374/608 [00:02<00:01, 148.94it/s]Data Loader:  64%|██████▍   | 389/608 [00:02<00:01, 149.23it/s]Data Loader:  66%|██████▋   | 404/608 [00:02<00:01, 148.63it/s]Data Loader:  69%|██████▉   | 419/608 [00:02<00:01, 148.41it/s]Data Loader:  71%|███████▏  | 434/608 [00:02<00:01, 132.80it/s]Data Loader:  74%|███████▍  | 451/608 [00:03<00:01, 142.26it/s]Data Loader:  77%|███████▋  | 468/608 [00:03<00:00, 148.07it/s]Data Loader:  80%|███████▉  | 484/608 [00:03<00:00, 150.95it/s]Data Loader:  82%|████████▏ | 500/608 [00:03<00:00, 153.14it/s]Data Loader:  85%|████████▍ | 516/608 [00:03<00:00, 153.60it/s]Data Loader:  88%|████████▊ | 532/608 [00:03<00:00, 149.83it/s]Data Loader:  90%|█████████ | 548/608 [00:03<00:00, 147.17it/s]Data Loader:  93%|█████████▎| 563/608 [00:03<00:00, 145.29it/s]Data Loader:  95%|█████████▌| 578/608 [00:03<00:00, 144.33it/s]Data Loader:  98%|█████████▊| 594/608 [00:03<00:00, 146.66it/s]Data Loader: 100%|██████████| 608/608 [00:04<00:00, 148.42it/s]
+Loaded 608 maps from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Loaded 608 metadata files from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Maps width: 64
+Maps height: 64
+Unique shapes of trench_axes_list: {(608, 4, 8)}
+Maps shape: (1, 608, 64, 64).
+Padding mask shape: (1, 608, 64, 64).
+Dumpability mask shape: (1, 608, 64, 64).
+Trench axes shape: (1, 608, 4, 8).
+Trench types shape: (1, 608).
+Foundation border axes shape: (1, 608, 64, 3).
+Foundation border types shape: (1, 608).
+Actions shape: (1, 608, 64, 64).
+Distance maps shape: (1, 608, 64, 64).
+Map provenance shape: (1, 608).
+🧩 Agent Types (effective): (0,)
+🧩 Agent Types (names): Excavator
+✅ Using --agent_types override
+🚗 Action Types (effective): (0,)
+🚗 Action Types (names): Tracked
+✅ Using --action_types override
+📊 Relocation progress multiplier: 1.5
+🧭 Finite trench metadata verified: 608 maps in evaluation/gate_main/development
+🧭 Fresh-trench dig gate (effective): True
+🧭 Fresh-trench gate semantics (effective): v2 (yaw-parallel only; reach left to the dig cone)
+🪣 Relocation progress multiplier (effective): 1.5
+🎯 Reward stage (effective): reward_v2
+🎯 Reward-v2 timing variant (effective): 0
+Mixed Agent Environment - Resolved map scale: map_edge=64x64 px, edge_length=36.571 m, meters_per_tile=0.571429
+Mixed Agent Environment - Resolved geometry: tile_size=0.000000 m/tile, excavator_footprint=0x0 cells (0.000x0.000 m)
+⏱️  Batching env_params...
+⏱️  Batching env_params done in 0.46s
+Mixed Agent Environment - Tile size shape: (1, 176)
+Setting num_prev_actions to 5 (5 per agent × 1 agents)
+🧠 Model size preset: medium
+🧠 Model core: mlp
+🧠 Map encoder: resnet_spatial_8x8_se_sa_xattn
+🧠 Encoder dtype: bfloat16, attention dtype: float32
+⏱️  Initializing model...
+num_embeddings_agent = 64
+map normalization min max = (-1, 1)
+critic_hidden_dims override -> hidden_dim_v = (512, 256, 1)
+flatten_reduce_channels -> 32
+model.init obs_len = 23
+model.init obs_shapes = [(1, 4, 9), (1, 4), (1,), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1,), (1,), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1, 5), (1, 3)]
+Model: 2,049,751 parameters
+⏱️  Model init done in 11.27s
+🏗️ Architecture:
+   core: mlp
+   model_size: medium
+   map_encoder: resnet_spatial_8x8_se_sa_xattn
+   encoder_compute_dtype: bfloat16
+   attention_compute_dtype: float32
+   token_mixer_residual_init_scale: 0.1
+   flatten_reduce_channels: 32
+   attn_latent_queries: 8
+   aux_coef: 0.0
+   mlp details:
+     fusion: concat(agent_state, prev_actions, local_map, cnn_maps)
+     intermediate_mlp_dim: 160
+🛠️ Debug: Number of actions = 8
+Network: Unified with agent type conditioning
+on-line clause: DISABLED (yaw-parallel only)
+geometry 70.5s tile=0.571429 agent=7x11 fwd0=(0, 5) bwd0=(0, -5) {'cone_offset_table_checks': 288, 'cone_offset_table_exact_fraction': 0.8090277777777778, 'cone_offset_table_mean_cell_diff': 0.3541666666666667, 'cone_offset_table_max_cell_diff': 5, 'footprint_replica_checks': 72, 'footprint_patterns_per_heading': [1, 1, 1, 2, 1, 1, 9, 1, 1, 1, 1, 1], 'move_table_checks': 1741, 'cone_accessor_checks': 120}
+step 1 done=0/176 succ=0 elapsed=233s [terra_step=195s probe=2s plan=2s bfs=1s]
+step 11 done=0/176 succ=0 elapsed=485s [terra_step=420s probe=4s plan=2s bfs=1s]
+step 21 done=0/176 succ=0 elapsed=496s [terra_step=424s probe=4s plan=4s bfs=3s]
+step 31 done=2/176 succ=2 elapsed=508s [terra_step=428s probe=4s plan=6s bfs=4s stall_attribution=2s]
+step 41 done=7/176 succ=7 elapsed=517s [terra_step=432s probe=5s plan=7s bfs=4s stall_attribution=2s]
+step 51 done=17/176 succ=17 elapsed=527s [terra_step=436s probe=5s plan=8s bfs=5s stall_attribution=3s]
+step 61 done=32/176 succ=32 elapsed=536s [terra_step=440s probe=5s plan=8s bfs=6s stall_attribution=4s]
+step 71 done=65/176 succ=65 elapsed=545s [terra_step=445s probe=6s plan=9s bfs=6s stall_attribution=4s]
+step 81 done=78/176 succ=78 elapsed=553s [terra_step=449s probe=6s plan=9s bfs=7s stall_attribution=5s]
+step 91 done=88/176 succ=88 elapsed=561s [terra_step=453s probe=6s plan=10s bfs=7s stall_attribution=5s]
+step 101 done=105/176 succ=105 elapsed=572s [terra_step=460s probe=7s plan=10s bfs=8s stall_attribution=5s]
+step 111 done=117/176 succ=117 elapsed=610s [terra_step=485s probe=9s plan=11s bfs=8s stall_attribution=5s]
+step 121 done=122/176 succ=122 elapsed=669s [terra_step=525s probe=14s plan=11s bfs=9s stall_attribution=6s]
+step 131 done=133/176 succ=133 elapsed=676s [terra_step=531s probe=14s plan=11s bfs=9s stall_attribution=6s]
+step 141 done=138/176 succ=138 elapsed=683s [terra_step=536s probe=14s plan=11s bfs=9s stall_attribution=6s]
+step 151 done=143/176 succ=143 elapsed=690s [terra_step=541s probe=15s plan=11s bfs=9s stall_attribution=6s]
+step 161 done=144/176 succ=144 elapsed=696s [terra_step=546s probe=15s plan=11s bfs=9s stall_attribution=6s]
+step 171 done=144/176 succ=144 elapsed=702s [terra_step=550s probe=15s plan=11s bfs=9s stall_attribution=6s]
+step 181 done=145/176 succ=145 elapsed=708s [terra_step=555s probe=16s plan=11s bfs=9s stall_attribution=6s]
+step 191 done=146/176 succ=146 elapsed=714s [terra_step=559s probe=16s plan=11s bfs=9s stall_attribution=6s]
+step 201 done=146/176 succ=146 elapsed=720s [terra_step=564s probe=16s plan=11s bfs=9s stall_attribution=6s]
+step 211 done=146/176 succ=146 elapsed=730s [terra_step=572s probe=17s plan=11s bfs=9s stall_attribution=6s]
+step 221 done=146/176 succ=146 elapsed=738s [terra_step=577s probe=17s plan=11s bfs=9s stall_attribution=6s]
+step 231 done=146/176 succ=146 elapsed=744s [terra_step=582s probe=17s plan=11s bfs=9s stall_attribution=6s]
+step 241 done=146/176 succ=146 elapsed=750s [terra_step=586s probe=18s plan=11s bfs=9s stall_attribution=6s]
+step 251 done=146/176 succ=146 elapsed=756s [terra_step=591s probe=18s plan=11s bfs=9s stall_attribution=6s]
+step 261 done=146/176 succ=146 elapsed=762s [terra_step=595s probe=18s plan=11s bfs=9s stall_attribution=6s]
+step 271 done=146/176 succ=146 elapsed=767s [terra_step=600s probe=19s plan=11s bfs=9s stall_attribution=6s]
+step 281 done=146/176 succ=146 elapsed=773s [terra_step=604s probe=19s plan=11s bfs=9s stall_attribution=6s]
+step 291 done=146/176 succ=146 elapsed=779s [terra_step=608s probe=19s plan=11s bfs=9s stall_attribution=6s]
+step 301 done=146/176 succ=146 elapsed=784s [terra_step=612s probe=20s plan=11s bfs=9s stall_attribution=6s]
+step 311 done=146/176 succ=146 elapsed=790s [terra_step=616s probe=20s plan=11s bfs=9s stall_attribution=6s]
+step 321 done=146/176 succ=146 elapsed=795s [terra_step=621s probe=20s plan=11s bfs=9s stall_attribution=6s]
+step 331 done=146/176 succ=146 elapsed=800s [terra_step=625s probe=21s plan=11s bfs=9s stall_attribution=6s]
+step 341 done=146/176 succ=146 elapsed=806s [terra_step=629s probe=21s plan=11s bfs=9s stall_attribution=6s]
+step 351 done=146/176 succ=146 elapsed=814s [terra_step=635s probe=21s plan=11s bfs=9s stall_attribution=6s]
+step 361 done=146/176 succ=146 elapsed=821s [terra_step=641s probe=22s plan=11s bfs=9s stall_attribution=6s]
+step 371 done=146/176 succ=146 elapsed=858s [terra_step=668s probe=24s plan=11s bfs=9s stall_attribution=6s]
+step 381 done=146/176 succ=146 elapsed=908s [terra_step=703s probe=29s plan=11s bfs=9s stall_attribution=6s]
+step 391 done=146/176 succ=146 elapsed=914s [terra_step=708s probe=29s plan=11s bfs=9s stall_attribution=6s]
+step 401 done=146/176 succ=146 elapsed=920s [terra_step=712s probe=29s plan=11s bfs=9s stall_attribution=6s]
+step 411 done=146/176 succ=146 elapsed=925s [terra_step=716s probe=30s plan=11s bfs=9s stall_attribution=6s]
+step 421 done=146/176 succ=146 elapsed=931s [terra_step=721s probe=30s plan=11s bfs=9s stall_attribution=6s]
+step 431 done=146/176 succ=146 elapsed=937s [terra_step=725s probe=30s plan=11s bfs=9s stall_attribution=6s]
+step 441 done=146/176 succ=146 elapsed=942s [terra_step=729s probe=30s plan=11s bfs=9s stall_attribution=6s]
+step 451 done=146/176 succ=146 elapsed=948s [terra_step=733s probe=31s plan=11s bfs=9s stall_attribution=6s]
+step 461 done=146/176 succ=146 elapsed=953s [terra_step=737s probe=31s plan=11s bfs=9s stall_attribution=6s]
+step 471 done=146/176 succ=146 elapsed=959s [terra_step=742s probe=31s plan=11s bfs=9s stall_attribution=6s]
+step 481 done=146/176 succ=146 elapsed=964s [terra_step=746s probe=32s plan=11s bfs=9s stall_attribution=6s]
+step 491 done=146/176 succ=146 elapsed=970s [terra_step=750s probe=32s plan=11s bfs=9s stall_attribution=6s]
+step 501 done=146/176 succ=146 elapsed=975s [terra_step=754s probe=32s plan=11s bfs=9s stall_attribution=6s]
+step 511 done=146/176 succ=146 elapsed=981s [terra_step=758s probe=33s plan=11s bfs=9s stall_attribution=6s]
+step 521 done=146/176 succ=146 elapsed=986s [terra_step=762s probe=33s plan=11s bfs=9s stall_attribution=6s]
+step 531 done=146/176 succ=146 elapsed=991s [terra_step=766s probe=33s plan=11s bfs=9s stall_attribution=6s]
+step 541 done=146/176 succ=146 elapsed=997s [terra_step=770s probe=33s plan=11s bfs=9s stall_attribution=6s]
+step 551 done=146/176 succ=146 elapsed=1002s [terra_step=775s probe=34s plan=11s bfs=9s stall_attribution=6s]
+step 561 done=146/176 succ=146 elapsed=1008s [terra_step=779s probe=34s plan=11s bfs=9s stall_attribution=6s]
+step 571 done=146/176 succ=146 elapsed=1014s [terra_step=783s probe=34s plan=11s bfs=9s stall_attribution=6s]
+step 581 done=146/176 succ=146 elapsed=1020s [terra_step=788s probe=35s plan=11s bfs=9s stall_attribution=6s]
+step 591 done=146/176 succ=146 elapsed=1025s [terra_step=792s probe=35s plan=11s bfs=9s stall_attribution=6s]
+step 601 done=146/176 succ=146 elapsed=1031s [terra_step=796s probe=35s plan=11s bfs=9s stall_attribution=6s]
+step 611 done=146/176 succ=146 elapsed=1038s [terra_step=802s probe=36s plan=11s bfs=9s stall_attribution=6s]
+step 621 done=146/176 succ=146 elapsed=1047s [terra_step=808s probe=36s plan=11s bfs=9s stall_attribution=6s]
+step 631 done=146/176 succ=146 elapsed=1074s [terra_step=828s probe=38s plan=11s bfs=9s stall_attribution=6s]
+step 641 done=146/176 succ=146 elapsed=1144s [terra_step=879s probe=43s plan=11s bfs=9s stall_attribution=6s]
+step 651 done=146/176 succ=146 elapsed=1151s [terra_step=883s probe=44s plan=11s bfs=9s stall_attribution=6s]
+step 661 done=146/176 succ=146 elapsed=1157s [terra_step=888s probe=44s plan=11s bfs=9s stall_attribution=6s]
+step 671 done=146/176 succ=146 elapsed=1163s [terra_step=892s probe=45s plan=11s bfs=9s stall_attribution=6s]
+step 681 done=146/176 succ=146 elapsed=1169s [terra_step=897s probe=45s plan=11s bfs=9s stall_attribution=6s]
+step 691 done=146/176 succ=146 elapsed=1175s [terra_step=901s probe=45s plan=11s bfs=9s stall_attribution=6s]
+step 701 done=146/176 succ=146 elapsed=1181s [terra_step=906s probe=46s plan=11s bfs=9s stall_attribution=6s]
+step 711 done=146/176 succ=146 elapsed=1187s [terra_step=910s probe=46s plan=11s bfs=9s stall_attribution=6s]
+step 721 done=146/176 succ=146 elapsed=1192s [terra_step=914s probe=46s plan=11s bfs=9s stall_attribution=6s]
+step 731 done=146/176 succ=146 elapsed=1198s [terra_step=919s probe=47s plan=11s bfs=9s stall_attribution=6s]
+step 741 done=146/176 succ=146 elapsed=1204s [terra_step=923s probe=47s plan=11s bfs=9s stall_attribution=6s]
+step 751 done=146/176 succ=146 elapsed=1210s [terra_step=928s probe=47s plan=11s bfs=9s stall_attribution=6s]
+step 761 done=146/176 succ=146 elapsed=1215s [terra_step=932s probe=48s plan=11s bfs=9s stall_attribution=6s]
+step 771 done=146/176 succ=146 elapsed=1221s [terra_step=936s probe=48s plan=11s bfs=9s stall_attribution=6s]
+step 781 done=146/176 succ=146 elapsed=1227s [terra_step=940s probe=48s plan=11s bfs=9s stall_attribution=6s]
+step 791 done=146/176 succ=146 elapsed=1232s [terra_step=945s probe=48s plan=11s bfs=9s stall_attribution=6s]
+step 801 done=146/176 succ=146 elapsed=1238s [terra_step=949s probe=49s plan=11s bfs=9s stall_attribution=6s]
+step 811 done=146/176 succ=146 elapsed=1243s [terra_step=953s probe=49s plan=11s bfs=9s stall_attribution=6s]
+step 821 done=146/176 succ=146 elapsed=1249s [terra_step=957s probe=49s plan=11s bfs=9s stall_attribution=6s]
+step 831 done=146/176 succ=146 elapsed=1254s [terra_step=961s probe=50s plan=11s bfs=9s stall_attribution=6s]
+step 841 done=146/176 succ=146 elapsed=1260s [terra_step=966s probe=50s plan=11s bfs=9s stall_attribution=6s]
+step 851 done=146/176 succ=146 elapsed=1265s [terra_step=970s probe=50s plan=11s bfs=9s stall_attribution=6s]
+step 861 done=146/176 succ=146 elapsed=1271s [terra_step=974s probe=50s plan=11s bfs=9s stall_attribution=6s]
+step 871 done=146/176 succ=146 elapsed=1278s [terra_step=979s probe=51s plan=11s bfs=9s stall_attribution=6s]
+step 881 done=146/176 succ=146 elapsed=1287s [terra_step=986s probe=51s plan=11s bfs=9s stall_attribution=6s]
+step 891 done=146/176 succ=146 elapsed=1316s [terra_step=1008s probe=53s plan=11s bfs=9s stall_attribution=6s]
+{
+ "slots": 176,
+ "succeeded": 146,
+ "within_horizon": 146,
+ "rate": 0.8295454545454546,
+ "median_success_step": 78.5,
+ "p90_success_step": 130.0,
+ "max_success_step": 183,
+ "median_success_step_any_horizon": 78.5,
+ "p90_success_step_any_horizon": 130.0,
+ "max_success_step_any_horizon": 183,
+ "mean_dig_fraction": 0.9693930551637997,
+ "stations": 988,
+ "stations_on_axis": 366,
+ "loaded_no_legal_dump_deadlocks": 0,
+ "slots_with_stuck_loaded_steps": 0,
+ "dump_precheck_blocks": 2,
+ "illegal_soil_units": 0,
+ "slots_with_illegal_soil": 0
+}
+trn-net3-side1-road        15/16 (any-horizon 15) median=119.0 p90=139.8 max=183 digfrac=0.970 deadlock=0 spoil=0
+trn-net3-side2             12/16 (any-horizon 12) median=96.5 p90=127.50000000000001 max=131 digfrac=0.929 deadlock=0 spoil=0
+trn-net3-side2-s           14/16 (any-horizon 14) median=68.0 p90=82.4 max=103 digfrac=0.983 deadlock=0 spoil=0
+trn-seg2-side2             14/16 (any-horizon 14) median=105.0 p90=125.7 max=135 digfrac=0.995 deadlock=0 spoil=0
+trn-seg3-side2             11/16 (any-horizon 11) median=128.0 p90=150.0 max=177 digfrac=0.974 deadlock=0 spoil=0
+trn-straight-altsides      14/16 (any-horizon 14) median=70.0 p90=92.00000000000001 max=106 digfrac=0.969 deadlock=0 spoil=0
+trn-straight-side1         16/16 (any-horizon 16) median=58.0 p90=84.0 max=100 digfrac=1.000 deadlock=0 spoil=0
+trn-straight-side1-tight   15/16 (any-horizon 15) median=66.0 p90=87.6 max=99 digfrac=0.991 deadlock=0 spoil=0
+trn-straight-side2         14/16 (any-horizon 14) median=63.5 p90=89.50000000000001 max=95 digfrac=0.987 deadlock=0 spoil=0
+trn-tee-side2               9/16 (any-horizon  9) median=121.0 p90=146.8 max=158 digfrac=0.890 deadlock=0 spoil=0
+trn-tee-side2-s            12/16 (any-horizon 12) median=65.5 p90=83.9 max=111 digfrac=0.976 deadlock=0 spoil=0
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_maxoffset_sweep_20260902/oracle_176slot_off.json

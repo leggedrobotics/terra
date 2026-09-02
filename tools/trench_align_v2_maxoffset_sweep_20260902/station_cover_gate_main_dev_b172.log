@@ -1,0 +1,89 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+gate semantics v2 (standoff band enforced=False, forced=False; on-line clause: perpendicular offset <= 1.72 m)
+224 trench maps
+selfcheck trn-net3-side1-road:evaluation/gate_main/development:289: probes=512 applicable=197 mismatches=0
+selfcheck trn-net3-side1-road:evaluation/gate_main/development:290: probes=512 applicable=176 mismatches=0
+1/224
+21/224
+41/224
+61/224
+81/224
+101/224
+121/224
+141/224
+161/224
+181/224
+201/224
+221/224
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+trn-net3-side1-road      maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  6 cells_lost_to_legacy=  18 gained_by_legacy= 393 ncomp=1.00 minshare=1.000
+trn-net3-side2           maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  6 cells_lost_to_legacy=  18 gained_by_legacy= 393 ncomp=1.00 minshare=1.000
+trn-net3-side2-s         maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 14 cells_lost_to_legacy=   2 gained_by_legacy= 122 ncomp=1.00 minshare=1.000
+trn-net4-side1-road      maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  2 cells_lost_to_legacy=  66 gained_by_legacy= 692 ncomp=4.62 minshare=0.931
+trn-net4-side2           maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  2 cells_lost_to_legacy=  66 gained_by_legacy= 692 ncomp=4.62 minshare=0.931
+trn-net4-side2-s         maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  7 cells_lost_to_legacy=  31 gained_by_legacy= 131 ncomp=1.44 minshare=0.986
+trn-seg2-side2           maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 10 cells_lost_to_legacy=  10 gained_by_legacy= 454 ncomp=1.06 minshare=0.989
+trn-seg3-side2           maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  6 cells_lost_to_legacy=  34 gained_by_legacy= 550 ncomp=3.19 minshare=0.852
+trn-straight-altsides    maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 16 cells_lost_to_legacy=   0 gained_by_legacy= 728 ncomp=12.19 minshare=0.042
+trn-straight-side1       maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 16 cells_lost_to_legacy=   0 gained_by_legacy= 728 ncomp=12.19 minshare=0.042
+trn-straight-side1-tight maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 16 cells_lost_to_legacy=   0 gained_by_legacy= 728 ncomp=12.19 minshare=0.042
+trn-straight-side2       maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 16 cells_lost_to_legacy=   0 gained_by_legacy= 728 ncomp=12.19 minshare=0.042
+trn-tee-side2            maps= 16 complete: any= 16 terra_fp=  0 legacy_fp=  7 cells_lost_to_legacy=   3 gained_by_legacy= 690 ncomp=8.38 minshare=0.737
+trn-tee-side2-s          maps= 16 complete: any= 16 terra_fp=  0 legacy_fp= 13 cells_lost_to_legacy=   7 gained_by_legacy= 267 ncomp=2.31 minshare=0.910
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_maxoffset_sweep_20260902/station_cover_gate_main_dev_b172.json

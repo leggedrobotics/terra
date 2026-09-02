@@ -1,0 +1,210 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+slots=176 conditions=11
+Loaded data from /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_oracle_receipts_20260831/oracle_t1_arm_train_config_only.pkl.
+gate semantics: v2 (yaw-parallel + on the line)
+📍 Using maps from config: ['evaluation/gate_main/development']
+📍 Curriculum: promote after 3 task success(es), demote after 3 failure(s), last_level_type='none'
+Loading maps from ['/home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development'].
+Data Loader:   0%|          | 0/608 [00:00<?, ?it/s]Data Loader:   1%|          | 7/608 [00:00<00:09, 61.97it/s]Data Loader:   2%|▏         | 14/608 [00:00<00:09, 62.33it/s]Data Loader:   3%|▎         | 21/608 [00:00<00:09, 63.06it/s]Data Loader:   5%|▍         | 28/608 [00:00<00:09, 63.80it/s]Data Loader:   6%|▌         | 35/608 [00:00<00:08, 64.59it/s]Data Loader:   7%|▋         | 42/608 [00:00<00:08, 65.00it/s]Data Loader:   8%|▊         | 49/608 [00:00<00:08, 65.07it/s]Data Loader:   9%|▉         | 56/608 [00:00<00:08, 65.21it/s]Data Loader:  10%|█         | 63/608 [00:00<00:08, 65.27it/s]Data Loader:  12%|█▏        | 70/608 [00:01<00:08, 65.35it/s]Data Loader:  13%|█▎        | 77/608 [00:01<00:08, 65.31it/s]Data Loader:  14%|█▍        | 84/608 [00:01<00:08, 64.12it/s]Data Loader:  15%|█▍        | 91/608 [00:01<00:08, 59.67it/s]Data Loader:  16%|█▌        | 98/608 [00:01<00:08, 57.00it/s]Data Loader:  17%|█▋        | 104/608 [00:01<00:09, 55.87it/s]Data Loader:  18%|█▊        | 110/608 [00:01<00:09, 55.05it/s]Data Loader:  19%|█▉        | 116/608 [00:01<00:09, 54.43it/s]Data Loader:  20%|██        | 122/608 [00:02<00:08, 54.12it/s]Data Loader:  21%|██        | 128/608 [00:02<00:08, 53.78it/s]Data Loader:  22%|██▏       | 134/608 [00:02<00:10, 44.53it/s]Data Loader:  23%|██▎       | 141/608 [00:02<00:09, 49.01it/s]Data Loader:  24%|██▍       | 148/608 [00:02<00:08, 52.71it/s]Data Loader:  25%|██▌       | 155/608 [00:02<00:08, 55.12it/s]Data Loader:  27%|██▋       | 162/608 [00:02<00:07, 57.05it/s]Data Loader:  28%|██▊       | 169/608 [00:02<00:07, 59.11it/s]Data Loader:  29%|██▉       | 176/608 [00:03<00:07, 60.37it/s]Data Loader:  30%|███       | 183/608 [00:03<00:06, 61.64it/s]Data Loader:  31%|███▏      | 190/608 [00:03<00:06, 62.67it/s]Data Loader:  32%|███▏      | 197/608 [00:03<00:06, 63.16it/s]Data Loader:  34%|███▎      | 204/608 [00:03<00:06, 64.05it/s]Data Loader:  35%|███▍      | 211/608 [00:03<00:06, 64.70it/s]Data Loader:  36%|███▌      | 218/608 [00:03<00:06, 64.78it/s]Data Loader:  37%|███▋      | 225/608 [00:03<00:05, 64.29it/s]Data Loader:  38%|███▊      | 232/608 [00:03<00:05, 64.67it/s]Data Loader:  39%|███▉      | 239/608 [00:03<00:05, 64.85it/s]Data Loader:  40%|████      | 246/608 [00:04<00:05, 65.36it/s]Data Loader:  42%|████▏     | 253/608 [00:04<00:05, 65.78it/s]Data Loader:  43%|████▎     | 260/608 [00:04<00:05, 65.59it/s]Data Loader:  44%|████▍     | 267/608 [00:04<00:05, 66.17it/s]Data Loader:  45%|████▌     | 274/608 [00:04<00:05, 58.48it/s]Data Loader:  46%|████▌     | 281/608 [00:04<00:05, 59.71it/s]Data Loader:  47%|████▋     | 288/608 [00:04<00:05, 60.68it/s]Data Loader:  49%|████▊     | 295/608 [00:04<00:05, 61.71it/s]Data Loader:  50%|████▉     | 302/608 [00:04<00:04, 62.09it/s]Data Loader:  51%|█████     | 309/608 [00:05<00:04, 62.46it/s]Data Loader:  52%|█████▏    | 316/608 [00:05<00:04, 62.58it/s]Data Loader:  53%|█████▎    | 323/608 [00:05<00:04, 62.99it/s]Data Loader:  54%|█████▍    | 330/608 [00:05<00:04, 63.77it/s]Data Loader:  55%|█████▌    | 337/608 [00:05<00:04, 64.03it/s]Data Loader:  57%|█████▋    | 344/608 [00:05<00:04, 64.20it/s]Data Loader:  58%|█████▊    | 351/608 [00:05<00:04, 64.08it/s]Data Loader:  59%|█████▉    | 358/608 [00:05<00:03, 63.65it/s]Data Loader:  60%|██████    | 365/608 [00:05<00:03, 63.22it/s]Data Loader:  61%|██████    | 372/608 [00:06<00:03, 63.31it/s]Data Loader:  62%|██████▏   | 379/608 [00:06<00:03, 63.47it/s]Data Loader:  63%|██████▎   | 386/608 [00:06<00:03, 62.54it/s]Data Loader:  65%|██████▍   | 393/608 [00:06<00:03, 58.53it/s]Data Loader:  66%|██████▌   | 399/608 [00:06<00:03, 56.27it/s]Data Loader:  67%|██████▋   | 405/608 [00:06<00:03, 54.50it/s]Data Loader:  68%|██████▊   | 411/608 [00:06<00:03, 53.46it/s]Data Loader:  69%|██████▊   | 417/608 [00:06<00:03, 52.64it/s]Data Loader:  70%|██████▉   | 423/608 [00:07<00:03, 52.45it/s]Data Loader:  71%|███████   | 429/608 [00:07<00:03, 52.46it/s]Data Loader:  72%|███████▏  | 435/608 [00:07<00:03, 43.45it/s]Data Loader:  73%|███████▎  | 442/608 [00:07<00:03, 48.60it/s]Data Loader:  74%|███████▍  | 449/608 [00:07<00:03, 52.47it/s]Data Loader:  75%|███████▌  | 456/608 [00:07<00:02, 55.71it/s]Data Loader:  76%|███████▌  | 463/608 [00:07<00:02, 58.05it/s]Data Loader:  77%|███████▋  | 470/608 [00:07<00:02, 59.27it/s]Data Loader:  78%|███████▊  | 477/608 [00:08<00:02, 60.64it/s]Data Loader:  80%|███████▉  | 484/608 [00:08<00:02, 60.87it/s]Data Loader:  81%|████████  | 491/608 [00:08<00:01, 61.33it/s]Data Loader:  82%|████████▏ | 498/608 [00:08<00:01, 61.74it/s]Data Loader:  83%|████████▎ | 505/608 [00:08<00:01, 62.51it/s]Data Loader:  84%|████████▍ | 512/608 [00:08<00:01, 62.90it/s]Data Loader:  85%|████████▌ | 519/608 [00:08<00:01, 60.45it/s]Data Loader:  87%|████████▋ | 526/608 [00:08<00:01, 59.13it/s]Data Loader:  88%|████████▊ | 532/608 [00:08<00:01, 58.71it/s]Data Loader:  88%|████████▊ | 538/608 [00:09<00:01, 58.49it/s]Data Loader:  89%|████████▉ | 544/608 [00:09<00:01, 58.38it/s]Data Loader:  90%|█████████ | 550/608 [00:09<00:00, 58.42it/s]Data Loader:  91%|█████████▏| 556/608 [00:09<00:00, 57.93it/s]Data Loader:  92%|█████████▏| 562/608 [00:09<00:00, 57.42it/s]Data Loader:  93%|█████████▎| 568/608 [00:09<00:00, 56.81it/s]Data Loader:  94%|█████████▍| 574/608 [00:09<00:00, 56.35it/s]Data Loader:  95%|█████████▌| 580/608 [00:09<00:00, 57.07it/s]Data Loader:  97%|█████████▋| 587/608 [00:09<00:00, 58.48it/s]Data Loader:  98%|█████████▊| 594/608 [00:09<00:00, 59.31it/s]Data Loader:  99%|█████████▊| 600/608 [00:10<00:00, 58.74it/s]Data Loader: 100%|█████████▉| 606/608 [00:10<00:00, 57.96it/s]Data Loader: 100%|██████████| 608/608 [00:10<00:00, 59.42it/s]
+Loaded 608 maps from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Loaded 608 metadata files from /home/lorenzo/moleworks/.artifacts/terra_v8_trench_finite_enriched_20260819/evaluation/gate_main/development.
+Maps width: 64
+Maps height: 64
+Unique shapes of trench_axes_list: {(608, 4, 8)}
+Maps shape: (1, 608, 64, 64).
+Padding mask shape: (1, 608, 64, 64).
+Dumpability mask shape: (1, 608, 64, 64).
+Trench axes shape: (1, 608, 4, 8).
+Trench types shape: (1, 608).
+Foundation border axes shape: (1, 608, 64, 3).
+Foundation border types shape: (1, 608).
+Actions shape: (1, 608, 64, 64).
+Distance maps shape: (1, 608, 64, 64).
+Map provenance shape: (1, 608).
+🧩 Agent Types (effective): (0,)
+🧩 Agent Types (names): Excavator
+✅ Using --agent_types override
+🚗 Action Types (effective): (0,)
+🚗 Action Types (names): Tracked
+✅ Using --action_types override
+📊 Relocation progress multiplier: 1.5
+🧭 Finite trench metadata verified: 608 maps in evaluation/gate_main/development
+🧭 Fresh-trench dig gate (effective): True
+🧭 Fresh-trench gate semantics (effective): v2 (yaw-parallel only; reach left to the dig cone)
+🪣 Relocation progress multiplier (effective): 1.5
+🎯 Reward stage (effective): reward_v2
+🎯 Reward-v2 timing variant (effective): 0
+Mixed Agent Environment - Resolved map scale: map_edge=64x64 px, edge_length=36.571 m, meters_per_tile=0.571429
+Mixed Agent Environment - Resolved geometry: tile_size=0.000000 m/tile, excavator_footprint=0x0 cells (0.000x0.000 m)
+⏱️  Batching env_params...
+⏱️  Batching env_params done in 0.45s
+Mixed Agent Environment - Tile size shape: (1, 176)
+Setting num_prev_actions to 5 (5 per agent × 1 agents)
+🧠 Model size preset: medium
+🧠 Model core: mlp
+🧠 Map encoder: resnet_spatial_8x8_se_sa_xattn
+🧠 Encoder dtype: bfloat16, attention dtype: float32
+⏱️  Initializing model...
+num_embeddings_agent = 64
+map normalization min max = (-1, 1)
+critic_hidden_dims override -> hidden_dim_v = (512, 256, 1)
+flatten_reduce_channels -> 32
+model.init obs_len = 23
+model.init obs_shapes = [(1, 4, 9), (1, 4), (1,), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 12), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1,), (1,), (1, 64, 64), (1, 64, 64), (1, 64, 64), (1, 5), (1, 3)]
+Model: 2,049,751 parameters
+⏱️  Model init done in 18.07s
+🏗️ Architecture:
+   core: mlp
+   model_size: medium
+   map_encoder: resnet_spatial_8x8_se_sa_xattn
+   encoder_compute_dtype: bfloat16
+   attention_compute_dtype: float32
+   token_mixer_residual_init_scale: 0.1
+   flatten_reduce_channels: 32
+   attn_latent_queries: 8
+   aux_coef: 0.0
+   mlp details:
+     fusion: concat(agent_state, prev_actions, local_map, cnn_maps)
+     intermediate_mlp_dim: 160
+🛠️ Debug: Number of actions = 8
+Network: Unified with agent type conditioning
+on-line clause: perpendicular offset <= 2.2900 m
+2026-09-02 11:16:23.098056: E external/xla/xla/service/slow_operation_alarm.cc:65] Constant folding an instruction is taking > 1s:
+
+  %reduce-window = pred[2112,128]{1,0} reduce-window(pred[2112,4096]{1,0} %broadcast.22, pred[] %constant.102), window={size=1x32 stride=1x32}, to_apply=%region_23.2470
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+2026-09-02 11:16:23.646076: E external/xla/xla/service/slow_operation_alarm.cc:133] The operation took 1.548130151s
+Constant folding an instruction is taking > 1s:
+
+  %reduce-window = pred[2112,128]{1,0} reduce-window(pred[2112,4096]{1,0} %broadcast.22, pred[] %constant.102), window={size=1x32 stride=1x32}, to_apply=%region_23.2470
+
+This isn't necessarily a bug; constant-folding is inherently a trade-off between compilation time and speed at runtime. XLA has some guards that attempt to keep constant folding from taking too long, but fundamentally you'll always be able to come up with an input program that takes a long time.
+
+If you'd like to file a bug, run with envvar XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.
+geometry 135.1s tile=0.571429 agent=7x11 fwd0=(0, 5) bwd0=(0, -5) {'cone_offset_table_checks': 288, 'cone_offset_table_exact_fraction': 0.8090277777777778, 'cone_offset_table_mean_cell_diff': 0.3541666666666667, 'cone_offset_table_max_cell_diff': 5, 'footprint_replica_checks': 72, 'footprint_patterns_per_heading': [1, 1, 1, 2, 1, 1, 9, 1, 1, 1, 1, 1], 'move_table_checks': 1741, 'cone_accessor_checks': 120}
+step 1 done=0/176 succ=0 elapsed=352s [terra_step=292s probe=9s plan=2s bfs=3s]
+step 11 done=0/176 succ=0 elapsed=588s [terra_step=452s probe=15s plan=2s bfs=3s stall_attribution=2s]
+step 21 done=0/176 succ=0 elapsed=618s [terra_step=458s probe=16s plan=5s bfs=6s stall_attribution=12s]
+step 31 done=0/176 succ=0 elapsed=639s [terra_step=464s probe=16s plan=7s bfs=8s stall_attribution=16s]
+step 41 done=1/176 succ=1 elapsed=663s [terra_step=470s probe=17s plan=9s bfs=10s stall_attribution=23s]
+step 51 done=2/176 succ=2 elapsed=686s [terra_step=476s probe=17s plan=10s bfs=12s stall_attribution=29s]
+step 61 done=4/176 succ=4 elapsed=704s [terra_step=482s probe=17s plan=11s bfs=13s stall_attribution=33s]
+step 71 done=5/176 succ=5 elapsed=722s [terra_step=488s probe=18s plan=13s bfs=14s stall_attribution=37s]
+step 81 done=9/176 succ=9 elapsed=745s [terra_step=497s probe=19s plan=15s bfs=16s stall_attribution=41s]
+step 91 done=12/176 succ=12 elapsed=770s [terra_step=509s probe=20s plan=17s bfs=17s stall_attribution=46s]
+step 101 done=16/176 succ=16 elapsed=796s [terra_step=521s probe=21s plan=19s bfs=18s stall_attribution=51s]
+step 111 done=18/176 succ=18 elapsed=819s [terra_step=532s probe=22s plan=20s bfs=18s stall_attribution=54s]
+step 121 done=22/176 succ=22 elapsed=842s [terra_step=544s probe=23s plan=22s bfs=19s stall_attribution=58s]
+step 131 done=26/176 succ=26 elapsed=864s [terra_step=555s probe=24s plan=23s bfs=19s stall_attribution=62s]
+step 141 done=27/176 succ=27 elapsed=887s [terra_step=566s probe=25s plan=25s bfs=20s stall_attribution=67s]
+step 151 done=28/176 succ=28 elapsed=909s [terra_step=579s probe=26s plan=26s bfs=20s stall_attribution=70s]
+step 161 done=28/176 succ=28 elapsed=922s [terra_step=585s probe=26s plan=26s bfs=20s stall_attribution=72s]
+step 171 done=28/176 succ=28 elapsed=933s [terra_step=591s probe=27s plan=27s bfs=20s stall_attribution=74s]
+step 181 done=28/176 succ=28 elapsed=943s [terra_step=598s probe=27s plan=27s bfs=20s stall_attribution=75s]
+step 191 done=28/176 succ=28 elapsed=951s [terra_step=604s probe=27s plan=27s bfs=20s stall_attribution=75s]
+step 201 done=28/176 succ=28 elapsed=960s [terra_step=609s probe=28s plan=28s bfs=20s stall_attribution=76s]
+step 211 done=28/176 succ=28 elapsed=971s [terra_step=615s probe=28s plan=28s bfs=20s stall_attribution=78s]
+step 221 done=28/176 succ=28 elapsed=980s [terra_step=621s probe=29s plan=28s bfs=20s stall_attribution=78s]
+step 231 done=28/176 succ=28 elapsed=988s [terra_step=628s probe=29s plan=28s bfs=20s stall_attribution=78s]
+step 241 done=28/176 succ=28 elapsed=997s [terra_step=635s probe=29s plan=28s bfs=20s stall_attribution=78s]
+step 251 done=28/176 succ=28 elapsed=1005s [terra_step=641s probe=30s plan=28s bfs=20s stall_attribution=79s]
+step 261 done=28/176 succ=28 elapsed=1014s [terra_step=647s probe=30s plan=28s bfs=20s stall_attribution=79s]
+step 271 done=28/176 succ=28 elapsed=1022s [terra_step=653s probe=31s plan=28s bfs=20s stall_attribution=79s]
+step 281 done=28/176 succ=28 elapsed=1030s [terra_step=659s probe=31s plan=28s bfs=20s stall_attribution=79s]
+step 291 done=28/176 succ=28 elapsed=1038s [terra_step=665s probe=31s plan=28s bfs=20s stall_attribution=79s]
+step 301 done=28/176 succ=28 elapsed=1048s [terra_step=673s probe=32s plan=28s bfs=20s stall_attribution=79s]
+step 311 done=28/176 succ=28 elapsed=1056s [terra_step=679s probe=32s plan=28s bfs=20s stall_attribution=79s]
+step 321 done=28/176 succ=28 elapsed=1063s [terra_step=685s probe=33s plan=28s bfs=20s stall_attribution=79s]
+step 331 done=28/176 succ=28 elapsed=1072s [terra_step=691s probe=33s plan=28s bfs=20s stall_attribution=79s]
+step 341 done=28/176 succ=28 elapsed=1080s [terra_step=697s probe=33s plan=28s bfs=20s stall_attribution=79s]
+step 351 done=28/176 succ=28 elapsed=1088s [terra_step=703s probe=34s plan=28s bfs=20s stall_attribution=79s]
+step 361 done=28/176 succ=28 elapsed=1096s [terra_step=709s probe=34s plan=28s bfs=20s stall_attribution=79s]
+step 371 done=28/176 succ=28 elapsed=1108s [terra_step=718s probe=35s plan=28s bfs=20s stall_attribution=79s]
+step 381 done=28/176 succ=28 elapsed=1123s [terra_step=729s probe=36s plan=28s bfs=20s stall_attribution=79s]
+step 391 done=28/176 succ=28 elapsed=1131s [terra_step=735s probe=37s plan=28s bfs=20s stall_attribution=79s]
+step 401 done=28/176 succ=28 elapsed=1140s [terra_step=741s probe=37s plan=28s bfs=20s stall_attribution=79s]
+step 411 done=28/176 succ=28 elapsed=1147s [terra_step=747s probe=37s plan=28s bfs=20s stall_attribution=79s]
+step 421 done=28/176 succ=28 elapsed=1156s [terra_step=753s probe=38s plan=28s bfs=20s stall_attribution=79s]
+step 431 done=28/176 succ=28 elapsed=1164s [terra_step=759s probe=38s plan=28s bfs=20s stall_attribution=79s]
+step 441 done=28/176 succ=28 elapsed=1172s [terra_step=765s probe=38s plan=28s bfs=20s stall_attribution=79s]
+step 451 done=28/176 succ=28 elapsed=1180s [terra_step=771s probe=39s plan=28s bfs=20s stall_attribution=79s]
+step 461 done=28/176 succ=28 elapsed=1189s [terra_step=778s probe=39s plan=28s bfs=20s stall_attribution=79s]
+step 471 done=28/176 succ=28 elapsed=1196s [terra_step=783s probe=40s plan=28s bfs=20s stall_attribution=79s]
+step 481 done=28/176 succ=28 elapsed=1202s [terra_step=788s probe=40s plan=28s bfs=20s stall_attribution=79s]
+step 491 done=28/176 succ=28 elapsed=1208s [terra_step=792s probe=40s plan=28s bfs=20s stall_attribution=79s]
+step 501 done=28/176 succ=28 elapsed=1213s [terra_step=796s probe=41s plan=28s bfs=20s stall_attribution=79s]
+step 511 done=28/176 succ=28 elapsed=1219s [terra_step=800s probe=41s plan=28s bfs=20s stall_attribution=79s]
+step 521 done=28/176 succ=28 elapsed=1225s [terra_step=805s probe=41s plan=28s bfs=20s stall_attribution=79s]
+step 531 done=28/176 succ=28 elapsed=1230s [terra_step=809s probe=42s plan=28s bfs=20s stall_attribution=79s]
+step 541 done=28/176 succ=28 elapsed=1236s [terra_step=813s probe=42s plan=28s bfs=20s stall_attribution=79s]
+step 551 done=28/176 succ=28 elapsed=1241s [terra_step=817s probe=42s plan=28s bfs=20s stall_attribution=79s]
+step 561 done=28/176 succ=28 elapsed=1247s [terra_step=822s probe=43s plan=28s bfs=20s stall_attribution=79s]
+step 571 done=28/176 succ=28 elapsed=1253s [terra_step=826s probe=43s plan=28s bfs=20s stall_attribution=79s]
+step 581 done=28/176 succ=28 elapsed=1258s [terra_step=830s probe=43s plan=28s bfs=20s stall_attribution=79s]
+step 591 done=28/176 succ=28 elapsed=1264s [terra_step=835s probe=43s plan=28s bfs=20s stall_attribution=79s]
+step 601 done=28/176 succ=28 elapsed=1271s [terra_step=840s probe=44s plan=28s bfs=20s stall_attribution=79s]
+step 611 done=28/176 succ=28 elapsed=1278s [terra_step=845s probe=44s plan=28s bfs=20s stall_attribution=79s]
+step 621 done=28/176 succ=28 elapsed=1285s [terra_step=850s probe=45s plan=28s bfs=20s stall_attribution=79s]
+step 631 done=28/176 succ=28 elapsed=1292s [terra_step=856s probe=45s plan=28s bfs=20s stall_attribution=79s]
+step 641 done=28/176 succ=28 elapsed=1299s [terra_step=861s probe=45s plan=28s bfs=20s stall_attribution=79s]
+step 651 done=28/176 succ=28 elapsed=1305s [terra_step=866s probe=46s plan=28s bfs=20s stall_attribution=79s]
+step 661 done=28/176 succ=28 elapsed=1312s [terra_step=871s probe=46s plan=28s bfs=20s stall_attribution=79s]
+step 671 done=28/176 succ=28 elapsed=1319s [terra_step=877s probe=46s plan=28s bfs=20s stall_attribution=79s]
+step 681 done=28/176 succ=28 elapsed=1326s [terra_step=882s probe=47s plan=28s bfs=20s stall_attribution=79s]
+step 691 done=28/176 succ=28 elapsed=1340s [terra_step=892s probe=47s plan=28s bfs=20s stall_attribution=79s]
+step 701 done=28/176 succ=28 elapsed=1356s [terra_step=904s probe=48s plan=28s bfs=20s stall_attribution=79s]
+step 711 done=28/176 succ=28 elapsed=1375s [terra_step=918s probe=50s plan=28s bfs=20s stall_attribution=79s]
+step 721 done=28/176 succ=28 elapsed=1395s [terra_step=932s probe=51s plan=28s bfs=20s stall_attribution=79s]
+step 731 done=28/176 succ=28 elapsed=1412s [terra_step=945s probe=52s plan=28s bfs=20s stall_attribution=79s]
+step 741 done=28/176 succ=28 elapsed=1421s [terra_step=951s probe=53s plan=28s bfs=20s stall_attribution=79s]
+step 751 done=28/176 succ=28 elapsed=1430s [terra_step=958s probe=53s plan=28s bfs=20s stall_attribution=79s]
+step 761 done=28/176 succ=28 elapsed=1440s [terra_step=966s probe=54s plan=28s bfs=20s stall_attribution=79s]
+step 771 done=28/176 succ=28 elapsed=1448s [terra_step=972s probe=54s plan=28s bfs=20s stall_attribution=79s]
+step 781 done=28/176 succ=28 elapsed=1458s [terra_step=979s probe=55s plan=28s bfs=20s stall_attribution=79s]
+step 791 done=28/176 succ=28 elapsed=1465s [terra_step=984s probe=55s plan=28s bfs=20s stall_attribution=79s]
+step 801 done=28/176 succ=28 elapsed=1474s [terra_step=991s probe=56s plan=28s bfs=20s stall_attribution=79s]
+step 811 done=28/176 succ=28 elapsed=1484s [terra_step=999s probe=56s plan=28s bfs=20s stall_attribution=79s]
+step 821 done=28/176 succ=28 elapsed=1492s [terra_step=1005s probe=57s plan=28s bfs=20s stall_attribution=79s]
+step 831 done=28/176 succ=28 elapsed=1500s [terra_step=1011s probe=57s plan=28s bfs=20s stall_attribution=79s]
+step 841 done=28/176 succ=28 elapsed=1509s [terra_step=1017s probe=57s plan=28s bfs=20s stall_attribution=79s]
+step 851 done=28/176 succ=28 elapsed=1517s [terra_step=1023s probe=58s plan=28s bfs=20s stall_attribution=79s]
+step 861 done=28/176 succ=28 elapsed=1526s [terra_step=1030s probe=58s plan=28s bfs=20s stall_attribution=79s]
+step 871 done=28/176 succ=28 elapsed=1534s [terra_step=1036s probe=58s plan=28s bfs=20s stall_attribution=79s]
+step 881 done=28/176 succ=28 elapsed=1543s [terra_step=1043s probe=59s plan=28s bfs=20s stall_attribution=79s]
+step 891 done=28/176 succ=28 elapsed=1553s [terra_step=1051s probe=59s plan=28s bfs=20s stall_attribution=79s]
+{
+ "slots": 176,
+ "succeeded": 28,
+ "within_horizon": 28,
+ "rate": 0.1590909090909091,
+ "median_success_step": 95.5,
+ "p90_success_step": 130.0,
+ "max_success_step": 143,
+ "median_success_step_any_horizon": 95.5,
+ "p90_success_step_any_horizon": 130.0,
+ "max_success_step_any_horizon": 143,
+ "mean_dig_fraction": 0.6256871730488383,
+ "stations": 1056,
+ "stations_on_axis": 1056,
+ "loaded_no_legal_dump_deadlocks": 0,
+ "slots_with_stuck_loaded_steps": 0,
+ "dump_precheck_blocks": 6,
+ "illegal_soil_units": 0,
+ "slots_with_illegal_soil": 0
+}
+trn-net3-side1-road         0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.476 deadlock=0 spoil=0
+trn-net3-side2              0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.580 deadlock=0 spoil=0
+trn-net3-side2-s            0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.732 deadlock=0 spoil=0
+trn-seg2-side2              0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.634 deadlock=0 spoil=0
+trn-seg3-side2              0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.583 deadlock=0 spoil=0
+trn-straight-altsides       5/16 (any-horizon  5) median=116.0 p90=133.4 max=143 digfrac=0.614 deadlock=0 spoil=0
+trn-straight-side1          7/16 (any-horizon  7) median=70.0 p90=122.2 max=130 digfrac=0.623 deadlock=0 spoil=0
+trn-straight-side1-tight    6/16 (any-horizon  6) median=101.0 p90=135.0 max=140 digfrac=0.632 deadlock=0 spoil=0
+trn-straight-side2          6/16 (any-horizon  6) median=86.5 p90=110.0 max=119 digfrac=0.634 deadlock=0 spoil=0
+trn-tee-side2               0/16 (any-horizon  0) median=None p90=None max=None digfrac=0.534 deadlock=0 spoil=0
+trn-tee-side2-s             4/16 (any-horizon  4) median=119.5 p90=130.0 max=130 digfrac=0.841 deadlock=0 spoil=0
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_maxoffset_sweep_20260902/oracle_176slot_b229.json
