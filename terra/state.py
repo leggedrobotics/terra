@@ -2218,6 +2218,297 @@ class State(NamedTuple):
             * outside_base_footprint
         ).astype(jnp.bool_)
 
+    def _fresh_trench_target_sets(self, dig_mask_2d: Array):
+        """Fresh target cells inside ``dig_mask_2d`` and the trench subset the gate scopes.
+
+        Returns ``(fresh_target, fresh_trench_target, valid_axes,
+        finite_section_metadata, axes, trench_type)``. Shared by the
+        prospective-DO gate (``_get_fresh_trench_dig_alignment_details``) and
+        the per-cell admissibility view (``_fresh_trench_pose_valid_cells``) so
+        both read the same metadata contract.
+        """
+        target = _as_2d_map(self.world.target_map.map)
+        action = _as_2d_map(self.world.action_map.map)
+        records = _as_axes_table(self.world.trench_axes).astype(jnp.float32)
+        axes = records[:, :3]
+        max_axes = axes.shape[0]
+        trench_type = jnp.clip(
+            _as_scalar_int(self.world.trench_type),
+            0,
+            max_axes,
+        )
+        fresh_target = jnp.logical_and(
+            jnp.asarray(dig_mask_2d, dtype=jnp.bool_),
+            jnp.logical_and(target < 0, action == 0),
+        )
+        valid_axes = jnp.arange(max_axes) < trench_type
+        if records.shape[1] >= 8:
+            segment_vectors = records[:, 5:7] - records[:, 3:5]
+            finite_section_metadata = jnp.logical_and(
+                jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
+                jnp.logical_and(
+                    records[:, 7] > jnp.float32(0.0),
+                    jnp.linalg.norm(segment_vectors, axis=1)
+                    > jnp.float32(1e-6),
+                ),
+            )
+        else:
+            finite_section_metadata = jnp.zeros(
+                (max_axes,), dtype=jnp.bool_
+            )
+        declared_metadata_valid = jnp.all(
+            jnp.logical_or(~valid_axes, finite_section_metadata)
+        )
+        # TerraEnvBatch rejects incomplete generated metadata before tracing.
+        # Lower-level State/TerraEnv callers do not have that Python validator,
+        # so fail closed instead of silently reclassifying a trench target as
+        # ordinary excavation when its cached membership is empty.
+        fail_closed_metadata = jnp.logical_and(
+            trench_type > 0,
+            ~declared_metadata_valid,
+        )
+        fresh_trench_target = jnp.logical_and(
+            fresh_target,
+            jnp.logical_or(
+                self.world.trench_axis_membership != jnp.uint8(0),
+                fail_closed_metadata,
+            ),
+        )
+        return (
+            fresh_target,
+            fresh_trench_target,
+            valid_axes,
+            finite_section_metadata,
+            axes,
+            trench_type,
+        )
+
+    def _trench_section_pose_validity(
+        self,
+        axes: Array,
+        valid_axes: Array,
+        finite_section_metadata: Array,
+        fresh_trench_target: Array,
+    ):
+        """Section-level pose validity of the current chassis for a fresh set.
+
+        Returns ``(section_membership, axis_has_fresh, yaw_errors_normalized,
+        standoff_errors_normalized, axis_pose_valid, fresh_cell_pose_valid)``.
+        This is the whole positional clause of the fresh-trench gate; callers
+        decide how to fold the per-cell result (one macro DO verdict, or one
+        count per cabin angle).
+        """
+        cur = self._get_current_agent_state()
+        max_axes = axes.shape[0]
+        line_denominators = jnp.maximum(
+            jnp.linalg.norm(axes[:, :2], axis=1),
+            jnp.float32(1e-6),
+        )
+        bit_values = jnp.left_shift(
+            jnp.ones((max_axes,), dtype=jnp.uint8),
+            jnp.arange(max_axes, dtype=jnp.uint8),
+        )
+        section_membership = jnp.logical_and(
+            valid_axes[:, None, None],
+            jnp.bitwise_and(
+                self.world.trench_axis_membership[None, :, :],
+                bit_values[:, None, None],
+            )
+            != 0,
+        )
+        axis_has_fresh = jnp.any(
+            jnp.logical_and(
+                section_membership,
+                fresh_trench_target[None, :, :],
+            ),
+            axis=(1, 2),
+        )
+
+        base_angle = jnp.ravel(self._get_base_angle_rad())[0]
+        base_forward = jnp.array(
+            [-jnp.sin(base_angle), jnp.cos(base_angle)],
+            dtype=jnp.float32,
+        )
+        # Metadata uses A*col + B*row + C = 0.  In State [row, col]
+        # coordinates, [-A, B] is the corresponding section tangent.
+        trench_tangents = jnp.stack([-axes[:, 0], axes[:, 1]], axis=1)
+        tangent_norms = jnp.maximum(
+            jnp.linalg.norm(trench_tangents, axis=1),
+            jnp.float32(1e-6),
+        )
+        parallel_cosines = jnp.clip(
+            jnp.abs(trench_tangents @ base_forward) / tangent_norms,
+            a_min=jnp.float32(0.0),
+            a_max=jnp.float32(1.0),
+        )
+        yaw_errors = jnp.arccos(parallel_cosines)
+        yaw_errors_normalized = jnp.clip(
+            yaw_errors / (jnp.pi / jnp.float32(2.0)),
+            a_min=jnp.float32(0.0),
+            a_max=jnp.float32(1.0),
+        )
+
+        base_row = cur.pos_base[0].astype(jnp.float32)
+        base_col = cur.pos_base[1].astype(jnp.float32)
+        # Signed perpendicular offset of the base centre from each section
+        # axis, in metres. The sign is the section's own line-equation side
+        # (positive where A*col + B*row + C > 0); it is a per-section
+        # generator convention, constant within an episode, so it says
+        # "which side of this section am I on / did I cross it", not
+        # "left or right of the machine".
+        signed_standoffs_m = (
+            (
+                axes[:, 0] * base_col
+                + axes[:, 1] * base_row
+                + axes[:, 2]
+            )
+            / line_denominators
+            * self.env_cfg.tile_size
+        )
+        standoffs_m = jnp.abs(signed_standoffs_m)
+        standoff_min = jnp.float32(self.env_cfg.trench_dig_standoff_min_m)
+        standoff_max = jnp.float32(self.env_cfg.trench_dig_standoff_max_m)
+        standoff_enforced = jnp.bool_(
+            self.env_cfg.trench_dig_standoff_enforced
+        )
+        # v1 diagnostic: signed distance to the nearest band edge,
+        # normalized by that edge (negative too close, positive too far,
+        # zero in band).
+        band_errors_normalized = jnp.clip(
+            jnp.where(
+                standoffs_m < standoff_min,
+                (standoffs_m - standoff_min)
+                / jnp.maximum(standoff_min, jnp.float32(1e-6)),
+                jnp.where(
+                    standoffs_m > standoff_max,
+                    (standoffs_m - standoff_max)
+                    / jnp.maximum(standoff_max, jnp.float32(1e-6)),
+                    jnp.float32(0.0),
+                ),
+            ),
+            a_min=jnp.float32(-1.0),
+            a_max=jnp.float32(1.0),
+        )
+        # v2 diagnostic: the same signed perpendicular offset expressed in
+        # units of the dig cone's own outer reach, clipped to [-1, 1]. Zero
+        # is on the section line (legal under v2 and the pose the operator
+        # actually wants); |value| = 1 saturates at "the axis is at or
+        # beyond the far edge of my reach". This carries a gradient
+        # everywhere, unlike the v1 error, which is flat at 0 across the
+        # whole band.
+        _, cone_r_max = self._dig_cone_radius_bounds()
+        offset_errors_normalized = jnp.clip(
+            signed_standoffs_m
+            / jnp.maximum(jnp.float32(cone_r_max), jnp.float32(1e-6)),
+            a_min=jnp.float32(-1.0),
+            a_max=jnp.float32(1.0),
+        )
+        standoff_errors_normalized = jnp.where(
+            standoff_enforced,
+            band_errors_normalized,
+            offset_errors_normalized,
+        )
+        # v1 required the perpendicular standoff to sit in a lateral band.
+        # v2 leaves working distance to the dig cone, which already tests it
+        # radially, machine -> cell, and keeps only the yaw-parallel clause.
+        # v2 "on the line": perpendicular offset at most
+        # trench_dig_max_offset_m (disabled when <= 0). Under v1 the band
+        # applies instead.
+        max_offset = jnp.float32(self.env_cfg.trench_dig_max_offset_m)
+        on_line_clause = jnp.logical_or(
+            max_offset <= jnp.float32(0.0),
+            standoffs_m <= max_offset,
+        )
+        standoff_clause = jnp.where(
+            standoff_enforced,
+            jnp.logical_and(
+                standoffs_m >= standoff_min,
+                standoffs_m <= standoff_max,
+            ),
+            on_line_clause,
+        )
+        axis_pose_valid = jnp.logical_and(
+            valid_axes,
+            jnp.logical_and(
+                finite_section_metadata,
+                jnp.logical_and(
+                    axis_has_fresh,
+                    jnp.logical_and(
+                        yaw_errors
+                        <= jnp.float32(
+                            self.env_cfg.trench_dig_yaw_tolerance_rad
+                        ),
+                        standoff_clause,
+                    ),
+                ),
+            ),
+        )
+        fresh_cell_pose_valid = jnp.any(
+            jnp.logical_and(
+                section_membership,
+                axis_pose_valid[:, None, None],
+            ),
+            axis=0,
+        )
+        return (
+            section_membership,
+            axis_has_fresh,
+            yaw_errors_normalized,
+            standoff_errors_normalized,
+            axis_pose_valid,
+            fresh_cell_pose_valid,
+        )
+
+    def _fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
+        """Per-cell view of the fresh-trench gate for the CURRENT base pose.
+
+        Returns ``(fresh_target, fresh_trench_target, pose_valid)`` as [H, W]
+        bools over the whole map. ``pose_valid`` is True on every cell owned by
+        a section that is pose-valid for the current chassis yaw (the same
+        section clause a prospective DO is judged by) and True everywhere when
+        the gate is inapplicable (non-excavator, loaded, non-trench map, no
+        fresh trench cell), where the gate is neutral. A DO at cabin angle k is
+        admitted iff none of its cone's fresh trench cells is pose-invalid;
+        ``LocalMapWrapper`` folds that into ``local_map_admissible_dig``.
+        """
+        cur = self._get_current_agent_state()
+        target = _as_2d_map(self.world.target_map.map)
+        (
+            fresh_target,
+            fresh_trench_target,
+            valid_axes,
+            finite_section_metadata,
+            axes,
+            trench_type,
+        ) = self._fresh_trench_target_sets(
+            jnp.ones(target.shape, dtype=jnp.bool_)
+        )
+        applicable = jnp.logical_and(
+            cur.agent_type[0] == 0,
+            jnp.logical_and(
+                cur.loaded[0] == 0,
+                jnp.logical_and(
+                    trench_type > 0,
+                    jnp.any(fresh_trench_target),
+                ),
+            ),
+        )
+
+        def _measure() -> Array:
+            return self._trench_section_pose_validity(
+                axes,
+                valid_axes,
+                finite_section_metadata,
+                fresh_trench_target,
+            )[5]
+
+        pose_valid = jax.lax.cond(
+            applicable,
+            _measure,
+            lambda: jnp.ones(target.shape, dtype=jnp.bool_),
+        )
+        return fresh_target, fresh_trench_target, pose_valid
+
     def _get_fresh_trench_dig_alignment_details(
         self, dig_mask: Array | None = None
     ) -> tuple[Array, Array, Array, Array]:
@@ -2260,58 +2551,20 @@ class State(NamedTuple):
 
         cur = self._get_current_agent_state()
         target = _as_2d_map(self.world.target_map.map)
-        action = _as_2d_map(self.world.action_map.map)
-        records = _as_axes_table(self.world.trench_axes).astype(jnp.float32)
-        axes = records[:, :3]
-        max_axes = axes.shape[0]
-        trench_type = jnp.clip(
-            _as_scalar_int(self.world.trench_type),
-            0,
-            max_axes,
-        )
         if dig_mask is None:
             dig_mask = self._mask_out_wrong_dig_tiles(
                 self._build_dig_dump_cone()
             )
         dig_mask = jnp.asarray(dig_mask, dtype=jnp.bool_).reshape(-1)
         dig_mask_2d = dig_mask.reshape(target.shape)
-        fresh_target = jnp.logical_and(
-            dig_mask_2d,
-            jnp.logical_and(target < 0, action == 0),
-        )
-        valid_axes = jnp.arange(max_axes) < trench_type
-        if records.shape[1] >= 8:
-            segment_vectors = records[:, 5:7] - records[:, 3:5]
-            finite_section_metadata = jnp.logical_and(
-                jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
-                jnp.logical_and(
-                    records[:, 7] > jnp.float32(0.0),
-                    jnp.linalg.norm(segment_vectors, axis=1)
-                    > jnp.float32(1e-6),
-                ),
-            )
-        else:
-            finite_section_metadata = jnp.zeros(
-                (max_axes,), dtype=jnp.bool_
-            )
-        declared_metadata_valid = jnp.all(
-            jnp.logical_or(~valid_axes, finite_section_metadata)
-        )
-        # TerraEnvBatch rejects incomplete generated metadata before tracing.
-        # Lower-level State/TerraEnv callers do not have that Python validator,
-        # so fail closed instead of silently reclassifying a trench target as
-        # ordinary excavation when its cached membership is empty.
-        fail_closed_metadata = jnp.logical_and(
-            trench_type > 0,
-            ~declared_metadata_valid,
-        )
-        fresh_trench_target = jnp.logical_and(
+        (
             fresh_target,
-            jnp.logical_or(
-                self.world.trench_axis_membership != jnp.uint8(0),
-                fail_closed_metadata,
-            ),
-        )
+            fresh_trench_target,
+            valid_axes,
+            finite_section_metadata,
+            axes,
+            trench_type,
+        ) = self._fresh_trench_target_sets(dig_mask_2d)
         applicable = jnp.logical_and(
             cur.agent_type[0] == 0,
             jnp.logical_and(
@@ -2324,155 +2577,18 @@ class State(NamedTuple):
         )
 
         def _measure_alignment() -> tuple[Array, Array, Array, Array]:
-            line_denominators = jnp.maximum(
-                jnp.linalg.norm(axes[:, :2], axis=1),
-                jnp.float32(1e-6),
-            )
-            bit_values = jnp.left_shift(
-                jnp.ones((max_axes,), dtype=jnp.uint8),
-                jnp.arange(max_axes, dtype=jnp.uint8),
-            )
-            section_membership = jnp.logical_and(
-                valid_axes[:, None, None],
-                jnp.bitwise_and(
-                    self.world.trench_axis_membership[None, :, :],
-                    bit_values[:, None, None],
-                )
-                != 0,
-            )
-            axis_has_fresh = jnp.any(
-                jnp.logical_and(
-                    section_membership,
-                    fresh_trench_target[None, :, :],
-                ),
-                axis=(1, 2),
-            )
-
-            base_angle = jnp.ravel(self._get_base_angle_rad())[0]
-            base_forward = jnp.array(
-                [-jnp.sin(base_angle), jnp.cos(base_angle)],
-                dtype=jnp.float32,
-            )
-            # Metadata uses A*col + B*row + C = 0.  In State [row, col]
-            # coordinates, [-A, B] is the corresponding section tangent.
-            trench_tangents = jnp.stack([-axes[:, 0], axes[:, 1]], axis=1)
-            tangent_norms = jnp.maximum(
-                jnp.linalg.norm(trench_tangents, axis=1),
-                jnp.float32(1e-6),
-            )
-            parallel_cosines = jnp.clip(
-                jnp.abs(trench_tangents @ base_forward) / tangent_norms,
-                a_min=jnp.float32(0.0),
-                a_max=jnp.float32(1.0),
-            )
-            yaw_errors = jnp.arccos(parallel_cosines)
-            yaw_errors_normalized = jnp.clip(
-                yaw_errors / (jnp.pi / jnp.float32(2.0)),
-                a_min=jnp.float32(0.0),
-                a_max=jnp.float32(1.0),
-            )
-
-            base_row = cur.pos_base[0].astype(jnp.float32)
-            base_col = cur.pos_base[1].astype(jnp.float32)
-            # Signed perpendicular offset of the base centre from each section
-            # axis, in metres. The sign is the section's own line-equation side
-            # (positive where A*col + B*row + C > 0); it is a per-section
-            # generator convention, constant within an episode, so it says
-            # "which side of this section am I on / did I cross it", not
-            # "left or right of the machine".
-            signed_standoffs_m = (
-                (
-                    axes[:, 0] * base_col
-                    + axes[:, 1] * base_row
-                    + axes[:, 2]
-                )
-                / line_denominators
-                * self.env_cfg.tile_size
-            )
-            standoffs_m = jnp.abs(signed_standoffs_m)
-            standoff_min = jnp.float32(self.env_cfg.trench_dig_standoff_min_m)
-            standoff_max = jnp.float32(self.env_cfg.trench_dig_standoff_max_m)
-            standoff_enforced = jnp.bool_(
-                self.env_cfg.trench_dig_standoff_enforced
-            )
-            # v1 diagnostic: signed distance to the nearest band edge,
-            # normalized by that edge (negative too close, positive too far,
-            # zero in band).
-            band_errors_normalized = jnp.clip(
-                jnp.where(
-                    standoffs_m < standoff_min,
-                    (standoffs_m - standoff_min)
-                    / jnp.maximum(standoff_min, jnp.float32(1e-6)),
-                    jnp.where(
-                        standoffs_m > standoff_max,
-                        (standoffs_m - standoff_max)
-                        / jnp.maximum(standoff_max, jnp.float32(1e-6)),
-                        jnp.float32(0.0),
-                    ),
-                ),
-                a_min=jnp.float32(-1.0),
-                a_max=jnp.float32(1.0),
-            )
-            # v2 diagnostic: the same signed perpendicular offset expressed in
-            # units of the dig cone's own outer reach, clipped to [-1, 1]. Zero
-            # is on the section line (legal under v2 and the pose the operator
-            # actually wants); |value| = 1 saturates at "the axis is at or
-            # beyond the far edge of my reach". This carries a gradient
-            # everywhere, unlike the v1 error, which is flat at 0 across the
-            # whole band.
-            _, cone_r_max = self._dig_cone_radius_bounds()
-            offset_errors_normalized = jnp.clip(
-                signed_standoffs_m
-                / jnp.maximum(jnp.float32(cone_r_max), jnp.float32(1e-6)),
-                a_min=jnp.float32(-1.0),
-                a_max=jnp.float32(1.0),
-            )
-            standoff_errors_normalized = jnp.where(
-                standoff_enforced,
-                band_errors_normalized,
-                offset_errors_normalized,
-            )
-            # v1 required the perpendicular standoff to sit in a lateral band.
-            # v2 leaves working distance to the dig cone, which already tests it
-            # radially, machine -> cell, and keeps only the yaw-parallel clause.
-            # v2 "on the line": perpendicular offset at most
-            # trench_dig_max_offset_m (disabled when <= 0). Under v1 the band
-            # applies instead.
-            max_offset = jnp.float32(self.env_cfg.trench_dig_max_offset_m)
-            on_line_clause = jnp.logical_or(
-                max_offset <= jnp.float32(0.0),
-                standoffs_m <= max_offset,
-            )
-            standoff_clause = jnp.where(
-                standoff_enforced,
-                jnp.logical_and(
-                    standoffs_m >= standoff_min,
-                    standoffs_m <= standoff_max,
-                ),
-                on_line_clause,
-            )
-            axis_pose_valid = jnp.logical_and(
+            (
+                _section_membership,
+                axis_has_fresh,
+                yaw_errors_normalized,
+                standoff_errors_normalized,
+                axis_pose_valid,
+                fresh_cell_pose_valid,
+            ) = self._trench_section_pose_validity(
+                axes,
                 valid_axes,
-                jnp.logical_and(
-                    finite_section_metadata,
-                    jnp.logical_and(
-                        axis_has_fresh,
-                        jnp.logical_and(
-                            yaw_errors
-                            <= jnp.float32(
-                                self.env_cfg.trench_dig_yaw_tolerance_rad
-                            ),
-                            standoff_clause,
-                        ),
-                    ),
-                ),
-            )
-            fresh_cell_pose_valid = jnp.any(
-                jnp.logical_and(
-                    section_membership,
-                    axis_pose_valid[:, None, None],
-                ),
-                axis=0,
+                finite_section_metadata,
+                fresh_trench_target,
             )
             # DO remains one macro action: admit its complete selected fresh
             # workspace or reject it.  Do not turn alignment into a hidden

@@ -547,6 +547,36 @@ class LocalMapWrapper:
             state, border_diggable_map, local_cartesian_masks, current_arm_angle
         )
 
+        # Admissible fresh digs per cabin angle: the fresh target cells of each
+        # cone that a DO would actually be allowed to remove from the current
+        # base pose. The trench gate is one macro decision per DO (the whole
+        # fresh workspace or nothing), so a cone holding any pose-invalid fresh
+        # trench cell counts 0. Non-trench maps and inapplicable poses reduce
+        # to the plain fresh-target count (the gate is neutral there). The
+        # difference to ``local_map_target_neg`` therefore reads "target
+        # present but illegal from this heading".
+        fresh_target, fresh_trench_target, pose_valid = (
+            state._fresh_trench_pose_valid_cells()
+        )
+        fresh_flat = fresh_target.reshape(-1)
+        blocking_flat = jnp.logical_and(
+            fresh_trench_target, jnp.logical_not(pose_valid)
+        ).reshape(-1)
+
+        def _admissible_count(cone_mask: Array) -> Array:
+            cone_mask = cone_mask.reshape(-1)
+            count = jnp.sum(
+                jnp.logical_and(cone_mask, fresh_flat), dtype=jnp.int32
+            )
+            blocked = jnp.any(jnp.logical_and(cone_mask, blocking_flat))
+            return jnp.where(blocked, jnp.int32(0), count)
+
+        local_map_admissible_dig = jnp.roll(
+            jax.vmap(_admissible_count)(local_cartesian_masks),
+            -current_arm_angle,
+            axis=0,
+        ).astype(IntMap)
+
         state = state._replace(
             world=state.world._replace(
                 local_map_target_pos=state.world.local_map_target_pos._replace(
@@ -575,6 +605,9 @@ class LocalMapWrapper:
                 ),
                 local_map_border_diggable=state.world.local_map_border_diggable._replace(
                     map=local_map_border_diggable
+                ),
+                local_map_admissible_dig=state.world.local_map_admissible_dig._replace(
+                    map=local_map_admissible_dig
                 ),
             )
         )

@@ -225,6 +225,9 @@ class GridWorld(NamedTuple):
     local_map_border_workspace: GridMap = GridMap.dummy_map()
     local_map_edge_alignment_error: GridMap = GridMap.dummy_map()
     local_map_border_diggable: GridMap = GridMap.dummy_map()
+    # Fresh target cells a DO would be admitted to dig, per cabin angle,
+    # from the current base pose (trench gate folded in; see LocalMapWrapper).
+    local_map_admissible_dig: GridMap = GridMap.dummy_map()
 
     # Additional maps for second agent with "_2" suffix
     traversability_mask_2: GridMap = GridMap.dummy_map()

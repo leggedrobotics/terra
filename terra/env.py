@@ -660,6 +660,7 @@ class TerraEnv(NamedTuple):
             "local_map_border_workspace": state.world.local_map_border_workspace.map,
             "local_map_edge_alignment_error": state.world.local_map_edge_alignment_error.map,
             "local_map_border_diggable": state.world.local_map_border_diggable.map,
+            "local_map_admissible_dig": state.world.local_map_admissible_dig.map,
             # "local_map_action_neg_2": state.world.local_map_action_neg_2.map,
             # "local_map_action_pos_2": state.world.local_map_action_pos_2.map,
             # "local_map_target_neg_2": state.world.local_map_target_neg_2.map,
@@ -675,6 +676,10 @@ class TerraEnv(NamedTuple):
             "padding_mask": state.world.padding_mask.map,
             "dumpability_mask": state.world.dumpability_mask.map,
             "interaction_mask": state.world.interaction_mask.map,
+            # Static per-episode geodesic distance to the accepted dump zone,
+            # normalized and clipped at REWARD_V2_DISTANCE_BOUND; the reward-v2
+            # potential is built from it, so the policy gets it verbatim.
+            "relocation_distance_map": state.world.relocation_distance_map,
             "stall_age": jnp.minimum(
                 jnp.asarray(state.stall_age_steps, dtype=jnp.float32),
                 jnp.float32(STALL_AGE_CAP_STEPS),
