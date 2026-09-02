@@ -523,6 +523,17 @@ class State(NamedTuple):
 
         return biased_corners
 
+    def _current_base_footprint_mask(self) -> Array:
+        """Return the exact grid footprint occupied by the active agent base."""
+        current = self._get_current_agent_state()
+        corners = self._get_agent_corners(
+            current.pos_base,
+            current.angle_base,
+            self.env_cfg.agent.width,
+            self.env_cfg.agent.height,
+        )
+        return compute_polygon_mask(corners, self.world.width, self.world.height)
+
     @staticmethod
     def _build_traversability_mask(map: Array, static_traversability_base: Array) -> Array:
         """
@@ -672,6 +683,22 @@ class State(NamedTuple):
         - [0, 1] encodes a True
         """
         return jax.nn.one_hot(valid_move.astype(IntLowDim), 2, dtype=IntLowDim)
+
+    def _movement_feasibility_tracked(self) -> Array:
+        """Return exact effect bits for the four tracked-base actions."""
+        current = self._get_current_agent_state()
+        forward = self._handle_move_forward()._get_current_agent_state()
+        backward = self._handle_move_backward()._get_current_agent_state()
+        clockwise = self._handle_clock()._get_current_agent_state()
+        anticlockwise = self._handle_anticlock()._get_current_agent_state()
+        return jnp.stack(
+            (
+                jnp.any(forward.pos_base != current.pos_base),
+                jnp.any(backward.pos_base != current.pos_base),
+                jnp.any(clockwise.angle_base != current.angle_base),
+                jnp.any(anticlockwise.angle_base != current.angle_base),
+            )
+        )
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
         # Compute the xy delta for a forward move along that angle.
@@ -1536,8 +1563,7 @@ class State(NamedTuple):
         return jnp.logical_and(mask_2d, jnp.logical_not(remove)).reshape(-1)
 
     def _apply_dig_mask(
-        self, flattened_map: Array, dig_mask: Array, lifting_positive_soil: bool,
-        containment_mask: Array | None = None,
+        self, flattened_map: Array, dig_mask: Array, lifting_positive_soil: bool
     ) -> Array:
         """
         this function does the following:
@@ -1581,17 +1607,9 @@ class State(NamedTuple):
             _lift_positive_soil,
             lambda: (flattened_map - delta_dig).astype(IntMap),
         )
-        #Optionally apply soil mechanics using the global flag
-        map_shape = self.world.action_map.map.shape[-2:]
-        map_2d = new_flattened_map.reshape(map_shape)
-        dig_mask_2d = dig_mask.reshape(map_shape)
-        # Contain the first relaxation pass too: uncontained, it pushed units of
-        # an adjacent pile onto neutral ground (24 units in 176 oracle episodes,
-        # every event with the agent empty), which exact_visible_dump_v1 can
-        # never recover.
-        return self._apply_local_soil_mechanics(
-            map_2d, dig_mask_2d, containment_mask=containment_mask
-        ).reshape(-1)
+        # The caller applies local soil relaxation once after the map update
+        # (one-pass digging, contained to the accepted dump zone there).
+        return new_flattened_map
 
     def _apply_dump_mask(
         self,
@@ -2186,6 +2204,9 @@ class State(NamedTuple):
             lambda: self._get_foundation_border_alignment_mask(dig_mask),
             lambda: jnp.ones_like(dig_mask, dtype=jnp.bool_),
         )
+        outside_base_footprint = jnp.logical_not(
+            self._current_base_footprint_mask()
+        ).reshape(-1)
 
         return (
             dig_mask
@@ -2194,6 +2215,7 @@ class State(NamedTuple):
             * max_dig_limit_mask
             * dig_exclusion_mask
             * border_alignment_mask
+            * outside_base_footprint
         ).astype(jnp.bool_)
 
     def _get_fresh_trench_dig_alignment_details(
@@ -2566,10 +2588,7 @@ class State(NamedTuple):
             def _apply_dig(volume, fam):
                 # First remove dirt cleanly (without soil mechanics)
                 new_map_global_coords = self._apply_dig_mask(
-                    fam,
-                    dig_mask,
-                    lifting_positive_soil,
-                    containment_mask=self._accepted_dump_mask(),
+                    fam, dig_mask, lifting_positive_soil
                 )
                 new_map_global_coords = new_map_global_coords.reshape(
                     action_map_2d.shape

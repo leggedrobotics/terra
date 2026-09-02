@@ -22,6 +22,7 @@ class DispatchState(NamedTuple):
     marker: jax.Array
     current_agent: jax.Array
     env_steps: jax.Array
+    stall_age_steps: jax.Array
 
     def _get_current_agent_state(self):
         return FakeAgentState(self.action_type[None])
@@ -68,6 +69,9 @@ class DispatchState(NamedTuple):
     def _swap(self):
         return self._replace(current_agent=1 - self.current_agent)
 
+    def _next_stall_age_steps(self, new_state):
+        return new_state.stall_age_steps + 1
+
 
 def reference_step(state, action, turn=True):
     handlers = [
@@ -98,7 +102,10 @@ def reference_step(state, action, turn=True):
         lambda: jax.lax.switch(offset + action_idx, handlers),
     )
     result = jax.lax.cond(turn, result._swap, lambda: result)
-    return result._replace(env_steps=result.env_steps + 1)
+    return result._replace(
+        env_steps=result.env_steps + 1,
+        stall_age_steps=result.stall_age_steps + 1,
+    )
 
 
 class FakeEnvState(NamedTuple):
@@ -114,11 +121,13 @@ def fake_transition_diagnostics(done):
     return {
         "timeout": zeros_bool,
         "action_had_effect": jnp.ones_like(done, dtype=jnp.bool_),
+        "material_or_load_changed": zeros_bool,
         "productive_workspace_cycle": zeros_int,
         "productive_workspace_cycles": zeros_int,
         "transition_mass_residual": zeros_int,
         "target_mutation": zeros_bool,
         "obstacle_mutation": zeros_bool,
+        "ended_reset_tier": zeros_int,
     }
 
 
@@ -320,6 +329,7 @@ class StepOptimizationTest(unittest.TestCase):
                         marker=jnp.int32(-1),
                         current_agent=jnp.int32(0),
                         env_steps=jnp.int32(9),
+                        stall_age_steps=jnp.int32(4),
                     )
                     action = FakeAction(jnp.array([action_idx], dtype=jnp.int32))
                     expected = reference_step(state, action, turn=turn)

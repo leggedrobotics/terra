@@ -38,6 +38,28 @@ The detailed edge-finishing diagnosis and literature notes live in
 `terra-baselines/docs/edges_trainings/`; treat those as research hypotheses and
 verify them against the current Terra code before implementation.
 
+## Movement-feedback pilot runtime
+
+The 2026-08-21 paired pilot uses one common repaired runtime for both arms:
+dig/relift excludes the exact current base footprint, the visible
+traversability layer preserves blockers beneath the agent overlay, and a
+successful dig/relift applies local soil relaxation exactly once in
+`_handle_dig`. These are shared runtime invariants, not the compared treatment.
+
+The optional treatment observations are deliberately narrow and unmasked:
+four exact tracked-base movement-effect bits and two previous-transition bits
+for any physical effect and material-or-load change. Reset observations encode
+the previous outcome as `00`. The sibling baselines repository owns the
+fresh-scratch control-versus-feedback training contract and evaluation gates.
+
+Both paired 4-GPU arms completed 50,000 updates on 2026-08-23 (Slurm
+`11364188` control and `11364189` feedback). Their final 1,000-update online
+success is tied at 0.99019 and 0.99037, while feedback reduces the no-effect
+rate from 0.03152 to 0.01450. This supports promoting the repaired runtime and
+the optional observation path, with feedback disabled by default. It does not
+select the feedback policy: the preregistered fixed development-720 and
+recurrence panels remain pending in terra-baselines.
+
 ## Partial-completion reset distribution
 
 The supported training treatment is one sparse, source-bound
