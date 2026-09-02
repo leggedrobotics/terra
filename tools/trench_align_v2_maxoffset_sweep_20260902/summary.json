@@ -1,0 +1,5788 @@
+{
+ "tile_size_m": 0.5714285969734192,
+ "bounds": {
+  "b114": {
+   "tag": "b114",
+   "max_offset_m": 1.14,
+   "lanes_admitted": "0-1 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18934,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 9,
+      "inband_applicable_candidates": 715710,
+      "veto_candidates": 445607,
+      "admissible_stations": 124036,
+      "admissible_stations_legal_terra_footprint": 25174
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 439094,
+      "veto_candidates": 231584,
+      "admissible_stations": 88736,
+      "admissible_stations_legal_terra_footprint": 17100
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5506,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 9,
+      "inband_applicable_candidates": 276616,
+      "veto_candidates": 214023,
+      "admissible_stations": 35300,
+      "admissible_stations_legal_terra_footprint": 8074
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2200,
+      "lost": 2
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2200,
+      "lost": 2
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1106,
+      "lost": 5
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 5,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:evaluation/gate_main/development:374",
+      "condition": "trn-net4-side2-s",
+      "lost": 5,
+      "target": 67
+     },
+     {
+      "label": "trn-net4-side1-road:evaluation/gate_main/development:341",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 124
+     },
+     {
+      "label": "trn-net4-side1-road:evaluation/gate_main/development:339",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 141
+     },
+     {
+      "label": "trn-net4-side2:evaluation/gate_main/development:357",
+      "condition": "trn-net4-side2",
+      "lost": 1,
+      "target": 124
+     },
+     {
+      "label": "trn-net4-side2:evaluation/gate_main/development:355",
+      "condition": "trn-net4-side2",
+      "lost": 1,
+      "target": 141
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120409,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 70,
+      "inband_applicable_candidates": 4404488,
+      "veto_candidates": 2671468,
+      "admissible_stations": 775922,
+      "admissible_stations_legal_terra_footprint": 157253
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 2744340,
+      "veto_candidates": 1384003,
+      "admissible_stations": 564461,
+      "admissible_stations_legal_terra_footprint": 109957
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33476,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 70,
+      "inband_applicable_candidates": 1660148,
+      "veto_candidates": 1287465,
+      "admissible_stations": 211461,
+      "admissible_stations_legal_terra_footprint": 47296
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13335,
+      "lost": 19
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13335,
+      "lost": 19
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6806,
+      "lost": 32
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 30,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2263",
+      "condition": "trn-net4-side2-s",
+      "lost": 10,
+      "target": 86
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2230",
+      "condition": "trn-net4-side2-s",
+      "lost": 5,
+      "target": 65
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2073",
+      "condition": "trn-net4-side1-road",
+      "lost": 4,
+      "target": 163
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2094",
+      "condition": "trn-net4-side1-road",
+      "lost": 4,
+      "target": 148
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2169",
+      "condition": "trn-net4-side2",
+      "lost": 4,
+      "target": 163
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2190",
+      "condition": "trn-net4-side2",
+      "lost": 4,
+      "target": 148
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2262",
+      "condition": "trn-net4-side2-s",
+      "lost": 4,
+      "target": 64
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2273",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 62
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2281",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 75
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2295",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 65
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2056",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 145
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2072",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 143
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2095",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 157
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2152",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 145
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2168",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 143
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2191",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 157
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2022",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 133
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2033",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 140
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2027",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 152
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2025",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 146
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 219,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 115
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 110
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 43,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 5
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 14,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 14,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 15,
+      "complete_terra": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     }
+    },
+    "incomplete_terra_maps": 224,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 2400,
+    "preflight_passed": false,
+    "wall_seconds": 682.35,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 8009,
+      "covered": 5934
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 13861,
+      "covered": 9334
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 11372,
+      "covered": 8892
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 10039
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 13861,
+      "covered": 9334
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 10039
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 12962,
+      "covered": 6151
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 16902,
+      "covered": 8479
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2357
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2357
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2357
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2357
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2357
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10021,
+      "covered": 6436
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 14851,
+      "covered": 5475
+     }
+    },
+    "incomplete_maps": [
+     "network:trn-net3-side2-s:evaluation/gate_main/development:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:641",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:642",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:643",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:644",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:645",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:646",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:647",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:648"
+    ]
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 0,
+     "cells": 18943,
+     "covered": 10648
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5300,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2747,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2415,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b115": {
+   "tag": "b115",
+   "max_offset_m": 1.15,
+   "lanes_admitted": "0-2 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18934,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 9,
+      "inband_applicable_candidates": 720586,
+      "veto_candidates": 448940,
+      "admissible_stations": 124859,
+      "admissible_stations_legal_terra_footprint": 25318
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 442506,
+      "veto_candidates": 233735,
+      "admissible_stations": 89388,
+      "admissible_stations_legal_terra_footprint": 17220
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5506,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 9,
+      "inband_applicable_candidates": 278080,
+      "veto_candidates": 215205,
+      "admissible_stations": 35471,
+      "admissible_stations_legal_terra_footprint": 8098
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2200,
+      "lost": 2
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2200,
+      "lost": 2
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1106,
+      "lost": 5
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 5,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:evaluation/gate_main/development:374",
+      "condition": "trn-net4-side2-s",
+      "lost": 5,
+      "target": 67
+     },
+     {
+      "label": "trn-net4-side1-road:evaluation/gate_main/development:341",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 124
+     },
+     {
+      "label": "trn-net4-side1-road:evaluation/gate_main/development:339",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 141
+     },
+     {
+      "label": "trn-net4-side2:evaluation/gate_main/development:357",
+      "condition": "trn-net4-side2",
+      "lost": 1,
+      "target": 124
+     },
+     {
+      "label": "trn-net4-side2:evaluation/gate_main/development:355",
+      "condition": "trn-net4-side2",
+      "lost": 1,
+      "target": 141
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120413,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 66,
+      "inband_applicable_candidates": 4435877,
+      "veto_candidates": 2692829,
+      "admissible_stations": 781044,
+      "admissible_stations_legal_terra_footprint": 158043
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 2763039,
+      "veto_candidates": 1395065,
+      "admissible_stations": 568137,
+      "admissible_stations_legal_terra_footprint": 110486
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33480,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 66,
+      "inband_applicable_candidates": 1672838,
+      "veto_candidates": 1297764,
+      "admissible_stations": 212907,
+      "admissible_stations_legal_terra_footprint": 47557
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13337,
+      "lost": 17
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13337,
+      "lost": 17
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6806,
+      "lost": 32
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 30,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2263",
+      "condition": "trn-net4-side2-s",
+      "lost": 10,
+      "target": 86
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2230",
+      "condition": "trn-net4-side2-s",
+      "lost": 5,
+      "target": 65
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2073",
+      "condition": "trn-net4-side1-road",
+      "lost": 4,
+      "target": 163
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2169",
+      "condition": "trn-net4-side2",
+      "lost": 4,
+      "target": 163
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2262",
+      "condition": "trn-net4-side2-s",
+      "lost": 4,
+      "target": 64
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2273",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 62
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2281",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 75
+     },
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2295",
+      "condition": "trn-net4-side2-s",
+      "lost": 3,
+      "target": 65
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2056",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 145
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2072",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 143
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2094",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 148
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2095",
+      "condition": "trn-net4-side1-road",
+      "lost": 2,
+      "target": 157
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2152",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 145
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2168",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 143
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2191",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 157
+     },
+     {
+      "label": "trn-net4-side2:train_v2_pooled_generalist:2190",
+      "condition": "trn-net4-side2",
+      "lost": 2,
+      "target": 148
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2022",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 133
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2027",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 152
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2025",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 146
+     },
+     {
+      "label": "trn-net4-side1-road:train_v2_pooled_generalist:2033",
+      "condition": "trn-net4-side1-road",
+      "lost": 1,
+      "target": 140
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 219,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 116
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 111
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 43,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 5
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 14,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 14,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 15,
+      "complete_terra": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     }
+    },
+    "incomplete_terra_maps": 224,
+    "selfcheck_mismatches": 0
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 0,
+     "cells": 18943,
+     "covered": 10650
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b171": {
+   "tag": "b171",
+   "max_offset_m": 1.71,
+   "lanes_admitted": "0-2 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1055694,
+      "veto_candidates": 669552,
+      "admissible_stations": 180066,
+      "admissible_stations_legal_terra_footprint": 34782
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 645572,
+      "veto_candidates": 348661,
+      "admissible_stations": 129273,
+      "admissible_stations_legal_terra_footprint": 23635
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 410122,
+      "veto_candidates": 320891,
+      "admissible_stations": 50793,
+      "admissible_stations_legal_terra_footprint": 11147
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120478,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 1,
+      "inband_applicable_candidates": 6491830,
+      "veto_candidates": 4013837,
+      "admissible_stations": 1127912,
+      "admissible_stations_legal_terra_footprint": 217855
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 4031671,
+      "veto_candidates": 2082623,
+      "admissible_stations": 824618,
+      "admissible_stations_legal_terra_footprint": 152871
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33545,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 1,
+      "inband_applicable_candidates": 2460159,
+      "veto_candidates": 1931214,
+      "admissible_stations": 303294,
+      "admissible_stations_legal_terra_footprint": 64984
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6837,
+      "lost": 1
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 1,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2242",
+      "condition": "trn-net4-side2-s",
+      "lost": 1,
+      "target": 68
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 135
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 124
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 11
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     }
+    },
+    "incomplete_terra_maps": 224,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 2400,
+    "preflight_passed": false,
+    "wall_seconds": 687.69,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 8009,
+      "covered": 5998
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 13861,
+      "covered": 9552
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 11372,
+      "covered": 9073
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 10588
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 13861,
+      "covered": 9552
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 10588
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 12962,
+      "covered": 6227
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 16902,
+      "covered": 8621
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2429
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2429
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2429
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2429
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10902,
+      "covered": 2429
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 10021,
+      "covered": 6586
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 14851,
+      "covered": 5544
+     }
+    },
+    "incomplete_maps": [
+     "network:trn-net3-side2-s:evaluation/gate_main/development:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:641",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:642",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:643",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:644",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:645",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:646",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:647",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:648"
+    ]
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 0,
+     "cells": 18943,
+     "covered": 10734
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b172": {
+   "tag": "b172",
+   "max_offset_m": 1.72,
+   "lanes_admitted": "0-3 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1061529,
+      "veto_candidates": 673116,
+      "admissible_stations": 181016,
+      "admissible_stations_legal_terra_footprint": 34941
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 649967,
+      "veto_candidates": 351136,
+      "admissible_stations": 130048,
+      "admissible_stations_legal_terra_footprint": 23776
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 411562,
+      "veto_candidates": 321980,
+      "admissible_stations": 50968,
+      "admissible_stations_legal_terra_footprint": 11165
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120478,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 1,
+      "inband_applicable_candidates": 6524749,
+      "veto_candidates": 4033968,
+      "admissible_stations": 1133250,
+      "admissible_stations_legal_terra_footprint": 218660
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 4052215,
+      "veto_candidates": 2093590,
+      "admissible_stations": 828348,
+      "admissible_stations_legal_terra_footprint": 153415
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33545,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 1,
+      "inband_applicable_candidates": 2472534,
+      "veto_candidates": 1940378,
+      "admissible_stations": 304902,
+      "admissible_stations_legal_terra_footprint": 65245
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6837,
+      "lost": 1
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 1,
+    "worst_maps": [
+     {
+      "label": "trn-net4-side2-s:train_v2_pooled_generalist:2242",
+      "condition": "trn-net4-side2-s",
+      "lost": 1,
+      "target": 68
+     }
+    ],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 137
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 126
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 0,
+      "complete_legacy_mirror_footprint": 11
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     }
+    },
+    "incomplete_terra_maps": 224,
+    "selfcheck_mismatches": 0
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 0,
+     "cells": 18943,
+     "covered": 10737
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b200": {
+   "tag": "b200",
+   "max_offset_m": 2.0,
+   "lanes_admitted": "0-3 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1245131,
+      "veto_candidates": 779574,
+      "admissible_stations": 211728,
+      "admissible_stations_legal_terra_footprint": 41069
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 764887,
+      "veto_candidates": 406567,
+      "admissible_stations": 151761,
+      "admissible_stations_legal_terra_footprint": 28162
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 480244,
+      "veto_candidates": 373007,
+      "admissible_stations": 59967,
+      "admissible_stations_legal_terra_footprint": 12907
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120479,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 7655550,
+      "veto_candidates": 4667995,
+      "admissible_stations": 1326402,
+      "admissible_stations_legal_terra_footprint": 257104
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 4778570,
+      "veto_candidates": 2426497,
+      "admissible_stations": 967824,
+      "admissible_stations_legal_terra_footprint": 181986
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33546,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 2876980,
+      "veto_candidates": 2241498,
+      "admissible_stations": 358578,
+      "admissible_stations_legal_terra_footprint": 75118
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6838,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 14,
+      "complete_legacy_mirror_footprint": 146
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 13,
+      "complete_legacy_mirror_footprint": 132
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 1,
+      "complete_legacy_mirror_footprint": 14
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 3
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 3
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 3
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 3
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     }
+    },
+    "incomplete_terra_maps": 210,
+    "selfcheck_mismatches": 0
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 14,
+     "cells": 18943,
+     "covered": 11928
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b229": {
+   "tag": "b229",
+   "max_offset_m": 2.29,
+   "lanes_admitted": "0-4 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1433046,
+      "veto_candidates": 884300,
+      "admissible_stations": 244193,
+      "admissible_stations_legal_terra_footprint": 48259
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 887717,
+      "veto_candidates": 464769,
+      "admissible_stations": 174806,
+      "admissible_stations_legal_terra_footprint": 33444
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 545329,
+      "veto_candidates": 419531,
+      "admissible_stations": 69387,
+      "admissible_stations_legal_terra_footprint": 14815
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120479,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 8811849,
+      "veto_candidates": 5291924,
+      "admissible_stations": 1529653,
+      "admissible_stations_legal_terra_footprint": 300794
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 5540469,
+      "veto_candidates": 2770667,
+      "admissible_stations": 1113674,
+      "admissible_stations_legal_terra_footprint": 214301
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33546,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 3271380,
+      "veto_candidates": 2521257,
+      "admissible_stations": 415979,
+      "admissible_stations_legal_terra_footprint": 86493
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6838,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 53,
+      "complete_legacy_mirror_footprint": 157
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 50,
+      "complete_legacy_mirror_footprint": 139
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 3,
+      "complete_legacy_mirror_footprint": 18
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 7
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 3
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 1
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 6
+     }
+    },
+    "incomplete_terra_maps": 171,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 2074,
+    "preflight_passed": false,
+    "wall_seconds": 662.95,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 8009,
+      "covered": 6264
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 1,
+      "cells": 13861,
+      "covered": 10922
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 25,
+      "cells": 11372,
+      "covered": 9541
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 13179
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 1,
+      "cells": 13861,
+      "covered": 10922
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 22051,
+      "covered": 13179
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 12962,
+      "covered": 8494
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 0,
+      "cells": 16902,
+      "covered": 11911
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 52,
+      "cells": 10902,
+      "covered": 5948
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 52,
+      "cells": 10902,
+      "covered": 5948
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 52,
+      "cells": 10902,
+      "covered": 5948
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 52,
+      "cells": 10902,
+      "covered": 5948
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 52,
+      "cells": 10902,
+      "covered": 5948
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 26,
+      "cells": 10021,
+      "covered": 7890
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 13,
+      "cells": 14851,
+      "covered": 9008
+     }
+    },
+    "incomplete_maps": [
+     "network:trn-net3-side2-s:evaluation/gate_main/development:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:326",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:327",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:332",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:333",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:335",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:336",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:641",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:642",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:643",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:644",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:645",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:646",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:647",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:648"
+    ]
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 52,
+     "cells": 18943,
+     "covered": 13960
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b286": {
+   "tag": "b286",
+   "max_offset_m": 2.86,
+   "lanes_admitted": "0-5 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1792736,
+      "veto_candidates": 1068519,
+      "admissible_stations": 308693,
+      "admissible_stations_legal_terra_footprint": 72940
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1125603,
+      "veto_candidates": 568352,
+      "admissible_stations": 220299,
+      "admissible_stations_legal_terra_footprint": 52299
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 667133,
+      "veto_candidates": 500167,
+      "admissible_stations": 88394,
+      "admissible_stations_legal_terra_footprint": 20641
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120479,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 11032878,
+      "veto_candidates": 6385638,
+      "admissible_stations": 1935370,
+      "admissible_stations_legal_terra_footprint": 453532
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 7046240,
+      "veto_candidates": 3397615,
+      "admissible_stations": 1405249,
+      "admissible_stations_legal_terra_footprint": 333605
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33546,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 3986638,
+      "veto_candidates": 2988023,
+      "admissible_stations": 530121,
+      "admissible_stations_legal_terra_footprint": 119927
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6838,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 146,
+      "complete_legacy_mirror_footprint": 177
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 132,
+      "complete_legacy_mirror_footprint": 154
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 14,
+      "complete_legacy_mirror_footprint": 23
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 8
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 12
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 4
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 4
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 6
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 7
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 11
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 9
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 13
+     }
+    },
+    "incomplete_terra_maps": 78,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 758,
+    "preflight_passed": false,
+    "wall_seconds": 812.77,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 103,
+      "cells": 8009,
+      "covered": 7507
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 87,
+      "cells": 13861,
+      "covered": 12752
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 104,
+      "cells": 11372,
+      "covered": 10941
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 64,
+      "cells": 22051,
+      "covered": 20172
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 87,
+      "cells": 13861,
+      "covered": 12752
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 64,
+      "cells": 22051,
+      "covered": 20172
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 74,
+      "cells": 12962,
+      "covered": 11955
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 79,
+      "cells": 16902,
+      "covered": 16107
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 148,
+      "cells": 10902,
+      "covered": 10740
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 148,
+      "cells": 10902,
+      "covered": 10740
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 148,
+      "cells": 10902,
+      "covered": 10740
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 148,
+      "cells": 10902,
+      "covered": 10740
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 148,
+      "cells": 10902,
+      "covered": 10740
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 141,
+      "cells": 10021,
+      "covered": 9967
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 99,
+      "cells": 14851,
+      "covered": 14530
+     }
+    },
+    "incomplete_maps": [
+     "network:trn-net3-side2-s:evaluation/gate_main/development:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:325",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:329",
+     "network:trn-net3-side2-s:evaluation/gate_main/development:334",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:321",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:322",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:323",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:324",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:328",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:330",
+     "network:trn-net3-side2-s:evaluation/gate_main/promotion:331",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:641",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:646",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:648",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:651",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:655",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:658",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:659",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:661",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:663",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:664",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:665",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:667",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:671",
+     "network:trn-net3-side2-s:evaluation/gate_main/sealed:672",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:1",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:10",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:11",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:14",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:16",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:20",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:21",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:26",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:28",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:30",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:32",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:33",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:36",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:39",
+     "network:trn-net3-side2-s:train/020__trn-net3-side2-s:4"
+    ]
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 143,
+     "cells": 18943,
+     "covered": 18202
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "b343": {
+   "tag": "b343",
+   "max_offset_m": 3.43,
+   "lanes_admitted": "0-6 cells",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 2137897,
+      "veto_candidates": 1219652,
+      "admissible_stations": 372062,
+      "admissible_stations_legal_terra_footprint": 109924
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1362538,
+      "veto_candidates": 658595,
+      "admissible_stations": 264992,
+      "admissible_stations_legal_terra_footprint": 80806
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 775359,
+      "veto_candidates": 561057,
+      "admissible_stations": 107070,
+      "admissible_stations_legal_terra_footprint": 29118
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120479,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 13184453,
+      "veto_candidates": 7282227,
+      "admissible_stations": 2333795,
+      "admissible_stations_legal_terra_footprint": 686485
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 8550008,
+      "veto_candidates": 3933361,
+      "admissible_stations": 1690903,
+      "admissible_stations_legal_terra_footprint": 516559
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33546,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 4634445,
+      "veto_candidates": 3348866,
+      "admissible_stations": 642892,
+      "admissible_stations_legal_terra_footprint": 169926
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6838,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 221,
+      "complete_legacy_mirror_footprint": 195
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 173,
+      "complete_legacy_mirror_footprint": 168
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 48,
+      "complete_legacy_mirror_footprint": 27
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 13
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     }
+    },
+    "incomplete_terra_maps": 3,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 0,
+    "preflight_passed": true,
+    "wall_seconds": 712.41,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 8009,
+      "covered": 8009
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 13861,
+      "covered": 13861
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 11372,
+      "covered": 11372
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 22051,
+      "covered": 22051
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 13861,
+      "covered": 13861
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 22051,
+      "covered": 22051
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 12962,
+      "covered": 12962
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 16902,
+      "covered": 16902
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10021,
+      "covered": 10021
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 14851,
+      "covered": 14851
+     }
+    },
+    "incomplete_maps": []
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 219,
+     "cells": 18943,
+     "covered": 18934
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4518,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4786,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  },
+  "off": {
+   "tag": "off",
+   "max_offset_m": 0.0,
+   "lanes_admitted": "all",
+   "overres_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "cells_admissible": 18943,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 4344537,
+      "veto_candidates": 2648918,
+      "admissible_stations": 646989,
+      "admissible_stations_legal_terra_footprint": 304632
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "cells_admissible": 13428,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 2663512,
+      "veto_candidates": 1372226,
+      "admissible_stations": 459383,
+      "admissible_stations_legal_terra_footprint": 231978
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "cells_admissible": 5515,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 1681025,
+      "veto_candidates": 1276692,
+      "admissible_stations": 187606,
+      "admissible_stations_legal_terra_footprint": 72654
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "target_cells": 1394,
+      "cells_admissible": 1394,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "target_cells": 799,
+      "cells_admissible": 799,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "target_cells": 2202,
+      "cells_admissible": 2202,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "target_cells": 1111,
+      "cells_admissible": 1111,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "target_cells": 1261,
+      "cells_admissible": 1261,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "target_cells": 1707,
+      "cells_admissible": 1707,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "target_cells": 1102,
+      "cells_admissible": 1102,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "target_cells": 1480,
+      "cells_admissible": 1480,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "target_cells": 985,
+      "cells_admissible": 985,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "overres_pooled": {
+    "scopes": {
+     "all": {
+      "maps": 1440,
+      "target_cells": 120479,
+      "cells_admissible": 120479,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 26849388,
+      "veto_candidates": 15976448,
+      "admissible_stations": 4064624,
+      "admissible_stations_legal_terra_footprint": 1932363
+     },
+     "no_net4": {
+      "maps": 1152,
+      "target_cells": 86933,
+      "cells_admissible": 86933,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 16741854,
+      "veto_candidates": 8294508,
+      "admissible_stations": 2941127,
+      "admissible_stations_legal_terra_footprint": 1502153
+     },
+     "net4": {
+      "maps": 288,
+      "target_cells": 33546,
+      "cells_admissible": 33546,
+      "cells_reachable_any_pose": 0,
+      "cells_reachable_but_never_admissible": 0,
+      "inband_applicable_candidates": 10107534,
+      "veto_candidates": 7681940,
+      "admissible_stations": 1123497,
+      "admissible_stations_legal_terra_footprint": 430210
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2": {
+      "maps": 96,
+      "target_cells": 8327,
+      "cells_admissible": 8327,
+      "lost": 0
+     },
+     "trn-net3-side2-s": {
+      "maps": 96,
+      "target_cells": 4803,
+      "cells_admissible": 4803,
+      "lost": 0
+     },
+     "trn-net4-side1-road": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2": {
+      "maps": 96,
+      "target_cells": 13354,
+      "cells_admissible": 13354,
+      "lost": 0
+     },
+     "trn-net4-side2-s": {
+      "maps": 96,
+      "target_cells": 6838,
+      "cells_admissible": 6838,
+      "lost": 0
+     },
+     "trn-seg2-side2": {
+      "maps": 96,
+      "target_cells": 7783,
+      "cells_admissible": 7783,
+      "lost": 0
+     },
+     "trn-seg3-side2": {
+      "maps": 96,
+      "target_cells": 10150,
+      "cells_admissible": 10150,
+      "lost": 0
+     },
+     "trn-straight-allfree": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-altsides": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side1-tight": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-straight-side2": {
+      "maps": 96,
+      "target_cells": 6514,
+      "cells_admissible": 6514,
+      "lost": 0
+     },
+     "trn-tee-side2": {
+      "maps": 96,
+      "target_cells": 8934,
+      "cells_admissible": 8934,
+      "lost": 0
+     },
+     "trn-tee-side2-s": {
+      "maps": 96,
+      "target_cells": 6039,
+      "cells_admissible": 6039,
+      "lost": 0
+     }
+    },
+    "maps_with_any_loss": 0,
+    "worst_maps": [],
+    "selfcheck_mismatches": 0
+   },
+   "station_cover_gate_main": {
+    "scopes": {
+     "all": {
+      "maps": 224,
+      "target_cells": 18943,
+      "complete_any": 224,
+      "complete_terra_footprint": 224,
+      "complete_legacy_mirror_footprint": 223
+     },
+     "no_net4": {
+      "maps": 176,
+      "target_cells": 13428,
+      "complete_any": 176,
+      "complete_terra_footprint": 176,
+      "complete_legacy_mirror_footprint": 175
+     },
+     "net4": {
+      "maps": 48,
+      "target_cells": 5515,
+      "complete_any": 48,
+      "complete_terra_footprint": 48,
+      "complete_legacy_mirror_footprint": 48
+     }
+    },
+    "by_condition": {
+     "trn-net3-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net3-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side1-road": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-net4-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-seg2-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-seg3-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-altsides": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side1-tight": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-straight-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-tee-side2": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     },
+     "trn-tee-side2-s": {
+      "maps": 16,
+      "complete_any": 16,
+      "complete_terra": 16
+     }
+    },
+    "incomplete_terra_maps": 0,
+    "selfcheck_mismatches": 0
+   },
+   "preflight": {
+    "maps": 2400,
+    "incomplete_fresh_cover_count": 0,
+    "preflight_passed": true,
+    "wall_seconds": 959.49,
+    "by_condition": {
+     "trn-net3-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 8009,
+      "covered": 8009
+     },
+     "trn-net3-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 13861,
+      "covered": 13861
+     },
+     "trn-net4-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 11372,
+      "covered": 11372
+     },
+     "trn-net4-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 22051,
+      "covered": 22051
+     },
+     "trn-net3-side1-road": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 13861,
+      "covered": 13861
+     },
+     "trn-net4-side1-road": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 22051,
+      "covered": 22051
+     },
+     "trn-seg2-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 12962,
+      "covered": 12962
+     },
+     "trn-seg3-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 16902,
+      "covered": 16902
+     },
+     "trn-straight-allfree": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-altsides": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side1-tight": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side1": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-straight-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10902,
+      "covered": 10902
+     },
+     "trn-tee-side2-s": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 10021,
+      "covered": 10021
+     },
+     "trn-tee-side2": {
+      "maps": 160,
+      "complete": 160,
+      "cells": 14851,
+      "covered": 14851
+     }
+    },
+    "incomplete_maps": []
+   },
+   "axis_sweep_gate_main": {
+    "main_terra": {
+     "maps": 224,
+     "complete": 224,
+     "cells": 18943,
+     "covered": 18943
+    },
+    "onaxis": {
+     "network|0.5": {
+      "family": "network",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 1,
+      "target_cells": 5506,
+      "cells_covered": 4520,
+      "sections": 224,
+      "sections_complete": 4
+     },
+     "network|1.0": {
+      "family": "network",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 3,
+      "target_cells": 5506,
+      "cells_covered": 4787,
+      "sections": 224,
+      "sections_complete": 7
+     },
+     "network|2.0": {
+      "family": "network",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 8,
+      "target_cells": 5506,
+      "cells_covered": 5302,
+      "sections": 224,
+      "sections_complete": 21
+     },
+     "road|0.5": {
+      "family": "road",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3080,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|1.0": {
+      "family": "road",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3225,
+      "sections": 112,
+      "sections_complete": 0
+     },
+     "road|2.0": {
+      "family": "road",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 3596,
+      "cells_covered": 3486,
+      "sections": 112,
+      "sections_complete": 1
+     },
+     "segmented|0.5": {
+      "family": "segmented",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 0,
+      "target_cells": 2968,
+      "cells_covered": 2448,
+      "sections": 80,
+      "sections_complete": 0
+     },
+     "segmented|1.0": {
+      "family": "segmented",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2968,
+      "cells_covered": 2552,
+      "sections": 80,
+      "sections_complete": 2
+     },
+     "segmented|2.0": {
+      "family": "segmented",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2968,
+      "cells_covered": 2754,
+      "sections": 80,
+      "sections_complete": 13
+     },
+     "straight|0.5": {
+      "family": "straight",
+      "tol_tiles": 0.5,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|1.0": {
+      "family": "straight",
+      "tol_tiles": 1.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "straight|2.0": {
+      "family": "straight",
+      "tol_tiles": 2.0,
+      "maps": 64,
+      "maps_complete": 64,
+      "target_cells": 4408,
+      "cells_covered": 4408,
+      "sections": 64,
+      "sections_complete": 64
+     },
+     "tee|0.5": {
+      "family": "tee",
+      "tol_tiles": 0.5,
+      "maps": 32,
+      "maps_complete": 2,
+      "target_cells": 2465,
+      "cells_covered": 2235,
+      "sections": 64,
+      "sections_complete": 2
+     },
+     "tee|1.0": {
+      "family": "tee",
+      "tol_tiles": 1.0,
+      "maps": 32,
+      "maps_complete": 4,
+      "target_cells": 2465,
+      "cells_covered": 2299,
+      "sections": 64,
+      "sections_complete": 4
+     },
+     "tee|2.0": {
+      "family": "tee",
+      "tol_tiles": 2.0,
+      "maps": 32,
+      "maps_complete": 5,
+      "target_cells": 2465,
+      "cells_covered": 2417,
+      "sections": 64,
+      "sections_complete": 13
+     }
+    },
+    "selfcheck_mismatches": 0
+   }
+  }
+ }
+}

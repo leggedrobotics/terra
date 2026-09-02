@@ -1,0 +1,19 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+288 trench maps, bound 1.71 m
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+{
+ "mechanisms": {
+  "junction_veto": 1
+ },
+ "total_lost": 1,
+ "maps_with_loss": 1
+}
+wrote tools/trench_align_v2_maxoffset_sweep_20260902/lost_cells_pooled_net4_b171.json

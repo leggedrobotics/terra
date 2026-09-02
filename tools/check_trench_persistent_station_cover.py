@@ -21,6 +21,18 @@ never wall itself off):
   * whether the Terra-legal station set is connected.
 
 The gap between the two cover numbers is what the transposition used to cost.
+
+Gate semantics follow ``EnvConfig``: v2 (the default) is yaw-parallel AND
+"on the line" (perpendicular offset <= ``trench_dig_max_offset_m``,
+``--max-offset-m``, <= 0 disables the clause); ``--gate-v1`` restores the
+retired [3.5, 7.0] m band.  READ THE PERSISTENT COLUMN WITH THE CLAUSE IN MIND:
+a *persistent* station must stay legal with the WHOLE trench dug, and a machine
+standing on the trench line does not.  Any bound tight enough to force the
+machine onto the line therefore empties the persistent station set by
+construction -- that is the definition colliding with the clause, not a coverage
+loss in the gate.  The model that matches a monotone dig-ahead-and-retreat is
+the ``fresh`` (padding-only) blocked space, reported by
+``tools/check_trench_axis_sweep_feasibility.py``.
 """
 
 from __future__ import annotations
@@ -46,10 +58,10 @@ _W = {}
 
 
 def _init(cfg, cones, fp_true, fp_masked, fwd, bwd, tol, so_min, so_max,
-          enforce_band=True):
+          enforce_band=True, max_offset=0.0):
     _W.update(cfg=cfg, cones=cones, fp_true=fp_true, fp_masked=fp_masked,
               fwd=fwd, bwd=bwd, tol=tol, so_min=so_min, so_max=so_max,
-              enforce_band=bool(enforce_band))
+              enforce_band=bool(enforce_band), max_offset=float(max_offset))
 
 
 def components(free, fwd, bwd):
@@ -81,6 +93,7 @@ def analyze(case):
     cones, tile = _W["cones"], _W["cfg"].tile_size
     tol, so_min, so_max = _W["tol"], _W["so_min"], _W["so_max"]
     enforce_band = _W["enforce_band"]
+    max_offset = _W["max_offset"]
     fwd, bwd = _W["fwd"], _W["bwd"]
 
     target = np.load(case["images"], allow_pickle=False).astype(np.int32)
@@ -104,7 +117,8 @@ def analyze(case):
     standoff = np.stack([
         np.abs(axes3[a, 0] * cols + axes3[a, 1] * rows + axes3[a, 2]) / den[a] * tile
         for a in range(naxes)])
-    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band)
+    band, _band_diag = standoff_bands(standoff, so_min, so_max, enforce_band,
+                                      max_offset)
     tg = np.stack([-axes3[:, 0], axes3[:, 1]], axis=1)
     tn = np.maximum(np.linalg.norm(tg, axis=1), 1e-6)
     yaw_ok = np.zeros((NH, naxes), dtype=bool)
@@ -194,6 +208,11 @@ def main():
     ap.add_argument("--workers", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None,
                     help="analyze only the first N maps (timing slice)")
+    ap.add_argument("--max-offset-m", type=float, default=None,
+                    help="override the v2 'on the line' bound "
+                         "(EnvConfig.trench_dig_max_offset_m, metres); "
+                         "<= 0 disables the clause (yaw-parallel only). "
+                         "Inert under --gate-v1.")
     ap.add_argument("--selfcheck-maps", type=int, default=2,
                     help="maps on which the numpy replica is asserted against "
                          "Terra's exported verdict (0 disables)")
@@ -205,11 +224,13 @@ def main():
 
     cfg = env_config()
     cones, fp_true, fp_masked, fwd, bwd = geometry(cfg)
-    gate = gate_contract(args.gate_v1)
+    gate = gate_contract(args.gate_v1, args.max_offset_m)
     tol, so_min, so_max = gate["tol"], gate["so_min"], gate["so_max"]
     enforce_band = gate["enforce_band"]
+    max_offset = gate["max_offset"]
     print(f"gate semantics {gate['semantics']} "
-          f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+          f"(standoff band enforced={enforce_band}, forced={gate['forced']}; "
+          f"on-line clause: {gate['on_line_clause']})",
           flush=True)
     cases = cases_from_panel(args.bank_root, args.dataset, None, args.exclude_prefix)
     if args.limit is not None:
@@ -219,7 +240,8 @@ def main():
     selfcheck = []
     for case in cases[: max(args.selfcheck_maps, 0)]:
         row = terra_gate_selfcheck(cfg, case, tol=tol, so_min=so_min,
-                                   so_max=so_max, enforce_band=enforce_band)
+                                   so_max=so_max, enforce_band=enforce_band,
+                                   max_offset=max_offset)
         selfcheck.append(row)
         print(f"selfcheck {row['map']}: probes={row['probes']} "
               f"applicable={row['applicable_probes']} "
@@ -230,7 +252,8 @@ def main():
     ctx = mp.get_context("spawn")
     with ctx.Pool(args.workers, initializer=_init,
                   initargs=(cfg, cones, fp_true, fp_masked, fwd, bwd,
-                            tol, so_min, so_max, enforce_band)) as pool:
+                            tol, so_min, so_max, enforce_band,
+                            max_offset)) as pool:
         results = []
         for i, res in enumerate(pool.imap_unordered(analyze, cases, chunksize=1)):
             results.append(res)
@@ -270,6 +293,11 @@ def main():
                      "gate_v1_forced": gate["forced"],
                      "config_trench_dig_standoff_enforced":
                          gate["config_default_enforced"],
+                     "max_offset_m": max_offset,
+                     "max_offset_forced": gate["max_offset_forced"],
+                     "config_trench_dig_max_offset_m":
+                         gate["config_default_max_offset"],
+                     "on_line_clause": gate["on_line_clause"],
                      "terra_replica_selfcheck": selfcheck,
                      "yaw_tolerance_rad": tol,
                      "standoff_band_m": [so_min, so_max],

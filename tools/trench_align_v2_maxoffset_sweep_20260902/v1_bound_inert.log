@@ -1,0 +1,42 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+gate semantics v1 (standoff band enforced=True, forced=True; on-line clause: inert under v1)
+16 trench maps in evaluation/capability_floor/development
+selfcheck trn-straight-allfree:evaluation/capability_floor/development:17: probes=512 applicable=148 replica_refusals=140 mismatches=0
+selfcheck trn-straight-allfree:evaluation/capability_floor/development:18: probes=512 applicable=157 replica_refusals=146 mismatches=0
+1/16 trn-straight-allfree:evaluation/capability_floor/development:17
+11/16 trn-straight-allfree:evaluation/capability_floor/development:27
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[
+ {
+  "condition": "trn-straight-allfree",
+  "maps": 16,
+  "target_cells": 1102,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1361434062814724,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 1102,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 57458,
+  "stations_terra_only": 3766,
+  "stations_legacy_only": 0,
+  "admissible_stations": 14562,
+  "admissible_stations_legal_terra_footprint": 14312,
+  "admissible_stations_legal_legacy_mirror_footprint": 10546,
+  "mean_station_components": 1.375,
+  "min_largest_station_component_fraction": 0.9929859719438878
+ }
+]
+wrote /tmp/claude-1000/-home-lorenzo-moleworks/69e4ae13-0dcf-41ba-a04d-8bb7de67a97b/scratchpad/v1_inert.json

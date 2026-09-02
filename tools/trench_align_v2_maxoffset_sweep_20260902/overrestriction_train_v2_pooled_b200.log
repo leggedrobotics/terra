@@ -1,0 +1,511 @@
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+gate semantics v2 (standoff band enforced=False, forced=False; on-line clause: perpendicular offset <= 2.0 m)
+1440 trench maps in train_v2_pooled_generalist
+selfcheck trn-net3-side1-road:train_v2_pooled_generalist:1729: probes=512 applicable=153 replica_refusals=148 mismatches=0
+selfcheck trn-net3-side1-road:train_v2_pooled_generalist:1730: probes=512 applicable=169 replica_refusals=166 mismatches=0
+selfcheck trn-net3-side1-road:train_v2_pooled_generalist:1731: probes=512 applicable=208 replica_refusals=202 mismatches=0
+1/1440 trn-net3-side1-road:train_v2_pooled_generalist:1734
+11/1440 trn-net3-side1-road:train_v2_pooled_generalist:1739
+21/1440 trn-net3-side1-road:train_v2_pooled_generalist:1748
+31/1440 trn-net3-side1-road:train_v2_pooled_generalist:1762
+41/1440 trn-net3-side1-road:train_v2_pooled_generalist:1769
+51/1440 trn-net3-side1-road:train_v2_pooled_generalist:1779
+61/1440 trn-net3-side1-road:train_v2_pooled_generalist:1790
+71/1440 trn-net3-side1-road:train_v2_pooled_generalist:1800
+81/1440 trn-net3-side1-road:train_v2_pooled_generalist:1808
+91/1440 trn-net3-side1-road:train_v2_pooled_generalist:1821
+101/1440 trn-net3-side2:train_v2_pooled_generalist:1827
+111/1440 trn-net3-side2:train_v2_pooled_generalist:1839
+121/1440 trn-net3-side2:train_v2_pooled_generalist:1850
+131/1440 trn-net3-side2:train_v2_pooled_generalist:1861
+141/1440 trn-net3-side2:train_v2_pooled_generalist:1870
+151/1440 trn-net3-side2:train_v2_pooled_generalist:1878
+161/1440 trn-net3-side2:train_v2_pooled_generalist:1887
+171/1440 trn-net3-side2:train_v2_pooled_generalist:1899
+181/1440 trn-net3-side2:train_v2_pooled_generalist:1910
+191/1440 trn-net3-side2:train_v2_pooled_generalist:1919
+201/1440 trn-net3-side2-s:train_v2_pooled_generalist:1929
+211/1440 trn-net3-side2-s:train_v2_pooled_generalist:1935
+221/1440 trn-net3-side2-s:train_v2_pooled_generalist:1949
+231/1440 trn-net3-side2-s:train_v2_pooled_generalist:1960
+241/1440 trn-net3-side2-s:train_v2_pooled_generalist:1968
+251/1440 trn-net3-side2-s:train_v2_pooled_generalist:1979
+261/1440 trn-net3-side2-s:train_v2_pooled_generalist:1987
+271/1440 trn-net3-side2-s:train_v2_pooled_generalist:1998
+281/1440 trn-net3-side2-s:train_v2_pooled_generalist:2009
+291/1440 trn-net4-side1-road:train_v2_pooled_generalist:2020
+301/1440 trn-net4-side1-road:train_v2_pooled_generalist:2029
+311/1440 trn-net4-side1-road:train_v2_pooled_generalist:2039
+321/1440 trn-net4-side1-road:train_v2_pooled_generalist:2049
+331/1440 trn-net4-side1-road:train_v2_pooled_generalist:2056
+341/1440 trn-net4-side1-road:train_v2_pooled_generalist:2071
+351/1440 trn-net4-side1-road:train_v2_pooled_generalist:2081
+361/1440 trn-net4-side1-road:train_v2_pooled_generalist:2091
+371/1440 trn-net4-side1-road:train_v2_pooled_generalist:2097
+381/1440 trn-net4-side1-road:train_v2_pooled_generalist:2110
+391/1440 trn-net4-side2:train_v2_pooled_generalist:2119
+401/1440 trn-net4-side2:train_v2_pooled_generalist:2129
+411/1440 trn-net4-side2:train_v2_pooled_generalist:2144
+421/1440 trn-net4-side2:train_v2_pooled_generalist:2147
+431/1440 trn-net4-side2:train_v2_pooled_generalist:2162
+441/1440 trn-net4-side2:train_v2_pooled_generalist:2169
+451/1440 trn-net4-side2:train_v2_pooled_generalist:2180
+461/1440 trn-net4-side2:train_v2_pooled_generalist:2188
+471/1440 trn-net4-side2:train_v2_pooled_generalist:2200
+481/1440 trn-net4-side2-s:train_v2_pooled_generalist:2210
+491/1440 trn-net4-side2-s:train_v2_pooled_generalist:2219
+501/1440 trn-net4-side2-s:train_v2_pooled_generalist:2230
+511/1440 trn-net4-side2-s:train_v2_pooled_generalist:2242
+521/1440 trn-net4-side2-s:train_v2_pooled_generalist:2250
+531/1440 trn-net4-side2-s:train_v2_pooled_generalist:2260
+541/1440 trn-net4-side2-s:train_v2_pooled_generalist:2268
+551/1440 trn-net4-side2-s:train_v2_pooled_generalist:2279
+561/1440 trn-net4-side2-s:train_v2_pooled_generalist:2289
+571/1440 trn-net4-side2-s:train_v2_pooled_generalist:2298
+581/1440 trn-seg2-side2:train_v2_pooled_generalist:2308
+591/1440 trn-seg2-side2:train_v2_pooled_generalist:2319
+601/1440 trn-seg2-side2:train_v2_pooled_generalist:2329
+611/1440 trn-seg2-side2:train_v2_pooled_generalist:2339
+621/1440 trn-seg2-side2:train_v2_pooled_generalist:2352
+631/1440 trn-seg2-side2:train_v2_pooled_generalist:2360
+641/1440 trn-seg2-side2:train_v2_pooled_generalist:2365
+651/1440 trn-seg2-side2:train_v2_pooled_generalist:2378
+661/1440 trn-seg2-side2:train_v2_pooled_generalist:2388
+671/1440 trn-seg2-side2:train_v2_pooled_generalist:2398
+681/1440 trn-seg3-side2:train_v2_pooled_generalist:2409
+691/1440 trn-seg3-side2:train_v2_pooled_generalist:2419
+701/1440 trn-seg3-side2:train_v2_pooled_generalist:2429
+711/1440 trn-seg3-side2:train_v2_pooled_generalist:2439
+721/1440 trn-seg3-side2:train_v2_pooled_generalist:2449
+731/1440 trn-seg3-side2:train_v2_pooled_generalist:2459
+741/1440 trn-seg3-side2:train_v2_pooled_generalist:2469
+751/1440 trn-seg3-side2:train_v2_pooled_generalist:2480
+761/1440 trn-seg3-side2:train_v2_pooled_generalist:2491
+771/1440 trn-straight-altsides:train_v2_pooled_generalist:2500
+781/1440 trn-straight-altsides:train_v2_pooled_generalist:2507
+791/1440 trn-straight-altsides:train_v2_pooled_generalist:2520
+801/1440 trn-straight-altsides:train_v2_pooled_generalist:2526
+811/1440 trn-straight-altsides:train_v2_pooled_generalist:2540
+821/1440 trn-straight-altsides:train_v2_pooled_generalist:2548
+831/1440 trn-straight-altsides:train_v2_pooled_generalist:2560
+841/1440 trn-straight-altsides:train_v2_pooled_generalist:2570
+851/1440 trn-straight-altsides:train_v2_pooled_generalist:2579
+861/1440 trn-straight-altsides:train_v2_pooled_generalist:2588
+871/1440 trn-straight-side1:train_v2_pooled_generalist:2599
+881/1440 trn-straight-side1:train_v2_pooled_generalist:2608
+891/1440 trn-straight-side1:train_v2_pooled_generalist:2619
+901/1440 trn-straight-side1:train_v2_pooled_generalist:2626
+911/1440 trn-straight-side1:train_v2_pooled_generalist:2638
+921/1440 trn-straight-side1:train_v2_pooled_generalist:2649
+931/1440 trn-straight-side1:train_v2_pooled_generalist:2660
+941/1440 trn-straight-side1:train_v2_pooled_generalist:2669
+951/1440 trn-straight-side1:train_v2_pooled_generalist:2679
+961/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2692
+971/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2699
+981/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2710
+991/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2721
+1001/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2728
+1011/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2740
+1021/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2749
+1031/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2759
+1041/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2768
+1051/1440 trn-straight-side1-tight:train_v2_pooled_generalist:2777
+1061/1440 trn-straight-side2:train_v2_pooled_generalist:2791
+1071/1440 trn-straight-side2:train_v2_pooled_generalist:2799
+1081/1440 trn-straight-side2:train_v2_pooled_generalist:2809
+1091/1440 trn-straight-side2:train_v2_pooled_generalist:2818
+1101/1440 trn-straight-side2:train_v2_pooled_generalist:2828
+1111/1440 trn-straight-side2:train_v2_pooled_generalist:2839
+1121/1440 trn-straight-side2:train_v2_pooled_generalist:2849
+1131/1440 trn-straight-side2:train_v2_pooled_generalist:2860
+1141/1440 trn-straight-side2:train_v2_pooled_generalist:2870
+1151/1440 trn-straight-side2:train_v2_pooled_generalist:2878
+1161/1440 trn-tee-side2:train_v2_pooled_generalist:2889
+1171/1440 trn-tee-side2:train_v2_pooled_generalist:2897
+1181/1440 trn-tee-side2:train_v2_pooled_generalist:2911
+1191/1440 trn-tee-side2:train_v2_pooled_generalist:2919
+1201/1440 trn-tee-side2:train_v2_pooled_generalist:2930
+1211/1440 trn-tee-side2:train_v2_pooled_generalist:2938
+1221/1440 trn-tee-side2:train_v2_pooled_generalist:2950
+1231/1440 trn-tee-side2:train_v2_pooled_generalist:2960
+1241/1440 trn-tee-side2:train_v2_pooled_generalist:2971
+1251/1440 trn-tee-side2-s:train_v2_pooled_generalist:2982
+1261/1440 trn-tee-side2-s:train_v2_pooled_generalist:2988
+1271/1440 trn-tee-side2-s:train_v2_pooled_generalist:3002
+1281/1440 trn-tee-side2-s:train_v2_pooled_generalist:3008
+1291/1440 trn-tee-side2-s:train_v2_pooled_generalist:3021
+1301/1440 trn-tee-side2-s:train_v2_pooled_generalist:3028
+1311/1440 trn-tee-side2-s:train_v2_pooled_generalist:3041
+1321/1440 trn-tee-side2-s:train_v2_pooled_generalist:3049
+1331/1440 trn-tee-side2-s:train_v2_pooled_generalist:3059
+1341/1440 trn-tee-side2-s:train_v2_pooled_generalist:3067
+1351/1440 trn-straight-allfree:train_v2_pooled_generalist:3178
+1361/1440 trn-straight-allfree:train_v2_pooled_generalist:3186
+1371/1440 trn-straight-allfree:train_v2_pooled_generalist:3194
+1381/1440 trn-straight-allfree:train_v2_pooled_generalist:3205
+1391/1440 trn-straight-allfree:train_v2_pooled_generalist:3217
+1401/1440 trn-straight-allfree:train_v2_pooled_generalist:3225
+1411/1440 trn-straight-allfree:train_v2_pooled_generalist:3236
+1421/1440 trn-straight-allfree:train_v2_pooled_generalist:3248
+1431/1440 trn-straight-allfree:train_v2_pooled_generalist:3255
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.11)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[
+ {
+  "condition": "trn-net3-side1-road",
+  "maps": 96,
+  "target_cells": 8327,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 1,
+  "max_nearest_segment_distance": 1.6424840657522373,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 8327,
+  "veto_rate": 0.7180229850636857,
+  "veto_candidates": 450919,
+  "veto_candidates_mixed": 175002,
+  "inband_applicable_candidates": 628619,
+  "stations_terra_only": 3666,
+  "stations_legacy_only": 20661,
+  "admissible_stations": 92537,
+  "admissible_stations_legal_terra_footprint": 22579,
+  "admissible_stations_legal_legacy_mirror_footprint": 39574,
+  "mean_station_components": 1.5,
+  "min_largest_station_component_fraction": 0.9395017793594306
+ },
+ {
+  "condition": "trn-net3-side2",
+  "maps": 96,
+  "target_cells": 8327,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 1,
+  "max_nearest_segment_distance": 1.6424840657522373,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 8327,
+  "veto_rate": 0.7180229850636856,
+  "veto_candidates": 450919,
+  "veto_candidates_mixed": 175002,
+  "inband_applicable_candidates": 628619,
+  "stations_terra_only": 3666,
+  "stations_legacy_only": 20661,
+  "admissible_stations": 92537,
+  "admissible_stations_legal_terra_footprint": 22579,
+  "admissible_stations_legal_legacy_mirror_footprint": 39574,
+  "mean_station_components": 1.5,
+  "min_largest_station_component_fraction": 0.9395017793594306
+ },
+ {
+  "condition": "trn-net3-side2-s",
+  "maps": 96,
+  "target_cells": 4803,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.4649171769347709,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 4803,
+  "veto_rate": 0.7493830830649637,
+  "veto_candidates": 314154,
+  "veto_candidates_mixed": 137611,
+  "inband_applicable_candidates": 418948,
+  "stations_terra_only": 3146,
+  "stations_legacy_only": 19350,
+  "admissible_stations": 63933,
+  "admissible_stations_legal_terra_footprint": 16762,
+  "admissible_stations_legal_legacy_mirror_footprint": 32966,
+  "mean_station_components": 1.25,
+  "min_largest_station_component_fraction": 0.8936170212765957
+ },
+ {
+  "condition": "trn-net4-side1-road",
+  "maps": 96,
+  "target_cells": 13354,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.5,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 13354,
+  "veto_rate": 0.7612854410536215,
+  "veto_candidates": 823594,
+  "veto_candidates_mixed": 280672,
+  "inband_applicable_candidates": 1082907,
+  "stations_terra_only": 6109,
+  "stations_legacy_only": 26586,
+  "admissible_stations": 137224,
+  "admissible_stations_legal_terra_footprint": 26084,
+  "admissible_stations_legal_legacy_mirror_footprint": 46561,
+  "mean_station_components": 5.1875,
+  "min_largest_station_component_fraction": 0.9218009478672986
+ },
+ {
+  "condition": "trn-net4-side2",
+  "maps": 96,
+  "target_cells": 13354,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.5,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 13354,
+  "veto_rate": 0.7612854410536216,
+  "veto_candidates": 823594,
+  "veto_candidates_mixed": 280672,
+  "inband_applicable_candidates": 1082907,
+  "stations_terra_only": 6109,
+  "stations_legacy_only": 26586,
+  "admissible_stations": 137224,
+  "admissible_stations_legal_terra_footprint": 26084,
+  "admissible_stations_legal_legacy_mirror_footprint": 46561,
+  "mean_station_components": 5.1875,
+  "min_largest_station_component_fraction": 0.9218009478672986
+ },
+ {
+  "condition": "trn-net4-side2-s",
+  "maps": 96,
+  "target_cells": 6838,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.5500283515552225,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6838,
+  "veto_rate": 0.8366690532281464,
+  "veto_candidates": 594310,
+  "veto_candidates_mixed": 228316,
+  "inband_applicable_candidates": 711166,
+  "stations_terra_only": 6163,
+  "stations_legacy_only": 24157,
+  "admissible_stations": 84130,
+  "admissible_stations_legal_terra_footprint": 22950,
+  "admissible_stations_legal_legacy_mirror_footprint": 40944,
+  "mean_station_components": 1.53125,
+  "min_largest_station_component_fraction": 0.9516616314199395
+ },
+ {
+  "condition": "trn-seg2-side2",
+  "maps": 96,
+  "target_cells": 7783,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1814194653572456,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 7783,
+  "veto_rate": 0.596835913766847,
+  "veto_candidates": 253299,
+  "veto_candidates_mixed": 118422,
+  "inband_applicable_candidates": 423306,
+  "stations_terra_only": 2853,
+  "stations_legacy_only": 26816,
+  "admissible_stations": 88997,
+  "admissible_stations_legal_terra_footprint": 17542,
+  "admissible_stations_legal_legacy_mirror_footprint": 41505,
+  "mean_station_components": 2.8333333333333335,
+  "min_largest_station_component_fraction": 0.8041958041958042
+ },
+ {
+  "condition": "trn-seg3-side2",
+  "maps": 96,
+  "target_cells": 10150,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.435735963335186,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 10150,
+  "veto_rate": 0.6554335290869555,
+  "veto_candidates": 478211,
+  "veto_candidates_mixed": 145699,
+  "inband_applicable_candidates": 729119,
+  "stations_terra_only": 5537,
+  "stations_legacy_only": 34337,
+  "admissible_stations": 125196,
+  "admissible_stations_legal_terra_footprint": 23414,
+  "admissible_stations_legal_legacy_mirror_footprint": 52214,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.7453703703703703
+ },
+ {
+  "condition": "trn-straight-allfree",
+  "maps": 96,
+  "target_cells": 6514,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1364280041309394,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6514,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 216682,
+  "stations_terra_only": 456,
+  "stations_legacy_only": 29410,
+  "admissible_stations": 66806,
+  "admissible_stations_legal_terra_footprint": 9110,
+  "admissible_stations_legal_legacy_mirror_footprint": 38064,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.6597938144329897
+ },
+ {
+  "condition": "trn-straight-altsides",
+  "maps": 96,
+  "target_cells": 6514,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1364280041309394,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6514,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 216682,
+  "stations_terra_only": 456,
+  "stations_legacy_only": 29410,
+  "admissible_stations": 66806,
+  "admissible_stations_legal_terra_footprint": 9110,
+  "admissible_stations_legal_legacy_mirror_footprint": 38064,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.6597938144329897
+ },
+ {
+  "condition": "trn-straight-side1",
+  "maps": 96,
+  "target_cells": 6514,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1364280041309394,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6514,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 216682,
+  "stations_terra_only": 456,
+  "stations_legacy_only": 29410,
+  "admissible_stations": 66806,
+  "admissible_stations_legal_terra_footprint": 9110,
+  "admissible_stations_legal_legacy_mirror_footprint": 38064,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.6597938144329897
+ },
+ {
+  "condition": "trn-straight-side1-tight",
+  "maps": 96,
+  "target_cells": 6514,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1364280041309394,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6514,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 216682,
+  "stations_terra_only": 456,
+  "stations_legacy_only": 29410,
+  "admissible_stations": 66806,
+  "admissible_stations_legal_terra_footprint": 9110,
+  "admissible_stations_legal_legacy_mirror_footprint": 38064,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.6597938144329897
+ },
+ {
+  "condition": "trn-straight-side2",
+  "maps": 96,
+  "target_cells": 6514,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.1364280041309394,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6514,
+  "veto_rate": 0.0,
+  "veto_candidates": 0,
+  "veto_candidates_mixed": 0,
+  "inband_applicable_candidates": 216682,
+  "stations_terra_only": 456,
+  "stations_legacy_only": 29410,
+  "admissible_stations": 66806,
+  "admissible_stations_legal_terra_footprint": 9110,
+  "admissible_stations_legal_legacy_mirror_footprint": 38064,
+  "mean_station_components": 4.1875,
+  "min_largest_station_component_fraction": 0.6597938144329897
+ },
+ {
+  "condition": "trn-tee-side2",
+  "maps": 96,
+  "target_cells": 8934,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 1,
+  "max_nearest_segment_distance": 1.6747930142632552,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 8934,
+  "veto_rate": 0.5298893212289987,
+  "veto_candidates": 266948,
+  "veto_candidates_mixed": 93812,
+  "inband_applicable_candidates": 504708,
+  "stations_terra_only": 1437,
+  "stations_legacy_only": 26741,
+  "admissible_stations": 94710,
+  "admissible_stations_legal_terra_footprint": 16902,
+  "admissible_stations_legal_legacy_mirror_footprint": 42206,
+  "mean_station_components": 6.333333333333333,
+  "min_largest_station_component_fraction": 0.7516339869281046
+ },
+ {
+  "condition": "trn-tee-side2-s",
+  "maps": 96,
+  "target_cells": 6039,
+  "membership_empty_cells": 0,
+  "fringe_fallback_cells": 0,
+  "max_nearest_segment_distance": 1.5,
+  "cells_reachable_but_never_inband": 0,
+  "cells_inband_but_never_admissible": 0,
+  "cells_reachable_but_never_admissible": 0,
+  "cells_admissible": 6039,
+  "veto_rate": 0.5863904746457895,
+  "veto_candidates": 212047,
+  "veto_candidates_mixed": 90407,
+  "inband_applicable_candidates": 361841,
+  "stations_terra_only": 2740,
+  "stations_legacy_only": 21415,
+  "admissible_stations": 75884,
+  "admissible_stations_legal_terra_footprint": 16658,
+  "admissible_stations_legal_legacy_mirror_footprint": 35333,
+  "mean_station_components": 1.5520833333333333,
+  "min_largest_station_component_fraction": 0.8953488372093024
+ }
+]
+wrote /home/lorenzo/moleworks/.worktrees/terra_trench_fresh_dig_alignment_20260818/tools/trench_align_v2_maxoffset_sweep_20260902/overrestriction_train_v2_pooled_b200.json

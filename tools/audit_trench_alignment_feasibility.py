@@ -7,12 +7,15 @@ all-or-nothing: every still-fresh target cell in its cone must belong to at
 least one section for which the base pose is pose-valid.
 
 Pose validity follows ``EnvConfig.trench_dig_standoff_enforced``.  Under v2
-(the shipped default) that is the yaw-parallel clause alone -- working distance
-is the dig cone's job, tested radially machine -> cell, not perpendicular
-machine -> axis.  ``--gate-v1`` forces the retired perpendicular standoff band
-back on so the pre-2026-09-01 numbers (``tools/trench_alignment_feasibility_
-20260818.json``, ``tools/trench_alignment_preflight_pilot_20260819.json``) stay
-reproducible.  See TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
+(the shipped default) working distance is the dig cone's job, tested radially
+machine -> cell; the pose clauses are yaw-parallel AND "on the line" --
+perpendicular offset from the section axis at most
+``EnvConfig.trench_dig_max_offset_m`` (``--max-offset-m``; <= 0 disables it and
+restores yaw-only).  ``--gate-v1`` forces the retired perpendicular standoff
+band back on, and makes the offset bound inert, so the pre-2026-09-01 numbers
+(``tools/trench_alignment_feasibility_20260818.json``,
+``tools/trench_alignment_preflight_pilot_20260819.json``) stay reproducible.
+See TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
 """
 
 from __future__ import annotations
@@ -45,19 +48,34 @@ STANDOFF_MAX_M = 7.0
 MAX_AXES = 4
 
 
-def gate_contract(force_v1: bool = False) -> dict:
+def gate_contract(force_v1: bool = False, max_offset_m=None) -> dict:
     """Which pose semantics this run enforces.
 
-    v2 (the shipped default) drops the perpendicular standoff band entirely;
-    v1 keeps it.  ``force_v1`` is the ``--gate-v1`` override.
+    v2 (the shipped default) drops the perpendicular standoff band and applies
+    the "on the line" clause instead: perpendicular offset from the section
+    axis at most ``EnvConfig.trench_dig_max_offset_m`` (<= 0 disables it, so
+    pose validity is yaw-parallel alone).  v1 keeps the [3.5, 7.0] m band and
+    ignores the offset bound.  ``force_v1`` is the ``--gate-v1`` override;
+    ``max_offset_m`` is ``--max-offset-m`` (``None`` = the config default).
     """
     base = EnvConfig()
     enforce = bool(force_v1 or base.trench_dig_standoff_enforced)
+    default_max_offset = float(base.trench_dig_max_offset_m)
+    max_offset = (default_max_offset if max_offset_m is None
+                  else float(max_offset_m))
     return {
         "enforce_band": enforce,
         "semantics": "v1" if enforce else "v2",
         "forced": bool(force_v1),
         "config_default_enforced": bool(base.trench_dig_standoff_enforced),
+        "max_offset": max_offset,
+        "max_offset_forced": max_offset_m is not None,
+        "config_default_max_offset": default_max_offset,
+        "on_line_clause": (
+            "inert under v1" if enforce else
+            ("disabled (yaw-parallel only)" if max_offset <= 0.0
+             else f"perpendicular offset <= {max_offset} m")
+        ),
     }
 
 
@@ -263,11 +281,14 @@ def base_axis_bits(
     axis_count: int,
     tile_size: float,
     enforce_band: bool = True,
+    max_offset: float = 0.0,
 ) -> dict[tuple[int, int, int], int]:
     """Per pose, the bitmask of sections the pose is valid for.
 
     ``enforce_band`` selects the semantics: v1 adds the perpendicular standoff
-    band on top of the yaw-parallel clause, v2 uses yaw alone.
+    band [3.5, 7.0] m on top of the yaw-parallel clause; v2 adds the "on the
+    line" clause instead, perpendicular offset <= ``max_offset`` metres, and
+    drops it entirely when ``max_offset <= 0``.
     """
     result: dict[tuple[int, int, int], int] = {}
     axes = records[:axis_count, :3].astype(np.float32)
@@ -295,6 +316,8 @@ def base_axis_bits(
                 (standoff >= np.float32(STANDOFF_MIN_M))
                 & (standoff <= np.float32(STANDOFF_MAX_M))
             )
+        elif max_offset > 0.0:
+            valid = valid & (standoff <= np.float32(max_offset))
         bits = 0
         for axis_index in np.flatnonzero(valid):
             bits |= 1 << int(axis_index)
@@ -599,7 +622,7 @@ _WORKER: dict = {}
 
 
 def _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas,
-                 enforce_band=True) -> None:
+                 enforce_band=True, max_offset=0.0) -> None:
     _WORKER.update(
         cfg=cfg,
         cones=cones,
@@ -607,6 +630,7 @@ def _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas,
         forward_deltas=forward_deltas,
         backward_deltas=backward_deltas,
         enforce_band=bool(enforce_band),
+        max_offset=float(max_offset),
     )
 
 
@@ -624,6 +648,7 @@ def _run_case(case: dict) -> dict:
         forward_deltas=_WORKER["forward_deltas"],
         backward_deltas=_WORKER["backward_deltas"],
         enforce_band=_WORKER["enforce_band"],
+        max_offset=_WORKER["max_offset"],
     )
     result["family"] = case["family"]
     result["condition"] = case["condition"]
@@ -689,6 +714,7 @@ def analyze_map(
     forward_deltas: list[tuple[int, int]],
     backward_deltas: list[tuple[int, int]],
     enforce_band: bool = True,
+    max_offset: float = 0.0,
 ) -> dict:
     records, membership, axis_count = records_and_membership(target, metadata)
     target_count = int(np.count_nonzero(target < 0))
@@ -697,7 +723,8 @@ def analyze_map(
         persistent_blocked, footprints, forward_deltas, backward_deltas
     )
     axis_bits = base_axis_bits(valid_poses, records, axis_count, cfg.tile_size,
-                               enforce_band=enforce_band)
+                               enforce_band=enforce_band,
+                               max_offset=max_offset)
     dump_reachable = dump_reachable_bases(
         target=target,
         padding=padding,
@@ -806,6 +833,14 @@ def main() -> None:
         "enforced on top of yaw-parallel)",
     )
     parser.add_argument(
+        "--max-offset-m",
+        type=float,
+        default=None,
+        help="override the v2 'on the line' bound "
+        "(EnvConfig.trench_dig_max_offset_m, metres); <= 0 disables the "
+        "clause (yaw-parallel only). Inert under --gate-v1.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -831,11 +866,13 @@ def main() -> None:
         raise RuntimeError(f"No trench maps found under {root}.")
 
     cfg = env_config()
-    gate = gate_contract(args.gate_v1)
+    gate = gate_contract(args.gate_v1, args.max_offset_m)
     enforce_band = gate["enforce_band"]
+    max_offset = gate["max_offset"]
     print(
         f"gate semantics {gate['semantics']} "
-        f"(standoff band enforced={enforce_band}, forced={gate['forced']})",
+        f"(standoff band enforced={enforce_band}, forced={gate['forced']}; "
+        f"on-line clause: {gate['on_line_clause']})",
         flush=True,
     )
     cones, footprints, forward_deltas, backward_deltas = terra_geometry(cfg)
@@ -861,7 +898,7 @@ def main() -> None:
             processes=args.workers,
             initializer=_init_worker,
             initargs=(cfg, cones, footprints, forward_deltas, backward_deltas,
-                      enforce_band),
+                      enforce_band, max_offset),
         ) as pool:
             results = []
             for index, result in enumerate(
@@ -876,7 +913,7 @@ def main() -> None:
         results.sort(key=lambda item: item["label"])
     else:
         _init_worker(cfg, cones, footprints, forward_deltas, backward_deltas,
-                     enforce_band)
+                     enforce_band, max_offset)
         results = []
         for case in cases:
             result = _run_case(case)
@@ -939,6 +976,10 @@ def main() -> None:
             "standoff_band_enforced": enforce_band,
             "gate_v1_forced": gate["forced"],
             "config_trench_dig_standoff_enforced": gate["config_default_enforced"],
+            "max_offset_m": max_offset,
+            "max_offset_forced": gate["max_offset_forced"],
+            "config_trench_dig_max_offset_m": gate["config_default_max_offset"],
+            "on_line_clause": gate["on_line_clause"],
             "pose_graph": (
                 "complete target holes plus padding, endpoint-only Terra "
                 "movement/rotation"
