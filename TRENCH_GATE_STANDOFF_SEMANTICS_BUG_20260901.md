@@ -102,6 +102,45 @@ coverage sweep over {1.14, 1.71, 2.29, 2.86, 3.43, disabled} m picks the
 smallest bound that loses no coverage (oblique 30-deg lanes drift up to
 ~1.5 m over a traverse, so the bound cannot be arbitrarily tight).
 
+### 3.2 The bound: 2.0 m, and why the sweep's instruments disagree
+
+Sweep over {1.14, 1.15, 1.71, 1.72, 2.00, 2.29, 2.86, 3.43, disabled} m
+(`tools/trench_align_v2_maxoffset_sweep_20260902/README.md`):
+
+| bound | gate coverage loss (panel + pooled cells) | on-axis retreat lane | order-indep. cover (224) | 2,400-map preflight | oracle (old nav) |
+|---:|---|---|---:|---:|---:|
+| 1.14 | -9 / -70 | -11 cells | 0 | 0 | -- |
+| 1.71 | 0 / -1 | = disabled | 0 | 0 | 0/176 |
+| **2.00** | **0 / 0** | **= disabled** | 14 | -- | -- |
+| 2.29 | 0 / 0 | = disabled | 53 | 326 | 28/176 |
+| 3.43 | 0 / 0 | = disabled | 221 | 2,400 | 69/176 |
+| disabled | 0 / 0 | reference | 224 | 2,400 | 146/176 |
+
+Two instruments say "2.0 m is free" and three say "anything tight is fatal".
+The three are wrong for this manoeuvre, by construction: the persistent cover,
+the preflight and the oracle's navigation all require a station to stay legal
+with the WHOLE trench already dug -- never stand on a target cell -- while "on
+the line" means standing on UNDUG target cells. Dug cells are always behind the
+chassis (the cone starts at 3.64 m, the chassis reaches 3.14 m ahead), so a
+monotonically retreating machine never occupies a cell it dug; under that
+model every bound >= 1.15 m is identical to disabled on every family. At 3.43 m
+the preflight "passes" only because the chassis clears the trench sideways --
+that is the v1 lane in disguise, 0.07 m short of its floor.
+
+The lost cells at tight bounds are informative: all are single-owner junction
+cells 1-3 cells from a crossing branch (zero padding involvement), i.e. the
+junction all-or-nothing veto again, not the offset.
+
+**Decision: 2.0 m.** Smallest bound with zero gate-coverage loss; admits 0-3
+cells of lateral wobble (0 / 0.57 / 1.14 / 1.71 m), which covers the ~1.5 m
+drift of oblique 30-deg lanes; refuses both sideways digs from the manual
+session (3.84 m, 6.52 m) and the whole v1 lane. Launch gate, per Lorenzo: the
+simple check -- every trench cell has an aligned, on-the-line station from
+which it is admissibly diggable, and driving along the axis reaches it -- which
+passes at 2.0 m with zero loss. Re-fitting the preflight and oracle with a
+retreat-model pose graph was started and cancelled as unnecessary: how to
+place soil and sequence digs is the policy's job.
+
 ## 4. The completed pilot re-scored under v2
 
 `tools/rescore_trench_pilot_v2_admissibility.py` over the frozen u85,000 probe
