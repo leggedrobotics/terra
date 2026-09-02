@@ -298,6 +298,15 @@ class EnvConfig(NamedTuple):
     #   v1 replay path; ``fresh_trench_dig_standoff_error`` becomes a pure
     #   diagnostic (see State._get_fresh_trench_dig_alignment_details).
     trench_dig_standoff_enforced: bool = False
+    # v2 "on the line" clause (ignored under v1). A section is pose-valid only
+    # if the base centre's PERPENDICULAR distance to its axis is at most this
+    # many metres. 0 or negative disables the clause (yaw-parallel only).
+    # Lorenzo's intent is to dig from ON the trench (dig ahead, retreat
+    # backward); yaw-parallel alone still admitted the v1 sideways lane
+    # (parallel at 3.8-6.5 m to the side, cabin swung 60-120 deg). Default
+    # 2.0 m is provisional pending the coverage sweep; see
+    # TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
+    trench_dig_max_offset_m: float = 2.0
 
     @classmethod
     def new(cls):

@@ -111,13 +111,15 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         return (base_row - axis_row) * self.tile / self.cone_r_max
 
     def test_aligned_fresh_dig_executes_and_observation_explains_it(self):
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 37] = -1
+        # v2 "on the line": the base sits 2 cells (1.14 m) off the axis, inside
+        # the 2.0 m on-line clause, chassis parallel, cone ahead along the strip.
+        target = self._on_axis_strip_target()
         state = self._state(
             target,
             self._horizontal_axis(),
             base_angle=0,
             cabin_angle=1,
+            position=(26, 32),
         )
 
         valid, yaw_error, standoff_error = (
@@ -131,10 +133,10 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
 
         self.assertTrue(bool(valid))
         self.assertEqual(float(yaw_error), 0.0)
-        # v2: the base sits 8 cells (4.57 m) off the axis, well inside reach,
-        # and the diagnostic reports that offset instead of a flat in-band 0.
+        # v2: the diagnostic reports the signed offset / cone reach (1.14 / 6.50)
+        # instead of a flat in-band 0.
         self.assertAlmostEqual(
-            float(standoff_error), self._expected_v2_standoff(32.0), places=6
+            float(standoff_error), self._expected_v2_standoff(26.0), places=6
         )
         self.assertEqual(bool(jitted_valid), bool(valid))
         self.assertEqual(float(jitted_yaw), float(yaw_error))
@@ -145,8 +147,8 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertAlmostEqual(
             float(jitted_standoff), float(standoff_error), places=6
         )
-        self.assertEqual(int(dug.world.action_map.map[24, 37]), -1)
-        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 1)
+        self.assertEqual(int((np.asarray(dug.world.action_map.map) < 0).sum()), 5)
+        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 5)
         np.testing.assert_array_equal(
             jitted_dug.world.action_map.map,
             dug.world.action_map.map,
@@ -162,12 +164,13 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         )
         self.assertAlmostEqual(
             float(observation["fresh_trench_dig_standoff_error"]),
-            self._expected_v2_standoff(32.0),
+            self._expected_v2_standoff(26.0),
             places=6,
         )
 
-        # Same pose under v1: admitted too (it is inside the retired band), but
-        # the exported standoff collapses to the band-relative 0.0.
+        # The old sideways-lane pose (8 cells = 4.57 m off) under v1: admitted,
+        # it is inside the retired band, and the exported standoff collapses to
+        # the band-relative 0.0.
         v1_state = self._state(
             target,
             self._horizontal_axis(),
@@ -254,8 +257,10 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             [0, 1, -24, 24, 20, 24, 50, 1],
             [1, 0, -40, 16, 40, 42, 40, 1],
         )
+        # On the horizontal line at (24, 32), cone ahead: the junction cell
+        # (24, 40) is shared, (26, 40) is exclusive to the perpendicular axis.
         target = np.zeros(self.SHAPE, dtype=np.int8)
-        horizontal_cell = (24, 37)
+        horizontal_cell = (24, 40)
         vertical_cell = (26, 40)
         target[horizontal_cell] = -1
         target[vertical_cell] = -1
@@ -264,7 +269,8 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             target,
             axes,
             base_angle=0,
-            cabin_angle=1,
+            cabin_angle=0,
+            position=(24, 32),
         )
         rejected = mixed._handle_do()
         valid, yaw_error, _ = mixed._get_fresh_trench_dig_alignment()
@@ -279,7 +285,8 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             axes,
             action=vertical_done,
             base_angle=0,
-            cabin_angle=1,
+            cabin_angle=0,
+            position=(24, 32),
         )._handle_do()
         self.assertEqual(
             int(along_horizontal.world.action_map.map[horizontal_cell]), -1
@@ -287,12 +294,14 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
 
         horizontal_done = np.zeros(self.SHAPE, dtype=np.int8)
         horizontal_done[horizontal_cell] = -1
+        # From the vertical line at (34, 40), chassis parallel to it.
         along_vertical = self._state(
             target,
             axes,
             action=horizontal_done,
             base_angle=3,
-            cabin_angle=10,
+            cabin_angle=0,
+            position=(34, 40),
         )._handle_do()
         self.assertEqual(
             int(along_vertical.world.action_map.map[vertical_cell]), -1
@@ -329,9 +338,11 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertEqual(int(np.asarray(dumped.world.action_map.map).sum()), 5)
 
     def test_complete_short_trench_and_backward_progression_are_feasible(self):
+        """On the line: dig the five cells ahead, swing to the zone beside the
+        machine, dump, then retreat one move along the axis."""
         target = np.zeros(self.SHAPE, dtype=np.int8)
-        dig_cells = [(24, 37), (24, 38), (24, 39)]
-        dump_cells = [(40, 27), (40, 28), (40, 29)]
+        dig_cells = [(24, c) for c in (39, 40, 41, 42, 43)]
+        dump_cells = [(r, c) for r in (31, 32, 33) for c in (31, 32, 33)]
         for cell in dig_cells:
             target[cell] = -1
         for cell in dump_cells:
@@ -341,10 +352,11 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             target,
             self._horizontal_axis(),
             base_angle=0,
-            cabin_angle=2,
+            cabin_angle=0,
+            position=(24, 32),
         )
         dug = state._handle_do()
-        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 3)
+        self.assertEqual(int(dug._get_current_agent_state().loaded[0]), 5)
         self.assertTrue(
             all(
                 int(dug.world.action_map.map[cell]) == -1
@@ -364,9 +376,10 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertEqual(float(completion["absolute_completion"]), 1.0)
 
         retreated = TerraEnv.wrap_state(dumped)._handle_move_backward()
+        # Backward along the axis: same row, five cells back.
         np.testing.assert_array_equal(
             retreated._get_current_agent_state().pos_base,
-            np.array([32, 27], dtype=np.int16),
+            np.array([24, 27], dtype=np.int16),
         )
 
     def test_v1_standoff_band_reports_signed_close_and_far_errors(self):
@@ -404,46 +417,59 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertEqual(float(far_yaw), 0.0)
         self.assertGreater(float(far_error), 0.0)
 
-    def test_v2_admits_the_poses_the_band_refused_and_reports_the_offset(self):
-        """Same two poses under v2: reach is the cone's job, so both dig."""
-        close_target = np.zeros(self.SHAPE, dtype=np.int8)
-        close_target[24, 37] = -1
-        close = self._state(
-            close_target,
-            self._horizontal_axis(),
-            base_angle=0,
-            cabin_angle=1,
+    def test_v2_on_the_line_clause_admits_near_line_and_refuses_the_sideways_lane(self):
+        """v2 = yaw-parallel AND perpendicular offset <= 2.0 m.
+
+        Yaw alone still admitted the old sideways lane (parallel at 3-6 m to
+        the side, cabin swung in), which is not "on top of the trench".  The
+        on-line clause closes that: near-line poses dig, the lane is refused,
+        and the exported standoff is the signed offset / cone reach either way.
+        """
+        strip = self._on_axis_strip_target()
+
+        near = self._state(
+            strip, self._horizontal_axis(), base_angle=0, cabin_angle=0,
+            position=(26, 32),
+        )
+        near_valid, near_yaw, near_error = near._get_fresh_trench_dig_alignment()
+        self.assertTrue(bool(near_valid))
+        self.assertEqual(float(near_yaw), 0.0)
+        self.assertAlmostEqual(
+            float(near_error), self._expected_v2_standoff(26.0), places=6
+        )
+        self.assertEqual(
+            int((np.asarray(near._handle_do().world.action_map.map) < 0).sum()), 5
+        )
+
+        # 5 cells = 2.86 m off: v1's "too close", v2's "off the line".
+        lane = self._state(
+            strip, self._horizontal_axis(), base_angle=0, cabin_angle=1,
             position=(29, 32),
         )
-        close_valid, close_yaw, close_error = (
-            close._get_fresh_trench_dig_alignment()
-        )
-        self.assertTrue(bool(close_valid))
-        self.assertEqual(float(close_yaw), 0.0)
-        # 5 cells = 2.86 m off the axis: no longer an error, just an offset.
+        lane_valid, lane_yaw, lane_error = lane._get_fresh_trench_dig_alignment()
+        self.assertFalse(bool(lane_valid))
+        self.assertEqual(float(lane_yaw), 0.0)
         self.assertAlmostEqual(
-            float(close_error), self._expected_v2_standoff(29.0), places=6
+            float(lane_error), self._expected_v2_standoff(29.0), places=6
         )
-        self.assertEqual(int(close._handle_do().world.action_map.map[24, 37]), -1)
+        self.assertEqual(
+            int((np.asarray(lane._handle_do().world.action_map.map) < 0).sum()), 0
+        )
 
+        # 13 cells = 7.43 m off, past the cone's reach: refused, offset saturates.
         wide_axis = self._axes([0, 1, -24, 24, 20, 24, 50, 2])
         far_target = np.zeros(self.SHAPE, dtype=np.int8)
         far_target[26, 32] = -1
         far = self._state(
-            far_target,
-            wide_axis,
-            base_angle=0,
-            cabin_angle=3,
-            position=(37, 32),
+            far_target, wide_axis, base_angle=0, cabin_angle=3, position=(37, 32)
         )
         far_valid, far_yaw, far_error = far._get_fresh_trench_dig_alignment()
-        self.assertTrue(bool(far_valid))
+        self.assertFalse(bool(far_valid))
         self.assertEqual(float(far_yaw), 0.0)
-        # 13 cells = 7.43 m off the axis is past the cone's 6.50 m reach, so the
-        # normalized offset saturates at exactly +1.0.  The cell it digs is
-        # nonetheless radially reachable, which is the point: the cone decides.
         self.assertEqual(float(far_error), 1.0)
-        self.assertEqual(int(far._handle_do().world.action_map.map[26, 32]), -1)
+        self.assertEqual(
+            int((np.asarray(far._handle_do().world.action_map.map) < 0).sum()), 0
+        )
 
     # ---------------------------------------------------------------- #
     # v2 semantics: the on-axis dig-ahead pattern v1 wrongly refused    #

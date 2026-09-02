@@ -138,6 +138,7 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # The v2 gate-semantics selector was appended later still. It is inert
     # whenever the gate itself is disabled, which the v1 benchmark requires.
     payload.pop("trench_dig_standoff_enforced")
+    payload.pop("trench_dig_max_offset_m")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

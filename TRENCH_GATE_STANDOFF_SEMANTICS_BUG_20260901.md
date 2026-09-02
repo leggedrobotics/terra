@@ -82,6 +82,26 @@ digs, a machine > 7 m out cannot reach anyway, and any bound re-introduces an
 unshaped positional cliff. It is the fallback if v2 admits stations the ROS
 stack later rejects.
 
+### 3.1 The on-the-line clause (added 2026-09-02 after manual play)
+
+Yaw-parallel alone was not enough. Playing v2, Lorenzo could still dig from the
+old sideways lane: chassis parallel (yaw 0.0 deg) but 3.84 m and 6.52 m to the
+side of the line with the cabin swung 60-120 deg to reach in (session
+`manual_trench_slot455_20260902_091337.jsonl`, seq 203 and 221). Dropping the
+band had removed the *prohibition* of the on-axis pose without adding the
+*requirement* for it. His intent is "on top of the trench", which is a MAXIMUM
+perpendicular offset, not a minimum.
+
+v2 pose validity is now: chassis yaw parallel within tolerance AND perpendicular
+offset of the base centre to the axis `<= EnvConfig.trench_dig_max_offset_m`
+(appended last; `<= 0` disables the clause; ignored under v1). The exported
+standoff observation is unchanged (signed offset / cone reach). On the integer
+lattice the admitted offsets are 0, 0.57, 1.14, 1.71 m (0-3 cells) at 2.0 m;
+2.29 m (4 cells) and beyond are refused. The default 2.0 m is provisional: a
+coverage sweep over {1.14, 1.71, 2.29, 2.86, 3.43, disabled} m picks the
+smallest bound that loses no coverage (oblique 30-deg lanes drift up to
+~1.5 m over a traverse, so the bound cannot be arbitrarily tight).
+
 ## 4. The completed pilot re-scored under v2
 
 `tools/rescore_trench_pilot_v2_admissibility.py` over the frozen u85,000 probe

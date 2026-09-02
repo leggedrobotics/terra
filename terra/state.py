@@ -2413,12 +2413,21 @@ class State(NamedTuple):
             # v1 required the perpendicular standoff to sit in a lateral band.
             # v2 leaves working distance to the dig cone, which already tests it
             # radially, machine -> cell, and keeps only the yaw-parallel clause.
-            standoff_clause = jnp.logical_or(
-                ~standoff_enforced,
+            # v2 "on the line": perpendicular offset at most
+            # trench_dig_max_offset_m (disabled when <= 0). Under v1 the band
+            # applies instead.
+            max_offset = jnp.float32(self.env_cfg.trench_dig_max_offset_m)
+            on_line_clause = jnp.logical_or(
+                max_offset <= jnp.float32(0.0),
+                standoffs_m <= max_offset,
+            )
+            standoff_clause = jnp.where(
+                standoff_enforced,
                 jnp.logical_and(
                     standoffs_m >= standoff_min,
                     standoffs_m <= standoff_max,
                 ),
+                on_line_clause,
             )
             axis_pose_valid = jnp.logical_and(
                 valid_axes,
