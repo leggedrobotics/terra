@@ -260,3 +260,17 @@ no longer read the pinned venv or even `/cluster/project/rsl/alesweber`
 (the pilot's archived checkpoints). Use `lterenzi` (in the group) for any
 Terra work that touches project storage; `TERRA_EULER_USER=lterenzi` switches
 the launcher. §6 Traps still applies in full.
+
+---
+
+## 11. UPDATE 2026-09-02 — merged to main; v2 generalist submitted
+
+Gate v2 final semantics: dig admitted iff chassis parallel to the section
+axis (<= 0.2619 rad) AND base centre within `trench_dig_max_offset_m` = 2.0 m
+of the line. Bound chosen from the sweep in
+`tools/trench_align_v2_maxoffset_sweep_20260902/` (zero gate-coverage loss at
+2.0 m; the instruments that "collapse" at tight bounds assume the machine never
+stands on the trench, i.e. the v1 lane). Everything is on `main`: Terra
+`facc44e6`, baselines `445ad79` (+ ledger). Job `12505854` under `lterenzi`.
+The manual debugger (`tools/manual_trench_debugger.py`) plays v2 by default,
+`--gate-v1` for the old band, `--max-offset-m` to vary the bound.
