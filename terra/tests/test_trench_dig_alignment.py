@@ -599,6 +599,62 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         dug_cols = np.nonzero(np.asarray(away._handle_do().world.action_map.map)[24] < 0)[0]
         np.testing.assert_array_equal(dug_cols, np.array([21, 22, 23, 24, 25]))
 
+    def test_per_cell_admission_digs_only_the_aligned_cells_at_a_junction(self):
+        """trench_dig_per_cell_admission=True: the aligned fresh cells in the
+        cone are dug, the perpendicular section's exclusive cells are left, and
+        the pose is valid. Default (False) keeps the all-or-nothing veto."""
+        axes = self._axes(
+            [0, 1, -24, 24, 20, 24, 50, 1],
+            [1, 0, -40, 16, 40, 42, 40, 1],
+        )
+        target = np.zeros(self.SHAPE, dtype=np.int8)
+        target[24, 20:51] = -1
+        target[16:43, 40] = -1
+        per_cell_cfg = self.cfg._replace(trench_dig_per_cell_admission=True)
+
+        veto = self._state(
+            target, axes, base_angle=0, cabin_angle=0, position=(24, 32)
+        )
+        veto_valid, _, _ = veto._get_fresh_trench_dig_alignment()
+        self.assertFalse(bool(veto_valid))
+
+        admitted = self._state(
+            target, axes, base_angle=0, cabin_angle=0, position=(24, 32),
+            cfg=per_cell_cfg,
+        )
+        valid, yaw_err, _ = admitted._get_fresh_trench_dig_alignment()
+        self.assertTrue(bool(valid))
+        self.assertLess(abs(float(yaw_err)), 1e-6)
+        dug = np.asarray(admitted._handle_do().world.action_map.map) < 0
+        dug_rows, dug_cols = np.nonzero(dug)
+        self.assertGreater(len(dug_rows), 0)
+        # every dug cell is on axis 0 (row 24) or a shared junction cell on
+        # column 40 next to it; cells exclusive to the perpendicular axis 1
+        # (its arms away from the junction) are left in place
+        self.assertTrue(np.all((dug_rows == 24) | (dug_cols == 40)))
+        self.assertTrue(np.all(dug_cols >= 33))
+        self.assertFalse(np.any(dug[16:23, 40]))
+        self.assertFalse(np.any(dug[26:43, 40]))
+        self.assertTrue(dug[24, 40] or np.any(dug[24, 33:40]))
+
+        # chassis at 90 deg to axis 0, cabin swung back along it (the pose the
+        # yaw clause refuses in test_v2_still_refuses_a_misaligned_pose_on_the_axis):
+        # five axis-0 cells are selected, none is admissible, so per-cell
+        # admission refuses the DO as well
+        misaligned = self._state(
+            target, axes, base_angle=3, cabin_angle=9, position=(24, 32),
+            cfg=per_cell_cfg,
+        )
+        self.assertGreater(
+            int(np.asarray(misaligned._mask_out_wrong_dig_tiles(
+                misaligned._build_dig_dump_cone())).sum()), 0)
+        mis_valid, _, _ = misaligned._get_fresh_trench_dig_alignment()
+        self.assertFalse(bool(mis_valid))
+        self.assertEqual(
+            int((np.asarray(misaligned._handle_do().world.action_map.map) < 0).sum()),
+            0,
+        )
+
     def test_v2_still_refuses_a_misaligned_pose_on_the_axis(self):
         """Dropping the band does not weaken the yaw clause.
 

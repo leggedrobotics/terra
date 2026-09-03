@@ -1191,7 +1191,7 @@ class ExactDumpContractTest(unittest.TestCase):
     def test_reward_fields_are_appended_for_legacy_positional_checkpoints(self):
         current = EnvConfig()
         self.assertEqual(
-            EnvConfig._fields[-10:-6],
+            EnvConfig._fields[-11:-7],
             (
                 "reward_stage",
                 "terminal_reward_mix",
@@ -1200,7 +1200,7 @@ class ExactDumpContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            EnvConfig._fields[-6:],
+            EnvConfig._fields[-7:],
             (
                 "enforce_trench_dig_alignment",
                 "trench_dig_yaw_tolerance_rad",
@@ -1208,6 +1208,7 @@ class ExactDumpContractTest(unittest.TestCase):
                 "trench_dig_standoff_max_m",
                 "trench_dig_standoff_enforced",
                 "trench_dig_max_offset_m",
+                "trench_dig_per_cell_admission",
             ),
         )
         legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-10]))
@@ -1229,6 +1230,7 @@ class ExactDumpContractTest(unittest.TestCase):
         # The v2 gate-semantics default: a legacy checkpoint replays with the
         # standoff band OFF, which is the corrected contract, not v1.
         self.assertFalse(restored.trench_dig_standoff_enforced)
+        self.assertFalse(restored.trench_dig_per_cell_admission)
         self.assertEqual(restored.trench_dig_max_offset_m, 2.0)
         # A checkpoint from the immediately preceding revision has all reward
         # fields but none of the new alignment fields.
