@@ -63,3 +63,30 @@ launcher arms `genpc` / `specpc`, eval fingerprint records it).
 Not adopted by default. Decision pending: restart the two arms under per-cell
 admission (new epoch) or continue under the veto. The u10000 checkpoint's
 residual junction failures are not addressed by this flag alone.
+
+## Geometric check (2026-09-03, `tools/check_trench_axis_sweep_feasibility.py`
+## on the gate_main/development panel, 176 maps, same code and configuration
+## for both rules, on-the-line 2.0 m, transcription self-checked against
+## Terra's gate: 0 mismatches over 371 applicable probes)
+
+On-axis lane, section C: stand on the section line, chassis parallel, cabin
+straight ahead or behind, move forward/backward only, one axis at a time
+(blocked = padding, the monotone-retreat model). Maps complete at tolerances
+0.5 / 1.0 / 2.0 tiles:
+
+| family | all-or-nothing veto | per-cell admission |
+|---|---|---|
+| straight (64) | 64 / 64 / 64 | 64 / 64 / 64 |
+| tee (32) | 2 / 4 / 5 | 32 / 32 / 32 |
+| segmented (32) | 0 / 2 / 5 | 32 / 32 / 32 |
+| net3 road (16) | 0 / 0 / 0 | 16 / 16 / 16 |
+
+Sections complete under the veto: tee 2-13/64, segmented 0-13/80, net3
+0/48; under per-cell every section. So under the current rule a junction
+cannot be dug by driving along one of its axes and digging ahead: the other
+branch's cells inside the cone veto the whole action. That contradicts the
+intended semantics (a junction is diggable from any of its axes; the policy
+chooses the order). Per-cell admission restores it without changing any
+straight map. Receipts: session scratchpad `junction_geometry/`
+(`axis_sweep_veto.json`, `axis_sweep_percell.json`, patched tool copy
+`axis_sweep_percell.py`, env `TRENCH_PER_CELL=1`).
