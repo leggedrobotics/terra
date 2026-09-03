@@ -252,7 +252,7 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertEqual(float(standoff_error), 0.0)
         self.assertEqual(int(dug.world.action_map.map[40, 37]), -1)
 
-    def test_intersection_requires_every_fresh_cell_to_have_a_valid_axis(self):
+    def test_intersection_digs_the_aligned_cell_and_leaves_the_perpendicular_one(self):
         axes = self._axes(
             [0, 1, -24, 24, 20, 24, 50, 1],
             [1, 0, -40, 16, 40, 42, 40, 1],
@@ -272,11 +272,16 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
             cabin_angle=0,
             position=(24, 32),
         )
-        rejected = mixed._handle_do()
+        # Per-cell admission: the shared junction cell is dug from the
+        # horizontal line, the cell exclusive to the perpendicular axis is
+        # left in place, and the pose is valid (yaw error 0 on the aligned
+        # axis). The all-or-nothing veto that refused this DO was removed.
+        admitted = mixed._handle_do()
         valid, yaw_error, _ = mixed._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(valid))
-        self.assertAlmostEqual(float(yaw_error), 1.0, places=6)
-        self.assertFalse(np.any(np.asarray(rejected.world.action_map.map)))
+        self.assertTrue(bool(valid))
+        self.assertAlmostEqual(float(yaw_error), 0.0, places=6)
+        self.assertEqual(int(admitted.world.action_map.map[horizontal_cell]), -1)
+        self.assertEqual(int(admitted.world.action_map.map[vertical_cell]), 0)
 
         vertical_done = np.zeros(self.SHAPE, dtype=np.int8)
         vertical_done[vertical_cell] = -1
@@ -566,8 +571,9 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         dug_cols = np.nonzero(np.asarray(state.world.action_map.map)[24] < 0)[0]
         np.testing.assert_array_equal(dug_cols, np.arange(24, 44))
 
-    def test_v2_junction_veto_still_fires_from_an_on_axis_pose(self):
-        """The all-or-nothing junction clause is untouched by v2."""
+    def test_v2_junction_dig_from_an_on_axis_pose_admits_only_the_aligned_cells(self):
+        """Digging into a T junction along one axis digs that axis's cells and
+        the shared junction cells; the perpendicular arm is left in place."""
         axes = self._axes(
             [0, 1, -24, 24, 20, 24, 50, 1],
             [1, 0, -40, 16, 40, 42, 40, 1],
@@ -577,17 +583,22 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         target[16:43, 40] = -1
 
         # On axis 0, aligned to it, digging ahead into the T junction: the cone
-        # reaches cells owned EXCLUSIVELY by the perpendicular axis 1, which is
-        # 90 deg off, so the complete DO is refused.
+        # also reaches cells owned EXCLUSIVELY by the perpendicular axis 1
+        # (90 deg off). Those are left in place; the axis-0 cells and the
+        # shared junction cells on column 40 next to it are dug.
         into_junction = self._state(
             target, axes, base_angle=0, cabin_angle=0, position=(24, 32)
         )
-        valid, _, _ = into_junction._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(valid))
-        self.assertEqual(
-            int((np.asarray(into_junction._handle_do().world.action_map.map) < 0).sum()),
-            0,
-        )
+        valid, yaw_err, _ = into_junction._get_fresh_trench_dig_alignment()
+        self.assertTrue(bool(valid))
+        self.assertLess(abs(float(yaw_err)), 1e-6)
+        dug = np.asarray(into_junction._handle_do().world.action_map.map) < 0
+        dug_rows, dug_cols = np.nonzero(dug)
+        self.assertGreater(len(dug_rows), 0)
+        self.assertTrue(np.all((dug_rows == 24) | (dug_cols == 40)))
+        self.assertTrue(np.all(dug_cols >= 33))
+        self.assertFalse(np.any(dug[16:23, 40]))
+        self.assertFalse(np.any(dug[26:43, 40]))
 
         # Same pose, cabin turned around to dig away from the junction: only
         # axis-0 cells are selected and the dig is admitted.
@@ -598,62 +609,6 @@ class FreshTrenchDigAlignmentTest(unittest.TestCase):
         self.assertTrue(bool(away_valid))
         dug_cols = np.nonzero(np.asarray(away._handle_do().world.action_map.map)[24] < 0)[0]
         np.testing.assert_array_equal(dug_cols, np.array([21, 22, 23, 24, 25]))
-
-    def test_per_cell_admission_digs_only_the_aligned_cells_at_a_junction(self):
-        """trench_dig_per_cell_admission=True: the aligned fresh cells in the
-        cone are dug, the perpendicular section's exclusive cells are left, and
-        the pose is valid. Default (False) keeps the all-or-nothing veto."""
-        axes = self._axes(
-            [0, 1, -24, 24, 20, 24, 50, 1],
-            [1, 0, -40, 16, 40, 42, 40, 1],
-        )
-        target = np.zeros(self.SHAPE, dtype=np.int8)
-        target[24, 20:51] = -1
-        target[16:43, 40] = -1
-        per_cell_cfg = self.cfg._replace(trench_dig_per_cell_admission=True)
-
-        veto = self._state(
-            target, axes, base_angle=0, cabin_angle=0, position=(24, 32)
-        )
-        veto_valid, _, _ = veto._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(veto_valid))
-
-        admitted = self._state(
-            target, axes, base_angle=0, cabin_angle=0, position=(24, 32),
-            cfg=per_cell_cfg,
-        )
-        valid, yaw_err, _ = admitted._get_fresh_trench_dig_alignment()
-        self.assertTrue(bool(valid))
-        self.assertLess(abs(float(yaw_err)), 1e-6)
-        dug = np.asarray(admitted._handle_do().world.action_map.map) < 0
-        dug_rows, dug_cols = np.nonzero(dug)
-        self.assertGreater(len(dug_rows), 0)
-        # every dug cell is on axis 0 (row 24) or a shared junction cell on
-        # column 40 next to it; cells exclusive to the perpendicular axis 1
-        # (its arms away from the junction) are left in place
-        self.assertTrue(np.all((dug_rows == 24) | (dug_cols == 40)))
-        self.assertTrue(np.all(dug_cols >= 33))
-        self.assertFalse(np.any(dug[16:23, 40]))
-        self.assertFalse(np.any(dug[26:43, 40]))
-        self.assertTrue(dug[24, 40] or np.any(dug[24, 33:40]))
-
-        # chassis at 90 deg to axis 0, cabin swung back along it (the pose the
-        # yaw clause refuses in test_v2_still_refuses_a_misaligned_pose_on_the_axis):
-        # five axis-0 cells are selected, none is admissible, so per-cell
-        # admission refuses the DO as well
-        misaligned = self._state(
-            target, axes, base_angle=3, cabin_angle=9, position=(24, 32),
-            cfg=per_cell_cfg,
-        )
-        self.assertGreater(
-            int(np.asarray(misaligned._mask_out_wrong_dig_tiles(
-                misaligned._build_dig_dump_cone())).sum()), 0)
-        mis_valid, _, _ = misaligned._get_fresh_trench_dig_alignment()
-        self.assertFalse(bool(mis_valid))
-        self.assertEqual(
-            int((np.asarray(misaligned._handle_do().world.action_map.map) < 0).sum()),
-            0,
-        )
 
     def test_v2_still_refuses_a_misaligned_pose_on_the_axis(self):
         """Dropping the band does not weaken the yaw clause.

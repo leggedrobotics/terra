@@ -2590,30 +2590,24 @@ class State(NamedTuple):
                 finite_section_metadata,
                 fresh_trench_target,
             )
-            # Junction admission (EnvConfig.trench_dig_per_cell_admission).
-            # all-or-nothing (False): DO remains one macro action, admitted
-            # only if its complete selected fresh workspace is pose-valid.
-            # per-cell (True): the pose-valid fresh cells are dug, the other
-            # fresh cells in the cone are left in place, and the pose is
-            # valid when at least one fresh cell is admissible.
-            per_cell = jnp.bool_(self.env_cfg.trench_dig_per_cell_admission)
+            # Per-cell admission: the pose-valid fresh cells in the cone are
+            # dug, the other fresh cells are left in place, and the pose is
+            # valid when at least one fresh cell is admissible. The former
+            # all-or-nothing junction veto (refuse the whole DO if any fresh
+            # cell in the cone is owned exclusively by a section the pose is
+            # not aligned with) was removed on 2026-09-03: it refused every
+            # dig into a crossing approached along one of its own axes, so
+            # tee / segmented / net maps could not be completed axis by axis.
+            # See TRENCH_JUNCTION_PER_CELL_ADMISSION_20260903.md.
             cell_admissible = jnp.logical_or(
                 jnp.logical_not(fresh_trench_target),
                 fresh_cell_pose_valid,
             )
-            valid_all_or_nothing = jnp.all(cell_admissible)
-            valid_per_cell = jnp.any(
+            valid = jnp.any(
                 jnp.logical_and(fresh_trench_target, fresh_cell_pose_valid)
             )
-            valid = jnp.where(per_cell, valid_per_cell, valid_all_or_nothing)
-            admitted_dig_mask = jnp.where(
-                per_cell,
-                jnp.logical_and(dig_mask, cell_admissible.reshape(dig_mask.shape)),
-                jnp.where(
-                    valid_all_or_nothing,
-                    dig_mask,
-                    jnp.zeros_like(dig_mask, dtype=jnp.bool_),
-                ),
+            admitted_dig_mask = jnp.logical_and(
+                dig_mask, cell_admissible.reshape(dig_mask.shape)
             )
 
             diagnostic_pool = jnp.where(
