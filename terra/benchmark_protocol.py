@@ -139,7 +139,6 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # whenever the gate itself is disabled, which the v1 benchmark requires.
     payload.pop("trench_dig_standoff_enforced")
     payload.pop("trench_dig_max_offset_m")
-    payload.pop("trench_dig_per_cell_admission")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

@@ -47,22 +47,25 @@ deadlock.
 
 ## Implementation
 
-`EnvConfig.trench_dig_per_cell_admission` (default False = the all-or-nothing
-veto of the pilot and v2 contracts). `State._get_fresh_trench_dig_alignment_details`
-computes both validities and returns the admitted dig mask; under per-cell the
-mask is `dig_mask & (not fresh_trench_target | fresh_cell_pose_valid)`. Yaw and
-on-the-line clauses are unchanged. Test:
-`test_per_cell_admission_digs_only_the_aligned_cells_at_a_junction`.
-`benchmark_protocol` pops the field like the other gate fields. terra-baselines
-threads it as `trench_dig_per_cell_admission` (presets
-`trench_align_v2pc_generalist_gen` / `trench_align_v2pc_specialist_spec`, Euler
-launcher arms `genpc` / `specpc`, eval fingerprint records it).
+2026-09-03, Terra main: the all-or-nothing junction veto is REMOVED (user
+decision after the geometric check below). `State._get_fresh_trench_dig_alignment_details`
+now always admits per cell: the admitted dig mask is
+`dig_mask & (not fresh_trench_target | fresh_cell_pose_valid)` and the
+exported `fresh_trench_dig_alignment_valid` bit is 1 when at least one fresh
+cell in the cone is admissible. Yaw and on-the-line clauses are unchanged.
+There is no configuration switch; the pilot (v1) and the veto-era v2 runs
+are replayable only from their own Terra revisions (veto era ends at
+c703c4eb). Tests: `test_intersection_digs_the_aligned_cell_and_leaves_the_perpendicular_one`,
+`test_v2_junction_dig_from_an_on_axis_pose_admits_only_the_aligned_cells`.
+terra-baselines: no field; the Euler launcher arms `genpc` / `specpc` and
+the run contract's `gate_semantics=v2_yaw_parallel_on_the_line_per_cell_admission`
+label the epoch, and the Terra revision pin carries the semantics.
 
 ## Status
 
-Not adopted by default. Decision pending: restart the two arms under per-cell
-admission (new epoch) or continue under the veto. The u10000 checkpoint's
-residual junction failures are not addressed by this flag alone.
+Adopted. Veto-era runs cancelled on 2026-09-03 (Euler generalist 12508156
+at u14,000, CSCS specialist 4586880 at u18,000); both arms relaunched under
+per-cell admission.
 
 ## Geometric check (2026-09-03, `tools/check_trench_axis_sweep_feasibility.py`
 ## on the gate_main/development panel, 176 maps, same code and configuration
