@@ -307,6 +307,17 @@ class EnvConfig(NamedTuple):
     # 2.0 m is provisional pending the coverage sweep; see
     # TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
     trench_dig_max_offset_m: float = 2.0
+    # Junction admission. False (default, the pilot and v2 contract): DO is one
+    # macro action, admitted only if EVERY fresh trench cell in the cone has a
+    # pose-valid owning section (all-or-nothing veto). True: the pose-valid
+    # fresh cells are dug and the others are left in place; the exported
+    # ``fresh_trench_dig_alignment_valid`` bit is 1 when at least one fresh
+    # cell is admissible. Motivation: at u10000 the v2 generalist completed
+    # 0/160 junction panel episodes; the veto was 36% of its gate-invalid
+    # junction poses (0% on straights) and structurally total between two
+    # oblique segments (no yaw parallel to both). Scratch A/B on the same
+    # checkpoint: junction dig fraction 0.37 -> 0.52, straights unchanged.
+    trench_dig_per_cell_admission: bool = False
 
     @classmethod
     def new(cls):

@@ -2474,14 +2474,30 @@ class State(NamedTuple):
                 ),
                 axis=0,
             )
-            # DO remains one macro action: admit its complete selected fresh
-            # workspace or reject it.  Do not turn alignment into a hidden
-            # per-cell action mask at multi-axis junctions.
-            valid = jnp.all(
-                jnp.logical_or(
-                    jnp.logical_not(fresh_trench_target),
-                    fresh_cell_pose_valid,
-                )
+            # Junction admission (EnvConfig.trench_dig_per_cell_admission).
+            # all-or-nothing (False): DO remains one macro action, admitted
+            # only if its complete selected fresh workspace is pose-valid.
+            # per-cell (True): the pose-valid fresh cells are dug, the other
+            # fresh cells in the cone are left in place, and the pose is
+            # valid when at least one fresh cell is admissible.
+            per_cell = jnp.bool_(self.env_cfg.trench_dig_per_cell_admission)
+            cell_admissible = jnp.logical_or(
+                jnp.logical_not(fresh_trench_target),
+                fresh_cell_pose_valid,
+            )
+            valid_all_or_nothing = jnp.all(cell_admissible)
+            valid_per_cell = jnp.any(
+                jnp.logical_and(fresh_trench_target, fresh_cell_pose_valid)
+            )
+            valid = jnp.where(per_cell, valid_per_cell, valid_all_or_nothing)
+            admitted_dig_mask = jnp.where(
+                per_cell,
+                jnp.logical_and(dig_mask, cell_admissible.reshape(dig_mask.shape)),
+                jnp.where(
+                    valid_all_or_nothing,
+                    dig_mask,
+                    jnp.zeros_like(dig_mask, dtype=jnp.bool_),
+                ),
             )
 
             diagnostic_pool = jnp.where(
@@ -2508,11 +2524,7 @@ class State(NamedTuple):
                 valid,
                 yaw_errors_normalized[diagnostic_axis],
                 standoff_errors_normalized[diagnostic_axis],
-                jnp.where(
-                    valid,
-                    dig_mask,
-                    jnp.zeros_like(dig_mask, dtype=jnp.bool_),
-                ),
+                admitted_dig_mask,
             )
 
         return jax.lax.cond(
