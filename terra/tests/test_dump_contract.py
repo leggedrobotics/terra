@@ -939,6 +939,48 @@ class ExactDumpContractTest(unittest.TestCase):
             0,
         )
 
+    def test_productive_workspace_counter_keeps_reset_to_step_abstract_dtype(self):
+        env = TerraEnv.new(self.SHAPE[0])
+        reset_args = (
+            jax.random.PRNGKey(7),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            -97.0 * np.ones((4, 8), dtype=np.float32),
+            np.int32(-1),
+            -97.0 * np.ones((64, 3), dtype=np.float32),
+            np.int32(-1),
+            np.ones(self.SHAPE, dtype=np.bool_),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.ones(self.SHAPE, dtype=np.float32),
+            self._env_config(),
+        )
+
+        def reset_and_step_counters(initial_agent_supplied):
+            reset = env.reset(*reset_args)
+            if initial_agent_supplied:
+                reset = env.reset(*reset_args, initial_agent=reset.state.agent)
+            step = env.step_no_reset(
+                reset.state, TrackedAction.do_nothing(), reset.env_cfg
+            )
+            return (
+                reset.state.productive_workspace_cycles,
+                step.state.productive_workspace_cycles,
+            )
+
+        for initial_agent_supplied in (False, True):
+            with self.subTest(initial_agent_supplied=initial_agent_supplied):
+                # Trace the real reset/step paths without compiling the simulator.
+                # Unlike eval_shape's ShapeDtypeStruct on older JAX, these avals
+                # preserve weak_type, which is part of the JIT input signature.
+                reset_aval, step_aval = jax.make_jaxpr(
+                    lambda: reset_and_step_counters(initial_agent_supplied)
+                )().out_avals
+                self.assertEqual(reset_aval.shape, step_aval.shape)
+                self.assertEqual(reset_aval.dtype, np.dtype(np.int32))
+                self.assertEqual(reset_aval.dtype, step_aval.dtype)
+                self.assertFalse(reset_aval.weak_type)
+                self.assertFalse(step_aval.weak_type)
+
     def test_terminal_objective_is_terminal_only_and_orders_successes(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
         target[20:22, 20:22] = -1
