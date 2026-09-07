@@ -82,12 +82,24 @@ class AdmissibleDigLocalMapTest(unittest.TestCase):
 
     @staticmethod
     def _strip_target():
-        # Horizontal strip along row 24 (the axis) plus a sideways spur so
-        # that at least one cabin angle sees a cell of a second, misaligned
-        # section at a junction-free pose.
+        # Horizontal strip along row 24, with no junction cells.
         target = np.zeros((64, 64), dtype=np.int8)
         target[24, 20:50] = -1
         return target
+
+    @classmethod
+    def _junction(cls):
+        axes = cls._axes(
+            [0, 1, -24, 24, 20, 24, 50, 1],
+            [1, 0, -40, 16, 40, 42, 40, 1],
+        )
+        shared = (24, 40)
+        horizontal_only = (24, 42)
+        vertical_only = (26, 40)
+        target = np.zeros(cls.SHAPE, dtype=np.int8)
+        for cell in (shared, horizontal_only, vertical_only):
+            target[cell] = -1
+        return target, axes, shared, horizontal_only, vertical_only
 
     def _expected_per_angle(self, state):
         """Gate verdict per cyl cone, evaluated by the prospective-DO gate."""
@@ -149,6 +161,72 @@ class AdmissibleDigLocalMapTest(unittest.TestCase):
         # Targets are in reach of several cabin angles, none is admissible.
         self.assertGreater(int(target_neg.sum()), 0)
         self.assertEqual(int(observed.sum()), 0)
+
+    def test_junction_counts_match_do_from_either_owning_axis(self):
+        target, axes, shared, horizontal_only, vertical_only = self._junction()
+        do = jax.jit(lambda state: state._handle_do())
+        approaches = (
+            (0, (24, 32), horizontal_only, vertical_only),
+            (3, (34, 40), vertical_only, horizontal_only),
+        )
+        for base_angle, position, aligned_only, unaligned_only in approaches:
+            with self.subTest(base_angle=base_angle):
+                state = self._state(
+                    target, axes, base_angle=base_angle,
+                    cabin_angle=0, position=position,
+                )
+                membership = np.asarray(state.world.trench_axis_membership)
+                self.assertEqual(int(membership[shared]), 0b11)
+                self.assertEqual(int(membership[horizontal_only]), 0b01)
+                self.assertEqual(int(membership[vertical_only]), 0b10)
+
+                expected, _ = self._expected_per_angle(state)
+                obs, observed = self._observed(state)
+                np.testing.assert_array_equal(observed, expected)
+                self.assertEqual(int(observed[0]), 2)
+                self.assertEqual(float(obs["fresh_trench_dig_alignment_valid"]), 1.0)
+
+                # All three targets lie beyond the inner cone-cleaning band,
+                # so each local count also equals the actual fresh DO volume.
+                # Restart from the same fresh state for every cabin heading.
+                for cabin_angle in range(12):
+                    with self.subTest(cabin_angle=cabin_angle):
+                        candidate = state._set_current_agent_state(
+                            state._get_current_agent_state()._replace(
+                                angle_cabin=jnp.array([cabin_angle], dtype=jnp.int8),
+                            )
+                        )
+                        result = do(candidate)
+                        dug = np.asarray(result.world.action_map.map) < 0
+                        self.assertEqual(int(dug.sum()), int(observed[cabin_angle]))
+                        self.assertFalse(dug[unaligned_only])
+                        self.assertEqual(
+                            int(result._get_current_agent_state().loaded[0]),
+                            int(dug.sum()),
+                        )
+                        if cabin_angle == 0:
+                            # The same shared cell is diggable from BOTH axes;
+                            # another aligned section cannot admit an unowned cell.
+                            self.assertTrue(dug[shared])
+                            self.assertTrue(dug[aligned_only])
+
+    def test_junction_rejects_pose_aligned_with_neither_owning_axis(self):
+        target, axes, _, _, _ = self._junction()
+        # Rotate the chassis 30 degrees while keeping the cabin cone pointed
+        # along the horizontal section. Neither section accepts that yaw.
+        state = self._state(
+            target, axes, base_angle=1, cabin_angle=11, position=(24, 32)
+        )
+        expected, _ = self._expected_per_angle(state)
+        obs, observed = self._observed(state)
+        np.testing.assert_array_equal(observed, expected)
+        np.testing.assert_array_equal(observed, np.zeros((12,), dtype=IntMap))
+        self.assertGreater(int(-np.asarray(obs["local_map_target_neg"])[0]), 0)
+        self.assertEqual(float(obs["fresh_trench_dig_alignment_valid"]), 0.0)
+        np.testing.assert_array_equal(
+            np.asarray(state._handle_do().world.action_map.map),
+            np.asarray(state.world.action_map.map),
+        )
 
     def test_neutral_cases_reduce_to_fresh_target_count(self):
         axes = self._axes([0, 1, -24, 24, 20, 24, 50, 1])

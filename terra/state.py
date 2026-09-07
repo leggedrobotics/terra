@@ -2295,8 +2295,8 @@ class State(NamedTuple):
         Returns ``(section_membership, axis_has_fresh, yaw_errors_normalized,
         standoff_errors_normalized, axis_pose_valid, fresh_cell_pose_valid)``.
         This is the whole positional clause of the fresh-trench gate; callers
-        decide how to fold the per-cell result (one macro DO verdict, or one
-        count per cabin angle).
+        use the same per-cell result for the admitted DO mask and the counts
+        per cabin angle.
         """
         cur = self._get_current_agent_state()
         max_axes = axes.shape[0]
@@ -2443,6 +2443,8 @@ class State(NamedTuple):
                 ),
             ),
         )
+        # A shared junction cell is admitted by ANY owning section that
+        # accepts this pose, so either aligned approach can excavate it.
         fresh_cell_pose_valid = jnp.any(
             jnp.logical_and(
                 section_membership,
@@ -2459,6 +2461,24 @@ class State(NamedTuple):
             fresh_cell_pose_valid,
         )
 
+    @staticmethod
+    def _admit_fresh_trench_cells(
+        candidate_mask: Array,
+        fresh_trench_target: Array,
+        pose_valid: Array,
+    ) -> Array:
+        """Apply per-cell trench admission for both DO and local observations.
+
+        ``pose_valid`` already combines all owning sections with OR. Candidates
+        outside the fresh trench subset keep their existing eligibility.
+        """
+        cell_admissible = jnp.logical_or(
+            jnp.logical_not(fresh_trench_target), pose_valid
+        )
+        return jnp.logical_and(
+            candidate_mask, cell_admissible.reshape(candidate_mask.shape)
+        )
+
     def _fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
         """Per-cell view of the fresh-trench gate for the CURRENT base pose.
 
@@ -2467,9 +2487,10 @@ class State(NamedTuple):
         a section that is pose-valid for the current chassis yaw (the same
         section clause a prospective DO is judged by) and True everywhere when
         the gate is inapplicable (non-excavator, loaded, non-trench map, no
-        fresh trench cell), where the gate is neutral. A DO at cabin angle k is
-        admitted iff none of its cone's fresh trench cells is pose-invalid;
-        ``LocalMapWrapper`` folds that into ``local_map_admissible_dig``.
+        fresh trench cell), where the gate is neutral. A fresh trench cell is
+        admitted when any owning section accepts the pose; other branch cells
+        remain in place. ``LocalMapWrapper`` counts these admitted cells in
+        each cabin cone as ``local_map_admissible_dig``.
         """
         cur = self._get_current_agent_state()
         target = _as_2d_map(self.world.target_map.map)
@@ -2599,15 +2620,11 @@ class State(NamedTuple):
             # dig into a crossing approached along one of its own axes, so
             # tee / segmented / net maps could not be completed axis by axis.
             # See TRENCH_JUNCTION_PER_CELL_ADMISSION_20260903.md.
-            cell_admissible = jnp.logical_or(
-                jnp.logical_not(fresh_trench_target),
-                fresh_cell_pose_valid,
-            )
             valid = jnp.any(
                 jnp.logical_and(fresh_trench_target, fresh_cell_pose_valid)
             )
-            admitted_dig_mask = jnp.logical_and(
-                dig_mask, cell_admissible.reshape(dig_mask.shape)
+            admitted_dig_mask = self._admit_fresh_trench_cells(
+                dig_mask, fresh_trench_target, fresh_cell_pose_valid
             )
 
             diagnostic_pool = jnp.where(
