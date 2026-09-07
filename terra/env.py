@@ -37,6 +37,7 @@ class TerraEnv(NamedTuple):
     rendering_engine: Game | None = None
     movement_feasibility_observation: bool = False
     previous_outcome_observation: bool = False
+    executable_dig_observation: bool = False
 
     @classmethod
     def new(
@@ -48,6 +49,7 @@ class TerraEnv(NamedTuple):
         display: bool = False,
         movement_feasibility_observation: bool = False,
         previous_outcome_observation: bool = False,
+        executable_dig_observation: bool = False,
     ) -> "TerraEnv":
         re = None
         baseline_map_size = 64
@@ -87,6 +89,7 @@ class TerraEnv(NamedTuple):
             rendering_engine=re,
             movement_feasibility_observation=movement_feasibility_observation,
             previous_outcome_observation=previous_outcome_observation,
+            executable_dig_observation=executable_dig_observation,
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -123,7 +126,9 @@ class TerraEnv(NamedTuple):
             distance_map_override=distance_map,
             initial_agent=initial_agent,
         )
-        state = self.wrap_state(state)
+        state = self.wrap_state(
+            state, executable_dig_observation=self.executable_dig_observation
+        )
 
         observations = self._with_feedback_observations(
             state,
@@ -194,6 +199,12 @@ class TerraEnv(NamedTuple):
             "reward_v2_horizon_failure": zero,
             "reward_v2_step": zero,
             "reward_v2_valid": zero,
+            "reward_v2_lateral_dig": zero,
+            "reward_v2_base_travel": zero,
+            "reward_v2_base_turn": zero,
+            "reward_v2_fresh_dig_volume": zero,
+            "reward_v2_base_travel_m": zero,
+            "reward_v2_base_turn_rad": zero,
         }
 
     @staticmethod
@@ -301,9 +312,16 @@ class TerraEnv(NamedTuple):
         )
 
     @staticmethod
-    def wrap_state(state: State, update_reachability: jnp.bool_ = jnp.bool_(True)) -> State:
+    def wrap_state(
+        state: State,
+        update_reachability: jnp.bool_ = jnp.bool_(True),
+        *,
+        executable_dig_observation: bool | None = None,
+    ) -> State:
         state = TraversabilityMaskWrapper.wrap(state, update_reachability=update_reachability)
-        state = LocalMapWrapper.wrap(state)
+        state = LocalMapWrapper.wrap(
+            state, executable_dig_observation=executable_dig_observation
+        )
         return state
 
     @partial(jax.jit, static_argnums=(0,))
@@ -336,7 +354,9 @@ class TerraEnv(NamedTuple):
             action_map,
             distance_map_override=distance_map,
         )
-        state = self.wrap_state(state)
+        state = self.wrap_state(
+            state, executable_dig_observation=self.executable_dig_observation
+        )
         observations = self._with_feedback_observations(
             state,
             self._state_to_obs_dict(state),
@@ -442,7 +462,10 @@ class TerraEnv(NamedTuple):
         is_do = action.action[0] == TrackedActionType.DO
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
-        new_state = self.wrap_state(new_state, update_reachability=update_reachability)
+        new_state = self.wrap_state(
+            new_state, update_reachability=update_reachability,
+            executable_dig_observation=self.executable_dig_observation,
+        )
         obs = self._with_feedback_observations(
             new_state,
             self._state_to_obs_dict(new_state),
@@ -558,7 +581,10 @@ class TerraEnv(NamedTuple):
         is_do = action.action[0] == TrackedActionType.DO
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
-        new_state = self.wrap_state(new_state, update_reachability=update_reachability)
+        new_state = self.wrap_state(
+            new_state, update_reachability=update_reachability,
+            executable_dig_observation=self.executable_dig_observation,
+        )
         obs = self._with_feedback_observations(
             new_state,
             self._state_to_obs_dict(new_state),
@@ -723,7 +749,9 @@ class TerraEnvBatch:
         partial_reset_root: str | None = None,
         movement_feasibility_observation: bool = False,
         previous_outcome_observation: bool = False,
+        executable_dig_observation: bool = False,
     ) -> None:
+        self.executable_dig_observation = bool(executable_dig_observation)
         self.maps_buffer, self.batch_cfg = init_maps_buffer(
             batch_cfg,
             shuffle_maps,
@@ -746,6 +774,7 @@ class TerraEnvBatch:
             display=display,
             movement_feasibility_observation=movement_feasibility_observation,
             previous_outcome_observation=previous_outcome_observation,
+            executable_dig_observation=self.executable_dig_observation,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(

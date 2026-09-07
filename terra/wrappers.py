@@ -477,7 +477,7 @@ class LocalMapWrapper:
     
     
     @staticmethod
-    def wrap(state: State) -> State:
+    def wrap(state: State, *, executable_dig_observation: bool | None = None) -> State:
         """Wrapper that calls all the single-map wrappers for the currently active agent"""
         # Debug prints removed for training performance
         
@@ -569,6 +569,22 @@ class LocalMapWrapper:
             -current_arm_angle,
             axis=0,
         ).astype(IntMap)
+        def _executable_counts():
+            return state._executable_fresh_dig_counts(
+                (fresh_target, fresh_trench_target, pose_valid)
+            )
+
+        # The batch environment supplies a static option: a vmapped per-lane
+        # lax.cond would evaluate both branches even for all-false legacy runs.
+        # Direct standalone wrapping can still use the saved EnvConfig flag.
+        if executable_dig_observation is None:
+            local_map_admissible_dig = jax.lax.cond(
+                jnp.bool_(state.env_cfg.executable_dig_observation),
+                _executable_counts,
+                lambda: local_map_admissible_dig,
+            )
+        elif executable_dig_observation:
+            local_map_admissible_dig = _executable_counts()
 
         state = state._replace(
             world=state.world._replace(

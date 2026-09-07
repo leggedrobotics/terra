@@ -308,6 +308,16 @@ class EnvConfig(NamedTuple):
     # TRENCH_GATE_STANDOFF_SEMANTICS_BUG_20260901.md.
     trench_dig_max_offset_m: float = 2.0
 
+    # Optional reward-v2 behavior costs. Append fields to preserve old pickles.
+    # Lateral digging is weighted by fresh required volume, never loose pickup
+    # or dumping. Travel and turn costs use executed base motion, not attempts.
+    lateral_dig_cost: float = 0.0
+    base_travel_cost: float = 0.0  # per metre
+    base_turn_cost: float = 0.0  # per radian
+    # Versioned opt-in: the existing width-12 admissible-dig vector describes
+    # executable fresh volume, including all DO eligibility filters.
+    executable_dig_observation: bool = False
+
     @classmethod
     def new(cls):
         return EnvConfig()
