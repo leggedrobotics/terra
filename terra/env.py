@@ -938,8 +938,14 @@ class TerraEnvBatch:
             if str(name).lower().startswith("trn-")
             or "trench" in str(name).lower()
         ]
+        foundation_family_ids = [
+            index
+            for index, name in enumerate(self.maps_buffer.family_names)
+            if str(name).lower() in ("foundation", "fnd")
+            or str(name).lower().startswith("fnd-")
+        ]
+        family_ids = np.asarray(self.maps_buffer.family_ids)
         if trench_family_ids:
-            family_ids = np.asarray(self.maps_buffer.family_ids)
             missing_types = np.isin(family_ids, trench_family_ids) & (
                 trench_types <= 0
             )
@@ -949,11 +955,17 @@ class TerraEnvBatch:
                     "lack axis metadata at indices "
                     f"{np.argwhere(missing_types)[:8].tolist()}."
                 )
-        elif not np.any(trench_types > 0):
+        # Foundations do not have trench sections. An absent axis count is
+        # valid only with explicit foundation provenance, including in mixed
+        # banks where another map happens to supply valid trench metadata.
+        missing_provenance = (trench_types <= 0) & ~np.isin(
+            family_ids, foundation_family_ids
+        )
+        if np.any(missing_provenance):
             raise RuntimeError(
-                "Fresh-trench alignment was enabled for a dataset with no "
-                "declared trench metadata and no family provenance. Use an "
-                "enriched trench dataset or disable the gate."
+                "Fresh-trench alignment is enabled but maps lack both trench "
+                "axis metadata and explicit foundation family provenance at "
+                f"indices {np.argwhere(missing_provenance)[:8].tolist()}."
             )
         missing = np.argwhere(declared & ~finite_segments)
         if missing.size > 0:
