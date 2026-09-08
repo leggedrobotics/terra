@@ -1,0 +1,10 @@
+split,shape,maps
+train,square,86
+train,rectangle,85
+train,l,85
+validation,square,21
+validation,rectangle,22
+validation,l,21
+test,square,21
+test,rectangle,21
+test,l,22

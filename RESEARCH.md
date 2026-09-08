@@ -14,6 +14,9 @@ operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 
 ## Canonical environment sources
 
+- [Audited dataset reference and terrain figures](docs/DATASET.md)
+- [Audited environment, rewards, and termination](docs/ENVIRONMENT.md)
+- [Paired PPO and evaluation protocol](https://github.com/leggedrobotics/terra-baselines/blob/main/docs/TRAINING_PROTOCOL.md)
 - [Environment overview and semantics](README.md)
 - [Map-generation workflow](terra/env_generation/README.md)
 - [Partial-completion reset contract](terra/env_generation/PARTIAL_COMPLETION_RESETS.md)

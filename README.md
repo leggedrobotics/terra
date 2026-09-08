@@ -14,6 +14,19 @@ Terra is a flexible and abstracted grid world environment for training intellige
 - 🔧 Tooling: Visualization, evaluation, manual play, and maps inspection scripts
 - 🏌 Baselines: We provide baseline results and PPO-based training scripts inspired from [purejaxrl](https://github.com/luchris429/purejaxrl) and [xland-minigrid](https://github.com/corl-team/xland-minigrid)
 
+## Dataset and methods reference
+
+The source-audited reference for the August/September 2026 experiments is:
+
+- [Dataset, terrain categories, constraints, splits, and map figures](docs/DATASET.md).
+- [Training environment, actions, observations, rewards, and termination](docs/ENVIRONMENT.md).
+- [Resolved PPO settings, curriculum, and evaluation](https://github.com/leggedrobotics/terra-baselines/blob/main/docs/TRAINING_PROTOCOL.md).
+
+These documents identify the paired source versions and saved banks. The mixed
+V8 benchmark, the later trench/generalist subsets, and the simple foundation
+efficiency suite have different scopes. Older examples below describe the
+original API and generators; they do not specify those experiment recipes.
+
 ## Installation
 Clone the repo, and if you want to use Terra in your project use 
 ~~~

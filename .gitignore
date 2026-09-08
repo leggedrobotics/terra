@@ -8,7 +8,7 @@ __pycache__/*
 *.egg*
 terra/map_utils/__pycache__/
 cache/
-docs/
+/docs/*
 terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*
 viz/
@@ -22,3 +22,11 @@ data/*
 !assets/*
 *.gifterra/tests/__pycache__/
 terra/tests/__pycache__/
+
+# Audited dataset and methods reference; keep other scratch docs ignored.
+!/docs/DATASET.md
+!/docs/ENVIRONMENT.md
+!/docs/assets/
+/docs/assets/*
+!/docs/assets/dataset/
+!/docs/assets/dataset/**
