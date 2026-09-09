@@ -216,7 +216,8 @@ def test_executable_affordance_matches_all_do_headings(foundation, case):
         state = _map(state, "target_map", np.asarray(state.world.target_map.map) * 2)
         state = state._replace(env_cfg=state.env_cfg._replace(agent=state.env_cfg.agent._replace(dig_depth=2)))
     observed = _assert_all_headings_match_do(state)
-    if case in ("obstacle", "pile", "excluded_pile", "loaded", "capacity"):
+    # Excluded loose soil no longer suppresses eligible fresh digging.
+    if case in ("obstacle", "pile", "loaded", "capacity"):
         assert observed[0] == 0
     else:
         assert observed[0] > 0
