@@ -60,6 +60,41 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
     assert protocol.canonical_json_sha256(first_receipt["env_config"]) == (
         first_receipt["env_config_sha256"]
     )
+    defaults = {
+        "lateral_dig_cost": 0.0,
+        "base_travel_cost": 0.0,
+        "base_turn_cost": 0.0,
+        "executable_dig_observation": False,
+    }
+    assert {name: getattr(first_config, name) for name in defaults} == defaults
+    assert not defaults.keys() & first_receipt["env_config"].keys()
+
+    # Compatibility is local to the frozen base receipt. Serializing an
+    # actual treatment must retain every non-default field.
+    treatment = {
+        "lateral_dig_cost": 0.6,
+        "base_travel_cost": 0.07,
+        "base_turn_cost": 0.11,
+        "executable_dig_observation": True,
+    }
+    serialized = protocol._jsonable(first_config._replace(**treatment))
+    assert {name: serialized[name] for name in treatment} == treatment
+
+
+@pytest.mark.parametrize("name,value", [
+    ("lateral_dig_cost", 0.6),
+    ("base_travel_cost", 0.07),
+    ("base_turn_cost", 0.11),
+    ("executable_dig_observation", True),
+])
+def test_frozen_protocol_does_not_hide_nondefault_foundation_behavior(
+    monkeypatch, name, value,
+):
+    changed = EnvConfig()._replace(**{name: value})
+    monkeypatch.setattr(protocol, "EnvConfig", lambda: changed)
+
+    with pytest.raises(RuntimeError, match=f"inert foundation behavior defaults: {name}"):
+        protocol.frozen_environment_protocol("terra-commit-a")
 
 
 def test_protocol_fails_loudly_if_live_footprint_changes(monkeypatch):

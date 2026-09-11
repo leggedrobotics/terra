@@ -34,6 +34,7 @@ from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import compute_polygon_mask
+from terra.utils import compute_swept_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
 from terra.settings import INTLOWDIM_MAX
@@ -151,13 +152,15 @@ class State(NamedTuple):
         if initial_agent is not None:
             # Benchmark resets own the complete Agent tree. Do not derive caches,
             # choose a current agent, or consume reset randomness in this path.
+            # The caller validates this explicit state at its host boundary.
+            # Keeping this path unsanitized also permits forensic legacy states.
             state = State(
                 key=key,
                 env_cfg=env_cfg,
                 world=world,
                 agent=initial_agent,
                 env_steps=0,
-                productive_workspace_cycles=0,
+                productive_workspace_cycles=jnp.int32(0),
                 material_q_reset=jnp.float32(0.0),
                 material_h_reset=jnp.float32(0.0),
                 stall_age_steps=jnp.int32(0),
@@ -206,7 +209,7 @@ class State(NamedTuple):
             world=world,
             agent=agent,
             env_steps=0,
-            productive_workspace_cycles=0,
+            productive_workspace_cycles=jnp.int32(0),
             material_q_reset=jnp.float32(0.0),
             material_h_reset=jnp.float32(0.0),
             stall_age_steps=jnp.int32(0),
@@ -523,84 +526,38 @@ class State(NamedTuple):
 
         return biased_corners
 
-    def _current_base_footprint_mask(self) -> Array:
-        """Return the exact grid footprint occupied by the active agent base."""
-        current = self._get_current_agent_state()
+    def _agent_base_footprint_mask(self, agent_state) -> Array:
+        """Return one chassis footprint using the movement geometry."""
         corners = self._get_agent_corners(
-            current.pos_base,
-            current.angle_base,
+            agent_state.pos_base,
+            agent_state.angle_base,
             self.env_cfg.agent.width,
             self.env_cfg.agent.height,
         )
         return compute_polygon_mask(corners, self.world.width, self.world.height)
 
+    def _current_base_footprint_mask(self) -> Array:
+        """Return the exact grid footprint occupied by the acting agent."""
+        return self._agent_base_footprint_mask(self._get_current_agent_state())
+
+    def _active_base_footprint_mask(self, *, exclude_current: bool = False) -> Array:
+        """Occupied chassis cells; inactive padded agents contribute nothing."""
+        occupied = jnp.zeros_like(_as_2d_map(self.world.action_map.map), dtype=jnp.bool_)
+        for i, agent_state in enumerate(self.agent.agent_states):
+            include = self.agent.agent_active[i] == 1
+            if exclude_current:
+                include &= i != self.agent.current_agent
+            occupied |= jax.lax.cond(
+                include,
+                lambda agent_state=agent_state: self._agent_base_footprint_mask(agent_state),
+                lambda: jnp.zeros_like(occupied),
+            )
+        return occupied
+
     @staticmethod
     def _build_traversability_mask(map: Array, static_traversability_base: Array) -> Array:
-        """
-        Efficient traversability mask with selective dirt collision.
-        Small dirt patches are traversable, only very dense dirt formations block movement.
-        
-        Args:
-            - map: (N, M) Array of ints (action_map)
-            - static_traversability_base: (N, M) Array of ints, 1 if not traversable, 0 if traversable
-        Returns:
-            - traversability_mask: (N, M) Array of ints
-                1 for non traversable, 0 for traversable
-                
-        Behavior:
-            - High dirt piles (>1 height): Always blocked
-            - Dug holes/trenches (negative values): Always blocked
-            - 3x3 dirt patches: Mostly traversable (edges passable)
-            - Large solid dirt formations: Blocked (8+ dirt tiles in 3x3 area)
-            - Scattered dirt: Always traversable
-            - Static obstacles: Always blocked
-        """
-        # Fast path: if no dirt, just return padding mask
-        has_dirt = jnp.any(map != 0)
-        
-        def _with_selective_dirt_collision():
-            # Efficient direct neighbor counting (no convolution)
-            dirt_mask = (map != 0).astype(jnp.int32)
-            H, W = dirt_mask.shape
-            
-            # Pad with zeros to handle boundaries
-            padded = jnp.pad(dirt_mask, 1, mode='constant', constant_values=0)
-            
-            # Count dirt in 3x3 neighborhood (8 neighbors + center = 9 total)
-            dirt_count_3x3 = (
-                padded[:-2, :-2] + padded[:-2, 1:-1] + padded[:-2, 2:] +    # Top row
-                padded[1:-1, :-2] + dirt_mask +        padded[1:-1, 2:] +    # Middle row (include center)
-                padded[2:, :-2] + padded[2:, 1:-1] + padded[2:, 2:]         # Bottom row
-            )
-            
-            # Block only tiles in very dense dirt areas (8+ out of 9 tiles are dirt)
-            # This allows 3x3 patches to be mostly traversable, blocks larger solid formations
-            large_dirt_patches = jnp.logical_and(
-                map != 0,  # Is dirt
-                dirt_count_3x3 >= 6  # 8+ dirt tiles in 3x3 area (very dense)
-            )
-            
-            # Also block high dirt piles (>1 dirt height) - always non-traversable
-            high_dirt_piles = map > 1
-            
-            # Also block dug holes/trenches (negative values) - always non-traversable
-            dug_holes = map < 0
-            
-            # Combine all conditions: dense areas OR high piles OR dug holes
-            dirt_obstacles = jnp.logical_or(
-                jnp.logical_or(large_dirt_patches, high_dirt_piles),
-                dug_holes
-            )
-            
-            # Combine: block padding obstacles OR dirt obstacles
-            return jnp.logical_or(static_traversability_base == 1, dirt_obstacles).astype(IntLowDim)
-        
-        def _without_dirt():
-            # No dirt present, just return the cached static obstacle base
-            return static_traversability_base.astype(IntLowDim)
-        
-        # Use JAX conditional to avoid unnecessary computation when no dirt is present
-        return jax.lax.cond(has_dirt, _with_selective_dirt_collision, _without_dirt)
+        """Chassis cells must be free of holes, positive soil and obstacles."""
+        return ((map != 0) | (static_traversability_base == 1)).astype(IntLowDim)
 
     def _is_valid_move(self, agent_corners: Array, allow_truck_neutral: bool = False) -> Array:
         """
@@ -621,34 +578,7 @@ class State(NamedTuple):
         # Determine the occupancy mask for a grid of size map_width x map_height.
         polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
 
-        # Build occupancy mask for all OTHER active agents (exclude current), or zero mask if single agent
-        def _mask_for_agent_idx(i):
-            st = self.agent.agent_states[i]
-            corners_xy = self._get_agent_corners(
-                st.pos_base,
-                base_orientation=st.angle_base,
-                agent_width=self.env_cfg.agent.width,
-                agent_height=self.env_cfg.agent.height,
-            )
-            return compute_polygon_mask(corners_xy, map_width, map_height)
-
-        def _zero_mask():
-            return jnp.zeros((map_height, map_width), dtype=jnp.bool_)
-
-        current_idx = self.agent.current_agent
-
-        def _maybe_mask(i):
-            include = jnp.logical_and(self.agent.agent_active[i] == 1, i != current_idx)
-            return jax.lax.cond(include, lambda: _mask_for_agent_idx(i), _zero_mask)
-
-        mask0 = _maybe_mask(0)
-        mask1 = _maybe_mask(1)
-        mask2 = _maybe_mask(2)
-        mask3 = _maybe_mask(3)
-        # Combine masks (int masks 0/1)
-        polygon_mask_2 = jnp.maximum(jnp.maximum(mask0, mask1), jnp.maximum(mask2, mask3))
-
-        
+        polygon_mask_2 = self._active_base_footprint_mask(exclude_current=True)
         # Build the traversability mask (0 = traversable, 1 = non-traversable).
         traversability_mask = self._build_traversability_mask(
             self.world.action_map.map, self.world.static_traversability_base.map
@@ -656,11 +586,8 @@ class State(NamedTuple):
         )
 
         
-        #traversability_mask = traversability_mask
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
         # For a valid move, all cells covered by the agent must be traversable (== 0).
-        # Mask out the cells where the agent is located.
-        # jnp.where(polygon_mask_2, 1 ,traversability_mask)
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
 
         def _truck_tiles_ok():
@@ -701,33 +628,69 @@ class State(NamedTuple):
         )
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        # Compute the xy delta for a forward move along that angle.
+        """Tracked excavation takes the longest clear straight translation."""
         angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
-        xy_delta = self.env_cfg.agent.move_tiles * jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
-        delta_xy = orientation_vector @ xy_delta
-
-        # Compute candidate new position and immediately round it to discrete grid points.
+        directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
         cur = self._get_current_agent_state()
-        candidate_pos = cur.pos_base + delta_xy
-        candidate_pos = jnp.round(candidate_pos).astype(IntMap)  # Fix: use IntMap not IntLowDim
-        candidate_pos = jnp.squeeze(candidate_pos, axis=0)
 
-        # Compute the agent's corners based on the candidate (rounded) position.
-        agent_corners_xy = self._get_agent_corners(
-            candidate_pos,
-            base_orientation=cur.angle_base,
-            agent_width=self.env_cfg.agent.width,
-            agent_height=self.env_cfg.agent.height,
+        def candidate_at(distance):
+            # Always round the displacement from the original position. Adding
+            # a rounded unit vector repeatedly would change 30-degree routes.
+            delta = orientation_vector @ (distance * directions)
+            return jnp.squeeze(jnp.round(cur.pos_base + delta).astype(IntMap), axis=0)
+
+        def valid_position(position):
+            corners = self._get_agent_corners(
+                position, cur.angle_base,
+                self.env_cfg.agent.width, self.env_cfg.agent.height,
+            )
+            return self._is_valid_move(corners)
+
+        def longest_clear_translation():
+            start_corners = self._get_agent_corners(
+                cur.pos_base, cur.angle_base,
+                self.env_cfg.agent.width, self.env_cfg.agent.height,
+            )
+            blocked = self._build_traversability_mask(
+                self.world.action_map.map, self.world.static_traversability_base.map,
+            ) != 0
+            blocked |= self._active_base_footprint_mask(exclude_current=True)
+            bounds = jnp.array([self.world.width, self.world.height])
+
+            def still_searching(carry):
+                distance, _, found = carry
+                return (distance > 0) & ~found
+
+            def try_distance(carry):
+                distance, position, _ = carry
+                candidate = candidate_at(distance)
+                displacement = candidate - cur.pos_base
+                swept = compute_swept_polygon_mask(
+                    start_corners, displacement, self.world.width, self.world.height,
+                )
+                translated_corners = start_corners + displacement
+                swept_bounds = jnp.all((start_corners >= 0) & (start_corners < bounds))
+                swept_bounds &= jnp.all((translated_corners >= 0) & (translated_corners < bounds))
+                clear = valid_position(candidate) & swept_bounds & ~jnp.any(swept & blocked)
+                return distance - 1, jnp.where(clear, candidate, position), clear
+
+            _, position, _ = jax.lax.while_loop(
+                still_searching, try_distance,
+                (jnp.asarray(self.env_cfg.agent.move_tiles, dtype=jnp.int32), cur.pos_base, jnp.bool_(False)),
+            )
+            return position
+
+        def nominal_endpoint():
+            candidate = candidate_at(self.env_cfg.agent.move_tiles)
+            return jnp.where(valid_position(candidate), candidate, cur.pos_base)
+
+        # This helper is also used by trucks, skid steers and straight-steering
+        # wheeled agents. Their movement models retain nominal endpoints.
+        new_pos_base = jax.lax.cond(
+            (cur.agent_type[0] == 0) & (cur.action_type[0] == 0),
+            longest_clear_translation, nominal_endpoint,
         )
-
-        # Check if the new position is valid.
-        valid_move = self._is_valid_move(agent_corners_xy)
-        valid_move_mask = self._valid_move_to_valid_mask(valid_move)
-
-        # Choose between the old position and the new candidate position.
-        old_new_pos = jnp.array([cur.pos_base, candidate_pos])
-        new_pos_base = valid_move_mask @ old_new_pos
         return self._set_current_agent_state(cur._replace(pos_base=new_pos_base))
 
     def _move_on_orientation_with_steering(self, orientation_vector: Array, is_forward: jnp.bool_) -> "State":
@@ -1622,6 +1585,7 @@ class State(NamedTuple):
         map_shape = self.world.action_map.map.shape
         map_2d_shape = map_shape[-2:]
         dump_mask_2d = jnp.reshape(dump_mask, map_2d_shape).astype(jnp.bool_)
+        dump_mask_2d &= ~self._active_base_footprint_mask()
         containment_mask_2d = jnp.reshape(
             containment_mask, map_2d_shape
         ).astype(jnp.bool_)
@@ -1720,6 +1684,9 @@ class State(NamedTuple):
             padding_mask == 0,  # Not an obstacle
             dumpability_mask == 1  # Is dumpable
         )
+        # Both sources and destinations of relaxation must remain outside every
+        # active chassis. Existing invalid historical soil is left untouched.
+        validity_mask &= ~self._active_base_footprint_mask()
 
         # Use rank-safe dilation helper (supports 2D and [B,H,W]).
         expanded = self._dilate_mask(mask.astype(jnp.bool_), kernel_size=3)
@@ -2152,7 +2119,12 @@ class State(NamedTuple):
             ),
         )
 
-    def _mask_out_wrong_dig_tiles(self, dig_mask: Array) -> Array:
+    def _mask_out_wrong_dig_tiles(
+        self,
+        dig_mask: Array,
+        *,
+        outside_base_footprint: Array | None = None,
+    ) -> Array:
         """
         Takes the dig mask and turns into False the elements that do not correspond to
         a tile that has to be digged in the target map or that are dumped tiles in the action map.
@@ -2161,19 +2133,8 @@ class State(NamedTuple):
         """
         target_map_2d = _as_2d_map(self.world.target_map.map)
         action_map_2d = _as_2d_map(self.world.action_map.map)
-        dig_mask_target_map = target_map_2d < 0
-        dig_mask_action_map = action_map_2d > 0
-        dig_mask_maps = jnp.logical_or(dig_mask_target_map, dig_mask_action_map)
-
         flat_action_map = action_map_2d.reshape(-1)
-        dig_mask_cone = self._build_dig_dump_cone().reshape(action_map_2d.shape)
-        # Prefer boolean any over integer sum for compile-time efficiency
-        has_dumped_dirt_in_cone = jnp.any((action_map_2d > 0) & dig_mask_cone)
-        ambiguity_mask_dig_movesoil = jax.lax.cond(
-            has_dumped_dirt_in_cone,
-            lambda: (flat_action_map > 0),
-            lambda: (flat_action_map == 0),
-        )
+        dig_mask = jnp.asarray(dig_mask, dtype=jnp.bool_).reshape(-1)
 
         # respect max dig limit
         max_dig_limit_mask = (
@@ -2204,19 +2165,116 @@ class State(NamedTuple):
             lambda: self._get_foundation_border_alignment_mask(dig_mask),
             lambda: jnp.ones_like(dig_mask, dtype=jnp.bool_),
         )
-        outside_base_footprint = jnp.logical_not(
-            self._current_base_footprint_mask()
-        ).reshape(-1)
+        if outside_base_footprint is None:
+            outside_base_footprint = jnp.logical_not(
+                self._active_base_footprint_mask()
+            ).reshape(-1)
+        eligible = dig_mask & max_dig_limit_mask & dig_exclusion_mask & outside_base_footprint
+        loose = eligible & (flat_action_map > 0)
+        fresh = (
+            eligible
+            & (target_map_2d.reshape(-1) < 0)
+            & (flat_action_map == 0)
+            & border_alignment_mask
+        )
+        # Choose material only after eligibility. Soil under a chassis or in
+        # an excluded last workspace must not suppress otherwise legal digging.
+        # Alignment applies to fresh excavation, never to loose-soil recovery.
+        return jnp.where(jnp.any(loose), loose, fresh)
 
-        return (
-            dig_mask
-            * dig_mask_maps.reshape(-1)
-            * ambiguity_mask_dig_movesoil
-            * max_dig_limit_mask
-            * dig_exclusion_mask
-            * border_alignment_mask
-            * outside_base_footprint
-        ).astype(jnp.bool_)
+    def _dig_eligibility(
+        self,
+        dig_cone: Array,
+        *,
+        fresh_trench_context: tuple[Array, Array, Array] | None = None,
+        outside_base_footprint: Array | None = None,
+    ) -> tuple[Array, Array, Array, Array]:
+        """Return DO's selected mask, load volume, relift flag and admission.
+
+        This contains eligibility only: no soil mechanics or state transition.
+        The observation can reuse chassis geometry across its cabin headings.
+        Loaded/non-excavator DO dispatch remains the caller's responsibility.
+        """
+        dig_mask = self._mask_out_wrong_dig_tiles(
+            dig_cone,
+            outside_base_footprint=outside_base_footprint,
+        )
+
+        def _align_fresh_cells():
+            context = fresh_trench_context
+            if context is None:
+                context = self._fresh_trench_pose_valid_cells()
+            return self._admit_fresh_trench_cells(dig_mask, context[1], context[2])
+
+        dig_mask = jax.lax.cond(
+            jnp.bool_(self.env_cfg.enforce_trench_dig_alignment),
+            _align_fresh_cells,
+            lambda: dig_mask,
+        )
+        action = _flat_2d_map(self.world.action_map.map).astype(jnp.int32)
+        selected_sum = action @ dig_mask.astype(jnp.int32)
+        lifting_positive_soil = selected_sum > 0
+        dig_volume = jnp.where(
+            lifting_positive_soil,
+            jnp.minimum(selected_sum, jnp.int32(INTLOWDIM_MAX)),
+            dig_mask.sum(dtype=jnp.int32),
+        )
+        obstacle_overlap = jnp.any(
+            dig_cone & (_flat_2d_map(self.world.padding_mask.map) == 1)
+        )
+        admitted = (
+            ~obstacle_overlap
+            & (dig_volume > 0)
+            & (dig_volume <= jnp.int32(INTLOWDIM_MAX))
+        )
+        return dig_mask, dig_volume, lifting_positive_soil, admitted
+
+    def _executable_fresh_dig_counts(
+        self, fresh_trench_context: tuple[Array, Array, Array] | None = None
+    ) -> Array:
+        """Fresh required volume DO can excavate at each relative cabin heading.
+
+        Uses the actual cleaned cone and all dig eligibility filters. Positive
+        pile pickup and loaded DO expose zero fresh volume. Soil relaxation is
+        restricted to dump cells, so it cannot add fresh target excavation.
+        """
+        current = self._get_current_agent_state()
+        angles = EnvConfig().agent.angles_cabin
+
+        def _counts():
+            context = fresh_trench_context
+            if context is None:
+                context = self._fresh_trench_pose_valid_cells()
+            outside_base = ~self._active_base_footprint_mask().reshape(-1)
+            target = _flat_2d_map(self.world.target_map.map).astype(jnp.int32)
+            fresh_depth = jnp.where(
+                context[0].reshape(-1),
+                jnp.minimum(-target, self.env_cfg.agent.dig_depth),
+                jnp.int32(0),
+            )
+
+            def _count(offset):
+                candidate = self._set_current_agent_state(
+                    current._replace(
+                        angle_cabin=((current.angle_cabin.astype(jnp.int32) + offset)
+                                     % angles).astype(current.angle_cabin.dtype)
+                    )
+                )
+                mask, _, relift, admitted = candidate._dig_eligibility(
+                    candidate._build_dig_dump_cone(),
+                    fresh_trench_context=context,
+                    outside_base_footprint=outside_base,
+                )
+                volume = jnp.sum(jnp.where(mask, fresh_depth, 0), dtype=jnp.int32)
+                return jnp.where(admitted & ~relift, volume, jnp.int32(0))
+
+            return jax.vmap(_count)(jnp.arange(angles, dtype=jnp.int32)).astype(IntMap)
+
+        return jax.lax.cond(
+            (current.agent_type[0] == 0) & (current.loaded[0] == 0),
+            _counts,
+            lambda: jnp.zeros((angles,), dtype=IntMap),
+        )
 
     def _fresh_trench_target_sets(self, dig_mask_2d: Array):
         """Fresh target cells inside ``dig_mask_2d`` and the trench subset the gate scopes.
@@ -2295,8 +2353,8 @@ class State(NamedTuple):
         Returns ``(section_membership, axis_has_fresh, yaw_errors_normalized,
         standoff_errors_normalized, axis_pose_valid, fresh_cell_pose_valid)``.
         This is the whole positional clause of the fresh-trench gate; callers
-        decide how to fold the per-cell result (one macro DO verdict, or one
-        count per cabin angle).
+        use the same per-cell result for the admitted DO mask and the counts
+        per cabin angle.
         """
         cur = self._get_current_agent_state()
         max_axes = axes.shape[0]
@@ -2443,6 +2501,8 @@ class State(NamedTuple):
                 ),
             ),
         )
+        # A shared junction cell is admitted by ANY owning section that
+        # accepts this pose, so either aligned approach can excavate it.
         fresh_cell_pose_valid = jnp.any(
             jnp.logical_and(
                 section_membership,
@@ -2459,6 +2519,24 @@ class State(NamedTuple):
             fresh_cell_pose_valid,
         )
 
+    @staticmethod
+    def _admit_fresh_trench_cells(
+        candidate_mask: Array,
+        fresh_trench_target: Array,
+        pose_valid: Array,
+    ) -> Array:
+        """Apply per-cell trench admission for both DO and local observations.
+
+        ``pose_valid`` already combines all owning sections with OR. Candidates
+        outside the fresh trench subset keep their existing eligibility.
+        """
+        cell_admissible = jnp.logical_or(
+            jnp.logical_not(fresh_trench_target), pose_valid
+        )
+        return jnp.logical_and(
+            candidate_mask, cell_admissible.reshape(candidate_mask.shape)
+        )
+
     def _fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
         """Per-cell view of the fresh-trench gate for the CURRENT base pose.
 
@@ -2467,9 +2545,10 @@ class State(NamedTuple):
         a section that is pose-valid for the current chassis yaw (the same
         section clause a prospective DO is judged by) and True everywhere when
         the gate is inapplicable (non-excavator, loaded, non-trench map, no
-        fresh trench cell), where the gate is neutral. A DO at cabin angle k is
-        admitted iff none of its cone's fresh trench cells is pose-invalid;
-        ``LocalMapWrapper`` folds that into ``local_map_admissible_dig``.
+        fresh trench cell), where the gate is neutral. A fresh trench cell is
+        admitted when any owning section accepts the pose; other branch cells
+        remain in place. ``LocalMapWrapper`` counts these admitted cells in
+        each cabin cone as ``local_map_admissible_dig``.
         """
         cur = self._get_current_agent_state()
         target = _as_2d_map(self.world.target_map.map)
@@ -2599,15 +2678,11 @@ class State(NamedTuple):
             # dig into a crossing approached along one of its own axes, so
             # tee / segmented / net maps could not be completed axis by axis.
             # See TRENCH_JUNCTION_PER_CELL_ADMISSION_20260903.md.
-            cell_admissible = jnp.logical_or(
-                jnp.logical_not(fresh_trench_target),
-                fresh_cell_pose_valid,
-            )
             valid = jnp.any(
                 jnp.logical_and(fresh_trench_target, fresh_cell_pose_valid)
             )
-            admitted_dig_mask = jnp.logical_and(
-                dig_mask, cell_admissible.reshape(dig_mask.shape)
+            admitted_dig_mask = self._admit_fresh_trench_cells(
+                dig_mask, fresh_trench_target, fresh_cell_pose_valid
             )
 
             diagnostic_pool = jnp.where(
@@ -2664,7 +2739,11 @@ class State(NamedTuple):
         """
         action_map_2d = _as_2d_map(self.world.action_map.map)
         positive_soil = action_map_2d > 0
-        return dig_mask & positive_soil.reshape(-1)
+        return (
+            dig_mask
+            & positive_soil.reshape(-1)
+            & ~self._active_base_footprint_mask().reshape(-1)
+        )
 
     def _get_new_dumpability_mask(self, action_map: Array) -> Array:
         return compute_dynamic_dumpability(
@@ -2673,39 +2752,16 @@ class State(NamedTuple):
         )
 
     def _handle_dig(self) -> "State":
+        dig_mask, dig_volume, lifting_positive_soil, admitted = self._dig_eligibility(
+            self._build_dig_dump_cone()
+        )
+
         def _blocked_by_obstacle():
             return self
 
         def _dig_when_clear():
-            dig_mask = self._build_dig_dump_cone()
-            dig_mask = self._mask_out_wrong_dig_tiles(dig_mask)
-            _, _, _, aligned_fresh_dig_mask = (
-                self._get_fresh_trench_dig_alignment_details(dig_mask)
-            )
-            dig_mask = jnp.where(
-                jnp.bool_(self.env_cfg.enforce_trench_dig_alignment),
-                aligned_fresh_dig_mask,
-                dig_mask,
-            )
             action_map_2d = _as_2d_map(self.world.action_map.map)
             flattened_action_map = action_map_2d.reshape(-1)
-            # The map is int8, but a workspace may contain more than 127 units.
-            # Sum in int32 so a capacity-bounded relift cannot wrap.
-            selected_tiles_sum = (
-                flattened_action_map.astype(jnp.int32)
-                @ dig_mask.astype(jnp.int32)
-            )
-            lifting_positive_soil = selected_tiles_sum > 0
-            # Positive soil is lifted up to the int8 carrier capacity.
-            # Ensure both branches return the same dtype (int32)
-            dig_volume = jax.lax.cond(
-                lifting_positive_soil,
-                lambda: jnp.minimum(
-                    selected_tiles_sum,
-                    jnp.int32(INTLOWDIM_MAX),
-                ),
-                lambda: dig_mask.sum().astype(jnp.int32),
-            )
 
             def _apply_dig(volume, fam):
                 # First remove dirt cleanly (without soil mechanics)
@@ -2810,23 +2866,12 @@ class State(NamedTuple):
                     )
                 )
 
-            load_fits_bucket = jnp.logical_and(
-                dig_volume > 0,
-                dig_volume <= jnp.int32(INTLOWDIM_MAX),
-            )
-            s = jax.lax.cond(
-                load_fits_bucket,
-                lambda v, fam: _apply_dig(v, fam),
-                lambda v, fam: self._do_nothing(),
-                dig_volume,
-                flattened_action_map,
-            )
-            return s
+            return _apply_dig(dig_volume, flattened_action_map)
 
         return jax.lax.cond(
-            self._workspace_intersects_obstacle(),
-            _blocked_by_obstacle,
+            admitted,
             _dig_when_clear,
+            _blocked_by_obstacle,
         )
     def _try_truck_transfer_on_excavator_dump(self) -> "State":
         """
@@ -2969,6 +3014,7 @@ class State(NamedTuple):
             physical_mask,
             _flat_2d_map(self.world.padding_mask.map == 0),
         )
+        physical_mask &= ~self._active_base_footprint_mask().reshape(-1)
         physical_mask = jax.lax.cond(
             self._dump_cone_lacks_free_space(physical_mask),
             lambda: jnp.zeros_like(physical_mask, dtype=jnp.bool_),
@@ -4002,6 +4048,12 @@ class State(NamedTuple):
                     "reward_v2_horizon_failure": zero,
                     "reward_v2_step": zero,
                     "reward_v2_valid": zero,
+                    "reward_v2_lateral_dig": zero,
+                    "reward_v2_base_travel": zero,
+                    "reward_v2_base_turn": zero,
+                    "reward_v2_fresh_dig_volume": zero,
+                    "reward_v2_base_travel_m": zero,
+                    "reward_v2_base_turn_rad": zero,
                 },
             ),
         )
@@ -4011,6 +4063,9 @@ class State(NamedTuple):
             dtype=jnp.float32,
         ).at[self.agent.current_agent].set(
             reward_v2_components["reward_v2_shaping"]
+            + reward_v2_components["reward_v2_lateral_dig"]
+            + reward_v2_components["reward_v2_base_travel"]
+            + reward_v2_components["reward_v2_base_turn"]
         )
         components["agent_rewards"] = jnp.where(
             use_reward_v2,
@@ -4851,7 +4906,22 @@ class State(NamedTuple):
         ) * horizon_failure.astype(jnp.float32)
         step = -step_cost_total / REWARD_V2_HORIZON
         reward = success + failure + step + shaping
+        behavior_components = self._reward_v2_behavior_costs(new_state)
+        behavior_cost = (
+            behavior_components["reward_v2_lateral_dig"]
+            + behavior_components["reward_v2_base_travel"]
+            + behavior_components["reward_v2_base_turn"]
+        )
+        # Keep the frozen reward expression exactly when all costs are disabled.
+        coefficients = jnp.asarray(
+            [new_state.env_cfg.lateral_dig_cost,
+             new_state.env_cfg.base_travel_cost,
+             new_state.env_cfg.base_turn_cost],
+            dtype=jnp.float32,
+        )
+        reward = jnp.where(jnp.any(coefficients != 0), reward + behavior_cost, reward)
         valid_transition = jnp.logical_and(valid > 0, valid_next > 0)
+        valid_transition &= jnp.all(jnp.isfinite(coefficients) & (coefficients >= 0))
         reward = jnp.where(valid_transition, reward, jnp.float32(jnp.nan))
         return reward, {
             "reward_v2_q": q,
@@ -4868,6 +4938,61 @@ class State(NamedTuple):
             "reward_v2_horizon_failure": failure,
             "reward_v2_step": step,
             "reward_v2_valid": valid_transition.astype(jnp.float32),
+            **behavior_components,
+        }
+
+    def _reward_v2_behavior_costs(self, new_state: "State") -> dict[str, Float]:
+        """Optional costs of actual fresh digging and executed chassis motion.
+
+        Track the old acting slot through a possible agent handoff. Lateral
+        orientation is relative to the chassis before the dig; it describes a
+        geometric preference, not a physical tipping-stability model.
+        """
+        current = self._get_current_agent_state()
+        following = new_state._replace(
+            agent=new_state.agent._replace(current_agent=self.agent.current_agent)
+        )._get_current_agent_state()
+        is_excavator = current.agent_type[0] == 0
+        fresh_map = self._get_fresh_target_excavation_map(
+            self.world.action_map.map,
+            new_state.world.action_map.map,
+            self.world.target_map.map,
+        )
+        fresh_volume = jnp.where(
+            is_excavator & (current.loaded[0] == 0) & (following.loaded[0] > 0),
+            fresh_map.sum(dtype=jnp.float32),
+            jnp.float32(0.0),
+        )
+        source_volume = jnp.maximum(self._required_excavation_volume(), jnp.float32(1e-6))
+        cabin_angle = jnp.ravel(self._get_cabin_angle_rad())[0]
+        lateral_factor = jnp.square(jnp.sin(cabin_angle))
+        travel_m = jnp.where(
+            is_excavator,
+            jnp.linalg.norm(
+                following.pos_base.astype(jnp.float32) - current.pos_base.astype(jnp.float32)
+            ) * jnp.float32(self.env_cfg.tile_size),
+            jnp.float32(0.0),
+        )
+        bins = jnp.float32(self.env_cfg.agent.angles_base)
+        angle_delta = (
+            following.angle_base.astype(jnp.float32) - current.angle_base.astype(jnp.float32)
+        )
+        wrapped_delta = (angle_delta + bins / 2) % bins - bins / 2
+        turn_rad = jnp.where(
+            is_excavator,
+            jnp.abs(jnp.ravel(wrapped_delta)[0]) * (2 * jnp.pi / bins),
+            jnp.float32(0.0),
+        )
+        return {
+            "reward_v2_lateral_dig": (
+                -jnp.float32(new_state.env_cfg.lateral_dig_cost)
+                * fresh_volume / source_volume * lateral_factor
+            ),
+            "reward_v2_base_travel": -jnp.float32(new_state.env_cfg.base_travel_cost) * travel_m,
+            "reward_v2_base_turn": -jnp.float32(new_state.env_cfg.base_turn_cost) * turn_rad,
+            "reward_v2_fresh_dig_volume": fresh_volume,
+            "reward_v2_base_travel_m": travel_m,
+            "reward_v2_base_turn_rad": turn_rad,
         }
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:

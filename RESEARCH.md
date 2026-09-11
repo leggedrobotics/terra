@@ -100,6 +100,16 @@ experiment.
 
 ## Experiment identity
 
+The September 11 movement correction preserves strict soil-free chassis
+occupancy while replacing independently rounded intermediate tracked poses
+with a straight swept-polygon check. The previous integer-prefix rule could
+invent sideways collisions at angled headings. Each shorter candidate is
+tested along its own straight path; clear endpoints cannot jump obstacles.
+This uses Terra's cell-center polygon convention and does not certify Nav2 or
+physical vehicle clearance. The sibling baselines reliability design and
+foundation behavior note retain the matched frozen-policy diagnosis. Keep the
+original ba9cc214 training cohort separate from this environment correction.
+
 For every reported result record the Terra revision, terra-baselines revision,
 dataset/map family and identity, curriculum, agent/action type, seed, policy
 architecture, checkpoint hash, reset distribution, and evaluation protocol.

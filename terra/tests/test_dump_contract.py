@@ -939,6 +939,48 @@ class ExactDumpContractTest(unittest.TestCase):
             0,
         )
 
+    def test_productive_workspace_counter_keeps_reset_to_step_abstract_dtype(self):
+        env = TerraEnv.new(self.SHAPE[0])
+        reset_args = (
+            jax.random.PRNGKey(7),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            -97.0 * np.ones((4, 8), dtype=np.float32),
+            np.int32(-1),
+            -97.0 * np.ones((64, 3), dtype=np.float32),
+            np.int32(-1),
+            np.ones(self.SHAPE, dtype=np.bool_),
+            np.zeros(self.SHAPE, dtype=np.int8),
+            np.ones(self.SHAPE, dtype=np.float32),
+            self._env_config(),
+        )
+
+        def reset_and_step_counters(initial_agent_supplied):
+            reset = env.reset(*reset_args)
+            if initial_agent_supplied:
+                reset = env.reset(*reset_args, initial_agent=reset.state.agent)
+            step = env.step_no_reset(
+                reset.state, TrackedAction.do_nothing(), reset.env_cfg
+            )
+            return (
+                reset.state.productive_workspace_cycles,
+                step.state.productive_workspace_cycles,
+            )
+
+        for initial_agent_supplied in (False, True):
+            with self.subTest(initial_agent_supplied=initial_agent_supplied):
+                # Trace the real reset/step paths without compiling the simulator.
+                # Unlike eval_shape's ShapeDtypeStruct on older JAX, these avals
+                # preserve weak_type, which is part of the JIT input signature.
+                reset_aval, step_aval = jax.make_jaxpr(
+                    lambda: reset_and_step_counters(initial_agent_supplied)
+                )().out_avals
+                self.assertEqual(reset_aval.shape, step_aval.shape)
+                self.assertEqual(reset_aval.dtype, np.dtype(np.int32))
+                self.assertEqual(reset_aval.dtype, step_aval.dtype)
+                self.assertFalse(reset_aval.weak_type)
+                self.assertFalse(step_aval.weak_type)
+
     def test_terminal_objective_is_terminal_only_and_orders_successes(self):
         target = np.zeros(self.SHAPE, dtype=np.int8)
         target[20:22, 20:22] = -1
@@ -1190,8 +1232,12 @@ class ExactDumpContractTest(unittest.TestCase):
 
     def test_reward_fields_are_appended_for_legacy_positional_checkpoints(self):
         current = EnvConfig()
+        # Keep the historical checkpoint boundaries independent of the newly
+        # appended foundation behavior fields.
+        previous_fields = EnvConfig._fields[:-4]
+        previous_values = tuple(current)[:-4]
         self.assertEqual(
-            EnvConfig._fields[-10:-6],
+            previous_fields[-10:-6],
             (
                 "reward_stage",
                 "terminal_reward_mix",
@@ -1200,7 +1246,7 @@ class ExactDumpContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            EnvConfig._fields[-6:],
+            previous_fields[-6:],
             (
                 "enforce_trench_dig_alignment",
                 "trench_dig_yaw_tolerance_rad",
@@ -1210,7 +1256,7 @@ class ExactDumpContractTest(unittest.TestCase):
                 "trench_dig_max_offset_m",
             ),
         )
-        legacy_values = pickle.loads(pickle.dumps(tuple(current)[:-10]))
+        legacy_values = pickle.loads(pickle.dumps(previous_values[:-10]))
         restored = EnvConfig(*legacy_values)
         self.assertEqual(
             restored.reward_stage,
@@ -1233,7 +1279,7 @@ class ExactDumpContractTest(unittest.TestCase):
         # A checkpoint from the immediately preceding revision has all reward
         # fields but none of the new alignment fields.
         pre_alignment_values = pickle.loads(
-            pickle.dumps(tuple(current)[:-6])
+            pickle.dumps(previous_values[:-6])
         )
         pre_alignment = EnvConfig(*pre_alignment_values)
         self.assertFalse(pre_alignment.enforce_trench_dig_alignment)
@@ -1241,26 +1287,26 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(pre_alignment.trench_dig_standoff_min_m, 3.5)
         self.assertEqual(pre_alignment.trench_dig_standoff_max_m, 7.0)
         self.assertFalse(pre_alignment.trench_dig_standoff_enforced)
-        for field_name in EnvConfig._fields[:-6]:
+        for field_name in previous_fields[:-6]:
             self.assertEqual(
                 getattr(pre_alignment, field_name),
                 getattr(current, field_name),
             )
         # A v1-era checkpoint (all four band fields, no semantics selector).
-        pre_v2 = EnvConfig(*tuple(current)[:-2])
+        pre_v2 = EnvConfig(*previous_values[:-2])
         self.assertFalse(pre_v2.trench_dig_standoff_enforced)
         self.assertEqual(pre_v2.trench_dig_max_offset_m, 2.0)
         # A v2-yaw-only checkpoint (selector present, no max-offset clause).
-        pre_offset = EnvConfig(*tuple(current)[:-1])
+        pre_offset = EnvConfig(*previous_values[:-1])
         self.assertEqual(pre_offset.trench_dig_max_offset_m, 2.0)
         # A pre-timing checkpoint (reward_stage + mix, no variant) also loads.
-        pre_timing = EnvConfig(*tuple(current)[:-8])
+        pre_timing = EnvConfig(*previous_values[:-8])
         self.assertEqual(
             pre_timing.reward_v2_timing_variant,
             REWARD_V2_TIMING_BASELINE,
         )
         self.assertEqual(pre_timing.reset_tier, 0)
-        for field_name in EnvConfig._fields[:-10]:
+        for field_name in previous_fields[:-10]:
             self.assertEqual(
                 getattr(restored, field_name),
                 getattr(current, field_name),

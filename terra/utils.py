@@ -233,3 +233,43 @@ def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Arr
     inside = jnp.logical_or(jnp.all(cross > 0, axis=0), jnp.all(cross < 0, axis=0))
     mask = inside.reshape((map_width, map_height))
     return mask
+
+
+def compute_swept_polygon_mask(
+    corners: Array, displacement: Array, map_width: int, map_height: int,
+) -> Array:
+    """Cell centers inside a convex polygon during one straight translation.
+
+    Keep the strict-interior convention of ``compute_polygon_mask``. A cell
+    is swept when it is inside every edge half-plane at some common time
+    t in [0, 1]. Intersect those time intervals without rounding intermediate
+    chassis positions, which would introduce sideways grid excursions.
+    """
+    # State stores corners as int8; widen before cross products or winding
+    # arithmetic so ordinary map coordinates cannot overflow.
+    corners = corners.astype(jnp.float32)
+    displacement = displacement.astype(jnp.float32)
+    xs = jnp.arange(map_width, dtype=jnp.float32) + 0.5
+    ys = jnp.arange(map_height, dtype=jnp.float32) + 0.5
+    x, y = jnp.meshgrid(xs, ys, indexing="ij")
+    points = jnp.stack((x, y), axis=-1).reshape((-1, 2))
+    edges = jnp.roll(corners, -1, axis=0) - corners
+    winding = jnp.sign(jnp.sum(
+        corners[:, 0] * jnp.roll(corners[:, 1], -1)
+        - corners[:, 1] * jnp.roll(corners[:, 0], -1)
+    ))
+    offsets = points[None, :, :] - corners[:, None, :]
+    cross = winding * (
+        edges[:, 0, None] * offsets[..., 1]
+        - edges[:, 1, None] * offsets[..., 0]
+    )
+    speed = winding * (
+        edges[:, 0] * displacement[1] - edges[:, 1] * displacement[0]
+    )[:, None]
+    # Each edge requires cross - t * speed > 0. Parallel edges must already
+    # contain the cell; the others impose an upper or lower time bound.
+    crossing_time = cross / jnp.where(speed != 0, speed, 1)
+    entry = jnp.maximum(0.0, jnp.max(jnp.where(speed < 0, crossing_time, -jnp.inf), axis=0))
+    leave = jnp.minimum(1.0, jnp.min(jnp.where(speed > 0, crossing_time, jnp.inf), axis=0))
+    parallel_inside = jnp.all((speed != 0) | (cross > 0), axis=0)
+    return ((entry < leave) & parallel_inside).reshape((map_width, map_height))

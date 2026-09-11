@@ -61,6 +61,17 @@ terra-baselines: no field; the Euler launcher arms `genpc` / `specpc` and
 the run contract's `gate_semantics=v2_yaw_parallel_on_the_line_per_cell_admission`
 label the epoch, and the Terra revision pin carries the semantics.
 
+2026-09-07: `local_map_admissible_dig` now uses the same per-cell admission
+helper as the DO mask. Its former whole-cone veto incorrectly reported zero
+when an aligned section and an unaligned branch shared a cone. Each heading
+now counts the fresh cells admitted by any owning section. A shared junction
+cell remains diggable from either aligned approach; cells owned only by an
+unaligned section remain untouched. The focused observation regressions check
+all 12 cabin headings against the prospective gate and actual DO volume from
+both section approaches, plus rejection when neither section accepts the yaw.
+This corrects the observation without changing the existing dynamics, yaw or
+offset tolerances, or rewards.
+
 ## Status
 
 Adopted. Veto-era runs cancelled on 2026-09-03 (Euler generalist 12508156
@@ -85,7 +96,7 @@ straight ahead or behind, move forward/backward only, one axis at a time
 | net3 road (16) | 0 / 0 / 0 | 16 / 16 / 16 |
 
 Sections complete under the veto: tee 2-13/64, segmented 0-13/80, net3
-0/48; under per-cell every section. So under the current rule a junction
+0/48; under per-cell every section. So under the removed veto a junction
 cannot be dug by driving along one of its axes and digging ahead: the other
 branch's cells inside the cone veto the whole action. That contradicts the
 intended semantics (a junction is diggable from any of its axes; the policy
