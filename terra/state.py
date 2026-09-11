@@ -34,6 +34,7 @@ from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
 from terra.utils import compute_polygon_mask
+from terra.utils import compute_swept_polygon_mask
 from terra.utils import decrease_angle_circular
 from terra.settings import Float
 from terra.settings import INTLOWDIM_MAX
@@ -627,7 +628,7 @@ class State(NamedTuple):
         )
 
     def _move_on_orientation(self, orientation_vector: Array) -> "State":
-        """Tracked excavation uses the longest valid discrete path prefix."""
+        """Tracked excavation takes the longest clear straight translation."""
         angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
         directions = jnp.stack([jnp.cos(angles), jnp.sin(angles)], axis=-1)
@@ -646,20 +647,37 @@ class State(NamedTuple):
             )
             return self._is_valid_move(corners)
 
-        def longest_valid_prefix():
-            def can_advance(carry):
-                distance, _, clear = carry
-                return clear & (distance <= self.env_cfg.agent.move_tiles)
+        def longest_clear_translation():
+            start_corners = self._get_agent_corners(
+                cur.pos_base, cur.angle_base,
+                self.env_cfg.agent.width, self.env_cfg.agent.height,
+            )
+            blocked = self._build_traversability_mask(
+                self.world.action_map.map, self.world.static_traversability_base.map,
+            ) != 0
+            blocked |= self._active_base_footprint_mask(exclude_current=True)
+            bounds = jnp.array([self.world.width, self.world.height])
 
-            def advance(carry):
+            def still_searching(carry):
+                distance, _, found = carry
+                return (distance > 0) & ~found
+
+            def try_distance(carry):
                 distance, position, _ = carry
                 candidate = candidate_at(distance)
-                clear = valid_position(candidate)
-                return distance + 1, jnp.where(clear, candidate, position), clear
+                displacement = candidate - cur.pos_base
+                swept = compute_swept_polygon_mask(
+                    start_corners, displacement, self.world.width, self.world.height,
+                )
+                translated_corners = start_corners + displacement
+                swept_bounds = jnp.all((start_corners >= 0) & (start_corners < bounds))
+                swept_bounds &= jnp.all((translated_corners >= 0) & (translated_corners < bounds))
+                clear = valid_position(candidate) & swept_bounds & ~jnp.any(swept & blocked)
+                return distance - 1, jnp.where(clear, candidate, position), clear
 
             _, position, _ = jax.lax.while_loop(
-                can_advance, advance,
-                (jnp.int32(1), cur.pos_base, jnp.bool_(True)),
+                still_searching, try_distance,
+                (jnp.asarray(self.env_cfg.agent.move_tiles, dtype=jnp.int32), cur.pos_base, jnp.bool_(False)),
             )
             return position
 
@@ -671,7 +689,7 @@ class State(NamedTuple):
         # wheeled agents. Their movement models retain nominal endpoints.
         new_pos_base = jax.lax.cond(
             (cur.agent_type[0] == 0) & (cur.action_type[0] == 0),
-            longest_valid_prefix, nominal_endpoint,
+            longest_clear_translation, nominal_endpoint,
         )
         return self._set_current_agent_state(cur._replace(pos_base=new_pos_base))
 
