@@ -1,6 +1,7 @@
 # Terra environment, rewards and episode contract
 
-Audited from local source and experiment records on September 8, 2026.
+Audited from local source and experiment records on September 8, 2026;
+movement and soil-occupancy sections updated on September 11 for `7fb30402`.
 This is the methods reference for repository documentation; it does not change
 the paper or the training implementation. Dataset composition is documented in
 [DATASET.md](DATASET.md). Optimization and experiment-specific policy inputs
@@ -10,8 +11,8 @@ are documented in the sibling
 Source links identify public code where available. References marked **local**
 are paths relative to the original `/home/lorenzo/moleworks` workspace. Input
 banks and unpublished experiment snapshots are separate from this documentation.
-The September optional behaviors describe those recorded snapshots and may not
-be implemented in the published main branch.
+The September behaviors are now implemented in main; optional costs and
+observations still require the corresponding resolved configuration.
 
 ## Which environment this describes
 
@@ -29,10 +30,13 @@ environment revision and resolved configuration:
 | Local checkout used during this audit | `b87c70f6` | Older source; its default dense reward and historical completion implementation do not define the newer experiments below. |
 | Historical V8 relay / recurrent comparisons | `25f855db` | Solo tracked excavator, corrected visible-dump success and reward-v2 support; no fresh-trench alignment gate. The relay feed-forward run additionally applied `ebdc3ad7`, preventing excavation beneath the base and preserving terrain blockers in the observation. |
 | September 7 restart of the v2 generalist and trench specialist | `46b140f8` | Per-cell trench admission, corrected footprint/soil containment and matching admissibility observations. |
-| September 7–8 easy-foundation reward screen | `fa8d5d13` | Same current mechanics, with optional costs for fresh lateral excavation, actual base travel and actual base rotation, plus the optional executable-dig observation. |
+| September 7–8 easy-foundation reward screen | `fa8d5d13` | September 7 mechanics, with optional costs for fresh lateral excavation, actual base travel and actual base rotation, plus the optional executable-dig observation. |
+| September 9–11 scratch comparison | `ba9cc214` | Strict soil-free chassis occupancy, protected relaxation and eligible loose-soil priority; rounded intermediate translation checks introduced false lateral collisions. |
+| Corrected movement in main | `7fb30402` | Retains the soil protections and checks whole straight translations to candidate endpoints, eliminating the intermediate-rounding bug. |
 
-The detailed source anchors below use `fa8d5d13`; the source index identifies
-the corresponding local worktree. The shared reward-v2 constants and exact
+Historical numbered source anchors below use `fa8d5d13`; updated mechanics
+refer to current function names. The source index identifies the historical
+worktree. The shared reward-v2 constants and exact
 completion formula also exist in the historical V8 runtime. Later geometry
 fixes do not retroactively validate older trajectories.
 
@@ -88,7 +92,7 @@ experiments trained or evaluated multi-agent policies.
 
 | Index | Tracked action | Solo-excavator effect |
 | ---: | --- | --- |
-| 0 | `FORWARD` | Translate in the chassis heading, if empty and the destination footprint is valid. |
+| 0 | `FORWARD` | Translate in the chassis heading, if empty and the straight path and destination footprint are valid. |
 | 1 | `BACKWARD` | Translate against the heading, subject to the same restrictions. |
 | 2 | `CLOCK` | Rotate the chassis one clockwise bin, if empty and the resulting footprint is valid. |
 | 3 | `ANTICLOCK` | Rotate the chassis one anticlockwise bin under the same conditions. |
@@ -100,24 +104,33 @@ experiments trained or evaluated multi-agent policies.
 Base and cabin orientations each have 12 bins, so one rotation action is
 30 degrees. A move proposes five cells and rounds its endpoint to the integer
 grid. Its actual metric displacement depends on heading and rounding; five
-cells is a nominal step, not a fixed measured travel distance. A loaded solo
+cells is a nominal step, not a fixed measured travel distance. Current tracked
+motion tests candidate distances from five down to one and selects the longest
+whose entire straight swept footprint and actual endpoint are clear. Each
+candidate starts at the original pose; independently rounding intermediate
+positions would introduce sideways grid excursions. A loaded solo
 excavator can rotate its cabin but cannot translate or rotate its chassis.
 Distant soil transport therefore requires reachable placement, repositioning
 while empty and, where needed, relifting staged soil.
 
 Every attempted action, including a rejected action and explicit no-op,
 increments the decision count. Invalid motion is a physical no-op rather than
-a separate collision termination. Translation and base rotation validate the
-candidate footprint, not a continuous swept path. Cabin motion does not model
-arm collision or dynamic stability.
+a separate collision termination. Translation sweeps Terra's raster chassis
+polygon against cell centers and validates map bounds, the actual endpoint and
+other active chassis. A clear endpoint cannot bypass an intervening obstacle.
+Base rotation still validates its resulting footprint rather than a turn
+sweep. These checks are not physical cell-area collision or Nav2 route
+certificates. Cabin motion does not model arm collision or dynamic stability.
 
-For current motion feasibility, holes (`action_map < 0`), piles above one unit,
-and static obstacles block motion. A nonzero terrain cell also blocks motion
-when at least six of its `3 × 3` neighborhood cells are nonzero. Some isolated
-unit-height spoil is therefore traversable. The source comments mentioning an
-eight-cell threshold are stale; the implemented threshold is six.
+For current motion feasibility, every nonzero terrain cell (`action_map != 0`)
+and every static obstacle blocks chassis occupancy. This includes unit-height
+spoil. The historical `fa8d5d13` rule permitted some shallow or sparse spoil;
+that exception was removed by `ba9cc214` for foundations and trenches alike.
+Other vehicle action models retain their existing endpoint movement semantics.
 
-Source: `actions.py:13–101`; `state.py:286–318,538–675,703–731,897–1199`.
+Source: [tracked movement and occupancy](../terra/state.py), functions
+`_move_on_orientation`, `_is_valid_move` and `_build_traversability_mask`;
+[swept cell-center geometry](../terra/utils.py), `compute_swept_polygon_mask`.
 
 ### Workspace excavation
 
@@ -127,11 +140,12 @@ the resolved footprint, cell size, fixed `0.5 m` extension and five-cell radial
 width. Additional footprint and connected-workspace filters narrow the sector.
 
 An empty `DO` selects target cells still eligible for excavation or existing
-positive soil. If the raw workspace contains positive soil, the implemented
-selection prefers positive-soil pickup over fresh excavation; this can prevent
-fresh digging even when target cells are also present. Recent-workspace,
-depth, base-footprint, optional foundation-edge and trench-admission filters
-also apply. Any static obstacle in the cleaned dig cone vetoes the complete
+positive soil. Loose-soil priority is resolved after recent-workspace, depth
+and active-chassis eligibility. Eligible positive soil takes precedence over
+fresh excavation; excluded spoil cannot suppress otherwise valid fresh work.
+The historical `fa8d5d13` rule selected loose mode before those exclusions.
+Optional foundation-edge and trench-admission filters apply to fresh work.
+Any static obstacle in the cleaned dig cone vetoes the complete
 dig, even if some selected target cells would otherwise be valid.
 
 Fresh excavation removes one depth unit per selected cell in the unit-depth
@@ -176,7 +190,11 @@ grid redistribution rule, not calibrated soil mechanics or a physical
 angle-of-repose model.
 
 Current relaxation is contained to the selected accepted/off-zone region on
-dump and to accepted cells on excavation/relift. A dump commits only if the map
+dump and to accepted cells on excavation/relift. Excavation, ground dumping and
+relaxation exclude every active chassis footprint; relaxation cannot use those
+cells as either sources or destinations. Inactive padded agents do not block
+work. No soil is deleted or flattened to enforce chassis clearance. A dump
+commits only if the map
 gain equals the removed load, changes stay in the permitted region and values
 fit storage. Transition diagnostics separately check total action-map sum plus
 active-agent loads. Final task success alone is not a substitute for those
@@ -233,7 +251,8 @@ existing 12-entry input width. Runs A and B differ in this replacement, so
 their observation semantics must remain explicit.
 
 The observed traversability map marks every nonzero action-map cell as blocked,
-which is stricter than the selective-spoil movement rule above. Reachability is
+matching the current terrain-occupancy rule. It was stricter than the historical
+selective-spoil movement rule. Reachability is
 optional and disabled by default. Current PPO recipes clip the global action
 map to `[-1,1]`, so positive pile heights are aliased in that channel. The
 previous-action history is added by `terra-baselines`; its standard length in
