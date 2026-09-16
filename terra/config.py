@@ -318,6 +318,14 @@ class EnvConfig(NamedTuple):
     # executable fresh volume, including all DO eligibility filters.
     executable_dig_observation: bool = False
 
+    # Optional deployment-oriented reward-v2 costs. Retain only effective
+    # tracked-excavator DO poses (dig, relift or dump), grouping exact equal
+    # base position and heading even after intervening navigation. The first
+    # work pose counts one setup; transfer costs exclude the initial approach.
+    retained_work_setup_cost: float = 0.0
+    retained_work_travel_cost: float = 0.0  # per inter-work straight-line metre
+    retained_work_turn_cost: float = 0.0  # per inter-work wrapped base radian
+
     @classmethod
     def new(cls):
         return EnvConfig()

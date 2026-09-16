@@ -205,6 +205,13 @@ class TerraEnv(NamedTuple):
             "reward_v2_fresh_dig_volume": zero,
             "reward_v2_base_travel_m": zero,
             "reward_v2_base_turn_rad": zero,
+            "reward_v2_retained_setup": zero,
+            "reward_v2_retained_travel": zero,
+            "reward_v2_retained_turn": zero,
+            "reward_v2_retained_work_event": zero,
+            "reward_v2_retained_new_setup": zero,
+            "reward_v2_retained_inter_setup_m": zero,
+            "reward_v2_retained_heading_rad": zero,
         }
 
     @staticmethod
@@ -594,6 +601,7 @@ class TerraEnv(NamedTuple):
             new_state.world.action_map.map,
             new_state.world.target_map.map,
         )
+        obs["remaining_time"] = jnp.where(done, jnp.float32(0.0), obs["remaining_time"])
         infos = {
             **new_state._get_infos(action, task_done),
             **transition_diagnostics,
@@ -677,6 +685,19 @@ class TerraEnv(NamedTuple):
             "agent_states": agents_feat_ordered,            # [MAX_AGENTS, feat]
             "agent_active": agent_active_ordered,           # [MAX_AGENTS]
             "num_agents": jnp.array(num_agents),            # scalar
+            # The finite-horizon task exposes its remaining action budget.
+            # Legacy preprocessing ignores this key unless explicitly enabled.
+            "remaining_time": jnp.clip(
+                (
+                    jnp.asarray(state.env_cfg.max_steps_in_episode, jnp.float32)
+                    - jnp.asarray(state.env_steps, jnp.float32)
+                ) / jnp.maximum(
+                    jnp.asarray(state.env_cfg.max_steps_in_episode, jnp.float32),
+                    jnp.float32(1.0),
+                ),
+                jnp.float32(0.0),
+                jnp.float32(1.0),
+            ),
             "local_map_action_neg": state.world.local_map_action_neg.map,
             "local_map_action_pos": state.world.local_map_action_pos.map,
             "local_map_target_neg": state.world.local_map_target_neg.map,

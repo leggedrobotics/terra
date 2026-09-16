@@ -25,6 +25,32 @@ operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 - `terra/config.py`: curriculum and reward/environment configuration
 - `terra/maps_buffer.py`: dataset and map metadata loading
 
+## September 16 Oracle implementation
+
+The observation dictionary now includes `remaining_time`, the fraction of the
+finite episode budget left. Reset emits 1; terminal step observations emit 0.
+Legacy policies ignore this field. The paired baselines change adds explicit
+zero-initialized actor/critic embeddings and native checkpoint migration.
+
+Reward-v2 also offers optional retained-work setup, transfer-distance and
+heading costs. They count effective digging, relifting and dumping at exact
+base poses; navigation and cabin motion between those events are discarded.
+Initial approach and final egress are excluded. Straight-line distance is a
+lower bound on a navigable transfer. All new coefficients default to zero and
+remain zero for broad training. Before activating them, expose previous
+retained pose/validity to the policy and qualify completion. The optional
+`State._executable_fresh_dig_union()` diagnostic unions actual eligible cells
+across cabin headings; it adds no geometry work to normal training.
+
+Corrected chassis/soil/trench rules and terminal reward-v2 potential are
+unchanged. Focused tests cover event accounting, reset/handoff, fresh-cell
+union and telescoping returns including failed-terminal potential. On a real
+fixture, old state leaves and zero-cost rewards match the previous runtime
+exactly for dig, cabin, motion, base turn and WAIT.
+
+Experiment decisions and remaining diagnostics are recorded in the paired
+baselines `docs/research/ORACLE_FOLLOWUP_20260916.md`.
+
 ## Active research themes
 
 - Generalist global planning across trenches and foundations.

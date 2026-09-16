@@ -126,6 +126,13 @@ class State(NamedTuple):
     # does not change when the trainer schedules a different next reset.
     reset_tier: int
 
+    # Last effective tracked-excavator DO pose, per fixed agent slot. Store
+    # integer (x, y, base-heading-bin); cabin orientation is not part of a setup.
+    # Appended defaults allow historical state pickles to initialize the new
+    # episode-local accounting without changing their physical state.
+    retained_work_pose: Array = jnp.zeros((4, 3), dtype=jnp.int32)
+    retained_work_events: Array = jnp.zeros((4,), dtype=jnp.int32)
+
 
     @classmethod
     def new(
@@ -2276,6 +2283,46 @@ class State(NamedTuple):
             lambda: jnp.zeros((angles,), dtype=IntMap),
         )
 
+    def _executable_fresh_dig_union(self) -> Array:
+        """Unique fresh cells executable across cabin headings at this pose.
+
+        This optional diagnostic is not called by the observation or step
+        paths. Sample the pre-action state on work-pose entry to measure the
+        available area without adding overlapping sector counts. It is an
+        instantaneous opportunity, not a reachable work/disposal sequence.
+        """
+        current = self._get_current_agent_state()
+        angles = EnvConfig().agent.angles_cabin
+        shape = _as_2d_map(self.world.target_map.map).shape
+
+        def _union():
+            context = self._fresh_trench_pose_valid_cells()
+            outside_base = ~self._active_base_footprint_mask().reshape(-1)
+
+            def _cells(offset):
+                candidate = self._set_current_agent_state(
+                    current._replace(
+                        angle_cabin=((current.angle_cabin.astype(jnp.int32) + offset)
+                                     % angles).astype(current.angle_cabin.dtype)
+                    )
+                )
+                mask, _, relift, admitted = candidate._dig_eligibility(
+                    candidate._build_dig_dump_cone(),
+                    fresh_trench_context=context,
+                    outside_base_footprint=outside_base,
+                )
+                return mask & context[0].reshape(-1) & admitted & ~relift
+
+            return jnp.any(
+                jax.vmap(_cells)(jnp.arange(angles, dtype=jnp.int32)), axis=0
+            ).reshape(shape)
+
+        return jax.lax.cond(
+            (current.agent_type[0] == 0) & (current.loaded[0] == 0),
+            _union,
+            lambda: jnp.zeros(shape, dtype=jnp.bool_),
+        )
+
     def _fresh_trench_target_sets(self, dig_mask_2d: Array):
         """Fresh target cells inside ``dig_mask_2d`` and the trench subset the gate scopes.
 
@@ -3218,7 +3265,25 @@ class State(NamedTuple):
                 return jax.lax.cond(did_transfer, _return_after_transfer, _fallback_dump_or_dig)
             return jax.lax.cond(is_truck, _truck_do, _excavator_do)
         
-        return jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
+        following = jax.lax.cond(is_skid_steer, _skid_steer_do, _tracked_wheeled_do)
+        # The evaluation projection retains DO only when terrain or load
+        # changes. Record it here so other physical transitions cannot be
+        # mistaken for work (e.g. skid-steer automatic loading while moving).
+        effective = (
+            (cur.agent_type[0] == 0) & (cur.action_type[0] == 0)
+            & (jnp.any(self.world.action_map.map != following.world.action_map.map)
+               | jnp.any(cur.loaded != following._get_current_agent_state().loaded))
+        )
+        slot = self.agent.current_agent
+        pose = jnp.concatenate((cur.pos_base, cur.angle_base)).astype(jnp.int32)
+        return following._replace(
+            retained_work_pose=self.retained_work_pose.at[slot].set(
+                jnp.where(effective, pose, self.retained_work_pose[slot])
+            ),
+            retained_work_events=self.retained_work_events.at[slot].add(
+                effective.astype(jnp.int32)
+            ),
+        )
 
     @staticmethod
     def _check_agent_moved_on_move_action(
@@ -4054,6 +4119,13 @@ class State(NamedTuple):
                     "reward_v2_fresh_dig_volume": zero,
                     "reward_v2_base_travel_m": zero,
                     "reward_v2_base_turn_rad": zero,
+                    "reward_v2_retained_setup": zero,
+                    "reward_v2_retained_travel": zero,
+                    "reward_v2_retained_turn": zero,
+                    "reward_v2_retained_work_event": zero,
+                    "reward_v2_retained_new_setup": zero,
+                    "reward_v2_retained_inter_setup_m": zero,
+                    "reward_v2_retained_heading_rad": zero,
                 },
             ),
         )
@@ -4066,6 +4138,9 @@ class State(NamedTuple):
             + reward_v2_components["reward_v2_lateral_dig"]
             + reward_v2_components["reward_v2_base_travel"]
             + reward_v2_components["reward_v2_base_turn"]
+            + reward_v2_components["reward_v2_retained_setup"]
+            + reward_v2_components["reward_v2_retained_travel"]
+            + reward_v2_components["reward_v2_retained_turn"]
         )
         components["agent_rewards"] = jnp.where(
             use_reward_v2,
@@ -4911,12 +4986,18 @@ class State(NamedTuple):
             behavior_components["reward_v2_lateral_dig"]
             + behavior_components["reward_v2_base_travel"]
             + behavior_components["reward_v2_base_turn"]
+            + behavior_components["reward_v2_retained_setup"]
+            + behavior_components["reward_v2_retained_travel"]
+            + behavior_components["reward_v2_retained_turn"]
         )
         # Keep the frozen reward expression exactly when all costs are disabled.
         coefficients = jnp.asarray(
             [new_state.env_cfg.lateral_dig_cost,
              new_state.env_cfg.base_travel_cost,
-             new_state.env_cfg.base_turn_cost],
+             new_state.env_cfg.base_turn_cost,
+             new_state.env_cfg.retained_work_setup_cost,
+             new_state.env_cfg.retained_work_travel_cost,
+             new_state.env_cfg.retained_work_turn_cost],
             dtype=jnp.float32,
         )
         reward = jnp.where(jnp.any(coefficients != 0), reward + behavior_cost, reward)
@@ -4942,7 +5023,7 @@ class State(NamedTuple):
         }
 
     def _reward_v2_behavior_costs(self, new_state: "State") -> dict[str, Float]:
-        """Optional costs of actual fresh digging and executed chassis motion.
+        """Optional costs of fresh digging, chassis motion and retained work.
 
         Track the old acting slot through a possible agent handoff. Lateral
         orientation is relative to the chassis before the dig; it describes a
@@ -4993,6 +5074,51 @@ class State(NamedTuple):
             "reward_v2_fresh_dig_volume": fresh_volume,
             "reward_v2_base_travel_m": travel_m,
             "reward_v2_base_turn_rad": turn_rad,
+            **self._reward_v2_retained_work_costs(new_state),
+        }
+
+    def _reward_v2_retained_work_costs(self, new_state: "State") -> dict[str, Float]:
+        """Charge consecutive effective DO poses, matching retained evaluation.
+
+        Exact equal (x, y, base heading) poses merge even after discarded
+        navigation; cabin swings, failed DO and ordinary motion add no setup.
+        Dump/relift events are retained along with fresh digs. Distance and yaw
+        are lower bounds between work poses, excluding initial approach/egress.
+        """
+        slot = self.agent.current_agent
+        event = new_state.retained_work_events[slot] > self.retained_work_events[slot]
+        previous = self.retained_work_pose[slot]
+        pose = new_state.retained_work_pose[slot]
+        has_previous = self.retained_work_events[slot] > 0
+        new_setup = event & (~has_previous | jnp.any(previous != pose))
+        transfer = new_setup & has_previous
+        distance = jnp.where(
+            transfer,
+            jnp.linalg.norm(pose[:2].astype(jnp.float32) - previous[:2].astype(jnp.float32))
+            * jnp.float32(self.env_cfg.tile_size),
+            jnp.float32(0.0),
+        )
+        bins = jnp.float32(self.env_cfg.agent.angles_base)
+        delta = (pose[2] - previous[2]).astype(jnp.float32)
+        wrapped_delta = (delta + bins / 2) % bins - bins / 2
+        heading = jnp.where(
+            transfer, jnp.abs(wrapped_delta) * (2 * jnp.pi / bins), jnp.float32(0.0),
+        )
+        return {
+            "reward_v2_retained_setup": (
+                -jnp.float32(new_state.env_cfg.retained_work_setup_cost)
+                * new_setup.astype(jnp.float32)
+            ),
+            "reward_v2_retained_travel": (
+                -jnp.float32(new_state.env_cfg.retained_work_travel_cost) * distance
+            ),
+            "reward_v2_retained_turn": (
+                -jnp.float32(new_state.env_cfg.retained_work_turn_cost) * heading
+            ),
+            "reward_v2_retained_work_event": event.astype(jnp.float32),
+            "reward_v2_retained_new_setup": new_setup.astype(jnp.float32),
+            "reward_v2_retained_inter_setup_m": distance,
+            "reward_v2_retained_heading_rad": heading,
         }
 
     def _compute_relocation_potential(self, action_map: Array) -> Float:
