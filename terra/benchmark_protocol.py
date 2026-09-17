@@ -139,14 +139,18 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # whenever the gate itself is disabled, which the v1 benchmark requires.
     payload.pop("trench_dig_standoff_enforced")
     payload.pop("trench_dig_max_offset_m")
-    # Later foundation behavior fields preserve v1 only at their inert
-    # defaults. Exclude them from this base receipt, not from EnvConfig or
-    # checkpoint/evaluation treatment metadata. A changed default must fail.
+    # Later foundation and retained-work behavior fields preserve v1 only at
+    # their inert defaults. Exclude them from this base receipt, not from
+    # EnvConfig or checkpoint/evaluation treatment metadata. A changed default
+    # must fail.
     for name, default in {
         "lateral_dig_cost": 0.0,
         "base_travel_cost": 0.0,
         "base_turn_cost": 0.0,
         "executable_dig_observation": False,
+        "retained_work_setup_cost": 0.0,
+        "retained_work_travel_cost": 0.0,
+        "retained_work_turn_cost": 0.0,
     }.items():
         if payload[name] != default:
             raise RuntimeError(

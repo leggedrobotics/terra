@@ -65,6 +65,9 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
         "base_travel_cost": 0.0,
         "base_turn_cost": 0.0,
         "executable_dig_observation": False,
+        "retained_work_setup_cost": 0.0,
+        "retained_work_travel_cost": 0.0,
+        "retained_work_turn_cost": 0.0,
     }
     assert {name: getattr(first_config, name) for name in defaults} == defaults
     assert not defaults.keys() & first_receipt["env_config"].keys()
@@ -76,6 +79,9 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
         "base_travel_cost": 0.07,
         "base_turn_cost": 0.11,
         "executable_dig_observation": True,
+        "retained_work_setup_cost": 0.12,
+        "retained_work_travel_cost": 0.03,
+        "retained_work_turn_cost": 0.04,
     }
     serialized = protocol._jsonable(first_config._replace(**treatment))
     assert {name: serialized[name] for name in treatment} == treatment
@@ -86,6 +92,9 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
     ("base_travel_cost", 0.07),
     ("base_turn_cost", 0.11),
     ("executable_dig_observation", True),
+    ("retained_work_setup_cost", 0.12),
+    ("retained_work_travel_cost", 0.03),
+    ("retained_work_turn_cost", 0.04),
 ])
 def test_frozen_protocol_does_not_hide_nondefault_foundation_behavior(
     monkeypatch, name, value,
