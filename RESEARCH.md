@@ -25,6 +25,87 @@ operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 - `terra/config.py`: curriculum and reward/environment configuration
 - `terra/maps_buffer.py`: dataset and map metadata loading
 
+## September 21 metadata precision and endpoint clearance
+
+Straight-trench replay exposed two geometry defects. Float16 storage moved a
+nominal centerline by 5.23 mm, admitting one pose at a 2 m offset while rejecting
+its mirror. The movement check also rejected a chassis corner equal to the map
+dimension, although corners are continuous cell boundaries and the footprint
+occupancy test uses cell centers.
+
+Trench and foundation-border metadata now remain float32 in MapsBuffer. Closed
+trench distance limits use the same 1e-5 m numerical tolerance as the dig cone.
+Endpoint and swept-translation bounds accept corners in [0, map dimension];
+overhang, soil, holes, obstacles and other chassis remain forbidden.
+
+On the inspected straight geometry, replaying the original greedy actions from
+the same initial Agent now completes 80/80 excavation and accepted disposal at
+action 46. A manual plan completes at action 62, then exits in seven native
+actions to open ground with all four base movements available. This is a
+fixed-action simulator diagnosis, not a newly evaluated policy success rate.
+Task termination still ends on excavation/disposal completion; post-completion
+egress is recorded separately and does not count as additional episode success.
+
+The correction was validated in `terra-geometry-clearance-20260921`, based on
+the current experiment source plus its earlier geometry correction, and applied
+to the active local experiment checkout. Existing frozen cluster snapshots
+retain their original runtime. Evidence and regression/review reports are in
+`.artifacts/terra_geometry_clearance_20260921/` in the Moleworks workspace.
+Serialized old float16 states must be reconstructed from original metadata;
+widening an already quantized table cannot restore geometry. Demonstration
+observations must be regenerated for this runtime. The inspected evaluation
+map remains outside the generalist training bank.
+
+Euler job 14791590 subsequently evaluated the same u109250 policy before and
+after this correction. Straight-trench completion rises from 2/32 to 26/32
+(26 gains, two losses). The full panel changes from 383/384 to 382/384
+foundations and 208/224 to 211/224 trenches; roads remain 29/32. Native finite
+PPO and transition-integrity checks pass. Six straight starts and two newly
+lost full-panel cases remain for diagnosis; these results do not qualify exit
+from every successful plan. Reports and independent review are under
+`.artifacts/terra_latest_geometry_20260921/`.
+
+The observation dictionary also exposes the acting agent's previous effective
+work pose as normalized x/y, heading sine/cosine and a validity flag. Reset
+context is zero. Legacy policies ignore it; the paired baselines support
+optional actor/critic context and native optimizer-preserving migration for
+the delayed retained-work cost experiment.
+
+## September 18 workspace-boundary correction
+
+A saved trench failure exposed an observation/transition disagreement: the
+executable observation reported eight fresh cells, while DO relifted one loose
+soil cell on the sector edge. Batched GPU matrix arithmetic placed that cell
+outside the observed sector although scalar geometry included it.
+
+The correction rotates relative coordinates elementwise, gathers the base
+position directly, and gives angular/radial sector boundaries a closed
+convention with a numerical tolerance of `1e-5` rad/metres. It preserves the
+chassis, trench-alignment, soil-priority, disposal and completion rules. Five
+GPU geometry tests pass, including scalar/batched/nested agreement over 432
+translated base/cabin poses. Replaying the saved failure now reports zero
+executable fresh cells and consistently relifts the one soil unit.
+
+Ten existing training plans also complete under the fixed geometry, with
+449 actions and no ineffective actions or integrity failures. Native MapsBuffer
+replay now also passes with float16 trench/foundation metadata and the original
+actions/reset seeds. It supersedes the earlier helper's float32 metadata:
+some saved observation values change, so the native export is not byte-identical
+to the earlier bank. These four-source, trench-only examples are implementation
+smoke data, not a qualified broad imitation curriculum. The paired baselines
+implementation has completed two
+finite native diagnostic PPO updates with actor imitation; no new production
+training or learned-policy improvement is established.
+
+Evidence is under `.artifacts/terra_trench_failures_20260918/boundary_fix/` in
+the Moleworks workspace. The paired baselines
+`docs/research/TRENCH_DEMONSTRATIONS_20260918.md` records replay limits, the
+completed 1,280-plan rehearsal archive, the independent Oracle review, and the
+bounded PPO-plus-imitation experiment being prepared. Its soft foundation
+targets and explicit source-balanced expert sampling require their own
+production-layout qualification; the earlier hard-label smoke does not
+establish those checks.
+
 ## September 16 Oracle implementation
 
 The observation dictionary now includes `remaining_time`, the fraction of the

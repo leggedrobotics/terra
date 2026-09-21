@@ -113,6 +113,13 @@ excavator can rotate its cabin but cannot translate or rotate its chassis.
 Distant soil transport therefore requires reachable placement, repositioning
 while empty and, where needed, relifting staged soil.
 
+Continuous chassis corners may touch either map edge: valid coordinates are
+`0 <= corner <= map_dimension`. Occupied cells are tested at their centers,
+ending at `map_dimension - 0.5`; crossing an edge remains invalid. The earlier
+strict positive-edge bound unnecessarily removed one row/column of clearance.
+Trench and foundation geometry metadata are stored in float32, and trench
+distance limits include a `1e-5 m` numerical tolerance at the boundary.
+
 Every attempted action, including a rejected action and explicit no-op,
 increments the decision count. Invalid motion is a physical no-op rather than
 a separate collision termination. Translation sweeps Terra's raster chassis

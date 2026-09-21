@@ -1,6 +1,10 @@
 import sys
 import numpy as np
 import jax.numpy as jnp
+import jax
+import pytest
+
+from terra.tests.test_foundation_behavior import foundation, _map, _pose
 
 # Ensure project imports work when running directly
 try:
@@ -19,14 +23,15 @@ def build_expected_axis_aligned_mask(
 ) -> np.ndarray:
     """
     Build an expected mask for an axis-aligned rectangle covering cells
-    x in [x0, x1-1], y in [y0, y1-1]. Mask shape is (map_h, map_w).
+    x in [x0, x1-1], y in [y0, y1-1]. Terra stores x as rows and y as
+    columns, so the mask shape is (map_w, map_h).
     """
-    m = np.zeros((map_h, map_w), dtype=np.int32)
+    m = np.zeros((map_w, map_h), dtype=np.int32)
     xs0 = max(0, min(map_w, x0))
     xs1 = max(0, min(map_w, x1))
     ys0 = max(0, min(map_h, y0))
     ys1 = max(0, min(map_h, y1))
-    m[ys0:ys1, xs0:xs1] = 1
+    m[xs0:xs1, ys0:ys1] = 1
     return m
 
 
@@ -117,43 +122,27 @@ def test_actual_odd_agent_footprint_preserves_width_and_height():
     assert int(mask.sum()) == agent_w * agent_h
 
 
-def test_bounds_check():
-    map_w = 8
-    map_h = 8
-
-    def valid_bounds(corners: np.ndarray) -> bool:
-        corners_j = jnp.array(corners, dtype=jnp.int32)
-        log_dtype_shape("corners_bounds", corners_j)
-        vb = jnp.all(
-            jnp.logical_and(
-                corners_j >= jnp.array([0, 0], dtype=jnp.int32),
-                corners_j < jnp.array([map_w, map_h], dtype=jnp.int32),
-            )
-        )
-        return bool(vb)
-
-    # Inside
-    assert valid_bounds(np.array([[1, 1], [2, 1], [2, 2], [1, 2]], dtype=np.int32))
-
-    # Exactly on right edge (x==8) -> invalid
-    assert not valid_bounds(np.array([[7, 1], [8, 1], [8, 2], [7, 2]], dtype=np.int32))
-
-    # Exactly on bottom edge (y==8) -> invalid
-    assert not valid_bounds(np.array([[1, 7], [2, 7], [2, 8], [1, 8]], dtype=np.int32))
-
-    # Negative -> invalid
-    assert not valid_bounds(
-        np.array([[-1, 1], [0, 1], [0, 2], [-1, 2]], dtype=np.int32)
-    )
-
-    print("OK: bounds check logic dtype/shape and edge behavior correct.")
+def test_bounds_check(foundation):
+    valid = jax.jit(lambda state, corners: state._is_valid_move(corners))
+    # Each real 7x11 footprint touches exactly one continuous map edge.
+    for position, outward in (
+        ((3, 32), (-1, 0)), ((60, 32), (1, 0)),
+        ((32, 5), (0, -1)), ((32, 58), (0, 1)),
+    ):
+        state = _pose(foundation, position=position, base=0)
+        corners = state._get_agent_corners(jnp.asarray(position), jnp.array([0]), 7, 11)
+        footprint = np.asarray(state._current_base_footprint_mask())
+        assert int(footprint.sum()) == 77
+        assert bool(valid(state, corners))
+        assert not bool(valid(state, corners + jnp.asarray(outward)))
+        # Touching the edge permits no exception for the occupied boundary cells.
+        cells = np.argwhere(footprint)
+        edge_cell = cells[np.argmax(cells @ np.asarray(outward))]
+        for field, height in (("action_map", 1), ("action_map", -1), ("static_traversability_base", 1)):
+            blocked = np.zeros((64, 64), dtype=np.int8)
+            blocked[tuple(edge_cell)] = height
+            assert not bool(valid(_map(state, field, blocked), corners))
 
 
 if __name__ == "__main__":
-    try:
-        test_polygon_mask_axes_and_edges()
-        test_bounds_check()
-    except AssertionError as e:
-        print("FAILED:", e)
-        sys.exit(1)
-    print("All tests passed.")
+    sys.exit(pytest.main([__file__]))

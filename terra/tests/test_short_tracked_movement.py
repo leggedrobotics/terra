@@ -58,6 +58,23 @@ def test_open_ground_preserves_nominal_endpoints_and_loaded_rejection(foundation
             np.testing.assert_array_equal(_position(handler(loaded)), _position(loaded))
 
 
+def test_tracked_translation_reaches_and_leaves_closed_map_edges(foundation):
+    for position, handler, reverse, expected in (
+        ((32, 57), _forward, _backward, (32, 58)),
+        ((32, 6), _backward, _forward, (32, 5)),
+    ):
+        before = _pose(foundation, position=position, base=0)
+        edge = handler(before)
+        np.testing.assert_array_equal(_position(edge), expected)
+        np.testing.assert_array_equal(_position(handler(edge)), expected)
+        assert np.any(_position(reverse(edge)) != _position(edge))
+        entered = np.asarray(edge._current_base_footprint_mask()) & ~np.asarray(before._current_base_footprint_mask())
+        obstacle = np.zeros((64, 64), dtype=np.int8)
+        obstacle[tuple(np.argwhere(entered)[0])] = 1
+        blocked = _map(before, "static_traversability_base", obstacle)
+        np.testing.assert_array_equal(_position(handler(blocked)), position)
+
+
 @pytest.mark.parametrize("blocker", ["soil", "hole", "static"])
 def test_blocked_nominal_move_keeps_only_the_valid_prefix(foundation, blocker):
     before = _pose(foundation, base=0)

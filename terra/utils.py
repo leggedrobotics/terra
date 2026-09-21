@@ -43,20 +43,14 @@ def apply_rot_transl(anchor_state: Array, global_coords: Array) -> Array:
     """
     theta = anchor_state[2]
     costheta, sintheta = jnp.cos(theta), jnp.sin(theta)
-    R_t = jnp.array([[costheta, sintheta], [-sintheta, costheta]])
-
-    t = anchor_state[:2]
-    neg_Rt_t = -R_t @ t
-
-    # Build the inverse transformation matrix
-    T = jnp.block([[R_t, neg_Rt_t[:, None]], [jnp.array([0.0, 0.0, 1.0])]])
-
-    local_coords = jnp.einsum(
-        "ij,jk->ik",
-        T,
-        jnp.vstack([global_coords, jnp.ones((1, global_coords.shape[1]))]),
-    )
-    return local_coords[:2]
+    # Geometry must not inherit the policy's matmul precision. A batched
+    # homogeneous-matrix product can use TF32 on GPU and put a sector-edge
+    # cell on a different side of the boundary than a scalar DO. Subtract
+    # the origin first and rotate elementwise in the coordinates' dtype.
+    dx = global_coords[0] - anchor_state[0]
+    dy = global_coords[1] - anchor_state[1]
+    return jnp.stack((costheta * dx + sintheta * dy,
+                      -sintheta * dx + costheta * dy))
 
 
 def apply_local_cartesian_to_cyl(local_coords: Array) -> Array:

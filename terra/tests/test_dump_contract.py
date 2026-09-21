@@ -1234,8 +1234,11 @@ class ExactDumpContractTest(unittest.TestCase):
         current = EnvConfig()
         # Keep the historical checkpoint boundaries independent of the newly
         # appended foundation behavior fields.
-        previous_fields = EnvConfig._fields[:-4]
-        previous_values = tuple(current)[:-4]
+        # Later retained-work costs also append fields. Identify the actual
+        # historical boundary instead of assuming exactly four newer fields.
+        previous_end = EnvConfig._fields.index("trench_dig_max_offset_m") + 1
+        previous_fields = EnvConfig._fields[:previous_end]
+        previous_values = tuple(current)[:previous_end]
         self.assertEqual(
             previous_fields[-10:-6],
             (

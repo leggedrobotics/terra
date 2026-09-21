@@ -622,6 +622,27 @@ class TerraEnv(NamedTuple):
         )
 
     @staticmethod
+    def _retained_work_context(state: State) -> Array:
+        """Last effective work pose for the acting agent, plus validity.
+
+        Exact pose grouping and transfer costs depend on this history even if
+        intervening navigation leaves the visible terrain unchanged. Coordinates
+        are normalized to the map's cell-index range; invalid reset context is
+        all zero. Heading remains relative to the world, like angle_base.
+        """
+        slot = state.agent.current_agent
+        pose = state.retained_work_pose[slot].astype(jnp.float32)
+        valid = state.retained_work_events[slot] > 0
+        dimensions = jnp.asarray(state.world.target_map.map.shape[-2:], jnp.float32)
+        xy = pose[:2] / jnp.maximum(dimensions - 1, jnp.float32(1))
+        heading = pose[2] * (2 * jnp.pi / state.env_cfg.agent.angles_base)
+        context = jnp.concatenate((
+            xy,
+            jnp.stack((jnp.sin(heading), jnp.cos(heading), jnp.float32(1))),
+        ))
+        return jnp.where(valid, context, jnp.zeros((5,), jnp.float32))
+
+    @staticmethod
     def _state_to_obs_dict(state: State) -> dict[str, Array]:
         """
         Transforms a State object to an observation dictionary.
@@ -685,6 +706,9 @@ class TerraEnv(NamedTuple):
             "agent_states": agents_feat_ordered,            # [MAX_AGENTS, feat]
             "agent_active": agent_active_ordered,           # [MAX_AGENTS]
             "num_agents": jnp.array(num_agents),            # scalar
+            # Legacy policies ignore this optional input. Both actor and critic
+            # consume it when retained-work costs are enabled.
+            "retained_work_context": TerraEnv._retained_work_context(state),
             # The finite-horizon task exposes its remaining action budget.
             # Legacy preprocessing ignores this key unless explicitly enabled.
             "remaining_time": jnp.clip(

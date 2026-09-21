@@ -574,11 +574,12 @@ class State(NamedTuple):
         map_width = self.world.width
         map_height = self.world.height
 
-        # Verify that the corners are within map bounds.
+        # Corners are continuous cell boundaries; the outer edge of an N-cell
+        # map is N, while occupied cell centers end at N - 0.5.
         valid_bounds = jnp.all(
             jnp.logical_and(
                 agent_corners >= jnp.array([0, 0]),
-                agent_corners < jnp.array([map_width, map_height])
+                agent_corners <= jnp.array([map_width, map_height])
             )
         )
 
@@ -677,8 +678,8 @@ class State(NamedTuple):
                     start_corners, displacement, self.world.width, self.world.height,
                 )
                 translated_corners = start_corners + displacement
-                swept_bounds = jnp.all((start_corners >= 0) & (start_corners < bounds))
-                swept_bounds &= jnp.all((translated_corners >= 0) & (translated_corners < bounds))
+                swept_bounds = jnp.all((start_corners >= 0) & (start_corners <= bounds))
+                swept_bounds &= jnp.all((translated_corners >= 0) & (translated_corners <= bounds))
                 clear = valid_position(candidate) & swept_bounds & ~jnp.any(swept & blocked)
                 return distance - 1, jnp.where(clear, candidate, position), clear
 
@@ -1231,10 +1232,9 @@ class State(NamedTuple):
         Given the flattened map and the index of the current position in the vector,
         it returns the current position as [x, y].
         """
-        num_tiles = flattened_map.shape[1]
-        idx_one_hot = jax.nn.one_hot(idx, num_tiles, dtype=Float)
-        current_pos = flattened_map @ idx_one_hot[0]
-        return current_pos
+        # A gather is exact and avoids a potentially reduced-precision
+        # one-hot matrix product when environment states are vmapped.
+        return flattened_map[:, jnp.ravel(idx)[0]]
 
     def _get_cabin_angle_rad(self) -> Float:
         cur = self._get_current_agent_state()
@@ -1450,11 +1450,19 @@ class State(NamedTuple):
         theta_max = 2 * np.pi / self.env_cfg.agent.angles_cabin
         theta_min = -theta_max
 
+        # Closed sector boundaries, with only a numerical tolerance (10 um
+        # radially, <0.07 mm at the standard outer angular edge). Equivalent
+        # base/cabin decompositions and scalar/vmapped fp32 expressions can
+        # round exact edge cells to opposite sides without this tolerance.
+        radius_eps = 1e-5
+        angle_eps = 1e-5
         dig_mask_r = jnp.logical_and(
-            map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
+            map_cyl_coords[0] >= r_min - radius_eps,
+            map_cyl_coords[0] <= r_max + radius_eps,
         )
         dig_mask_theta = jnp.logical_and(
-            map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
+            map_cyl_coords[1] >= theta_min - angle_eps,
+            map_cyl_coords[1] <= theta_max + angle_eps,
         )
 
         return jnp.logical_and(dig_mask_r, dig_mask_theta)
@@ -2520,15 +2528,19 @@ class State(NamedTuple):
         # trench_dig_max_offset_m (disabled when <= 0). Under v1 the band
         # applies instead.
         max_offset = jnp.float32(self.env_cfg.trench_dig_max_offset_m)
+        # Closed distance boundaries, matching the dig cone's numerical
+        # tolerance. fp32 line arithmetic can otherwise split mirrored poses
+        # that are exactly on the same metric limit.
+        distance_eps = jnp.float32(1e-5)
         on_line_clause = jnp.logical_or(
             max_offset <= jnp.float32(0.0),
-            standoffs_m <= max_offset,
+            standoffs_m <= max_offset + distance_eps,
         )
         standoff_clause = jnp.where(
             standoff_enforced,
             jnp.logical_and(
-                standoffs_m >= standoff_min,
-                standoffs_m <= standoff_max,
+                standoffs_m >= standoff_min - distance_eps,
+                standoffs_m <= standoff_max + distance_eps,
             ),
             on_line_clause,
         )

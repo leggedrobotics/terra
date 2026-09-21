@@ -128,9 +128,11 @@ class MapsBuffer(NamedTuple):
             maps=maps.astype(IntLowDim),
             padding_mask=padding_mask.astype(IntLowDim),
             dumpability_masks_init=dumpability_masks_init.astype(jnp.bool_),
-            trench_axes=trench_axes.astype(jnp.float16),
+            # These coefficients define physical admission boundaries. Half
+            # precision can shift an axis enough to reject a legal edge pose.
+            trench_axes=trench_axes.astype(jnp.float32),
             trench_types=trench_types,
-            foundation_border_axes=foundation_border_axes.astype(jnp.float16),
+            foundation_border_axes=foundation_border_axes.astype(jnp.float32),
             foundation_border_types=foundation_border_types,
             n_maps=maps.shape[1],
             action_maps=action_maps.astype(IntLowDim),
