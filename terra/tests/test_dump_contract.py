@@ -267,7 +267,7 @@ class ExactDumpContractTest(unittest.TestCase):
         )
         expected = []
         for action in actions:
-            candidate = state._step(action, turn=False)
+            candidate = state._step(action)
             expected.append(
                 bool(TerraEnv._transition_diagnostics(state, candidate)["action_had_effect"])
             )
@@ -541,7 +541,7 @@ class ExactDumpContractTest(unittest.TestCase):
             state._compute_relocation_potential(state.world.action_map.map)
         )
 
-        lifted = state._step(TrackedAction.do(), turn=False)
+        lifted = state._step(TrackedAction.do())
         lifted_map = np.asarray(lifted.world.action_map.map).astype(np.int32)
         loaded = int(lifted._get_current_agent_state().loaded[0])
         remaining = int(lifted_map.clip(min=0).sum())
@@ -588,15 +588,13 @@ class ExactDumpContractTest(unittest.TestCase):
         )
         initial_mass = int(action.sum())
 
-        first_lift = state._step(TrackedAction.do(), turn=False)
+        first_lift = state._step(TrackedAction.do())
         self.assertEqual(int(first_lift._get_current_agent_state().loaded[0]), 127)
 
         dump_agent = first_lift._get_current_agent_state()._replace(
             angle_cabin=jnp.array([6], dtype=jnp.int8)
         )
-        first_dump = first_lift._set_current_agent_state(dump_agent)._step(
-            TrackedAction.do(), turn=False
-        )
+        first_dump = first_lift._set_current_agent_state(dump_agent)._step(TrackedAction.do())
         self.assertEqual(int(first_dump._get_current_agent_state().loaded[0]), 0)
         self.assertEqual(
             float(first_dump._get_current_agent_state().carry_relocation_credit),
@@ -606,9 +604,7 @@ class ExactDumpContractTest(unittest.TestCase):
         pickup_agent = first_dump._get_current_agent_state()._replace(
             angle_cabin=jnp.array([0], dtype=jnp.int8)
         )
-        second_lift = first_dump._set_current_agent_state(pickup_agent)._step(
-            TrackedAction.do(), turn=False
-        )
+        second_lift = first_dump._set_current_agent_state(pickup_agent)._step(TrackedAction.do())
         second_load = int(second_lift._get_current_agent_state().loaded[0])
         second_map = np.asarray(second_lift.world.action_map.map).astype(np.int32)
         self.assertEqual(second_load, 8)
@@ -618,9 +614,7 @@ class ExactDumpContractTest(unittest.TestCase):
         dump_agent = second_lift._get_current_agent_state()._replace(
             angle_cabin=jnp.array([6], dtype=jnp.int8)
         )
-        final = second_lift._set_current_agent_state(dump_agent)._step(
-            TrackedAction.do(), turn=False
-        )
+        final = second_lift._set_current_agent_state(dump_agent)._step(TrackedAction.do())
         final_map = np.asarray(final.world.action_map.map).astype(np.int32)
         self.assertEqual(int(final._get_current_agent_state().loaded[0]), 0)
         self.assertEqual(int(final_map[pickup_mask].clip(min=0).sum()), 0)

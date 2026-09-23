@@ -237,6 +237,59 @@ class MapsBufferDistanceContractTest(unittest.TestCase):
                         required_distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
                     )
 
+    def test_reward_v2_admits_haul_only_maps_and_rejects_mixed_initial_soil(self):
+        tile_size_m = 36.5714285714 / 64
+        for dig_target, initial, error in (
+            (False, 1, None),  # relocation: loose soil, no dig target
+            (True, 1, "Reward-v2 R2 needs"),  # soil on an excavation map
+            (False, -1, "Reward-v2 R2 needs"),  # pre-dug hole
+        ):
+            with self.subTest(dig_target=dig_target, initial=initial):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    self.write_map(root, np.zeros((64, 64), dtype=np.float32))
+                    target = np.zeros((64, 64), dtype=np.int8)
+                    target[40:52, 40:52] = 1
+                    if dig_target:
+                        target[10:14, 10:14] = -1
+                    np.save(root / "images" / "img_1.npy", target)
+                    actions = np.zeros((64, 64), dtype=np.int8)
+                    actions[20:24, 20:26] = initial
+                    np.save(root / "actions" / "img_1.npy", actions)
+                    np.save(
+                        root / "distance" / "img_1.npy",
+                        compute_reward_v2_distance_map(
+                            target,
+                            np.zeros_like(target),
+                            tile_size_m=tile_size_m,
+                            distance_ref_m=REWARD_V2_DISTANCE_REF_M,
+                            distance_bound=REWARD_V2_DISTANCE_BOUND,
+                        ),
+                    )
+                    metadata_path = root / "dataset.json"
+                    metadata = json.loads(metadata_path.read_text())
+                    metadata.update(
+                        {
+                            "distance_protocol_id": REWARD_V2_DISTANCE_PROTOCOL_ID,
+                            "distance_metric": REWARD_V2_DISTANCE_METRIC,
+                            "distance_normalization": REWARD_V2_DISTANCE_NORMALIZATION,
+                            "tile_size_m": tile_size_m,
+                            "distance_ref_m": REWARD_V2_DISTANCE_REF_M,
+                            "distance_bound": REWARD_V2_DISTANCE_BOUND,
+                        }
+                    )
+                    metadata_path.write_text(json.dumps(metadata, sort_keys=True) + "\n")
+                    with patch.dict(os.environ, {"DATASET_SIZE": "1"}):
+                        load = lambda: load_maps_from_disk(  # noqa: E731
+                            str(root),
+                            required_distance_protocol_id=REWARD_V2_DISTANCE_PROTOCOL_ID,
+                        )
+                        if error is None:
+                            load()
+                        else:
+                            with self.assertRaisesRegex(RuntimeError, error):
+                                load()
+
     def test_exact_contract_rejects_count_and_manifest_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

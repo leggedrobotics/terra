@@ -66,14 +66,8 @@ class DispatchState(NamedTuple):
     def _do_nothing(self):
         return self
 
-    def _swap(self):
-        return self._replace(current_agent=1 - self.current_agent)
 
-    def _next_stall_age_steps(self, new_state):
-        return new_state.stall_age_steps + 1
-
-
-def reference_step(state, action, turn=True):
+def reference_dispatch(state, action):
     handlers = [
         state._handle_move_forward,
         state._handle_move_backward,
@@ -95,16 +89,11 @@ def reference_step(state, action, turn=True):
     offset = jnp.array([0, 8], dtype=jnp.int32) @ jax.nn.one_hot(
         state.action_type, 2, dtype=jnp.int32
     )
-    action_idx = jnp.squeeze(action.action)
-    result = jax.lax.cond(
+    action_idx = jnp.squeeze(action)
+    return jax.lax.cond(
         jnp.logical_or(action_idx == -1, action_idx == 7),
         state._do_nothing,
         lambda: jax.lax.switch(offset + action_idx, handlers),
-    )
-    result = jax.lax.cond(turn, result._swap, lambda: result)
-    return result._replace(
-        env_steps=result.env_steps + 1,
-        stall_age_steps=result.stall_age_steps + 1,
     )
 
 
@@ -133,7 +122,7 @@ def fake_transition_diagnostics(done):
 
 class FakeTerraEnv:
     @staticmethod
-    def step_no_reset(state, action, env_cfg):
+    def step_no_reset(state, action, env_cfg, order=None):
         next_state = FakeEnvState(state.value + action + 1)
         done = action == 1
         info = next_state._get_infos(action, done)
@@ -259,7 +248,7 @@ class FakeBatch:
 
 class OutcomeTerraEnv(FakeTerraEnv):
     @staticmethod
-    def step_no_reset(state, action, env_cfg):
+    def step_no_reset(state, action, env_cfg, order=None):
         next_state = FakeEnvState(state.value + action + 1)
         done = jnp.abs(action) == 1
         task_done = action == 1
@@ -323,18 +312,17 @@ class StepOptimizationTest(unittest.TestCase):
     def test_dispatch_matches_sixteen_branch_reference(self):
         for action_type in (0, 1):
             for action_idx in range(-1, 8):
-                for turn in (False, True):
-                    state = DispatchState(
-                        action_type=jnp.int32(action_type),
-                        marker=jnp.int32(-1),
-                        current_agent=jnp.int32(0),
-                        env_steps=jnp.int32(9),
-                        stall_age_steps=jnp.int32(4),
-                    )
-                    action = FakeAction(jnp.array([action_idx], dtype=jnp.int32))
-                    expected = reference_step(state, action, turn=turn)
-                    actual = State._step(state, action, turn=turn)
-                    np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
+                state = DispatchState(
+                    action_type=jnp.int32(action_type),
+                    marker=jnp.int32(-1),
+                    current_agent=jnp.int32(0),
+                    env_steps=jnp.int32(9),
+                    stall_age_steps=jnp.int32(4),
+                )
+                action = jnp.array([action_idx], dtype=jnp.int32)
+                expected = reference_dispatch(state, action)
+                actual = State._apply_action(state, action)
+                np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
 
     def test_conditional_reset_matches_reference(self):
         batch = FakeBatch()

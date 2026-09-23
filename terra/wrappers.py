@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from terra.agent import num_agent_slots
 from terra.config import EnvConfig
 from terra.state import State
 from terra.utils import angle_idx_to_rad
@@ -96,132 +97,19 @@ class TraversabilityMaskWrapper:
         - 0: no obstacle
         - 1: obstacle (digged or dumped tile)
         - (-1): agent occupying the tile
-        """
-        # encode map obstacles
-        traversability_mask = (state.world.action_map.map != 0).astype(IntLowDim)
 
-        # encode agent pos and size in the map for all active agents
+        The interaction mask is the union of every agent's dig/dump workspace.
+        """
         map_width = state.world.width
         map_height = state.world.height
-        
-        # Process all active agents using jax.lax.switch for JAX compatibility
-        def process_agent_idx(agent_idx):
-            # Get agent state using jax.lax.switch
-            agent_state = jax.lax.switch(
-                agent_idx,
-                [
-                    lambda: state.agent.agent_states[0],
-                    lambda: state.agent.agent_states[1],
-                    lambda: state.agent.agent_states[2],
-                    lambda: state.agent.agent_states[3],
-                ]
+        cones = []
+        for slot in range(num_agent_slots(state.env_cfg)):
+            view = state._replace(
+                agent=state.agent._replace(current_agent=jnp.int32(slot))
             )
-            # Get agent active status
-            agent_active = jax.lax.switch(
-                agent_idx,
-                [
-                    lambda: state.agent.agent_active[0],
-                    lambda: state.agent.agent_active[1],
-                    lambda: state.agent.agent_active[2],
-                    lambda: state.agent.agent_active[3],
-                ]
-            )
-            
-            agent_corners = state._get_agent_corners(
-                agent_state.pos_base,
-                agent_state.angle_base,
-                state.env_cfg.agent.width,
-                state.env_cfg.agent.height,
-            )
-            polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
-            return jnp.where(agent_active, polygon_mask, jnp.zeros_like(polygon_mask))
-        
-        is_single_agent = state.agent.num_agents == 1
-
-        def _single_agent_masks():
-            agent_state = state.agent.agent_states[0]
-            agent_corners = state._get_agent_corners(
-                agent_state.pos_base,
-                agent_state.angle_base,
-                state.env_cfg.agent.width,
-                state.env_cfg.agent.height,
-            )
-            polygon_mask = compute_polygon_mask(agent_corners, map_width, map_height)
-            combined_agent_mask = jnp.where(
-                state.agent.agent_active[0],
-                polygon_mask,
-                jnp.zeros_like(polygon_mask),
-            )
-
-            temp_state = state._replace(agent=state.agent._replace(current_agent=jnp.int32(0)))
-            interaction_mask = temp_state._build_dig_dump_cone().reshape(map_width, map_height)
-            return combined_agent_mask, interaction_mask
-
-        def _multi_agent_masks():
-            # Process all 4 agents (some may be inactive)
-            agent_masks = jax.vmap(process_agent_idx)(jnp.arange(4))
-            combined_agent_mask = jnp.any(agent_masks, axis=0)
-
-            # Generate interaction mask for all active agents
-            def get_agent_interaction_mask(agent_idx):
-                # Get agent state using jax.lax.switch
-                agent_state = jax.lax.switch(
-                    agent_idx,
-                    [
-                        lambda: state.agent.agent_states[0],
-                        lambda: state.agent.agent_states[1],
-                        lambda: state.agent.agent_states[2],
-                        lambda: state.agent.agent_states[3],
-                    ]
-                )
-                # Get agent active status
-                agent_active = jax.lax.switch(
-                    agent_idx,
-                    [
-                        lambda: state.agent.agent_active[0],
-                        lambda: state.agent.agent_active[1],
-                        lambda: state.agent.agent_active[2],
-                        lambda: state.agent.agent_active[3],
-                    ]
-                )
-                
-                # Only generate cone for active agents
-                def generate_cone():
-                    # Temporarily set current agent to this agent to generate its cone
-                    temp_state = state._replace(agent=state.agent._replace(current_agent=agent_idx))
-                    return temp_state._build_dig_dump_cone()
-                
-                def no_cone():
-                    return jnp.zeros((map_width * map_height,), dtype=jnp.bool_)
-                
-                cone = jax.lax.cond(agent_active, generate_cone, no_cone)
-                return cone.reshape(map_width, map_height)
-            
-            agent_interaction_masks = jax.vmap(get_agent_interaction_mask)(jnp.arange(4))
-            interaction_mask = jnp.any(agent_interaction_masks, axis=0)
-            return combined_agent_mask, interaction_mask
-
-        combined_agent_mask, interaction_mask = jax.lax.cond(
-            is_single_agent,
-            _single_agent_masks,
-            _multi_agent_masks,
-        )
-        # Keep material blockers visible even when an agent currently overlaps
-        # them.  Only free terrain receives the agent marker.  This prevents an
-        # underlying hole from looking traversable to the policy while movement
-        # physics still rejects it.
-        free_agent_footprint = jnp.logical_and(
-            combined_agent_mask,
-            traversability_mask == 0,
-        )
-        traversability_mask = jnp.where(
-            free_agent_footprint,
-            -1,
-            traversability_mask,
-        )
-
-        static_base = state.world.static_traversability_base.map
-        tm = jnp.where(static_base == 1, static_base, traversability_mask)
+            cones.append(view._build_dig_dump_cone().reshape(map_width, map_height))
+        interaction_mask = jnp.any(jnp.stack(cones), axis=0)
+        tm = state._traversability_map()
 
         # Optional global reachability channel (from current agent footprint),
         # with inflated blocked-space to account for excavator clearance.

@@ -1708,13 +1708,16 @@ def load_maps_from_disk(
             actions.append(actions_map)
         else:
             actions.append(np.zeros_like(map, dtype=IntMap))
-        if (
-            required_distance_protocol_id == REWARD_V2_DISTANCE_PROTOCOL_ID
-            and np.any(actions[-1] != 0)
+        # R2 maps are either full-reset excavations (no initial soil) or
+        # haul-only relocations (loose soil, no dig target). Pre-dug holes
+        # and mixed maps have no R2 normalization.
+        if required_distance_protocol_id == REWARD_V2_DISTANCE_PROTOCOL_ID and (
+            np.any(actions[-1] < 0)
+            or (np.any(actions[-1] > 0) and np.any(map < 0))
         ):
             raise RuntimeError(
-                "Reward-v2 R2 supports full-reset maps only; initial action "
-                f"map is nonzero for slot {i}."
+                "Reward-v2 R2 needs a zero initial action map, or loose soil "
+                f"on a map without a dig target; slot {i} is neither."
             )
         contained_dump_capacity_sanity_check(
             map,

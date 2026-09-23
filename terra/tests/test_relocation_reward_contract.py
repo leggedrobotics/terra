@@ -174,7 +174,7 @@ def _step_trace(state: State, action: TrackedAction) -> tuple[State, dict[str, f
         transitioned = state._do_nothing()
     else:
         raise ValueError(f"Unsupported evidence action: {action_index}")
-    next_state = transitioned._swap()._replace(env_steps=state.env_steps + 1)
+    next_state = transitioned._replace(env_steps=state.env_steps + 1)
 
     action_raw = 0.0
     if action_index == 6:
@@ -476,9 +476,11 @@ def test_truck_handoff_moves_credit_without_reward_then_dump_pays_once():
     assert dig["load_after"] > 0
     excavator_after_dig = after_dig.agent.agent_states[0]
 
-    # Give the truck its ordinary no-op turn, returning control to the excavator.
-    ready_to_transfer, _ = _step_trace(after_dig, TrackedAction.do_nothing())
-    assert int(np.asarray(ready_to_transfer.agent.current_agent)) == 0
+    # The truck idles for one action, then the excavator acts again.
+    truck_idle, _ = _step_trace(
+        _set_current_agent(after_dig, 1), TrackedAction.do_nothing()
+    )
+    ready_to_transfer = _set_current_agent(truck_idle, 0)
 
     after_transfer, transfer = _step_trace(
         ready_to_transfer,
@@ -502,7 +504,7 @@ def test_truck_handoff_moves_credit_without_reward_then_dump_pays_once():
     assert float(excavator_after_transfer.carry_relocation_credit) == 0
 
     after_truck_dump, truck_dump = _step_trace(
-        after_transfer,
+        _set_current_agent(after_transfer, 1),
         TrackedAction.do(),
     )
     assert truck_dump["world_changed"] == 1

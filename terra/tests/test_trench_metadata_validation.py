@@ -36,6 +36,9 @@ class TrenchMetadataValidationTests(unittest.TestCase):
         )
         self.validate(batch)
 
+    def test_relocations_need_no_trench_axes(self):
+        self.validate(self.batch(("unknown", "relocation"), [1, 1], [-1, -1]))
+
     def test_unknown_maps_without_axes_are_rejected_including_mixed_banks(self):
         for names, ids, types in (
             (("unknown",), [0], [-1]),

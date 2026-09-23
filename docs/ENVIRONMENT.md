@@ -90,6 +90,14 @@ environment supports up to four active excavators, trucks or skid steers and
 tracked or wheeled motion. Those capabilities are not evidence that the solo
 experiments trained or evaluated multi-agent policies.
 
+With several agents, one env step is one round: the action holds one index
+per agent slot and every agent acts once, sequentially in a per-step execution
+order (default: slot order). Each agent sees the results of the agents before
+it, so collisions and competing digs resolve by that order. `env_steps`, the
+horizon, the existence/step cost, terminal rewards and reward-v2 shaping count
+rounds; action-dependent terms are summed over the agents
+(`State._step_joint`, `State._agent_reward_terms`, `State._get_reward`).
+
 | Index | Tracked action | Solo-excavator effect |
 | ---: | --- | --- |
 | 0 | `FORWARD` | Translate in the chassis heading, if empty and the straight path and destination footprint are valid. |
@@ -112,6 +120,18 @@ positions would introduce sideways grid excursions. A loaded solo
 excavator can rotate its cabin but cannot translate or rotate its chassis.
 Distant soil transport therefore requires reachable placement, repositioning
 while empty and, where needed, relifting staged soil.
+
+A tracked skid steer (type 2, action type 0) carries its load while driving.
+`DO` toggles the shovel: lowered → lifted keeps the load; lifted and loaded
+dumps into the accepted region within its bucket sector and lowers the shovel
+(no accepted cell in reach: nothing is dumped, the shovel still lowers).
+`FORWARD` with the shovel lowered, after the move (also when the move is
+blocked), loads positive soil in the bucket sector up to
+`skidsteer_capacity − load` (partial loads, proportional over the cells).
+It never loads soil already in the accepted region, and the relaxation after a
+pickup is contained to that region, so no accepted soil leaves it. `BACKWARD`
+keeps the load; `DO` is the only dump. Cabin actions are no-ops. A wheeled
+skid steer cannot load and the trainer rejects it.
 
 Continuous chassis corners may touch either map edge: valid coordinates are
 `0 <= corner <= map_dimension`. Occupied cells are tested at their centers,
@@ -245,10 +265,19 @@ The current interface provides:
 
 | Component | Representation and meaning |
 | --- | --- |
-| Agent state | Four padded rows of nine scalars: row, column, base bin, relative cabin bin, steering bin, load, agent type, shovel state and carried relocation work divided by required volume. The acting agent is first; an active mask and count identify padding. |
+| Agent state | Four padded rows of nine scalars: row, column, base bin, relative cabin bin, steering bin, load, agent type, shovel state and carried relocation work divided by required volume. The observing agent is first; an active mask and count identify padding. |
 | Global maps | Action, target, observed traversability, optional reachability, padding/obstacles, dumpability and current interaction workspace. |
 | Local features | Nine 12-entry vectors describing positive/negative action and target material, dumpability, obstacles and foundation-edge workspace/alignment/diggability across cabin directions. These are aggregated sectors, not image crops. |
 | Optional current features | Static relocation-distance map; a 12-entry admissible-dig vector; normalized material-stall age; the two reset baselines; trench alignment diagnostics; and explicitly enabled movement-feasibility or previous-outcome feedback. |
+
+A team observes the shared maps and scalars once and stacks each agent's view
+of the agent-specific keys (`env.AGENT_VIEW_OBS_KEYS`: agent rows, local
+features, trench alignment, retained-work context, traversability and
+interaction workspace) on a leading agent axis in slot order. In a view only
+the observing agent's chassis is `-1`; teammates are blocked cells, and the
+interaction mask is the observer's own workspace. These are the meanings the
+maps have for a single agent, which keeps a solo policy's inputs in
+distribution. A single agent keeps the unbatched layout.
 
 The foundation screen can replace the historical local admissibility counts
 with counts of fresh material actually executable by `DO` at each relative
@@ -308,9 +337,13 @@ The current v2 specialist/generalist and foundation screen use
 recurrent lines also use this reward; older V8 dense controls are distinct
 experiments.
 
-Let cell index be `i`, target depth requirement be
-`v_i = max(-target_i, 0)`, and `V = Σ_i v_i > 0`. For action-map value `h_i`,
-define completed excavation and positive soil as
+Let cell index be `i` and target depth requirement be
+`v_i = max(-target_i, 0)`. The material normalizer is the excavation volume
+`V = Σ_i v_i` when the map has a dig target; on a haul-only relocation map
+(no dig target) it is the soil to haul at reset, off-zone soil plus active
+carriers' loads. R2 loaders accept only these two kinds of map: zero initial
+action maps, or loose soil on a map without a dig target. For action-map value
+`h_i`, define completed excavation and positive soil as
 
 ```text
 e_i = min(max(-h_i, 0), v_i)
@@ -377,7 +410,8 @@ timing variant 1 instead uses `Phi(s')-Phi(s)` and explicit step cost `-3.6/450`
 That is a separate treatment, not the setting of the current specialist or
 foundation screen.
 
-Runtime guards require a nonempty target, one tracked excavator, horizon 450,
+Runtime guards require `V > 0`, tracked excavators and tracked skid steers
+only (any team size; shaping and step cost are per round), horizon 450,
 finite constants/distances and bounded progress. A violation produces NaN for
 the trainer's finite-value guard to reject; it is not a new task-termination
 category. R2 distance generation uses the protocol identifier
@@ -440,9 +474,10 @@ world dump earns signed carrier-plus-off-zone relocation progress times
 `relocation_progress_mult` (default `1.5`), times
 `clip(170 / max(number_of_target_cells,1), 2,5)/2`, times the configured dump
 weight. Accepted-soil relifting incurs `-1.2` times accepted volume removed,
-times that dump weight. Exact solo completion's terminal component is
+times that dump weight. Exact completion's terminal component is
 `200 × 1.2 × 2 / 70 ≈ 6.857`; a timeout's terminal component is
-`200 × 0.1 × 2 / 70 × absolute_completion²`.
+`200 × 0.1 × 2 / 70 × absolute_completion²`. Both are paid once per episode,
+independent of team size.
 
 The separate terminal-only mode gives zero reward before termination, `-1`
 for failure, and an exact-success reward with workspace- and step-efficiency

@@ -14,6 +14,14 @@ from terra.utils import get_agent_corners
 TRACKED_MIN_BORDER_DISTANCE_TILES = 8
 
 
+MAX_AGENTS = 4
+
+
+def num_agent_slots(env_cfg: EnvConfig) -> int:
+    """Number of agents that act in every env step (static at trace time)."""
+    return min(len(env_cfg.agent_types), MAX_AGENTS)
+
+
 class AgentState(NamedTuple):
     """
     Clarifications on the agent state representation.
@@ -52,7 +60,7 @@ class Agent(NamedTuple):
     agent_states: tuple[AgentState, ...] | None = None  # Fixed-size container (e.g., 8)
     agent_active: jnp.ndarray | None = None  # shape [max_agents], 1 for active, 0 for inactive
     num_agents: int = 2  # actual number of active agents (defaults to current behavior)
-    current_agent: int = 0  # index of currently acting agent (alternating training)
+    current_agent: int = 0  # slot whose action is being applied inside an env step
 
     @staticmethod
     def new(
@@ -68,13 +76,11 @@ class Agent(NamedTuple):
         action_types: tuple = (0, 0),  # action types; 0=tracked, 1=wheeled
     ) -> tuple["Agent", jax.random.PRNGKey]:
         # Determine number of agents to initialize (clip to MAX_AGENTS)
-        MAX_AGENTS = 4
         n_agents = min(len(agent_types), MAX_AGENTS)  # Use Python min for static value
 
-        # Split keys: one per agent + one for choosing current agent
-        # Use MAX_AGENTS + 1 to avoid dynamic shapes
+        # Split keys: one per agent plus one historically used to pick the
+        # first actor. Keeping the split preserves reset randomness.
         keys = jax.random.split(key, MAX_AGENTS + 1)
-        key_current_sel = keys[0]
         per_agent_keys = list(keys[1:MAX_AGENTS + 1])
 
         width = env_cfg.agent.width
@@ -119,81 +125,8 @@ class Agent(NamedTuple):
         agent_types_tensor = _prepare_type_array(agent_types, MAX_AGENTS, dtype=jnp.int32, default=0)
         action_types_tensor = _prepare_type_array(action_types, MAX_AGENTS, dtype=jnp.int32, default=0)
         
-        def place_agent(carry, i):
-            combined_mask, keys, states = carry
-            # Only place agent if i < n_agents
-            should_place = i < n_agents
-            
-            agent_type_val = agent_types[i] if i < len(agent_types) else 0
-            action_type_val = action_types[i] if i < len(action_types) else 0
-            is_truck = (agent_type_val == 1)
-            
-            # Check if trucks are road-restricted
-            is_road_restricted = getattr(env_cfg, 'truck_road_restricted', False)
-            is_truck_road_restricted = jnp.logical_and(is_truck, jnp.bool_(is_road_restricted))
-            
-            allowed_mask = jax.lax.cond(
-                is_truck_road_restricted,
-                lambda: truck_spawn_allowed_mask,
-                lambda: spawnable_mask,
-            )
-            # For trucks with road restriction: accept if ANY part is on non-dumpable tiles
-            # For others (including free-roaming trucks): require ALL parts to be on allowed tiles
-            require_all_allowed = jnp.logical_not(is_truck_road_restricted)
-            min_border_distance = jax.lax.cond(
-                agent_type_val == 0,
-                lambda _: jnp.int32(TRACKED_MIN_BORDER_DISTANCE_TILES),
-                lambda _: jnp.int32(-1),
-                operand=None,
-            )
-            pos_i, angle_i, new_key = _get_random_init_state(
-                keys[i],
-                env_cfg,
-                max_traversable_x,
-                max_traversable_y,
-                combined_mask,
-                action_map,
-                width,
-                height,
-                allowed_mask,
-                require_all_allowed,
-                min_border_distance=min_border_distance,
-            )
-
-            # Create agent state
-            st_i = AgentState(
-                pos_base=pos_i,
-                angle_base=angle_i,
-                angle_cabin=jnp.full((1,), 0, dtype=jnp.int8),
-                wheel_angle=jnp.full((1,), 0, dtype=jnp.int8),
-                loaded=jnp.full((1,), 0, dtype=jnp.int8),
-                agent_type=jnp.full((1,), agent_type_val, dtype=jnp.int8),
-                action_type=jnp.full((1,), action_type_val, dtype=jnp.int8),
-                shovel_lifted=jnp.full((1,), 0, dtype=jnp.int8),
-                carry_relocation_credit=jnp.float32(0.0),
-            )
-            
-            # Update mask only if we placed an agent
-            agent_corners = get_agent_corners(
-                pos_i, angle_i, width, height, env_cfg.agent.angles_base
-            )
-            agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
-            new_combined_mask = jnp.where(should_place, 
-                                        jnp.logical_or(combined_mask, agent_mask), 
-                                        combined_mask)
-            
-            # Update keys array
-            new_keys = keys.at[i].set(new_key)
-            
-            # Update states array
-            new_states = states.at[i].set(st_i)
-            
-            return (new_combined_mask, new_keys, new_states), None
-        
-        # Initialize arrays
         initial_mask = (padding_mask == 1)
-        initial_keys = jnp.array(per_agent_keys)
-        
+
         # Create initial dummy state for padding
         dummy_state = AgentState(
             pos_base=jnp.array([0, 0], dtype=IntMap),
@@ -207,11 +140,7 @@ class Agent(NamedTuple):
             carry_relocation_credit=jnp.float32(0.0),
         )
         
-        # Initialize with dummy states that will be replaced
-        initial_states = [dummy_state] * MAX_AGENTS
-        
-        # Use a simpler approach - just place agents one by one with regular Python loop
-        # since the scan approach is too complex for NamedTuple handling
+        # Place agents one by one so each avoids the footprints placed before it.
         combined_mask = initial_mask
         built_states = []
         
@@ -287,8 +216,7 @@ class Agent(NamedTuple):
             jnp.zeros((MAX_AGENTS - n_agents,), dtype=jnp.int8)
         ])
 
-        # Randomize starting current agent among active agents
-        current_agent = jax.random.randint(key_current_sel, (), 0, n_agents)
+        current_agent = jnp.int32(0)
 
         return Agent(
             agent_states=agent_states_tuple,

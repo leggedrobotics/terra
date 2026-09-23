@@ -59,8 +59,9 @@ def test_stall_age_counts_no_material_change_and_is_normalized():
     assert observation["stall_age"].dtype == jnp.float32
     assert float(observation["stall_age"]) == 0.0
 
+    step = jax.jit(lambda s: s._step(TrackedAction.do_nothing()))
     for _ in range(40):
-        state = state._step(TrackedAction.do_nothing())
+        state = step(state)
 
     assert int(state.stall_age_steps) == 32
     assert float(TerraEnv._state_to_obs_dict(state)["stall_age"]) == 1.0

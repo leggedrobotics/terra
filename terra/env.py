@@ -10,6 +10,7 @@ from jax import Array
 from terra.actions import Action
 from terra.actions import TrackedActionType
 from terra.agent import Agent
+from terra.agent import num_agent_slots
 from terra.config import BatchConfig
 from terra.config import EnvConfig
 from terra.maps_buffer import init_maps_buffer
@@ -22,6 +23,35 @@ from terra.curriculum import CurriculumManager
 import pygame as pg
 from terra.viz.game.game import Game
 from terra.viz.game.settings import MAP_TILES
+
+
+# Observation keys that describe one agent's view. With several agents the
+# observation stacks these on a leading agent axis (slot order); every other
+# key is shared by the team. A single agent keeps the unbatched layout. Each
+# view's traversability marks only its own chassis as -1 (teammates are
+# blocked cells) and its interaction mask is its own workspace, the meaning
+# these maps have for a single agent.
+AGENT_VIEW_OBS_KEYS = (
+    "traversability_mask",
+    "interaction_mask",
+    "agent_states",
+    "agent_active",
+    "retained_work_context",
+    "local_map_action_neg",
+    "local_map_action_pos",
+    "local_map_target_neg",
+    "local_map_target_pos",
+    "local_map_dumpability",
+    "local_map_obstacles",
+    "local_map_border_workspace",
+    "local_map_edge_alignment_error",
+    "local_map_border_diggable",
+    "local_map_admissible_dig",
+    "fresh_trench_dig_alignment_valid",
+    "fresh_trench_dig_yaw_error",
+    "fresh_trench_dig_standoff_error",
+    "movement_feasibility",
+)
 
 
 class TimeStep(NamedTuple):
@@ -130,10 +160,7 @@ class TerraEnv(NamedTuple):
             state, executable_dig_observation=self.executable_dig_observation
         )
 
-        observations = self._with_feedback_observations(
-            state,
-            self._state_to_obs_dict(state),
-        )
+        observations = self._observation(state)
         dummy_action = BatchConfig().action_type.do_nothing()
         dummy_info = {
             # Keep the reset info pytree structure aligned with step() without
@@ -273,13 +300,11 @@ class TerraEnv(NamedTuple):
         terrain_changed = jnp.any(
             new_state.world.action_map.map != state.world.action_map.map
         )
-        current_agent = jnp.asarray(
-            state.agent.current_agent,
-            dtype=jnp.int32,
-        )
-        productive_workspace_cycle = jnp.logical_and(
-            old_loaded[current_agent] == 0,
-            new_loaded[current_agent] > 0,
+        # One cycle for every agent whose load went from zero to positive.
+        productive_workspace_cycle = jnp.sum(
+            state.agent.agent_active.astype(jnp.bool_)
+            & (old_loaded == 0)
+            & (new_loaded > 0)
         ).astype(jnp.int32)
         return {
             "timeout": (
@@ -326,9 +351,11 @@ class TerraEnv(NamedTuple):
         executable_dig_observation: bool | None = None,
     ) -> State:
         state = TraversabilityMaskWrapper.wrap(state, update_reachability=update_reachability)
-        state = LocalMapWrapper.wrap(
-            state, executable_dig_observation=executable_dig_observation
-        )
+        # Several agents: each view builds its own local maps in _observation.
+        if num_agent_slots(state.env_cfg) == 1:
+            state = LocalMapWrapper.wrap(
+                state, executable_dig_observation=executable_dig_observation
+            )
         return state
 
     @partial(jax.jit, static_argnums=(0,))
@@ -364,11 +391,47 @@ class TerraEnv(NamedTuple):
         state = self.wrap_state(
             state, executable_dig_observation=self.executable_dig_observation
         )
-        observations = self._with_feedback_observations(
-            state,
-            self._state_to_obs_dict(state),
-        )
-        return state, observations
+        return state, self._observation(state)
+
+    def _observation(
+        self,
+        state: State,
+        transition_diagnostics: dict[str, Array] | None = None,
+    ) -> dict[str, Array]:
+        """Observation of a wrapped state.
+
+        A single agent observes the historical layout. A team observes the
+        shared keys once and ``AGENT_VIEW_OBS_KEYS`` stacked per slot: each
+        slot's view is the single-agent observation with that slot acting
+        (agent-centric agent order, its own local maps and work context, only
+        its own chassis at -1 with teammates blocked, its own workspace).
+        """
+        num_agents = num_agent_slots(state.env_cfg)
+        if num_agents == 1:
+            return self._with_feedback_observations(
+                state, self._state_to_obs_dict(state), transition_diagnostics
+            )
+        views = []
+        for slot in range(num_agents):
+            view = state._replace(
+                agent=state.agent._replace(current_agent=jnp.int32(slot))
+            )
+            view = LocalMapWrapper.wrap(
+                view, executable_dig_observation=self.executable_dig_observation
+            )
+            observation = self._with_feedback_observations(
+                view, self._state_to_obs_dict(view), transition_diagnostics
+            )
+            observation["traversability_mask"] = view._traversability_map(slot)
+            observation["interaction_mask"] = view._build_dig_dump_cone().reshape(
+                observation["interaction_mask"].shape
+            )
+            views.append(observation)
+        observation = dict(views[0])
+        for key in AGENT_VIEW_OBS_KEYS:
+            if key in observation:
+                observation[key] = jnp.stack([view[key] for view in views])
+        return observation
 
     def _with_feedback_observations(
         self,
@@ -442,12 +505,13 @@ class TerraEnv(NamedTuple):
         action_map: Array,
         distance_map: Array,
         env_cfg: EnvConfig,
+        order: Array | None = None,
     ) -> TimeStep:
         # ``env_cfg`` is the live trainer-owned configuration. Keep the state
         # copy synchronized so rollout-time reward changes apply immediately,
         # including before an episode reset.
         state = state._replace(env_cfg=env_cfg)
-        new_state = state._step(action)
+        new_state, agent_terms = state._step_joint(action, order)
         transition_diagnostics = self._transition_diagnostics(
             state,
             new_state,
@@ -463,21 +527,17 @@ class TerraEnv(NamedTuple):
                 new_state.productive_workspace_cycles
             ),
         }
-        reward, reward_components = state._get_reward(new_state, action)
+        reward, reward_components = state._get_reward(new_state, action, agent_terms)
         # Recompute reachability only for effective DO actions that changed terrain.
         # For all other actions (or no-op DO), keep previous reachability to reduce overhead.
-        is_do = action.action[0] == TrackedActionType.DO
+        is_do = jnp.any(action.action == TrackedActionType.DO)
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
         new_state = self.wrap_state(
             new_state, update_reachability=update_reachability,
             executable_dig_observation=self.executable_dig_observation,
         )
-        obs = self._with_feedback_observations(
-            new_state,
-            self._state_to_obs_dict(new_state),
-            transition_diagnostics,
-        )
+        obs = self._observation(new_state, transition_diagnostics)
         #print agent agentstate_2
         # jax.debug.print(
         #     "agent_state_2: {agent_state_2}",
@@ -565,10 +625,15 @@ class TerraEnv(NamedTuple):
         state: State,
         action: Action,
         env_cfg: EnvConfig,
+        order: Array | None = None,
     ) -> TimeStep:
-        """Step once and return the terminal state instead of auto-resetting on done."""
+        """Step once and return the terminal state instead of auto-resetting on done.
+
+        ``action.action`` holds one action per agent slot; agents act in
+        ``order`` (default: slot order) within this single env step.
+        """
         state = state._replace(env_cfg=env_cfg)
-        new_state = state._step(action)
+        new_state, agent_terms = state._step_joint(action, order)
         transition_diagnostics = self._transition_diagnostics(
             state,
             new_state,
@@ -584,19 +649,15 @@ class TerraEnv(NamedTuple):
                 new_state.productive_workspace_cycles
             ),
         }
-        reward, reward_components = state._get_reward(new_state, action)
-        is_do = action.action[0] == TrackedActionType.DO
+        reward, reward_components = state._get_reward(new_state, action, agent_terms)
+        is_do = jnp.any(action.action == TrackedActionType.DO)
         terrain_changed = jnp.any(new_state.world.action_map.map != state.world.action_map.map)
         update_reachability = jnp.logical_and(is_do, terrain_changed)
         new_state = self.wrap_state(
             new_state, update_reachability=update_reachability,
             executable_dig_observation=self.executable_dig_observation,
         )
-        obs = self._with_feedback_observations(
-            new_state,
-            self._state_to_obs_dict(new_state),
-            transition_diagnostics,
-        )
+        obs = self._observation(new_state, transition_diagnostics)
         done, task_done = new_state._is_done(
             new_state.world.action_map.map,
             new_state.world.target_map.map,
@@ -649,7 +710,7 @@ class TerraEnv(NamedTuple):
         """
         # Build per-agent features for fixed-size agent array and reorder so current agent is first
         # Feature order mirrors legacy single-agent vector
-        required_volume = state._required_excavation_volume()
+        material_volume = state._reward_v2_volume()
         (
             fresh_trench_dig_alignment_valid,
             fresh_trench_dig_yaw_error,
@@ -658,12 +719,12 @@ class TerraEnv(NamedTuple):
 
         def _feat(a, active):
             carry_work_normalized = jnp.where(
-                jnp.logical_and(active, required_volume > 0),
+                jnp.logical_and(active, material_volume > 0),
                 jnp.asarray(
                     a.carry_relocation_credit,
                     dtype=jnp.float32,
                 )
-                / jnp.maximum(required_volume, jnp.float32(1e-6)),
+                / jnp.maximum(material_volume, jnp.float32(1e-6)),
                 jnp.float32(0.0),
             )
             return jnp.hstack([
@@ -763,7 +824,7 @@ class TerraEnv(NamedTuple):
                 (
                     state.material_q_reset,
                     state.material_h_reset
-                    / jnp.maximum(required_volume, jnp.float32(1e-6)),
+                    / jnp.maximum(material_volume, jnp.float32(1e-6)),
                 ),
             ).astype(jnp.float32),
             "fresh_trench_dig_alignment_valid": (
@@ -983,10 +1044,12 @@ class TerraEnvBatch:
             if str(name).lower().startswith("trn-")
             or "trench" in str(name).lower()
         ]
+        # Foundations and relocations (loose soil, no dig target) have no
+        # trench sections.
         foundation_family_ids = [
             index
             for index, name in enumerate(self.maps_buffer.family_names)
-            if str(name).lower() in ("foundation", "fnd")
+            if str(name).lower() in ("foundation", "fnd", "relocation")
             or str(name).lower().startswith("fnd-")
         ]
         family_ids = np.asarray(self.maps_buffer.family_ids)
@@ -1000,16 +1063,17 @@ class TerraEnvBatch:
                     "lack axis metadata at indices "
                     f"{np.argwhere(missing_types)[:8].tolist()}."
                 )
-        # Foundations do not have trench sections. An absent axis count is
-        # valid only with explicit foundation provenance, including in mixed
-        # banks where another map happens to supply valid trench metadata.
+        # An absent axis count is valid only with explicit foundation or
+        # relocation provenance, including in mixed banks where another map
+        # happens to supply valid trench metadata.
         missing_provenance = (trench_types <= 0) & ~np.isin(
             family_ids, foundation_family_ids
         )
         if np.any(missing_provenance):
             raise RuntimeError(
                 "Fresh-trench alignment is enabled but maps lack both trench "
-                "axis metadata and explicit foundation family provenance at "
+                "axis metadata and explicit foundation or relocation family "
+                "provenance at "
                 f"indices {np.argwhere(missing_provenance)[:8].tolist()}."
             )
         missing = np.argwhere(declared & ~finite_segments)
@@ -1147,12 +1211,14 @@ class TerraEnvBatch:
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
+        order: Array | None = None,
     ) -> TimeStep:
         """Reference path that samples reset maps on every environment step."""
         timestep = jax.vmap(self.terra_env.step_no_reset)(
             timestep.state,
             actions,
             timestep.env_cfg,
+            order,
         )
         timestep = self.curriculum_manager.update_cfgs(
             timestep, maps_buffer_keys
@@ -1264,12 +1330,18 @@ class TerraEnvBatch:
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
+        order: Array | None = None,
     ) -> TimeStep:
-        """Step the batch and sample reset maps only when an episode ends."""
+        """Step the batch and sample reset maps only when an episode ends.
+
+        ``actions.action`` is ``[envs, agents]``; ``order`` (``[envs, agents]``,
+        optional) is each env's execution order of the agent slots.
+        """
         timestep = jax.vmap(self.terra_env.step_no_reset)(
             timestep.state,
             actions,
             timestep.env_cfg,
+            order,
         )
         timestep = self.curriculum_manager.update_cfgs(
             timestep, maps_buffer_keys
@@ -1291,12 +1363,14 @@ class TerraEnvBatch:
         timestep: TimeStep,
         actions: Action,
         maps_buffer_keys: jax.random.PRNGKey,
+        order: Array | None = None,
     ) -> TimeStep:
         """Step without replacing done environments with freshly reset states."""
         timestep = jax.vmap(self.terra_env.step_no_reset)(
             timestep.state,
             actions,
             timestep.env_cfg,
+            order,
         )
         return self.curriculum_manager.update_cfgs(
             timestep, maps_buffer_keys

@@ -13,6 +13,8 @@ from terra.actions import TrackedActionType
 from terra.actions import WheeledActionType
 from terra.agent import Agent
 from terra.agent import AgentState
+from terra.agent import MAX_AGENTS
+from terra.agent import num_agent_slots
 from terra.config import AgentConfig
 from terra.config import EnvConfig
 from terra.config import RewardStage
@@ -58,6 +60,24 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
 REWARD_V2_HORIZON = jnp.float32(450.0)
 STALL_AGE_CAP_STEPS = 32
+
+# Keys of ``State._reward_v2_behavior_costs``: per-agent reward-v2 costs and
+# their diagnostics, summed over the agents that acted in a step.
+REWARD_V2_BEHAVIOR_KEYS = (
+    "reward_v2_lateral_dig",
+    "reward_v2_base_travel",
+    "reward_v2_base_turn",
+    "reward_v2_fresh_dig_volume",
+    "reward_v2_base_travel_m",
+    "reward_v2_base_turn_rad",
+    "reward_v2_retained_setup",
+    "reward_v2_retained_travel",
+    "reward_v2_retained_turn",
+    "reward_v2_retained_work_event",
+    "reward_v2_retained_new_setup",
+    "reward_v2_retained_inter_setup_m",
+    "reward_v2_retained_heading_rad",
+)
 
 # The terminal objective keeps success dominant and uses efficiency only to
 # order successful episodes. Its success base is supplied by the normalized
@@ -132,6 +152,9 @@ class State(NamedTuple):
     # episode-local accounting without changing their physical state.
     retained_work_pose: Array = jnp.zeros((4, 3), dtype=jnp.int32)
     retained_work_events: Array = jnp.zeros((4,), dtype=jnp.int32)
+    # Soil to haul at reset (off-zone soil plus loads). R2 normalizes by it
+    # only when a map has no dig target, e.g. skid-steer relocation.
+    material_v_reset: Float = jnp.float32(0.0)
 
 
     @classmethod
@@ -180,6 +203,7 @@ class State(NamedTuple):
                     jnp.float32(0.0),
                 ),
                 material_h_reset=state._compute_material_work(),
+                material_v_reset=state._haul_volume(),
             )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
@@ -202,13 +226,10 @@ class State(NamedTuple):
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
-        # Randomize starting agent uniformly among active agents to prevent first-mover advantage
-        key, cat_key = jax.random.split(key)
-        active_mask = agent.agent_active.astype(jnp.bool_)
-        # Uniform logits over active indices; large negative for inactive to mask them out
-        logits = jnp.where(active_mask, 0.0, -1e9)
-        start_idx = jax.random.categorical(cat_key, logits).astype(jnp.int32)
-        agent = agent._replace(current_agent=start_idx)
+        # This split once drew a random first actor; keep it so resets consume
+        # the same randomness. All agents act every step, starting at slot 0.
+        key, _ = jax.random.split(key)
+        agent = agent._replace(current_agent=jnp.int32(0))
 
         state = State(
             key=key,
@@ -229,6 +250,7 @@ class State(NamedTuple):
                 jnp.float32(0.0),
             ),
             material_h_reset=state._compute_material_work(),
+            material_v_reset=state._haul_volume(),
         )
 
     def _reset(
@@ -262,8 +284,54 @@ class State(NamedTuple):
             distance_map_override=distance_map_override,
         )
 
-    def _step(self, action: Action, turn:bool = True) -> "State":
+    def _step(self, action: Action, order: Array | None = None) -> "State":
+        """Apply one joint action (one action per agent slot) and count one step."""
+        return self._step_joint(action, order, with_reward_terms=False)[0]
+
+    def _step_joint(
+        self,
+        action: Action,
+        order: Array | None = None,
+        *,
+        with_reward_terms: bool = True,
+    ) -> tuple["State", dict[str, Array] | None]:
+        """Every agent acts once, sequentially in ``order``; one env step.
+
+        ``action.action[i]`` is agent slot ``i``'s action and ``order`` lists
+        the slots in execution order (default: slot order). A later agent sees
+        the result of every earlier one, so collisions and dig/dump conflicts
+        resolve by execution order. The traversability observation read by the
+        dump exclusion is refreshed between agents. Returns the post-step state
+        and, when requested, each agent's action-dependent reward terms stacked
+        in execution order (see ``_agent_reward_terms``).
         """
+        num_agents = num_agent_slots(self.env_cfg)
+        actions = jnp.reshape(action.action, (num_agents,))
+        if order is None:
+            order = jnp.arange(num_agents, dtype=jnp.int32)
+        order = jnp.reshape(jnp.asarray(order, dtype=jnp.int32), (num_agents,))
+        state = self
+        terms = []
+        for position in range(num_agents):
+            slot = order[position]
+            before = state._replace(agent=state.agent._replace(current_agent=slot))
+            agent_action = jax.lax.dynamic_slice(actions, (slot,), (1,))
+            state = before._apply_action(agent_action)
+            if with_reward_terms:
+                terms.append(before._agent_reward_terms(state, agent_action))
+            if position < num_agents - 1:
+                state = state._with_traversability_mask()
+        state = state._replace(
+            env_steps=state.env_steps + 1,
+            stall_age_steps=self._next_stall_age_steps(state),
+        )
+        if not with_reward_terms:
+            return state, None
+        return state, jax.tree_util.tree_map(lambda *x: jnp.stack(x), *terms)
+
+    def _apply_action(self, action: Array) -> "State":
+        """Apply ``current_agent``'s action; step counters are unchanged.
+
         TrackedAction type --> 0
         WheeledAction type --> 1
         """
@@ -309,20 +377,49 @@ class State(NamedTuple):
             self._do_nothing,
         ]
 
-        action_idx = jnp.squeeze(action.action)
-        state = jax.lax.cond(
+        action_idx = jnp.squeeze(action)
+        return jax.lax.cond(
             jnp.logical_or(action_idx == -1, action_idx == 7),
             self._do_nothing,
             lambda: jax.lax.switch(action_idx, handlers_list),
         )
-        state = jax.lax.cond(
-            turn, 
-            state._swap,
-            lambda: state
+
+    def _with_traversability_mask(self) -> "State":
+        """Refresh the observed traversability map after an agent acted."""
+        return self._replace(
+            world=self.world._replace(
+                traversability_mask=self.world.traversability_mask._replace(
+                    map=self._traversability_map()
+                )
+            )
         )
-        return state._replace(
-            env_steps=state.env_steps + 1,
-            stall_age_steps=self._next_stall_age_steps(state),
+
+    def _traversability_map(self, observer: int | None = None) -> Array:
+        """0 free, 1 blocked (soil, holes, static obstacles), -1 free chassis cells.
+
+        With ``observer``, only that agent's chassis is -1 and its teammates are
+        blocked cells: the map a single agent was trained on, seen from that
+        agent. Without it every chassis is -1 (the world map).
+        """
+        traversability = (self.world.action_map.map != 0).astype(IntLowDim)
+        if observer is None:
+            occupied = self._active_base_footprint_mask()
+        else:
+            view = self._replace(agent=self.agent._replace(current_agent=observer))
+            occupied = view._current_base_footprint_mask()
+            traversability = jnp.where(
+                view._active_base_footprint_mask(exclude_current=True),
+                jnp.asarray(1, IntLowDim),
+                traversability,
+            )
+        traversability = jnp.where(
+            jnp.logical_and(occupied, traversability == 0),
+            -1,
+            traversability,
+        )
+        static_base = self.world.static_traversability_base.map
+        return jnp.where(static_base == 1, static_base, traversability).astype(
+            IntLowDim
         )
 
     def _next_stall_age_steps(self, new_state: "State") -> Array:
@@ -361,21 +458,6 @@ class State(NamedTuple):
 
     def _do_nothing(self):
         return self
-    
-    def _swap(self):
-        """Advance to next active agent (defaults to 2 agents)."""
-        def _next_agent_idx(current: int, num_agents: int, active_mask):
-            # simple 2-agent fallback without scanning
-            return (current + 1) % jnp.maximum(1, num_agents)
-
-        next_idx = _next_agent_idx(self.agent.current_agent, self.agent.num_agents, self.agent.agent_active)
-        # DEBUG: track agent turn cycling
-        # Swap debug print silenced for cleaner training logs
-        return self._replace(
-            agent=self.agent._replace(
-                current_agent=next_idx,
-            )
-        )
 
     # --- Helper accessors to migrate to array-only agent states ---
     def _get_current_agent_state(self):
@@ -383,32 +465,6 @@ class State(NamedTuple):
         # Fixed cases for MAX_AGENTS=4
         return jax.lax.switch(
             self.agent.current_agent,
-            [
-                lambda: self.agent.agent_states[0],
-                lambda: self.agent.agent_states[1],
-                lambda: self.agent.agent_states[2],
-                lambda: self.agent.agent_states[3],
-            ]
-        )
-
-    def _get_next_agent_state(self):
-        """Return the next agent's `AgentState` (cyclic over active agents)."""
-        next_idx = (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
-        return jax.lax.switch(
-            next_idx,
-            [
-                lambda: self.agent.agent_states[0],
-                lambda: self.agent.agent_states[1],
-                lambda: self.agent.agent_states[2],
-                lambda: self.agent.agent_states[3],
-            ]
-        )
-
-    def _get_prev_agent_state(self):
-        """Return the previous agent's `AgentState` (cyclic over active agents)."""
-        prev_idx = (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
-        return jax.lax.switch(
-            prev_idx,
             [
                 lambda: self.agent.agent_states[0],
                 lambda: self.agent.agent_states[1],
@@ -447,27 +503,10 @@ class State(NamedTuple):
         """Index of current agent (int)."""
         return self.agent.current_agent
 
-    def _next_idx(self):
-        """Index of next agent (int), cyclic over num_agents."""
-        return (self.agent.current_agent + 1) % jnp.maximum(1, self.agent.num_agents)
-
-    def _prev_idx(self):
-        """Index of previous agent (int), cyclic over num_agents."""
-        return (self.agent.current_agent + self.agent.num_agents - 1) % jnp.maximum(1, self.agent.num_agents)
-
     def _set_current_agent_state(self, new_state):
         """Replace current agent's `AgentState` with `new_state`."""
         return self._set_agent_state_at(self._current_idx(), new_state)
 
-    def _set_next_agent_state(self, new_state):
-        """Replace next agent's `AgentState` with `new_state`."""
-        return self._set_agent_state_at(self._next_idx(), new_state)
-
-    def _set_prev_agent_state(self, new_state):
-        """Replace previous agent's `AgentState` with `new_state`."""
-        return self._set_agent_state_at(self._prev_idx(), new_state)
-
-    
     def _base_orientation_to_one_hot_forward(self, base_orientation: IntLowDim):
         """
         Converts the base orientation (int 0 to N) to a one-hot encoded vector.
@@ -776,10 +815,11 @@ class State(NamedTuple):
 
 
     def _skid_steer_auto_load_dirt(self, new_state: "State") -> "State":
-        """
-        Auto-loading function for skid steer when moving with shovel lowered.
-        Supports partial loading: loads up to capacity, removes exact amount from workspace.
-        Applies soil mechanics directly when dirt is loaded.
+        """Skid-steer pickup after a move with the shovel lowered.
+
+        Loads loose soil in the bucket sector up to capacity (partial loads
+        allowed), never from the accepted dump zone, and relaxes the remaining
+        soil only inside that zone. Mass is conserved exactly.
         """
         # Only applies to skid steer with shovel lowered
         cur = new_state._get_current_agent_state()
@@ -794,56 +834,46 @@ class State(NamedTuple):
         should_auto_load = jnp.logical_and(is_skid_steer, shovel_lowered)
         
         def _apply_auto_load():
-            
-            # Use the closer cylindrical workspace for skid steer auto-loading
             map_cyl_coords, map_local_coords = new_state._get_map_local_and_cyl_coords()
-            
-            # Get the skid steer cylindrical workspace
             auto_load_mask = new_state._get_dig_dump_mask_skidsteer(map_cyl_coords, map_local_coords)
-            
-            # Apply skid steer dig masking (only allow loading from existing dirt)
+            # Only existing loose soil, and never soil already delivered to the
+            # accepted dump zone.
             auto_load_mask = new_state._mask_out_wrong_dig_tiles_skidsteer(auto_load_mask)
-            
-            # Calculate how much dirt is available to load from workspace
+            auto_load_mask = jnp.logical_and(
+                auto_load_mask.astype(jnp.bool_),
+                ~_flat_2d_map(new_state._accepted_dump_mask()),
+            )
             action_map_2d = _as_2d_map(new_state.world.action_map.map)
-            current_flattened_action_map = action_map_2d.reshape(-1)
-            # Convert to int32 to prevent overflow in dot product
-            available_dirt = jnp.int32(current_flattened_action_map) @ jnp.int32(auto_load_mask)
-            
-            # Simple all-or-nothing loading: only load if entire workspace fits in capacity
-            can_load_all = current_load + available_dirt <= workspace_capacity
-            
+            flat = action_map_2d.reshape(-1).astype(jnp.int32)
+            eligible = jnp.where(auto_load_mask, jnp.maximum(flat, 0), 0)
+            available = jnp.sum(eligible, dtype=jnp.int32)
+            # Fill the bucket up to capacity. Prefix apportionment (as for the
+            # excavator's relift) takes each cell's proportional share and sums
+            # exactly to ``pickup``.
+            pickup = jnp.clip(workspace_capacity - current_load, 0, available)
+            cumulative = jnp.cumsum(eligible, dtype=jnp.int32)
+            removed_cumulative = (cumulative * pickup) // jnp.maximum(available, 1)
+            removed = removed_cumulative - jnp.concatenate(
+                [jnp.zeros((1,), dtype=jnp.int32), removed_cumulative[:-1]]
+            )
 
-            
-            def _load_all_workspace():
-                # Remove ALL dirt from workspace (simple and clean)
-                new_flattened_action_map = jnp.where(
-                    auto_load_mask,
-                    0,  # Clear all dirt from workspace tiles
-                    current_flattened_action_map  # Keep other tiles unchanged
-                )
-                
-                new_map_2d = new_flattened_action_map.reshape(action_map_2d.shape)
-                
-                # Apply soil mechanics (conserves dirt - only redistributes)
-                auto_load_mask_2d = auto_load_mask.reshape(action_map_2d.shape)
-                final_map = new_state._apply_local_soil_mechanics(new_map_2d, auto_load_mask_2d)
-                final_map = final_map.astype(new_state.world.action_map.map.dtype)
-                
-                # Load agent with the exact amount that was in the workspace
-                # (soil mechanics conserves dirt, so this is perfectly conserving)
-                new_loaded = current_load + available_dirt
-                
+            def _load():
+                new_map_2d = (flat - removed).reshape(action_map_2d.shape)
+                # Relaxation stays inside the accepted zone, so no soil leaves it.
+                final_map = new_state._apply_local_soil_mechanics(
+                    new_map_2d,
+                    auto_load_mask.reshape(action_map_2d.shape),
+                    containment_mask=new_state._accepted_dump_mask(),
+                ).astype(new_state.world.action_map.map.dtype)
                 potential_before_load = new_state._compute_relocation_potential(
                     new_state.world.action_map.map
                 )
                 after_lift_potential = self._compute_relocation_potential(final_map)
-                credit_increment = potential_before_load - after_lift_potential
-
                 new_cur = cur._replace(
-                    loaded=jnp.array([new_loaded], dtype=cur.loaded.dtype),
+                    loaded=jnp.array([current_load + pickup], dtype=cur.loaded.dtype),
                     carry_relocation_credit=jnp.float32(
-                        cur.carry_relocation_credit + credit_increment
+                        cur.carry_relocation_credit
+                        + potential_before_load - after_lift_potential
                     ),
                 )
                 return new_state._replace(
@@ -851,18 +881,9 @@ class State(NamedTuple):
                         action_map=new_state.world.action_map._replace(map=final_map),
                     )
                 )._set_current_agent_state(new_cur)
-            
-            def _no_load():
-                # Can't fit entire workspace, so don't load anything
-                return new_state
-            
-            # Load all workspace dirt if it fits, otherwise load nothing
-            return jax.lax.cond(
-                jnp.logical_and(available_dirt > 0, can_load_all),
-                _load_all_workspace,
-                _no_load
-            )
-        
+
+            return jax.lax.cond(pickup > 0, _load, lambda: new_state)
+
         return jax.lax.cond(should_auto_load, _apply_auto_load, lambda: new_state)
 
     def _handle_move_forward(self) -> "State":
@@ -903,112 +924,24 @@ class State(NamedTuple):
 
     def _handle_move_backward(self) -> "State":
         """
-        Moves the base backward with realistic restrictions:
-        - Excavators/Wheeled: can only move when not loaded
-        - Skid steer: can move when not loaded OR when loaded with shovel lifted OR when loaded with shovel down (drops dirt)
-        - Skid steer with lowered shovel + loaded: moves backward and drops dirt (realistic behavior)
-        - Skid steer with lowered shovel + loaded + no valid dump tiles: blocked from moving backward
+        Moves the base backward:
+        - Excavators/Wheeled: only when not loaded
+        - Skid steer and truck: always; the load stays in the bucket. DO is
+          the only way to dump.
         """
 
         def _move_backward():
             cur = self._get_current_agent_state()
-            base_orientation = cur.angle_base
             orientation_vector = self._base_orientation_to_one_hot_backwards(
-                base_orientation
+                cur.angle_base
             )
-            
-            # Check if skid steer should drop dirt when attempting to reverse
-            cur2 = self._get_current_agent_state()
-            is_skid_steer = cur2.agent_type[0] == 2
-            is_loaded = cur2.loaded[0] > 0
-            shovel_down = cur2.shovel_lifted[0] == 0
-            
-            # Check if backward movement would be possible (without actually moving yet)
-            test_new_state = self._move_on_orientation(orientation_vector)
-            movement_possible = ~jnp.allclose(
-                cur2.pos_base,
-                test_new_state._get_current_agent_state().pos_base,
-                atol=1e-6
-            )
-            
-            # Check if there are valid dump tiles under the agent (for skid steer)
-            # Use the same logic as the dump function
-            dump_mask = self._build_dig_dump_cone()
-            # Only restrict dumping to dump zones for skid steer agents (commented out dump zone restriction)
-            is_skid_steer = cur2.agent_type[0] == 2
-            
-            def _apply_dump_zone_restriction():
-                # For skid steer: restrict to only dump zones (target_map > 0)
-                dump_zone_mask = _flat_2d_map(self.world.target_map.map > 0)
-                return dump_mask * dump_zone_mask
-            
-            def _no_dump_zone_restriction():
-                # For excavators: allow dumping on any valid tile (including neutral)
-                return dump_mask
-            
-            dump_mask = jax.lax.cond(
-                is_skid_steer,
-                _apply_dump_zone_restriction,
-                _no_dump_zone_restriction
-            )
-            
-            # Apply the same exclude masks that are used in the dump function
-            dump_mask = self._exclude_dig_tiles_from_dump_mask(dump_mask)
-            dump_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(dump_mask)
-            dump_mask = self._exclude_traversability_mask_tiles_from_dump_mask(dump_mask)
-            
-            has_valid_dump_tiles = jnp.any(dump_mask)
+            return self._move_on_orientation(orientation_vector)
 
-            # Block movement only when the implicit reverse dump has no
-            # physically valid destination. Reward potential never vetoes an
-            # otherwise valid transition.
-            should_block_movement = jnp.logical_and(
-                jnp.logical_and(is_skid_steer, is_loaded),
-                jnp.logical_and(shovel_down, jnp.logical_not(has_valid_dump_tiles)),
-            )
-            
-            # If movement should be blocked, return current state
-            def _block_movement():
-                return self
-            
-            def _allow_movement():
-                # Drop dirt first if skid steer is loaded, shovel down, AND movement is possible
-                # (realistic: blade lifts when starting to reverse, dirt falls off)
-                should_drop_dirt = jnp.logical_and(
-                    jnp.logical_and(is_skid_steer, movement_possible),  # Skid steer AND can move
-                    jnp.logical_and(is_loaded, shovel_down)             # Loaded AND shovel down
-                )
-                
-                # First dump dirt if needed
-                state_after_dump = jax.lax.cond(
-                    should_drop_dirt,
-                    self._handle_dump,
-                    lambda: self
-                )
-                
-                # Then move backward
-                new_state = state_after_dump._move_on_orientation(orientation_vector)
-                
-                return new_state
-            
-            return jax.lax.cond(should_block_movement, _block_movement, _allow_movement)
-
-        # Check agent conditions
         cur = self._get_current_agent_state()
-        is_skid_steer = cur.agent_type[0] == 2
-        is_truck = cur.agent_type[0] == 1
-        is_loaded = cur.loaded[0] > 0
-        shovel_lifted = cur.shovel_lifted[0] > 0
-        
-        # Movement rules:
-        # - Non-skid steers/truck: allow movement when:
-        #   * Skid steer or Truck: can always move
-        #   * Others: only when not loaded
         can_move = jnp.logical_or(
-            jnp.logical_or(is_skid_steer, is_truck),
-            jnp.logical_not(is_loaded)
+            jnp.logical_or(cur.agent_type[0] == 2, cur.agent_type[0] == 1),
+            jnp.logical_not(cur.loaded[0] > 0),
         )
-        
         return jax.lax.cond(can_move, _move_backward, self._do_nothing)
 
     def _handle_move_forward_wheeled(self) -> "State":
@@ -3304,7 +3237,7 @@ class State(NamedTuple):
         """True if agent moved"""
         return ~jnp.allclose(
             old_state._get_current_agent_state().pos_base,
-            new_state._get_next_agent_state().pos_base,
+            new_state._get_current_agent_state().pos_base,
         )
 
     @staticmethod
@@ -3314,7 +3247,7 @@ class State(NamedTuple):
         """True if agent turned"""
         return ~jnp.allclose(
             old_state._get_current_agent_state().angle_base,
-            new_state._get_next_agent_state().angle_base,
+            new_state._get_current_agent_state().angle_base,
         )
 
     def _handle_rewards_move(
@@ -3372,7 +3305,7 @@ class State(NamedTuple):
         # Check if wheels actually turned
         wheel_not_turned = jnp.allclose(
             self._get_current_agent_state().wheel_angle,
-            new_state._get_next_agent_state().wheel_angle,
+            new_state._get_current_agent_state().wheel_angle,
         )
 
         # Apply extra reward if wheels did not turn
@@ -3476,8 +3409,8 @@ class State(NamedTuple):
     ) -> Float:
         """Reward a world dump once; a load handoff is reward-neutral."""
         cur = self._get_current_agent_state()
-        next_actor = new_state._get_prev_agent_state()
-        load_decreased = cur.loaded[0] > next_actor.loaded[0]
+        after = new_state._get_current_agent_state()
+        load_decreased = cur.loaded[0] > after.loaded[0]
         world_changed = jnp.any(
             self.world.action_map.map != new_state.world.action_map.map
         )
@@ -3513,7 +3446,7 @@ class State(NamedTuple):
         self, new_state: "State", action: TrackedActionType
     ) -> Float:
         cur = self._get_current_agent_state()
-        prev_new = new_state._get_prev_agent_state()
+        after = new_state._get_current_agent_state()
         fresh_target_progress = self._get_action_map_dig_progress(
             self.world.action_map.map,
             new_state.world.action_map.map,
@@ -3540,7 +3473,7 @@ class State(NamedTuple):
         # Wrong dig when loaded (no dirt loaded despite dig action)
         dig_wrong_reward = jax.lax.cond(
             jnp.allclose(
-                cur.loaded, prev_new.loaded
+                cur.loaded, after.loaded
             ),
             lambda: self.env_cfg.rewards.dig_wrong,
             lambda: 0.0,
@@ -3592,9 +3525,9 @@ class State(NamedTuple):
     ) -> Float:
         """Reward for successful auto-loading during movement, with penalty if dirt is removed from a dump zone."""
         cur = self._get_current_agent_state()
-        prev_new = new_state._get_prev_agent_state()
+        after = new_state._get_current_agent_state()
         old_loaded = cur.loaded[0]
-        new_loaded = prev_new.loaded[0]
+        new_loaded = after.loaded[0]
         dirt_gained = new_loaded - old_loaded
 
 
@@ -3611,9 +3544,9 @@ class State(NamedTuple):
         """Specialized dump rewards for skid steer with efficiency-based rewards"""
         # Check if dump was successful (dirt was unloaded)
         cur = self._get_current_agent_state()
-        prev_new = new_state._get_prev_agent_state()
+        after = new_state._get_current_agent_state()
         old_loaded = cur.loaded[0]
-        new_loaded = prev_new.loaded[0]
+        new_loaded = after.loaded[0]
         dirt_dumped = old_loaded - new_loaded
         
         
@@ -3636,9 +3569,9 @@ class State(NamedTuple):
         
         # Check what happened during DO action
         cur = self._get_current_agent_state()
-        prev_new = new_state._get_prev_agent_state()
+        after = new_state._get_current_agent_state()
         old_loaded = cur.loaded[0]
-        new_loaded = prev_new.loaded[0]
+        new_loaded = after.loaded[0]
         
         # Add dump rewards if dirt was unloaded
         reward += jax.lax.cond(
@@ -3860,12 +3793,61 @@ class State(NamedTuple):
             jnp.where(done_task, step_efficiency, jnp.float32(0.0)),
         )
 
-    def _get_reward(self, new_state: "State", action_handler: Action):
+    def _agent_reward_terms(self, new_state: "State", action: Array) -> dict[str, Array]:
+        """Reward terms caused by ``current_agent``'s action within one step.
+
+        ``self`` is the state before this agent acted and ``new_state`` the
+        state right after it. Team terms (completion, terminal, existence/step
+        cost, reward-v2 potential shaping) are paid once per env step by
+        ``_get_reward``.
+        """
+        agent_type = self._get_current_agent_state().agent_type[0]
+        # Route by agent type: 0=excavator, 1=truck, 2=skidsteer.
+        reward_functions = [
+            lambda: self._get_rewards_excavator(new_state, action),
+            lambda: self._get_rewards_truck(new_state, action),
+            lambda: self._get_rewards_skidsteer(new_state, action),
+        ]
+        agent_reward = jax.lax.switch(
+            jnp.clip(agent_type, 0, len(reward_functions) - 1), reward_functions
+        )
+        # Trench rewards apply to excavators only, from each excavator's pose.
+        is_excavator = agent_type == 0
+        trench = jax.lax.cond(
+            jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator),
+            lambda: self._get_trench_specific_rewards(action),
+            lambda: 0.0,
+        )
+        return {
+            "slot": jnp.asarray(self.agent.current_agent, dtype=jnp.int32),
+            "agent_reward": agent_reward,
+            "trench": trench,
+            "is_excavator": is_excavator,
+            **self._reward_v2_behavior_costs(new_state),
+        }
+
+    def _get_reward(
+        self,
+        new_state: "State",
+        action_handler: Action,
+        agent_terms: dict[str, Array] | None = None,
+    ):
+        """Team reward for the step ``self -> new_state``.
+
+        ``agent_terms`` holds every agent's ``_agent_reward_terms`` stacked in
+        execution order (``_step_joint``). Without it, ``new_state`` is the
+        result of the current agent's single action.
+        """
         action = action_handler.action
+        if agent_terms is None:
+            agent_terms = jax.tree_util.tree_map(
+                lambda x: jnp.asarray(x)[None],
+                self._agent_reward_terms(new_state, action),
+            )
+        slots = agent_terms["slot"]
 
         reward = 0.0
         # Components for W&B logging - generalized to MAX_AGENTS per-agent rewards
-        MAX_AGENTS = 4
         components = {
             "agent_rewards": jnp.zeros((MAX_AGENTS,), dtype=jnp.float32),
             "terminal": 0.0,
@@ -3875,28 +3857,10 @@ class State(NamedTuple):
             "agent_active": self.agent.agent_active.astype(jnp.int32),
         }
 
-        # Action-dependent - route to appropriate reward function based on agent type
-        current_agent_type = self._get_current_agent_state().agent_type[0]
-        
-        def get_excavator_rewards():
-            return self._get_rewards_excavator(new_state, action)
-            
-        def get_skidsteer_rewards():
-            return self._get_rewards_skidsteer(new_state, action)
-        
-        # Route rewards based on agent type: 0=excavator, 1=truck, 2=skidsteer
-        def get_truck_rewards():
-            return self._get_rewards_truck(new_state, action)
-        reward_functions = [get_excavator_rewards, get_truck_rewards, get_skidsteer_rewards]
-        clamped_agent_type = jnp.clip(current_agent_type, 0, len(reward_functions) - 1)
-        agent_reward = jax.lax.switch(clamped_agent_type, reward_functions)
-        
-        reward += agent_reward
-        
-        # Attribute per-step agent reward to the current agent index (active-first ordering in obs only)
-        def set_idx(vec):
-            return vec.at[self.agent.current_agent].set(agent_reward.astype(jnp.float32))
-        components["agent_rewards"] = set_idx(components["agent_rewards"])
+        reward += jnp.sum(agent_terms["agent_reward"])
+        components["agent_rewards"] = components["agent_rewards"].at[slots].set(
+            agent_terms["agent_reward"].astype(jnp.float32)
+        )
 
         # The corrected dense contract has one task-completion source for
         # termination, terminal reward, logging, and fixed evaluation.
@@ -3971,46 +3935,17 @@ class State(NamedTuple):
             * (jnp.clip(gated_completion, a_min=0.0, a_max=1.0) ** jnp.float32(2.0)),
             lambda: 0.0,
         )
-        terminal_r = success_terminal_r + timeout_terminal_r
-        # Divide terminal reward by number of active agents to share credit fairly
-        active_count_f32 = jnp.sum(self.agent.agent_active.astype(jnp.float32))
-        denom = jnp.maximum(active_count_f32, jnp.float32(1.0))
-        #terminal_r = terminal_r * 2 / denom
-        terminal_r = terminal_r * 2 / denom
-
-
-        # terminal_r = jax.lax.cond(
-        #     done_task,
-        #     lambda: self.env_cfg.rewards.terminal,
-        #     lambda: 0.0,
-        # )
+        # One team terminal reward per episode, independent of team size.
+        terminal_r = (success_terminal_r + timeout_terminal_r) * 2
 
         reward += terminal_r
         components["terminal"] = terminal_r
 
-        # Attribute terminal reward to BOTH agents in logging components (shared policy)
-        # Count full terminal for both to reflect joint success in logs
-        #components["agent1_rewards"] = components["agent1_rewards"] + terminal_r
-        #components["agent2_rewards"] = components["agent2_rewards"] + terminal_r
-
-        # Apply trench rewards - only for excavators (type 0)
-        # Each excavator gets its own trench reward based on its position
-        current_agent_type = self._get_current_agent_state().agent_type[0]
-        is_excavator = current_agent_type == 0
-        should_apply_trench = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
-        
-        trench_r = jax.lax.cond(
-            should_apply_trench,
-            lambda: self._get_trench_specific_rewards(action),
-            lambda: 0.0,
-        )
+        trench_r = jnp.sum(agent_terms["trench"])
         reward += trench_r
-        
-        # Only log trench reward when it's an excavator's turn to avoid noise in plots
-        components["trench"] = jax.lax.cond(
-            is_excavator,
-            lambda: trench_r,
-            lambda: jnp.nan,  # Use NaN for skidsteer turns so they don't appear in plots
+        # Log trench reward only for steps with an acting excavator.
+        components["trench"] = jnp.where(
+            jnp.any(agent_terms["is_excavator"]), trench_r, jnp.nan
         )
 
         # Existence
@@ -4052,12 +3987,9 @@ class State(NamedTuple):
                 done_task,
                 jnp.float32(2.0)
                 * jnp.asarray(self.env_cfg.rewards.terminal, dtype=jnp.float32)
-                / (
-                    denom
-                    * jnp.asarray(
-                        self.env_cfg.rewards.normalizer,
-                        dtype=jnp.float32,
-                    )
+                / jnp.asarray(
+                    self.env_cfg.rewards.normalizer,
+                    dtype=jnp.float32,
                 ),
             )
         )
@@ -4101,12 +4033,16 @@ class State(NamedTuple):
             reward_stage == jnp.int32(RewardStage.REWARD_V2)
         )
         zero = jnp.float32(0.0)
+        behavior_components = {
+            key: jnp.sum(agent_terms[key]) for key in REWARD_V2_BEHAVIOR_KEYS
+        }
         reward_v2, reward_v2_components = jax.lax.cond(
             use_reward_v2,
             lambda: self._get_reward_v2(
                 new_state,
                 done,
                 done_task,
+                behavior_components,
             ),
             lambda: (
                 zero,
@@ -4142,17 +4078,19 @@ class State(NamedTuple):
             ),
         )
         reward = jnp.where(use_reward_v2, reward_v2, reward)
+        # Logging only: each agent gets its own behavior costs and an equal
+        # share of the team potential shaping.
         reward_v2_agent = jnp.zeros(
             (MAX_AGENTS,),
             dtype=jnp.float32,
-        ).at[self.agent.current_agent].set(
-            reward_v2_components["reward_v2_shaping"]
-            + reward_v2_components["reward_v2_lateral_dig"]
-            + reward_v2_components["reward_v2_base_travel"]
-            + reward_v2_components["reward_v2_base_turn"]
-            + reward_v2_components["reward_v2_retained_setup"]
-            + reward_v2_components["reward_v2_retained_travel"]
-            + reward_v2_components["reward_v2_retained_turn"]
+        ).at[slots].set(
+            reward_v2_components["reward_v2_shaping"] / slots.shape[0]
+            + agent_terms["reward_v2_lateral_dig"]
+            + agent_terms["reward_v2_base_travel"]
+            + agent_terms["reward_v2_base_turn"]
+            + agent_terms["reward_v2_retained_setup"]
+            + agent_terms["reward_v2_retained_travel"]
+            + agent_terms["reward_v2_retained_turn"]
         )
         components["agent_rewards"] = jnp.where(
             use_reward_v2,
@@ -4363,45 +4301,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+            new_state._get_current_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+            new_state._get_current_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # clock
         new_state = self._handle_clock()
         bool_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
+            new_state._get_current_agent_state().angle_base == self._get_current_agent_state().angle_base
         )
 
         # anticlock
         new_state = self._handle_anticlock()
         bool_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_base == self._get_current_agent_state().angle_base
+            new_state._get_current_agent_state().angle_base == self._get_current_agent_state().angle_base
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
+            new_state._get_current_agent_state().angle_cabin
             == self._get_current_agent_state().angle_cabin
         )
 
         # cabin clock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
+            new_state._get_current_agent_state().angle_cabin
             == self._get_current_agent_state().angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
+            new_state._get_current_agent_state().loaded == self._get_current_agent_state().loaded
         )
 
         action_mask = jnp.array(
@@ -4422,45 +4360,45 @@ class State(NamedTuple):
         # forward
         new_state = self._handle_move_forward()
         bool_forward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+            new_state._get_current_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # backward
         new_state = self._handle_move_backward()
         bool_backward = ~jnp.all(
-            new_state._get_prev_agent_state().pos_base == self._get_current_agent_state().pos_base
+            new_state._get_current_agent_state().pos_base == self._get_current_agent_state().pos_base
         )
 
         # turn wheels left
         new_state = self._handle_turn_wheels_left()
         bool_turn_wheels_left = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
+            new_state._get_current_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
         )
 
         # turn wheels right
         new_state = self._handle_turn_wheels_right()
         bool_turn_wheels_right = ~jnp.all(
-            new_state._get_prev_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
+            new_state._get_current_agent_state().wheel_angle == self._get_current_agent_state().wheel_angle
         )
 
         # cabin clock
         new_state = self._handle_cabin_clock()
         bool_cabin_clock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
+            new_state._get_current_agent_state().angle_cabin
             == self._get_current_agent_state().angle_cabin
         )
 
         # cabin anticlock
         new_state = self._handle_cabin_anticlock()
         bool_cabin_anticlock = ~jnp.all(
-            new_state._get_prev_agent_state().angle_cabin
+            new_state._get_current_agent_state().angle_cabin
             == self._get_current_agent_state().angle_cabin
         )
 
         # do
         new_state = self._handle_do()
         bool_do = ~jnp.all(
-            new_state._get_prev_agent_state().loaded == self._get_current_agent_state().loaded
+            new_state._get_current_agent_state().loaded == self._get_current_agent_state().loaded
         )
 
         action_mask = jnp.array(
@@ -4565,14 +4503,21 @@ class State(NamedTuple):
         theta_max = 2 * np.pi / (self.env_cfg.agent.angles_cabin / 1.2)  # Same as excavator
         theta_min = -theta_max
 
+        # Closed boundaries with a numerical tolerance, as for the excavator:
+        # exact edge cells otherwise flip between eager and jitted evaluation.
+        radius_eps = 1e-5
+        angle_eps = 1e-5
         dig_mask_r = jnp.logical_and(
-            map_cyl_coords[0] >= r_min, map_cyl_coords[0] <= r_max
+            map_cyl_coords[0] >= r_min - radius_eps,
+            map_cyl_coords[0] <= r_max + radius_eps,
         )
         dig_mask_theta = jnp.logical_and(
-            map_cyl_coords[1] >= theta_min, map_cyl_coords[1] <= theta_max
+            map_cyl_coords[1] >= theta_min - angle_eps,
+            map_cyl_coords[1] <= theta_max + angle_eps,
         )
 
         return jnp.logical_and(dig_mask_r, dig_mask_theta)
+
     def _get_dig_dump_mask_skidsteer(
         self, map_cyl_coords: Array, map_local_coords: Array
     ) -> Array:
@@ -4723,7 +4668,7 @@ class State(NamedTuple):
         reward = 0.0
         # Sophisticated collision detection (matches single-agent)
         old_loaded = self._get_current_agent_state().loaded[0]
-        new_loaded = new_state._get_prev_agent_state().loaded[0]  # After swap in multi-agent
+        new_loaded = new_state._get_current_agent_state().loaded[0]
         loaded_increased = new_loaded > old_loaded
         no_movement = ~self._check_agent_moved_on_move_action(self, new_state)
         collision_applicable = jnp.logical_and(no_movement, jnp.logical_not(loaded_increased))
@@ -4751,7 +4696,7 @@ class State(NamedTuple):
         # Check for backwards dumping reward
         # This happens when moving backwards with shovel down and loaded
         old_loaded = self._get_current_agent_state().loaded[0]
-        new_loaded = new_state._get_prev_agent_state().loaded[0]
+        new_loaded = new_state._get_current_agent_state().loaded[0]
         reward += jax.lax.cond(
             (action == TrackedActionType.BACKWARD) & (old_loaded > new_loaded),
             lambda: self._handle_rewards_skid_steer_dump(new_state, action),
@@ -4838,6 +4783,27 @@ class State(NamedTuple):
             )
         )
 
+    def _haul_volume(self) -> Float:
+        """Off-zone soil on the map plus soil carried by active agents."""
+        action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
+        off_zone_soil = jnp.where(
+            self._accepted_dump_mask(),
+            jnp.float32(0.0),
+            jnp.clip(action, a_min=jnp.float32(0.0)),
+        )
+        loads = jnp.stack(
+            [agent_state.loaded[0] for agent_state in self.agent.agent_states]
+        ).astype(jnp.float32)
+        carried = jnp.where(
+            self.agent.agent_active.astype(jnp.bool_), loads, jnp.float32(0.0)
+        )
+        return jnp.sum(off_zone_soil) + jnp.sum(carried)
+
+    def _reward_v2_volume(self) -> Float:
+        """R2 material normalizer: the dig target, else the soil to haul at reset."""
+        v0 = self._required_excavation_volume()
+        return jnp.where(v0 > 0, v0, self.material_v_reset)
+
     def _compute_material_work(self) -> Float:
         """Return remaining excavation plus off-zone and carried haul work."""
         target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
@@ -4875,7 +4841,8 @@ class State(NamedTuple):
         q_absolute = jnp.sum(completed) / jnp.maximum(v0, jnp.float32(1e-6))
         q = q_absolute - self.material_q_reset
         h = self._compute_material_work()
-        p = (self.material_h_reset - h) / jnp.maximum(v0, jnp.float32(1e-6))
+        volume = jnp.where(v0 > 0, v0, self.material_v_reset)
+        p = (self.material_h_reset - h) / jnp.maximum(volume, jnp.float32(1e-6))
         return q, h, p
 
     def _reward_v2_state_values(self) -> tuple[Float, Float, Float, Float, Float]:
@@ -4883,6 +4850,7 @@ class State(NamedTuple):
         target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
         required = jnp.clip(-target, a_min=jnp.float32(0.0))
         v0 = jnp.sum(required)
+        volume = jnp.where(v0 > 0, v0, self.material_v_reset)
         q, h, p = self._reward_v2_progress()
         bound = jnp.float32(REWARD_V2_DISTANCE_BOUND)
         alpha = jnp.float32(REWARD_V2_ALPHA)
@@ -4910,18 +4878,20 @@ class State(NamedTuple):
             [agent_state.action_type[0] for agent_state in self.agent.agent_states]
         )
         active = self.agent.agent_active.astype(jnp.bool_)
-        r2_embodiment = jnp.logical_and(
-            self.agent.num_agents == 1,
-            jnp.all(
-                jnp.logical_or(
-                    jnp.logical_not(active),
-                    jnp.logical_and(agent_types == 0, action_types == 0),
-                )
-            ),
+        # R2 is defined for teams of tracked excavators and tracked skid
+        # steers of any size.
+        r2_embodiment = jnp.all(
+            jnp.logical_or(
+                jnp.logical_not(active),
+                jnp.logical_and(
+                    jnp.logical_or(agent_types == 0, agent_types == 2),
+                    action_types == 0,
+                ),
+            )
         )
         valid = jnp.logical_and(
             jnp.logical_and(
-                v0 > 0,
+                volume > 0,
                 jnp.logical_and(
                     self.env_cfg.max_steps_in_episode == 450,
                     r2_embodiment,
@@ -4957,8 +4927,13 @@ class State(NamedTuple):
         new_state: "State",
         done: jnp.bool_,
         exact_success: jnp.bool_,
+        behavior_components: dict[str, Float] | None = None,
     ) -> tuple[Float, dict[str, Float]]:
-        """Compute the one R2 reward on every physical transition."""
+        """Compute the one R2 reward on every physical transition.
+
+        ``behavior_components`` are the per-agent behavior costs summed over
+        the agents that acted; by default the current agent's single action.
+        """
         q, h, p, phi, valid = self._reward_v2_state_values()
         q_next, h_next, p_next, phi_next, valid_next = (
             new_state._reward_v2_state_values()
@@ -4993,7 +4968,8 @@ class State(NamedTuple):
         ) * horizon_failure.astype(jnp.float32)
         step = -step_cost_total / REWARD_V2_HORIZON
         reward = success + failure + step + shaping
-        behavior_components = self._reward_v2_behavior_costs(new_state)
+        if behavior_components is None:
+            behavior_components = self._reward_v2_behavior_costs(new_state)
         behavior_cost = (
             behavior_components["reward_v2_lateral_dig"]
             + behavior_components["reward_v2_base_travel"]
@@ -5037,9 +5013,10 @@ class State(NamedTuple):
     def _reward_v2_behavior_costs(self, new_state: "State") -> dict[str, Float]:
         """Optional costs of fresh digging, chassis motion and retained work.
 
-        Track the old acting slot through a possible agent handoff. Lateral
-        orientation is relative to the chassis before the dig; it describes a
-        geometric preference, not a physical tipping-stability model.
+        ``self``/``new_state`` bracket the current agent's action; both reads
+        use ``self``'s slot. Lateral orientation is relative to the chassis
+        before the dig; it describes a geometric preference, not a physical
+        tipping-stability model.
         """
         current = self._get_current_agent_state()
         following = new_state._replace(
