@@ -235,9 +235,9 @@ def stage_v6_level(level, siblings, ranked, frozen, accepted, old_digs, limit, r
                    "generator_level": level,
                    "generator_map_index": slot["map_index"],
                    "generator_status": slot["status"],
-                   "generator_source": str(slot["members"][
+                   "generator_run": str(slot["members"][
                        condition_id if condition_id in slot["members"]
-                       else c.CONTROL_PARENTS[condition_id]][0])}
+                       else c.CONTROL_PARENTS[condition_id]][0].relative_to(c.GENERATION))}
             c.save_map(level_dir / condition_id, rank, arrays, metadata)
             rows[condition_id].append(row)
     for condition_id, condition_rows in rows.items():
@@ -315,13 +315,22 @@ def main() -> None:
     frozen = load_frozen(args.frozen)
     old = c.old_pool_index()
     old_digs = old_train_digs(old)
-    state = (json.loads(args.accepted_state.read_text()) if args.accepted_state.is_file()
-             else {"dig": [], "scenario": [], "source": [], "used_sources": []})
-    accepted = {k: set(state[k]) for k in ("dig", "scenario", "source")}
-    used_sources = set(state["used_sources"])
+    # Identities accepted by other levels (per-level state keeps re-staging idempotent).
+    state = json.loads(args.accepted_state.read_text()) if args.accepted_state.is_file() else {}
+    levels = [level for level in args.levels.split(",") if level]
+    staged_now = set(levels) | ({"v7"} if args.v7 else set())
+    accepted = {k: set() for k in ("dig", "scenario", "source")}
+    used_sources = set()
+    for level, entry in state.items():
+        if set(level.split(",")) & staged_now:
+            continue
+        for key in accepted:
+            accepted[key].update(entry[key])
+        used_sources.update(entry["used_sources"])
+    before = {k: set(v) for k, v in accepted.items()}
+    before_used = set(used_sources)
     report = {"levels": {}, "rejections": []}
     by_level = conditions_by_level()
-    levels = [level for level in args.levels.split(",") if level]
     prepared = []
     for level in levels:
         siblings = by_level[level]
@@ -346,8 +355,12 @@ def main() -> None:
     if args.v7:
         stage_v7(frozen, accepted, args.v7_count, args.v7_seed, args.foundation_limit, report)
         print("v7:", report["levels"]["v7"], flush=True)
-    args.accepted_state.write_text(json.dumps(
-        {k: sorted(v) for k, v in accepted.items()} | {"used_sources": sorted(used_sources)}) + "\n")
+    # attribute the identities added in this run to the staged levels
+    for level in [key for key in state if set(key.split(",")) & staged_now]:
+        state.pop(level)
+    added = {k: sorted(accepted[k] - before[k]) for k in accepted}
+    state[",".join(sorted(staged_now))] = added | {"used_sources": sorted(used_sources - before_used)}
+    args.accepted_state.write_text(json.dumps(state) + "\n")
     report["wall_seconds"] = round(time.time() - started, 1)
     args.report.write_text(json.dumps(report, indent=1) + "\n")
 

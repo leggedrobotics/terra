@@ -46,7 +46,8 @@ def candidate_dirs() -> dict[str, Path]:
 
 
 def excluded_pairs(level_dir: Path) -> tuple[set[str], dict]:
-    verdict_path = level_dir / "preflight_verdict.json"
+    verdict_path = level_dir / "preflight_verdict_yawonly.json"
+    default_path = level_dir / "preflight_verdict_default.json"
     rows = None
     for dataset in level_dir.iterdir():
         if (dataset / "manifest.jsonl").is_file():
@@ -69,10 +70,16 @@ def excluded_pairs(level_dir: Path) -> tuple[set[str], dict]:
             value = slots.get(row["slot_index"])
             if value is not None and not value["complete"]:
                 excluded.add(row["pair_slot_id"])
+    default = json.loads(default_path.read_text()) if default_path.is_file() else None
     return excluded, {"preflight_slots": verdict["slots"],
+                      "exclusion_contract": "v2 yaw-parallel (--max-offset-m 0)",
                       "incomplete_pair_slots": sorted(excluded),
                       "audited": verdict["audited_datasets"],
-                      "sibling_inputs_identical": verdict["sibling_inputs_identical"]}
+                      "sibling_inputs_identical": verdict["sibling_inputs_identical"],
+                      "default_2122b2df_incomplete_maps": (
+                          default["contract"]["incomplete_fresh_cover_count"] if default else None),
+                      "default_2122b2df_audited_maps": (
+                          default["contract"]["maps"] if default else None)}
 
 
 def link_or_copy(source: Path, destination: Path, hardlink: bool) -> None:
@@ -123,18 +130,20 @@ def main() -> None:
             level_dir = source.parent
             if level_dir not in level_selected:
                 excluded, info = excluded_pairs(level_dir)
-                reference = c.read_jsonl(next(
-                    d for d in sorted(level_dir.iterdir()) if (d / "manifest.jsonl").is_file()
-                ) / "manifest.jsonl")
-                chosen = [r["pair_slot_id"] for r in reference
-                          if r["pair_slot_id"] not in excluded][:NEW_PER_CONDITION]
-                level_selected[level_dir] = chosen
-                info.update({"staged_slots": len(reference), "selected_slots": len(chosen)})
+                level_selected[level_dir] = excluded
                 level_info[level_dir.name] = info
-            chosen = level_selected[level_dir]
-            staged = {r["pair_slot_id"]: r for r in c.read_jsonl(source / "manifest.jsonl")}
-            for offset, pair in enumerate(chosen, start=len(rows) + 1):
-                row = staged[pair]
+            excluded = level_selected[level_dir]
+            staged_rows = c.read_jsonl(source / "manifest.jsonl")
+            chosen_rows = [r for r in staged_rows
+                           if r["pair_slot_id"] not in excluded][:NEW_PER_CONDITION]
+            info = level_info[level_dir.name]
+            info.setdefault("selected", {})[condition] = {
+                "staged": len(staged_rows), "selected": len(chosen_rows)}
+            if level_dir.name != "v7":
+                pairs = [r["pair_slot_id"] for r in chosen_rows]
+                if info.setdefault("chosen_pairs", pairs) != pairs:
+                    raise RuntimeError(f"{condition}: siblings disagree on the chosen pair slots")
+            for offset, row in enumerate(chosen_rows, start=len(rows) + 1):
                 for folder in c.RESET_ARRAY_FOLDERS:
                     link_or_copy(source / folder / f"img_{row['slot_index']}.npy",
                                  dataset / folder / f"img_{offset}.npy", hardlink=True)
@@ -189,6 +198,8 @@ def main() -> None:
     shutil.copyfile(registry, BANK / "source_registry.jsonl")
     shutil.move(str(pooled), str(BANK / POOLED_NAME))
     shutil.copyfile(STAGING / f"{POOLED_NAME}_manifest.json", BANK / f"{POOLED_NAME}_pooling_manifest.json")
+    for info in level_info.values():
+        info.pop("chosen_pairs", None)
     report = {
         "counts": counts,
         "levels": level_info,

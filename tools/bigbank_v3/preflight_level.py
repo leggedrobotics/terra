@@ -41,6 +41,11 @@ def main() -> None:
     parser.add_argument("--level-dir", type=Path, required=True)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--tag", choices=("default", "yawonly"), default="default",
+                        help="default: the tool's 2122b2df defaults (v2, on-the-line bound "
+                        "EnvConfig.trench_dig_max_offset_m); yawonly: --max-offset-m 0, the "
+                        "v2 yaw-parallel contract the current bank was re-admitted under "
+                        "(tools/trench_align_v2_revalidation_20260901/preflight_full_v2.json)")
     args = parser.parse_args()
     level_dir = args.level_dir.resolve()
     datasets = sorted(p.name for p in level_dir.iterdir()
@@ -61,7 +66,7 @@ def main() -> None:
         if len(keys) != 1:
             unequal.append(slot)
     audited = [representative] if not unequal else trench
-    output = level_dir / "preflight.json"
+    output = level_dir / f"preflight_{args.tag}.json"
     command = [sys.executable, str(TOOL), "--layout", "exact", "--bank", str(level_dir),
                "--workers", str(args.workers), "--witness-actions", "counts",
                "--output", str(output)]
@@ -69,6 +74,8 @@ def main() -> None:
         command += ["--dataset", name]
     if args.limit:
         command += ["--limit", str(args.limit)]
+    if args.tag == "yawonly":
+        command += ["--max-offset-m", "0"]
     print(" ".join(command), flush=True)
     subprocess.run(command, check=True)
     report = json.loads(output.read_text())
@@ -87,6 +94,7 @@ def main() -> None:
             }
     summary = {
         "level_dir": str(level_dir),
+        "tag": args.tag,
         "trench_datasets": trench,
         "audited_datasets": audited,
         "slots": slots,
@@ -99,7 +107,7 @@ def main() -> None:
         "incomplete": sorted(k for k, v in verdict.items() if not v["complete"]),
         "verdict": verdict,
     }
-    (level_dir / "preflight_verdict.json").write_text(json.dumps(summary, indent=1) + "\n")
+    (level_dir / f"preflight_verdict_{args.tag}.json").write_text(json.dumps(summary, indent=1) + "\n")
     print(json.dumps({k: v for k, v in summary.items() if k != "verdict"})[:2000])
 
 
