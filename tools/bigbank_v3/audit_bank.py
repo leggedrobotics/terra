@@ -63,7 +63,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--frozen", type=Path, default=c.ROOT / "receipts" / "frozen_identities.json")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--pooled", type=Path, default=POOLED)
     args = parser.parse_args()
+    pooled = args.pooled
     frozen = json.loads(args.frozen.read_text())["evaluation"]
     eval_sets = {
         "dig": set(frozen["array_dig_sha256"]) | set(frozen["dig_sha256"]),
@@ -73,13 +75,15 @@ def main() -> None:
         "reset_arrays": set(frozen["array_scenario_sha256"]),
         "map_id": set(frozen["map_id"]),
     }
-    rows = c.read_jsonl(POOLED / "manifest.jsonl")
+    rows = c.read_jsonl(pooled / "manifest.jsonl")
+    for row in rows:
+        row.setdefault("train_v3_origin", "old")
     identities = []
     per_condition = defaultdict(lambda: {"old": defaultdict(list), "new": defaultdict(list)})
     mismatched_scenario = 0
     for row in rows:
-        arrays, dig, reset = slot_identity(POOLED, row["slot_index"])
-        metadata = json.loads((POOLED / "metadata" / f"trench_{row['slot_index']}.json").read_text())
+        arrays, dig, reset = slot_identity(pooled, row["slot_index"])
+        metadata = json.loads((pooled / "metadata" / f"trench_{row['slot_index']}.json").read_text())
         if reset != row["scenario_id"]:
             mismatched_scenario += 1
         identities.append((row, dig, reset))

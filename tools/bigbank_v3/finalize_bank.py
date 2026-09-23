@@ -38,11 +38,25 @@ def git(*args: str) -> str:
                           capture_output=True, text=True).stdout.strip()
 
 
+def write_files_manifest() -> list[Path]:
+    files = sorted(p for p in BANK.rglob("*") if p.is_file() and p.name != "files.sha256"
+                   and not p.name.endswith(".tar.zst") and not p.name.endswith(".tar.zst.sha256"))
+    (BANK / "files.sha256").write_text("".join(
+        f"{c.sha256_file(p)}  {p.relative_to(BANK)}\n" for p in files))
+    print(f"files.sha256: {len(files)} files, sha256 {c.sha256_file(BANK / 'files.sha256')}")
+    return files
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--assemble-report", type=Path, required=True)
-    parser.add_argument("--extension-receipt", type=Path, required=True)
+    parser.add_argument("--assemble-report", type=Path)
+    parser.add_argument("--extension-receipt", type=Path)
+    parser.add_argument("--files-only", action="store_true",
+                        help="only rewrite bank/files.sha256 (after README.md is written)")
     args = parser.parse_args()
+    if args.files_only:
+        write_files_manifest()
+        return
     assemble = json.loads(args.assemble_report.read_text())
     extension = json.loads(args.extension_receipt.read_text())
     rows = c.read_jsonl(POOLED / "manifest.jsonl")
@@ -94,9 +108,7 @@ def main() -> None:
         "observed_global_max": max(r["normalized_distance_max"] for r in records),
     })
     sidecar_sha = c.sha256_file(sidecar / "dataset.json")
-    files = sorted(p for p in BANK.rglob("*") if p.is_file() and p.name != "files.sha256")
-    (BANK / "files.sha256").write_text("".join(
-        f"{c.sha256_file(p)}  {p.relative_to(BANK)}\n" for p in files))
+    files = write_files_manifest()
     summary = {
         "slots": len(rows),
         "scenarios": scenarios,
