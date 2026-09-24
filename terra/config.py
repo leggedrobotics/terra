@@ -98,8 +98,8 @@ class ImmutableAgentConfig(NamedTuple):
     wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
     # [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded,
     #  agent_type, shovel_lifted, normalized carry work,
-    #  normalized machine work (executed-plan time over job time)]
-    num_state_obs: int = 10
+    #  machine work and team fair share (executed-plan time over job time)]
+    num_state_obs: int = 11
 
 
 class AgentConfig(NamedTuple):

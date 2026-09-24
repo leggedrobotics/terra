@@ -466,20 +466,26 @@ events (`State.machine_work_s`): loaded units (fresh digs and relifts) at
 `tile_size³ / 0.3 m³ × 30 s` per unit, straight-line travel from its previous
 work pose at 0.5 m/s, and `makespan_setup_s` per new work pose (the same
 work-pose rules as the retained-work costs; the initial approach is not
-counted). With `F(s) = max_i W_i(s) / (V × unit seconds)` over active slots,
-the busiest machine's time as a fraction of the single-machine loading time
-of the job,
+counted). Over the `A` active tracked excavators, with `R` the remaining
+loading time (unexcavated required units plus loose soil outside the accepted
+region, at the same rate) and `T_job` the single-machine loading time of the
+job, the makespan lower bound is
 
 ```text
-r_makespan = -makespan_cost × (F(s') - F(s)),
+B(s) = max(max_i W_i, (sum_i W_i + R) / A) / T_job
+r_makespan = -makespan_cost × (B(s') - B(s)),
 ```
 
-paid once per round. Work by a machine that is not the busiest costs nothing
-until it becomes the busiest, so the term rewards dividing the loading between
-machines; summed over an episode it is `-makespan_cost × F(final)`. It is 0 by
-default and leaves the reward bitwise unchanged when 0. `agent_states[..., 9]`
-exposes each machine's `W_i / (V × unit seconds)`, own machine first. Skid-steer
-pickups (FORWARD) are not counted yet.
+paid once per round (the dense makespan reward of L2D, Zhang et al. 2020, with
+Graham's parallel-machine bound). Balanced loading leaves `B` at the fair
+share and costs nothing; any machine's setup, travel or relift raises the fair
+share and costs the team; imbalance costs once the busiest machine passes the
+fair share. `B` starts at `1/A`, and the term sums to
+`-makespan_cost × (final makespan / T_job - 1/A)`. It is 0 by default and
+leaves the reward bitwise unchanged when 0. `agent_states[..., 9]` holds each
+machine's `W_i / T_job` (own machine first) and `agent_states[..., 10]` the
+fair share `(sum_i W_i + R) / (A × T_job)`. Skid-steer pickups (FORWARD) are
+not counted yet.
 
 ### Legacy dense and terminal-only rewards
 

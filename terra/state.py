@@ -4849,14 +4849,46 @@ class State(NamedTuple):
             self._reward_v2_volume() * self._makespan_unit_s(), jnp.float32(1e-6)
         )
 
-    def _makespan_fraction(self) -> Float:
-        """Busiest active machine's executed-plan time over the job time."""
-        work = jnp.where(
-            self.agent.agent_active.astype(jnp.bool_),
-            self.machine_work_s,
+    def _remaining_loading_units(self) -> Float:
+        """Units that must still be loaded at least once: unexcavated required
+        volume plus loose soil outside the accepted region (carried loads are
+        already loaded)."""
+        target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
+        action = _as_2d_map(self.world.action_map.map).astype(jnp.float32)
+        required = jnp.clip(-target, a_min=jnp.float32(0.0))
+        completed = jnp.minimum(jnp.clip(-action, a_min=jnp.float32(0.0)), required)
+        off_zone = jnp.where(
+            self._accepted_dump_mask(target),
             jnp.float32(0.0),
+            jnp.clip(action, a_min=jnp.float32(0.0)),
         )
-        return jnp.max(work) / self._makespan_job_s()
+        return jnp.sum(required - completed) + jnp.sum(off_zone)
+
+    def _makespan_terms(self) -> tuple[Float, Float]:
+        """Makespan lower bound and fair share, as fractions of the job time.
+
+        With W_i the executed-plan time of each work-capable machine (active
+        tracked excavators), R the remaining loading time and A their number,
+        the final makespan is at least max(max_i W_i, (sum_i W_i + R) / A):
+        the busiest machine so far, or a perfect split of everything left
+        (Graham's list-scheduling bound). The fair share is the second term.
+        Both are 0 without a work-capable machine.
+        """
+        capable = self.agent.agent_active.astype(jnp.bool_) & jnp.stack([
+            (agent_state.agent_type[0] == 0) & (agent_state.action_type[0] == 0)
+            for agent_state in self.agent.agent_states
+        ])
+        machines = jnp.sum(capable.astype(jnp.float32))
+        work = jnp.where(capable, self.machine_work_s, jnp.float32(0.0))
+        remaining_s = self._remaining_loading_units() * self._makespan_unit_s()
+        job_s = self._makespan_job_s()
+        fair = (jnp.sum(work) + remaining_s) / jnp.maximum(machines, jnp.float32(1.0)) / job_s
+        bound = jnp.maximum(jnp.max(work) / job_s, fair)
+        has_machine = machines > 0
+        return (
+            jnp.where(has_machine, bound, jnp.float32(0.0)),
+            jnp.where(has_machine, fair, jnp.float32(0.0)),
+        )
 
     def _reward_v2_volume(self) -> Float:
         """R2 material normalizer: the dig target, else the soil to haul at reset."""
@@ -5048,14 +5080,17 @@ class State(NamedTuple):
             dtype=jnp.float32,
         )
         reward = jnp.where(jnp.any(coefficients != 0), reward + behavior_cost, reward)
-        # Team makespan: pay only for growth of the busiest machine's
-        # executed-plan time, so work by a less loaded machine is free until
-        # it becomes the busiest. Summed over an episode this is
-        # -makespan_cost * (final busiest time / single-machine job time).
+        # Team makespan (L2D-style dense reward): pay the growth of the
+        # makespan lower bound max(busiest machine, fair share of all work
+        # done and left). Balanced work leaves the bound at the fair share and
+        # is free; any machine's overhead (setups, travel, relifts) raises
+        # the fair share and costs the team; imbalance costs once the busiest
+        # machine passes the fair share. Summed over an episode this is
+        # -makespan_cost * (final makespan / job time - 1 / machines).
         makespan_cost = jnp.asarray(new_state.env_cfg.makespan_cost, dtype=jnp.float32)
         makespan_setup_s = jnp.asarray(new_state.env_cfg.makespan_setup_s, dtype=jnp.float32)
-        makespan_fraction = self._makespan_fraction()
-        makespan_fraction_next = new_state._makespan_fraction()
+        makespan_fraction, _ = self._makespan_terms()
+        makespan_fraction_next, _ = new_state._makespan_terms()
         makespan = -makespan_cost * (makespan_fraction_next - makespan_fraction)
         reward = jnp.where(makespan_cost != 0, reward + makespan, reward)
         valid_transition = jnp.logical_and(valid > 0, valid_next > 0)

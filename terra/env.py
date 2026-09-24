@@ -485,7 +485,7 @@ class TerraEnv(NamedTuple):
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
             interaction_mask=obs["interaction_mask"],  # [H, W] - dig/dump cones for all active agents
-            agent_states=obs["agent_states"],  # [MAX_AGENTS, 10] with active agent at index 0
+            agent_states=obs["agent_states"],  # [MAX_AGENTS, 11] with active agent at index 0
             agent_active=obs["agent_active"],  # [MAX_AGENTS] mask
             num_agents=obs["num_agents"],      # scalar
             generate_gif=generate_gif,
@@ -720,15 +720,18 @@ class TerraEnv(NamedTuple):
         ) = state._get_fresh_trench_dig_alignment()
 
         makespan_job_s = state._makespan_job_s()
+        _, makespan_fair_share = state._makespan_terms()
 
         def _feat(a, active, work_s):
-            # Index 9: this machine's executed-plan time so far over the
-            # single-machine loading time of the job (makespan balance).
+            # Index 9: this machine's executed-plan time so far and index 10:
+            # the team's fair share (all work done and left, split evenly),
+            # both over the single-machine loading time of the job.
             machine_work_normalized = jnp.where(
                 active,
                 jnp.asarray(work_s, dtype=jnp.float32) / makespan_job_s,
                 jnp.float32(0.0),
             )
+            fair_share = jnp.where(active, makespan_fair_share, jnp.float32(0.0))
             carry_work_normalized = jnp.where(
                 jnp.logical_and(active, material_volume > 0),
                 jnp.asarray(
@@ -748,6 +751,7 @@ class TerraEnv(NamedTuple):
                 a.shovel_lifted,
                 carry_work_normalized[None],
                 machine_work_normalized[None],
+                fair_share[None],
             ])
 
         # Fixed MAX_AGENTS consistent with Agent.new
