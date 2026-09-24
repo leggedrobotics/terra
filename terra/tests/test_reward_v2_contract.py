@@ -146,7 +146,7 @@ def test_reward_v2_material_work_and_carry_observation_are_markov():
     assert float(valid) == 1.0
 
     observation = TerraEnv._state_to_obs_dict(lifted)
-    assert observation["agent_states"].shape == (4, 9)
+    assert observation["agent_states"].shape == (4, 10)
     np.testing.assert_allclose(
         observation["agent_states"][0, 8],
         0.25,

@@ -151,6 +151,8 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
         "retained_work_setup_cost": 0.0,
         "retained_work_travel_cost": 0.0,
         "retained_work_turn_cost": 0.0,
+        "makespan_cost": 0.0,
+        "makespan_setup_s": 0.0,
     }.items():
         if payload[name] != default:
             raise RuntimeError(

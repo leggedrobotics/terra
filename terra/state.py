@@ -17,6 +17,9 @@ from terra.agent import MAX_AGENTS
 from terra.agent import num_agent_slots
 from terra.config import AgentConfig
 from terra.config import EnvConfig
+from terra.config import MAKESPAN_BUCKET_M3
+from terra.config import MAKESPAN_CYCLE_S
+from terra.config import MAKESPAN_NAV_SPEED_MPS
 from terra.config import RewardStage
 from terra.config import REWARD_V2_ALPHA
 from terra.config import REWARD_V2_BETA
@@ -155,6 +158,10 @@ class State(NamedTuple):
     # Soil to haul at reset (off-zone soil plus loads). R2 normalizes by it
     # only when a map has no dig target, e.g. skid-steer relocation.
     material_v_reset: Float = jnp.float32(0.0)
+    # Executed-plan seconds per machine slot, accumulated on effective DO:
+    # loaded units at the scoop rate, travel between successive work poses
+    # and makespan_setup_s per new work pose.
+    machine_work_s: Array = jnp.zeros((4,), dtype=jnp.float32)
 
 
     @classmethod
@@ -3221,6 +3228,31 @@ class State(NamedTuple):
         )
         slot = self.agent.current_agent
         pose = jnp.concatenate((cur.pos_base, cur.angle_base)).astype(jnp.int32)
+        # Executed-plan time of this work event: loading at the scoop rate,
+        # plus travel from the previous work pose and a setup overhead when
+        # the work pose changes (same rules as the retained-work costs).
+        previous = self.retained_work_pose[slot]
+        has_previous = self.retained_work_events[slot] > 0
+        new_setup = effective & (~has_previous | jnp.any(previous != pose))
+        travel_m = jnp.where(
+            new_setup & has_previous,
+            jnp.linalg.norm((pose[:2] - previous[:2]).astype(jnp.float32))
+            * jnp.float32(self.env_cfg.tile_size),
+            jnp.float32(0.0),
+        )
+        loaded_units = jnp.maximum(
+            following._get_current_agent_state().loaded[0].astype(jnp.float32)
+            - cur.loaded[0].astype(jnp.float32),
+            jnp.float32(0.0),
+        )
+        work_s = jnp.where(
+            effective,
+            loaded_units * self._makespan_unit_s()
+            + travel_m / jnp.float32(MAKESPAN_NAV_SPEED_MPS)
+            + new_setup.astype(jnp.float32)
+            * jnp.float32(self.env_cfg.makespan_setup_s),
+            jnp.float32(0.0),
+        )
         return following._replace(
             retained_work_pose=self.retained_work_pose.at[slot].set(
                 jnp.where(effective, pose, self.retained_work_pose[slot])
@@ -3228,6 +3260,7 @@ class State(NamedTuple):
             retained_work_events=self.retained_work_events.at[slot].add(
                 effective.astype(jnp.int32)
             ),
+            machine_work_s=self.machine_work_s.at[slot].add(work_s),
         )
 
     @staticmethod
@@ -4061,6 +4094,8 @@ class State(NamedTuple):
                     "reward_v2_horizon_failure": zero,
                     "reward_v2_step": zero,
                     "reward_v2_valid": zero,
+                    "reward_v2_makespan": zero,
+                    "reward_v2_makespan_fraction": zero,
                     "reward_v2_lateral_dig": zero,
                     "reward_v2_base_travel": zero,
                     "reward_v2_base_turn": zero,
@@ -4079,12 +4114,13 @@ class State(NamedTuple):
         )
         reward = jnp.where(use_reward_v2, reward_v2, reward)
         # Logging only: each agent gets its own behavior costs and an equal
-        # share of the team potential shaping.
+        # share of the team potential shaping and makespan cost.
         reward_v2_agent = jnp.zeros(
             (MAX_AGENTS,),
             dtype=jnp.float32,
         ).at[slots].set(
             reward_v2_components["reward_v2_shaping"] / slots.shape[0]
+            + reward_v2_components["reward_v2_makespan"] / slots.shape[0]
             + agent_terms["reward_v2_lateral_dig"]
             + agent_terms["reward_v2_base_travel"]
             + agent_terms["reward_v2_base_turn"]
@@ -4799,6 +4835,29 @@ class State(NamedTuple):
         )
         return jnp.sum(off_zone_soil) + jnp.sum(carried)
 
+    def _makespan_unit_s(self) -> Float:
+        """Executed-plan seconds to load one material unit (a cubic cell)."""
+        tile = jnp.float32(self.env_cfg.tile_size)
+        return (
+            tile * tile * tile / jnp.float32(MAKESPAN_BUCKET_M3)
+            * jnp.float32(MAKESPAN_CYCLE_S)
+        )
+
+    def _makespan_job_s(self) -> Float:
+        """Single-machine loading time of the whole job (the R2 volume)."""
+        return jnp.maximum(
+            self._reward_v2_volume() * self._makespan_unit_s(), jnp.float32(1e-6)
+        )
+
+    def _makespan_fraction(self) -> Float:
+        """Busiest active machine's executed-plan time over the job time."""
+        work = jnp.where(
+            self.agent.agent_active.astype(jnp.bool_),
+            self.machine_work_s,
+            jnp.float32(0.0),
+        )
+        return jnp.max(work) / self._makespan_job_s()
+
     def _reward_v2_volume(self) -> Float:
         """R2 material normalizer: the dig target, else the soil to haul at reset."""
         v0 = self._required_excavation_volume()
@@ -4989,8 +5048,20 @@ class State(NamedTuple):
             dtype=jnp.float32,
         )
         reward = jnp.where(jnp.any(coefficients != 0), reward + behavior_cost, reward)
+        # Team makespan: pay only for growth of the busiest machine's
+        # executed-plan time, so work by a less loaded machine is free until
+        # it becomes the busiest. Summed over an episode this is
+        # -makespan_cost * (final busiest time / single-machine job time).
+        makespan_cost = jnp.asarray(new_state.env_cfg.makespan_cost, dtype=jnp.float32)
+        makespan_setup_s = jnp.asarray(new_state.env_cfg.makespan_setup_s, dtype=jnp.float32)
+        makespan_fraction = self._makespan_fraction()
+        makespan_fraction_next = new_state._makespan_fraction()
+        makespan = -makespan_cost * (makespan_fraction_next - makespan_fraction)
+        reward = jnp.where(makespan_cost != 0, reward + makespan, reward)
         valid_transition = jnp.logical_and(valid > 0, valid_next > 0)
         valid_transition &= jnp.all(jnp.isfinite(coefficients) & (coefficients >= 0))
+        valid_transition &= jnp.isfinite(makespan_cost) & (makespan_cost >= 0)
+        valid_transition &= jnp.isfinite(makespan_setup_s) & (makespan_setup_s >= 0)
         reward = jnp.where(valid_transition, reward, jnp.float32(jnp.nan))
         return reward, {
             "reward_v2_q": q,
@@ -5007,6 +5078,8 @@ class State(NamedTuple):
             "reward_v2_horizon_failure": failure,
             "reward_v2_step": step,
             "reward_v2_valid": valid_transition.astype(jnp.float32),
+            "reward_v2_makespan": makespan,
+            "reward_v2_makespan_fraction": makespan_fraction_next,
             **behavior_components,
         }
 

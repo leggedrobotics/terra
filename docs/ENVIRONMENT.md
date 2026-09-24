@@ -459,6 +459,28 @@ resolved foundation recipes (local: `.artifacts/terra_foundation_sweep_20260907/
 original screen (local: `.artifacts/terra_foundation_sweep_20260907/RUNS.md`) and
 upper-cost screen (local: `.artifacts/terra_foundation_sweep_20260908_upper/PLAN.md`).
 
+### Optional team makespan cost
+
+Every machine slot accumulates executed-plan seconds on its effective DO
+events (`State.machine_work_s`): loaded units (fresh digs and relifts) at
+`tile_size³ / 0.3 m³ × 30 s` per unit, straight-line travel from its previous
+work pose at 0.5 m/s, and `makespan_setup_s` per new work pose (the same
+work-pose rules as the retained-work costs; the initial approach is not
+counted). With `F(s) = max_i W_i(s) / (V × unit seconds)` over active slots,
+the busiest machine's time as a fraction of the single-machine loading time
+of the job,
+
+```text
+r_makespan = -makespan_cost × (F(s') - F(s)),
+```
+
+paid once per round. Work by a machine that is not the busiest costs nothing
+until it becomes the busiest, so the term rewards dividing the loading between
+machines; summed over an episode it is `-makespan_cost × F(final)`. It is 0 by
+default and leaves the reward bitwise unchanged when 0. `agent_states[..., 9]`
+exposes each machine's `W_i / (V × unit seconds)`, own machine first. Skid-steer
+pickups (FORWARD) are not counted yet.
+
 ### Legacy dense and terminal-only rewards
 
 The `Rewards.dense()` named tuple remains the native default, but does not

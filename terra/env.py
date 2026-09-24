@@ -226,6 +226,8 @@ class TerraEnv(NamedTuple):
             "reward_v2_horizon_failure": zero,
             "reward_v2_step": zero,
             "reward_v2_valid": zero,
+            "reward_v2_makespan": zero,
+            "reward_v2_makespan_fraction": zero,
             "reward_v2_lateral_dig": zero,
             "reward_v2_base_travel": zero,
             "reward_v2_base_turn": zero,
@@ -483,7 +485,7 @@ class TerraEnv(NamedTuple):
             padding_mask=obs["padding_mask"],
             dumpability_mask=obs["dumpability_mask"],
             interaction_mask=obs["interaction_mask"],  # [H, W] - dig/dump cones for all active agents
-            agent_states=obs["agent_states"],  # [MAX_AGENTS, 9] with active agent at index 0
+            agent_states=obs["agent_states"],  # [MAX_AGENTS, 10] with active agent at index 0
             agent_active=obs["agent_active"],  # [MAX_AGENTS] mask
             num_agents=obs["num_agents"],      # scalar
             generate_gif=generate_gif,
@@ -717,7 +719,16 @@ class TerraEnv(NamedTuple):
             fresh_trench_dig_standoff_error,
         ) = state._get_fresh_trench_dig_alignment()
 
-        def _feat(a, active):
+        makespan_job_s = state._makespan_job_s()
+
+        def _feat(a, active, work_s):
+            # Index 9: this machine's executed-plan time so far over the
+            # single-machine loading time of the job (makespan balance).
+            machine_work_normalized = jnp.where(
+                active,
+                jnp.asarray(work_s, dtype=jnp.float32) / makespan_job_s,
+                jnp.float32(0.0),
+            )
             carry_work_normalized = jnp.where(
                 jnp.logical_and(active, material_volume > 0),
                 jnp.asarray(
@@ -736,6 +747,7 @@ class TerraEnv(NamedTuple):
                 a.agent_type,
                 a.shovel_lifted,
                 carry_work_normalized[None],
+                machine_work_normalized[None],
             ])
 
         # Fixed MAX_AGENTS consistent with Agent.new
@@ -743,7 +755,11 @@ class TerraEnv(NamedTuple):
         # Assemble [MAX_AGENTS, feat_dim]
         agents_feat = jnp.stack(
             [
-                _feat(state.agent.agent_states[i], state.agent.agent_active[i])
+                _feat(
+                    state.agent.agent_states[i],
+                    state.agent.agent_active[i],
+                    state.machine_work_s[i],
+                )
                 for i in range(MAX_AGENTS)
             ],
             axis=0,

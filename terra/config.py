@@ -55,6 +55,13 @@ REWARD_V2_TIMING_V21_ID = "gamma1_stepcost_3.6"
 REWARD_V2_V21_SHAPING_GAMMA = 1.0
 REWARD_V2_V21_STEP_COST_TOTAL = 3.6
 
+# Executed-plan time model shared by the makespan cost and the team
+# evaluation: a cubic material unit (tile_size^3), bucket cycles of
+# 0.3 m^3 in 30 s, and 0.5 m/s navigation between work poses.
+MAKESPAN_BUCKET_M3 = 0.3
+MAKESPAN_CYCLE_S = 30.0
+MAKESPAN_NAV_SPEED_MPS = 0.5
+
 # Backplay-inspired reset tiers. Tier zero always selects the canonical full
 # reset; tiers 1-3 substitute only the generated action map for the canonical
 # source slot.
@@ -90,8 +97,9 @@ class ImmutableAgentConfig(NamedTuple):
     max_wheel_angle: int = 2
     wheel_step: float = 20.0  # difference between next angles in discretization (in degrees)
     # [pos_x, pos_y, angle_base, angle_cabin, wheel_angle, loaded,
-    #  agent_type, shovel_lifted, normalized carry work]
-    num_state_obs: int = 9
+    #  agent_type, shovel_lifted, normalized carry work,
+    #  normalized machine work (executed-plan time over job time)]
+    num_state_obs: int = 10
 
 
 class AgentConfig(NamedTuple):
@@ -325,6 +333,14 @@ class EnvConfig(NamedTuple):
     retained_work_setup_cost: float = 0.0
     retained_work_travel_cost: float = 0.0  # per inter-work straight-line metre
     retained_work_turn_cost: float = 0.0  # per inter-work wrapped base radian
+
+    # Optional team makespan cost. Every machine accumulates executed-plan
+    # time on effective DO events (loaded units at the scoop rate, travel
+    # between successive work poses, makespan_setup_s per new work pose); the
+    # reward pays -makespan_cost times the growth of the busiest machine's
+    # time, normalized by the single-machine loading time of the whole job.
+    makespan_cost: float = 0.0
+    makespan_setup_s: float = 0.0  # overhead per new work pose (workspace)
 
     @classmethod
     def new(cls):
