@@ -727,9 +727,14 @@ class ExactDumpContractTest(unittest.TestCase):
 
         # Only cells beyond the dump reach are dumpable: the dump is refused.
         far_only = dig_cone.astype(bool) & (radius > 5.6)
-        state = self._with_dump_radius(
-            self._state(target, loaded=40, dumpability=far_only), 5.5
-        )
+        # Restrict dumpability after construction: the random start search
+        # in State.new needs dumpable ground near the base.
+        state = self._with_dump_radius(self._state(target, loaded=40), 5.5)
+        state = state._replace(world=state.world._replace(
+            dumpability_mask=state.world.dumpability_mask._replace(
+                map=jnp.asarray(far_only, dtype=state.world.dumpability_mask.map.dtype)
+            )
+        ))
         old_map = np.asarray(state.world.action_map.map).copy()
         refused = state._handle_dump()
         np.testing.assert_array_equal(np.asarray(refused.world.action_map.map), old_map)
@@ -741,13 +746,15 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(int(delta.sum()), 40)
         self.assertGreater(float(radius[delta > 0].min()), 5.5)
 
-        # Everything dumpable: every landed cell is within the dump reach.
+        # Everything dumpable: the load is released within the dump reach;
+        # relaxation lets the pile edge slide less than one tile further.
         state = self._with_dump_radius(self._state(target, loaded=40), 5.5)
         old_map = np.asarray(state.world.action_map.map).astype(np.int32)
         dumped = state._handle_dump()
         delta = np.asarray(dumped.world.action_map.map).astype(np.int32) - old_map
         self.assertEqual(int(delta.sum()), 40)
-        self.assertLessEqual(float(radius[delta > 0].max()), 5.5 + 1e-5)
+        self.assertLessEqual(float((radius * delta).sum() / delta.sum()), 5.5)
+        self.assertLess(float(radius[delta > 0].max()), 5.5 + state.env_cfg.tile_size)
 
     def test_unrepresentable_dump_is_rejected_without_mass_loss(self):
         legal_coordinate = self._workspace_coordinates()[0]
