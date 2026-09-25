@@ -2036,6 +2036,22 @@ class State(NamedTuple):
             _get_excavator_cone       # Default for excavator (0) and wheeled (1)
         )
 
+    def _build_dump_cone(self) -> Array:
+        """Excavator dump cone: the dig cone within ``agent.dump_max_radius_m``.
+
+        Skid steers and trucks keep their own cone; a radius of 0 keeps the
+        full dig reach.
+        """
+        cone = self._build_dig_dump_cone()
+        map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
+        dump_r_max = jnp.asarray(self.env_cfg.agent.dump_max_radius_m, dtype=jnp.float32)
+        within_reach = jnp.logical_or(
+            dump_r_max <= 0.0, map_cyl_coords[0] <= dump_r_max + 1e-5
+        )
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        keep = jnp.logical_or(jnp.logical_not(is_excavator), within_reach)
+        return jnp.logical_and(cone.astype(jnp.bool_), keep).astype(cone.dtype)
+
     def _workspace_intersects_obstacle(self) -> Array:
         """
         Returns True when the current workspace overlaps static obstacles.
@@ -2111,7 +2127,7 @@ class State(NamedTuple):
         has_foundation_metadata = foundation_border_type > 0
 
         map_shape = self.world.action_map.map.shape[-2:]
-        raw_cone = self._build_dig_dump_cone().reshape(map_shape).astype(jnp.bool_)
+        raw_cone = self._build_dump_cone().reshape(map_shape).astype(jnp.bool_)
         free_cone = jnp.reshape(dump_mask, (-1,) + map_shape)[0].astype(jnp.bool_)
         cone_count = jnp.sum(raw_cone.astype(jnp.float32))
         free_count = jnp.sum(jnp.logical_and(raw_cone, free_cone).astype(jnp.float32))
@@ -2938,7 +2954,7 @@ class State(NamedTuple):
         Returns a potentially updated State; caller can compare loaded before/after to detect transfer.
         """
         # Use excavator's dump cone for truck transfer
-        dump_mask = self._build_dig_dump_cone()
+        dump_mask = self._build_dump_cone()
         curd = self._get_current_agent_state()
         is_excavator = (curd.agent_type[0] == 0)
         is_loaded = (curd.loaded[0] > 0)
@@ -3058,7 +3074,7 @@ class State(NamedTuple):
             cur.agent_type[0] == 2,
         )
 
-        physical_mask = self._build_dig_dump_cone().astype(jnp.bool_)
+        physical_mask = self._build_dump_cone().astype(jnp.bool_)
         physical_mask = self._exclude_dig_tiles_from_dump_mask(physical_mask)
         physical_mask = self._exclude_dumpability_mask_tiles_from_dump_mask(
             physical_mask

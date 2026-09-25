@@ -710,6 +710,45 @@ class ExactDumpContractTest(unittest.TestCase):
         self.assertEqual(int(dumped._get_current_agent_state().loaded[0]), 0)
         self.assertGreater(new_potential, old_potential)
 
+    def _with_dump_radius(self, state: State, radius_m: float) -> State:
+        agent = state.env_cfg.agent._replace(dump_max_radius_m=radius_m)
+        return state._replace(env_cfg=state.env_cfg._replace(agent=agent))
+
+    def _cell_radius(self, state: State) -> np.ndarray:
+        map_cyl_coords, _ = state._get_map_local_and_cyl_coords()
+        return np.asarray(map_cyl_coords[0]).reshape(self.SHAPE)
+
+    def test_dump_lands_within_dump_reach_while_dig_keeps_full_reach(self):
+        target = np.ones(self.SHAPE, dtype=np.int8)
+        state = self._with_dump_radius(self._state(target, loaded=40), 5.5)
+        radius = self._cell_radius(state)
+        dig_cone = np.asarray(state._build_dig_dump_cone()).reshape(self.SHAPE)
+        self.assertGreater(float(radius[dig_cone.astype(bool)].max()), 6.0)
+
+        # Only cells beyond the dump reach are dumpable: the dump is refused.
+        far_only = dig_cone.astype(bool) & (radius > 5.6)
+        state = self._with_dump_radius(
+            self._state(target, loaded=40, dumpability=far_only), 5.5
+        )
+        old_map = np.asarray(state.world.action_map.map).copy()
+        refused = state._handle_dump()
+        np.testing.assert_array_equal(np.asarray(refused.world.action_map.map), old_map)
+        self.assertEqual(int(refused._get_current_agent_state().loaded[0]), 40)
+
+        # With the limit disabled the same load lands beyond 5.5 m.
+        unlimited = self._with_dump_radius(state, 0.0)._handle_dump()
+        delta = np.asarray(unlimited.world.action_map.map).astype(np.int32) - old_map
+        self.assertEqual(int(delta.sum()), 40)
+        self.assertGreater(float(radius[delta > 0].min()), 5.5)
+
+        # Everything dumpable: every landed cell is within the dump reach.
+        state = self._with_dump_radius(self._state(target, loaded=40), 5.5)
+        old_map = np.asarray(state.world.action_map.map).astype(np.int32)
+        dumped = state._handle_dump()
+        delta = np.asarray(dumped.world.action_map.map).astype(np.int32) - old_map
+        self.assertEqual(int(delta.sum()), 40)
+        self.assertLessEqual(float(radius[delta > 0].max()), 5.5 + 1e-5)
+
     def test_unrepresentable_dump_is_rejected_without_mass_loss(self):
         legal_coordinate = self._workspace_coordinates()[0]
         target = np.zeros(self.SHAPE, dtype=np.int8)

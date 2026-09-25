@@ -110,6 +110,12 @@ class AgentConfig(NamedTuple):
     height: int = 0  # updated in the code
     width: int = 0  # updated in the code
 
+    # The bucket digs out to the dig reach but only releases soil reliably
+    # closer in: excavator dumps land at most this far from the base centre
+    # (metres, same radial measure as the dig cone). 0 = the dig reach, the
+    # frozen v1 benchmark semantics; trainers set 5.5 as a treatment.
+    dump_max_radius_m: float = 0.0
+
 
 class Rewards(NamedTuple):
     existence: float
