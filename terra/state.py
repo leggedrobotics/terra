@@ -4282,10 +4282,14 @@ class State(NamedTuple):
                 loaded_per_agent == 0,
             )
         ).astype(jnp.float32)
+        # Integer counting avoids the CSCS fused Boolean-reduction discrepancy.
         dump_mask_integrity = jnp.where(
             has_dump_requirements,
-            jnp.logical_not(
-                jnp.any(jnp.logical_and(declared_dump_mask, obstacle_mask))
+            (
+                jnp.sum(
+                    jnp.logical_and(declared_dump_mask, obstacle_mask).astype(jnp.int32),
+                    dtype=jnp.int32,
+                ) == jnp.int32(0)
             ).astype(jnp.float32),
             jnp.float32(1.0),
         )
