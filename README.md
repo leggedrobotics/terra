@@ -237,6 +237,22 @@ class BatchConfig(NamedTuple):
 ## Tools 🔧
 We provide debugging tools to explore Terra maps and play with the different agents.
 
+### 3D manual play and replays
+
+Start the local 3D viewer with a built-in playable site:
+
+```bash
+JAX_PLATFORMS=cpu python -m terra.viewer3d
+```
+
+It shows terrain heights, articulated machines, soil transfers, task overlays,
+and a replay timeline, in a plain figure style or a stylized diorama. Use
+`--map /path/to/single-map` for your own site or `--replay episode.json.gz` for
+a recording. See the [viewer guide](terra/viewer3d/README.md) and
+[design specification](VISUALIZATION_3D_DESIGN.md).
+
+### Original 2D viewer
+
 You can play on a single environment using your keyboard with
 ``` python
 DATASET_PATH=/path/to/dataset DATASET_SIZE=<num_maps_per_type> python -m terra.viz.main_manual
