@@ -1,0 +1,502 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { makeMachine } from './models.js';
+import { shortestAngle, transitionFacts } from './data.js';
+import { SoilPiles } from './piles.js';
+import { createObstacleProps } from './obstacles.js';
+import { createEnvironment } from './environment.js';
+import { Effects } from './effects.js';
+import { PostPipeline } from './post.js';
+import { PALETTE, PALETTES, earthMaterial, shared, skyTexture, zoneMaterial } from './materials.js';
+
+const LAYERS = {
+  dig: { color: 0xe69f00, opacity: .55, map: 'target', pattern: 'hatch', test: v => v < 0 },
+  dump: { color: 0x009e73, opacity: .5, map: 'target', pattern: 'dots', test: v => v > 0 },
+  restricted: { color: 0xd55e00, opacity: .42, map: 'dumpability_static', pattern: 'cross', test: v => !v },
+  dumpability: { color: 0x0072b2, opacity: .28, map: 'dumpability', pattern: 'solid', test: v => !!v },
+  interaction: { color: 0x56b4e9, opacity: .26, map: 'interaction', pattern: 'solid', test: v => !!v },
+};
+const matrix = new THREE.Matrix4(), dummy = new THREE.Object3D(), color = new THREE.Color();
+const smooth = t => t * t * (3 - 2 * t);
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+const backOut = t => { const c = 1.4; return 1 + (c + 1) * (t - 1) ** 3 + c * (t - 1) ** 2; };
+const mix = (a, b, t) => a + (b - a) * t;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const WORK_KINDS = ['dig', 'dump', 'transfer'];
+const QUALITY_KEY = 'terra-viewer3d-quality', PRESENTATION_KEY = 'terra-viewer3d-presentation';
+function disposeProps(group) {
+  if (!group) return;
+  const geometries = new Set(), materials = new Set();
+  group.traverse(item => { if (item.geometry) geometries.add(item.geometry); if (item.material) for (const material of Array.isArray(item.material) ? item.material : [item.material]) materials.add(material); });
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  group.removeFromParent(); group.clear();
+}
+function stored(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function store(key, value) { try { localStorage.setItem(key, value); } catch { /* storage unavailable */ } }
+
+export class TerraScene {
+  constructor(element, { onPick, onCameraChange, onError, onQualityChange } = {}) {
+    this.element = element; this.onPick = onPick; this.onCameraChange = onCameraChange; this.onError = onError; this.onQualityChange = onQualityChange;
+    this.scene = new THREE.Scene();
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2); this.renderer.setPixelRatio(this.pixelRatio);
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    element.appendChild(this.renderer.domElement);
+    this.renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); this.onError?.(new Error('The graphics context was lost. Reload the viewer to reconnect to the scene. Your live episode remains on the server.')); });
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture; this.scene.environmentIntensity = .28; pmrem.dispose();
+    this.camera = new THREE.PerspectiveCamera(32, 1, .1, 2000);
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.enableDamping = true; this.controls.dampingFactor = .085; this.controls.maxPolarAngle = Math.PI * .47; this.controls.minPolarAngle = .001; this.controls.screenSpacePanning = true;
+    this.controls.addEventListener('start', () => { this.tween = null; if (this.follow) { this.follow = false; this.onCameraChange?.({ follow: false }); } });
+    this.hemi = new THREE.HemisphereLight(0xcfe4ff, 0x9a7650, .8); this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffe9c9, 2.7); this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048); this.sun.shadow.bias = -.0004; this.sun.shadow.radius = 3; this.scene.add(this.sun); this.scene.add(this.sun.target);
+    this.fill = new THREE.DirectionalLight(0xa9c9ff, .35); this.scene.add(this.fill);
+    this.world = new THREE.Group(); this.scene.add(this.world); this.machines = new Map(); this.heightScale = 1;
+    this.visibility = { dig: true, dump: true, restricted: false, dumpability: false, interaction: true, grid: false, tags: true };
+    this.raycaster = new THREE.Raycaster(); this.pointer = new THREE.Vector2(); this.selected = null;
+    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.effects = new Effects({ groundHeight: (x, z) => this.groundAt(x, z) }); this.scene.add(this.effects);
+    const quality = stored(QUALITY_KEY); this.quality = quality === 'fast' ? 'fast' : 'high';
+    // Without a stored choice, fall back once to fast graphics on slow GPUs.
+    this.perf = quality ? null : { frames: 0, elapsed: 0 };
+    this.presentation = stored(PRESENTATION_KEY) === 'diorama' ? 'diorama' : 'paper';
+    try { this.post = new PostPipeline(this.renderer, this.scene, this.camera); } catch (error) { console.warn('Post-processing unavailable', error); this.post = null; this.quality = 'fast'; }
+    this.lineMaterials = new Set(); this.applyLook();
+    let pointerStart = null;
+    element.addEventListener('pointerdown', event => { pointerStart = { x: event.clientX, y: event.clientY, button: event.button }; });
+    element.addEventListener('pointerup', event => { if (pointerStart?.button === 0 && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) < 5) this.pick(event); pointerStart = null; });
+    this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(element); this.resize();
+    this.clock = { last: performance.now(), idle: 0 };
+    this.renderer.setAnimationLoop(time => { this.update(time); this.controls.update(); this.render(); });
+  }
+
+  render() { if (this.quality === 'high' && this.post) this.post.render(); else this.renderer.render(this.scene, this.camera); }
+  measure(dt) {
+    if (!this.perf || !this.frame || this.quality !== 'high' || document.hidden) return;
+    // Skip the first frames (shader compilation), then average about 2.5 s.
+    if (++this.perf.frames > 20) this.perf.elapsed += dt;
+    if (this.perf.frames < 20 + 90) return;
+    const average = this.perf.elapsed / (this.perf.frames - 20); this.perf = null;
+    if (average > 1 / 24) { this.quality = 'fast'; this.onQualityChange?.('fast'); }
+  }
+  setQuality(value) { this.quality = value === 'fast' || !this.post ? 'fast' : 'high'; store(QUALITY_KEY, this.quality); return this.quality; }
+  /** 'paper': neutral figure style on white; 'diorama': the stylized island. */
+  applyLook() {
+    const paper = this.presentation === 'paper'; this.palette = PALETTES[this.presentation];
+    // An HDR white clear color tone-maps to (near) pure white in the rich pipeline.
+    this.scene.background = paper ? new THREE.Color(12, 12, 12) : (this.sky ||= skyTexture());
+    this.scene.fog = !paper && this.span ? new THREE.Fog(new THREE.Color(PALETTE.sky[1]), this.span * 3.2, this.span * 7.5) : null;
+    this.renderer.toneMapping = paper ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+    this.hemi.color.set(paper ? 0xffffff : 0xcfe4ff); this.hemi.groundColor.set(paper ? 0x8d8880 : 0x9a7650); this.hemi.intensity = paper ? .9 : .8;
+    this.sun.color.set(paper ? 0xffffff : 0xffe9c9); this.sun.intensity = paper ? 2.3 : 2.7;
+    this.fill.color.set(paper ? 0xffffff : 0xa9c9ff); this.fill.intensity = paper ? .45 : .35;
+    this.effects.puffsEnabled = !paper; shared.uMotion.value = paper ? 0 : 1;
+    this.post?.setLook({ vignette: paper ? 0 : .16 });
+    if (this.element.ownerDocument?.body) this.element.ownerDocument.body.dataset.presentation = this.presentation;
+  }
+  setPresentation(value) {
+    this.presentation = value === 'diorama' ? 'diorama' : 'paper'; store(PRESENTATION_KEY, this.presentation);
+    this.applyLook();
+    if (this.frame) {
+      // Rebuild materials, surroundings and machines for the new look; keep the view.
+      const position = this.camera.position.clone(), target = this.controls.target.clone();
+      this.setFrame(this.frame, { reset: true });
+      this.tween = null; this.camera.position.copy(position); this.controls.target.copy(target); this.controls.update();
+    }
+    return this.presentation;
+  }
+
+  resize() {
+    const width = this.element.clientWidth || 1, height = this.element.clientHeight || 1;
+    this.renderer.setSize(width, height, false); this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
+    this.post?.setSize(width, height, this.pixelRatio);
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    for (const material of this.lineMaterials ?? []) material.resolution.copy(size);
+  }
+  point(row, col, height = 0) { const { rows, cols, tile_size_m: tile } = this.frame.grid; return new THREE.Vector3((col + .5 - cols / 2) * tile, height * this.unitHeight, (row + .5 - rows / 2) * tile); }
+  heightAt(row, col, frame = this.frame) {
+    row = clamp(Math.round(row), 0, frame.grid.rows - 1); col = clamp(Math.round(col), 0, frame.grid.cols - 1);
+    const height = frame.maps.action[row][col];
+    return height > 0 && !frame.maps.padding[row][col]
+      ? this.piles.endpointHeight(row, col, frame === this.piles.previous)
+      : height * this.unitHeight;
+  }
+  displayHeightAt(row, col) {
+    row = clamp(Math.round(row), 0, this.frame.grid.rows - 1); col = clamp(Math.round(col), 0, this.frame.grid.cols - 1);
+    const height = this.displayHeights?.[row]?.[col] ?? this.frame.maps.action[row][col];
+    return height > 0 && !this.frame.maps.padding[row][col] ? this.piles.nodeHeight(row * 2 + 1, col * 2 + 1) : height * this.unitHeight;
+  }
+  surfacePoint(row, col) { const point = this.point(row, col); point.y = this.displayHeightAt(row, col); return point; }
+  /** Displayed surface height at a world position (0 on the surrounding turf). */
+  groundAt(x, z) {
+    if (!this.frame) return 0;
+    const { rows, cols, tile_size_m: tile } = this.frame.grid, col = Math.floor(x / tile + cols / 2), row = Math.floor(z / tile + rows / 2);
+    if (row < 0 || col < 0 || row >= rows || col >= cols) return 0;
+    if (this.frame.maps.padding[row][col]) return this.obstacleTop ?? 0;
+    return this.displayHeightAt(row, col);
+  }
+
+  buildWorld(frame) {
+    if (this.terrain) this.disposeWorld();
+    const { rows, cols, tile_size_m: tile } = frame.grid, count = rows * cols;
+    this.span = Math.max(rows, cols) * tile; shared.uTile.value = tile;
+    this.camera.near = Math.max(tile * .025, this.span / 200); this.camera.far = this.span * 20; this.camera.updateProjectionMatrix();
+    this.controls.minDistance = Math.max(tile * 2, this.span * .08); this.controls.maxDistance = this.span * 4.5;
+    this.applyLook();
+    const reach = this.span * .5 + THREE.MathUtils.clamp(this.span * .2, 6, 22) + 2;
+    this.sun.position.set(-this.span * .75, this.span * 1.35, -this.span * .45);
+    Object.assign(this.sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: .1, far: this.span * 4 }); this.sun.shadow.camera.updateProjectionMatrix();
+    this.sun.shadow.normalBias = tile * .04; this.fill.position.set(this.span * .8, this.span * .6, this.span * .9);
+    this.post?.configure({ span: this.span, tile });
+    // Adjacent columns share coplanar side faces. Bias those faces behind the
+    // surface so float precision cannot produce dotted seams across flat soil.
+    const sides = earthMaterial('soil', { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 }, this.palette);
+    const top = earthMaterial('soil', { color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }, this.palette);
+    const bottom = new THREE.MeshStandardMaterial({ color: 0x8c7153, roughness: 1 });
+    // Front faces cast, so cut walls shade trenches without the slab self-shadowing.
+    for (const material of [sides, top, bottom]) material.shadowSide = THREE.FrontSide;
+    this.terrain = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), [sides, sides, top, bottom, sides, sides], count); this.terrain.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.terrain.castShadow = true; this.terrain.receiveShadow = true; this.world.add(this.terrain);
+    this.environment = createEnvironment(frame, { style: this.presentation }); this.world.add(this.environment);
+    this.layers = {}; this.boundaries = {}; this.boundaryEntries = new Map();
+    for (const [name, settings] of Object.entries(LAYERS)) {
+      const geometry = new THREE.PlaneGeometry(1, 1); geometry.rotateX(-Math.PI / 2);
+      const material = zoneMaterial({ color: settings.color, opacity: settings.opacity, pattern: settings.pattern, polygonOffset: true, polygonOffsetFactor: -2 });
+      const layer = new THREE.InstancedMesh(geometry, material, count); layer.instanceMatrix.setUsage(THREE.DynamicDrawUsage); layer.visible = this.visibility[name]; layer.renderOrder = 3 + Object.keys(this.layers).length; layer.frustumCulled = false; layer.userData.skipAO = true; this.layers[name] = layer; this.world.add(layer);
+      if (name === 'dig' || name === 'dump' || name === 'interaction') {
+        const material = new LineMaterial({ color: new THREE.Color(settings.color).multiplyScalar(.82), linewidth: 2.6, transparent: true, opacity: .95, depthWrite: false });
+        material.resolution.copy(this.renderer.getDrawingBufferSize(new THREE.Vector2())); this.lineMaterials.add(material);
+        const line = new LineSegments2(new LineSegmentsGeometry(), material);
+        line.renderOrder = 14; line.visible = this.visibility[name]; line.frustumCulled = false; this.boundaries[name] = line; this.world.add(line);
+      }
+    }
+    this.gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x6b5132, transparent: true, opacity: .22, depthWrite: false })); this.gridLines.renderOrder = 10; this.gridLines.visible = this.visibility.grid; this.gridLines.frustumCulled = false; this.world.add(this.gridLines);
+    this.selection = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(tile * .99, tile * .04, tile * .99)), new THREE.LineBasicMaterial({ color: 0xfffbe0, depthTest: false })); this.selection.renderOrder = 20; this.selection.visible = false; this.world.add(this.selection);
+  }
+
+  disposeWorld() {
+    this.clearMotion(); this.effects.clear();
+    for (const machine of this.machines.values()) { this.scene.remove(machine.root); machine.dispose(); } this.machines.clear();
+    const geometries = new Set(), materials = new Set();
+    this.world.traverse(item => { if (item.geometry) geometries.add(item.geometry); if (item.material) for (const material of Array.isArray(item.material) ? item.material : [item.material]) materials.add(material); });
+    for (const geometry of geometries) geometry.dispose(); for (const material of materials) { material.map?.dispose(); material.dispose(); } this.world.clear(); this.selected = null; this.piles = null; this.obstacleProps = null; this.environment = null;
+    this.lineMaterials.clear();
+  }
+
+  setFrame(frame, { animate = false, duration = 650, reset = false } = {}) {
+    const previous = this.frame;
+    const dimensionsChanged = !previous || previous.grid.rows !== frame.grid.rows || previous.grid.cols !== frame.grid.cols || previous.grid.tile_size_m !== frame.grid.tile_size_m;
+    this.clearMotion(); this.frame = frame; this.unitHeight = frame.grid.tile_size_m * .48 * this.heightScale; shared.uUnit.value = this.unitHeight;
+    if (dimensionsChanged || reset) this.buildWorld(frame);
+    const facts = transitionFacts(previous, frame);
+    const mayAnimate = animate && !reset && !dimensionsChanged && !this.reducedMotion && previous && !previous.done && frame.step === previous.step + 1;
+    let lowest = 0;
+    for (const row of frame.maps.action) for (const cell of row) lowest = Math.min(lowest, cell);
+    this.finalFloor = lowest * this.unitHeight - frame.grid.tile_size_m * .85;
+    if (mayAnimate) for (const row of previous.maps.action) for (const cell of row) lowest = Math.min(lowest, cell);
+    this.setFloor(lowest * this.unitHeight - frame.grid.tile_size_m * .85);
+    disposeProps(this.obstacleProps);
+    this.obstacleProps = createObstacleProps(frame, { unitHeight: this.unitHeight, style: this.presentation }); this.world.add(this.obstacleProps);
+    disposeProps(this.piles);
+    this.piles = new SoilPiles(frame, { previous: mayAnimate ? previous : null, unitHeight: this.unitHeight, layerSettings: LAYERS, visibility: this.visibility, palette: this.palette });
+    this.world.add(this.piles); this.piles.update(mayAnimate ? 0 : 1);
+    this.populate(frame);
+    const liveIds = new Set(frame.agents.map(agent => agent.id));
+    for (const [id, machine] of this.machines) if (!liveIds.has(id)) { this.scene.remove(machine.root); machine.dispose(); this.machines.delete(id); }
+    for (const agent of frame.agents) {
+      let machine = this.machines.get(agent.id);
+      if (machine && (machine.agent.type !== agent.type || machine.agent.action_type !== agent.action_type || machine.agent.width !== agent.width || machine.agent.height !== agent.height || machine.agent.reach.some((v, i) => v !== agent.reach[i]))) { this.scene.remove(machine.root); machine.dispose(); this.machines.delete(agent.id); machine = null; }
+      if (!machine) { machine = makeMachine(agent, frame.grid.tile_size_m, { style: this.presentation }); machine.setTags(this.visibility.tags); this.machines.set(agent.id, machine); this.scene.add(machine.root); }
+      if (!mayAnimate) machine.lastMove = null;
+      this.poseMachine(machine, agent, frame, 1);
+    }
+    if (mayAnimate) {
+      // Work actions get a little more time for anticipation and follow-through.
+      const span = WORK_KINDS.includes(facts.kind) ? duration * 1.3 : duration;
+      this.motion = { previous, frame, facts, start: performance.now(), duration: clamp(span, 100, 900), events: this.planEvents(facts, previous, frame), fired: new Set() };
+      for (const cell of facts.changed) this.updateCell(cell.row, cell.col, previous.maps.action[cell.row][cell.col]); this.dirtyInstances();
+      this.update(performance.now());
+    }
+    if (this.selected) this.highlight(this.selected.row, this.selected.col);
+    if (dimensionsChanged || reset) this.home({ instant: true });
+  }
+
+  populate(frame) {
+    const { rows, cols, tile_size_m: tile } = frame.grid;
+    const gridPositions = []; this.boundaryEntries.clear(); this.gridEntries = new Map();
+    this.displayHeights = frame.maps.action.map(row => [...row]);
+    const dug = this.palette.dug.map(hex => new THREE.Color(hex)), sand = new THREE.Color(this.palette.sand), loose = new THREE.Color(this.palette.loose);
+    for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+      const index = row * cols + col, height = frame.maps.action[row][col];
+      this.updateCell(row, col, height);
+      const noise = ((row * 71 + col * 29 + (row * col) % 47) % 31) / 31;
+      color.copy(height < 0 ? dug[Math.min(dug.length - 1, -height - 1)] : height > 0 ? loose : sand).multiplyScalar(.98 + noise * .04); this.terrain.setColorAt(index, color);
+      if (this.visibility.grid) { this.gridEntries.set(index, gridPositions.length); gridPositions.push(...this.flatGridCell(row, col, height)); }
+    }
+    this.dirtyInstances(); this.terrain.instanceColor.needsUpdate = true; this.terrain.computeBoundingSphere();
+    this.gridLines.geometry.dispose(); this.gridLines.geometry = new THREE.BufferGeometry(); this.gridLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gridPositions, 3));
+    for (const [name, layer] of Object.entries(this.layers)) layer.visible = this.visibility[name] && frame.maps[LAYERS[name].map] != null;
+    for (const [name, boundary] of Object.entries(this.boundaries)) {
+      const positions = [], test = LAYERS[name].test, map = frame.maps[LAYERS[name].map];
+      const member = (row, col) => map != null && row >= 0 && row < rows && col >= 0 && col < cols && !frame.maps.padding[row][col] && test(map[row][col]);
+      for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (member(row, col)) {
+        const index = row * cols + col;
+        const edges = [[row - 1, col, [[0, 0], [0, 1], [0, 2]]], [row + 1, col, [[2, 0], [2, 1], [2, 2]]], [row, col - 1, [[0, 0], [1, 0], [2, 0]]], [row, col + 1, [[0, 2], [1, 2], [2, 2]]]];
+        for (const [neighborRow, neighborCol, nodes] of edges) if (!member(neighborRow, neighborCol)) {
+          if (!this.boundaryEntries.has(index)) this.boundaryEntries.set(index, []);
+          for (const node of [nodes[0], nodes[1], nodes[1], nodes[2]]) {
+            const row2 = row * 2 + node[0], col2 = col * 2 + node[1];
+            this.boundaryEntries.get(index).push({ name, y: positions.length + 1, row2, col2 });
+            positions.push((col2 / 2 - cols / 2) * tile, this.boundaryHeight(row, col, row2, col2), (row2 / 2 - rows / 2) * tile);
+          }
+        }
+      }
+      boundary.geometry.dispose(); boundary.geometry = new LineSegmentsGeometry();
+      if (positions.length) boundary.geometry.setPositions(positions);
+      boundary.visible = this.visibility[name] && positions.length > 0;
+    }
+  }
+
+  flatGridCell(row, col, height) {
+    const tile = this.frame.grid.tile_size_m, point = this.point(row, col, height), y = point.y + tile * .022;
+    // Positive cells use the soil mesh's draped grid instead of a floating quad.
+    const half = height > 0 && !this.frame.maps.padding[row][col] ? 0 : tile / 2;
+    const x = point.x, z = point.z;
+    return [x - half, y, z - half, x + half, y, z - half, x + half, y, z - half, x + half, y, z + half, x + half, y, z + half, x - half, y, z + half, x - half, y, z + half, x - half, y, z - half];
+  }
+
+  setFloor(height) { this.floor = height; this.environment?.setFloor(height); }
+
+  boundaryHeight(row, col, row2, col2) {
+    const height = this.displayHeights[row][col];
+    return (height > 0 ? this.piles.nodeHeight(row2, col2) : height * this.unitHeight) + this.frame.grid.tile_size_m * .035;
+  }
+
+  updateCell(row, col, height) {
+    const frame = this.frame, tile = frame.grid.tile_size_m, index = row * frame.grid.cols + col;
+    const soil = height > 0 && !frame.maps.padding[row][col], point = this.point(row, col, height);
+    this.displayHeights[row][col] = height;
+    // Soil mounds replace the positive box cap; negative excavation keeps its
+    // exact stepped cut walls and there is still a solid ground slab below soil.
+    const thickness = Math.max(tile * .02, (soil ? 0 : point.y) - this.floor);
+    dummy.rotation.set(0, 0, 0); dummy.position.set(point.x, this.floor + thickness / 2, point.z); dummy.scale.set(tile, thickness, tile); dummy.updateMatrix(); this.terrain.setMatrixAt(index, dummy.matrix);
+    let offset = 0;
+    for (const [name, layer] of Object.entries(this.layers)) {
+      const settings = LAYERS[name], map = frame.maps[settings.map], visible = !soil && map != null && settings.test(map[row][col]) && !frame.maps.padding[row][col];
+      dummy.position.set(point.x, point.y + tile * (.008 + offset * .003), point.z); dummy.scale.set(visible ? tile : 0, 1, visible ? tile : 0); dummy.updateMatrix(); layer.setMatrixAt(index, dummy.matrix); offset++;
+    }
+    if (this.gridEntries.has(index)) this.gridLines.geometry.attributes.position.array.set(this.flatGridCell(row, col, height), this.gridEntries.get(index));
+  }
+  dirtyInstances() {
+    this.terrain.instanceMatrix.needsUpdate = true;
+    for (const layer of Object.values(this.layers)) layer.instanceMatrix.needsUpdate = true;
+    const cols = this.frame.grid.cols;
+    for (const [index, entries] of this.boundaryEntries) for (const entry of entries) {
+      const array = this.boundaries[entry.name].geometry.attributes.instanceStart?.data.array;
+      if (array) array[entry.y] = this.boundaryHeight(Math.floor(index / cols), index % cols, entry.row2, entry.col2);
+    }
+    for (const boundary of Object.values(this.boundaries)) { const data = boundary.geometry.attributes.instanceStart?.data; if (data) data.needsUpdate = true; }
+    if (this.gridLines.geometry.attributes.position) this.gridLines.geometry.attributes.position.needsUpdate = true;
+  }
+
+  poseMachine(machine, state, frame, progress, oldState, oldFrame, kind = '') {
+    const from = oldState || state, turning = kind === 'turn' ? backOut(progress) : progress;
+    const position = state.position.map((v, i) => mix(from.position[i], v, progress));
+    const point = this.point(position[0], position[1]); point.y = mix(this.displayHeightAt(...from.position), this.displayHeightAt(...state.position), progress);
+    machine.root.position.copy(point); machine.root.rotation.y = shortestAngle(from.base_yaw, state.base_yaw, turning);
+    machine.setPose({ ...state, previous_loaded: from.loaded, cabin_yaw: shortestAngle(from.cabin_yaw, state.cabin_yaw, turning), wheel_angle: mix(from.wheel_angle, state.wheel_angle, progress) }, state.id === frame.current_agent, progress, kind);
+    machine.drive?.(machine.root.position, machine.root.rotation.y);
+  }
+
+  /** Timed display events for one transition, in normalized motion time. */
+  planEvents(facts, previous, frame) {
+    const events = [], actor = frame.agents.find(agent => agent.id === frame.actor_id), before = previous.agents.find(agent => agent.id === frame.actor_id);
+    if (!actor || !before) return events;
+    const moved = actor.position.some((v, i) => v !== before.position[i]);
+    events.push({ at: 0, once: 'exhaust-start' });
+    if (moved) events.push({ from: .05, to: .9, stream: 'tracks', rate: 16 });
+    const cells = kind => facts.changed.filter(cell => kind === 'dig' ? cell.delta < 0 : cell.delta > 0);
+    if (facts.kind === 'dig') {
+      const bite = actor.type === 2 ? .38 : .32;
+      events.push({ at: bite, once: 'bite', cells: cells('dig') });
+      events.push({ from: bite, to: bite + .22, stream: 'scoop', cells: cells('dig'), rate: 70 });
+    } else if (facts.kind === 'dump') {
+      const [start, end] = actor.type === 1 ? [.32, .72] : actor.type === 2 ? [.34, .62] : [.44, .74];
+      events.push({ from: start, to: end, stream: actor.type === 1 ? 'bed' : 'pour', cells: cells('dump'), rate: 60 });
+      events.push({ at: (start + end) / 2 + .1, once: 'landing', cells: cells('dump') });
+    } else if (facts.kind === 'transfer') {
+      events.push({ from: .44, to: .72, stream: 'transfer', rate: 55 });
+    }
+    return events;
+  }
+
+  centroid(cells) {
+    const point = new THREE.Vector3(); if (!cells?.length) return null;
+    for (const cell of cells) point.add(this.surfacePoint(cell.row, cell.col));
+    return point.multiplyScalar(1 / cells.length);
+  }
+
+  runEvents(motion, t, dt) {
+    const actor = this.machines.get(motion.frame.actor_id); if (!actor) return;
+    actor.root.updateMatrixWorld(true);
+    const tile = motion.frame.grid.tile_size_m, fx = this.effects;
+    for (const [index, event] of motion.events.entries()) {
+      if (event.once) {
+        if (motion.fired.has(index) || t < event.at) continue;
+        motion.fired.add(index);
+        if (event.once === 'exhaust-start') fx.puff(actor.exhaust(), { count: 4, size: tile * .28, rise: 1.4, spread: tile * .15, color: 0x5e636b, life: 1.1 });
+        else if (event.once === 'bite') {
+          const at = this.centroid(event.cells) ?? actor.tip();
+          fx.burst(at, { count: 14, speed: 2.4, size: tile * .09 }); fx.puff(at, { count: 7, size: tile * .38, spread: tile * .6, rise: .5 });
+        } else if (event.once === 'landing') {
+          const at = this.centroid(event.cells); if (at) fx.puff(at, { count: 8, size: tile * .42, spread: tile * .7, rise: .4 });
+        }
+      } else if (t >= event.from && t <= event.to) {
+        event.carry = (event.carry ?? 0) + event.rate * dt;
+        let count = Math.floor(event.carry); event.carry -= count;
+        while (count-- > 0) this.emitStream(event, actor, motion, tile);
+      }
+    }
+  }
+
+  emitStream(event, actor, motion, tile) {
+    const fx = this.effects, pick = cells => cells?.length ? this.surfacePoint(...Object.values(cells[Math.floor(Math.random() * cells.length)]).slice(0, 2)) : null;
+    if (event.stream === 'tracks') {
+      const state = motion.frame.agents.find(agent => agent.id === actor.agent.id);
+      const back = new THREE.Vector3(-actor.agent.height * tile * .45, 0, (Math.random() < .5 ? -1 : 1) * actor.agent.width * tile * .35).applyAxisAngle(new THREE.Vector3(0, 1, 0), actor.root.rotation.y).add(actor.root.position);
+      if (state && Math.random() < .5) fx.puff(back, { count: 1, size: tile * .3, spread: tile * .2, rise: .35, life: .8 });
+      if (Math.random() < .25) fx.puff(actor.exhaust(), { count: 1, size: tile * .2, rise: 1.3, spread: tile * .08, color: 0x6a6f77, life: 1 });
+    } else if (event.stream === 'scoop') {
+      const from = pick(event.cells); if (from) fx.throwClods(from, actor.tip(), { count: 1, flight: .22, spread: 0, size: tile * .08, settle: false, jitter: tile * .3 });
+    } else if (event.stream === 'pour' || event.stream === 'bed') {
+      const to = pick(event.cells); if (!to) return;
+      const from = event.stream === 'bed' ? actor.bedLip() : actor.tip();
+      fx.throwClods(from, to, { count: 1, flight: .34, spread: tile * .45, size: tile * .095, jitter: tile * .12 });
+    } else if (event.stream === 'transfer') {
+      const recipient = this.machines.get(motion.facts.recipient?.id); if (!recipient) return;
+      recipient.root.updateMatrixWorld(true);
+      fx.throwClods(actor.tip(), recipient.tip(), { count: 1, flight: .3, spread: tile * .2, size: tile * .09, settle: false, jitter: tile * .1 });
+    }
+  }
+
+  update(time) {
+    const dt = Math.min(.1, Math.max(0, (time - (this.clock?.last ?? time)) / 1000)); if (this.clock) this.clock.last = time;
+    shared.uTime.value = time / 1000;
+    if (!this.frame) return;
+    this.measure(dt);
+    this.environment?.update(time / 1000);
+    const moving = new Map();
+    if (this.motion) {
+      const { previous, frame, facts, start, duration } = this.motion, t = clamp((time - start) / duration, 0, 1), eased = smooth(t);
+      if (facts.changed.length) this.piles.update(eased);
+      for (const cell of facts.changed) this.updateCell(cell.row, cell.col, mix(previous.maps.action[cell.row][cell.col], frame.maps.action[cell.row][cell.col], eased));
+      for (const agent of frame.agents) {
+        const old = previous.agents.find(a => a.id === agent.id), kind = agent.id === frame.actor_id ? facts.kind : agent.id === facts.recipient?.id && facts.kind === 'transfer' ? 'receive' : '';
+        this.poseMachine(this.machines.get(agent.id), agent, frame, eased, old, previous, kind === 'turn' || kind === 'move' ? (old && agent.position.some((v, i) => v !== old.position[i]) ? 'move' : 'turn') : kind);
+        if (old && agent.position.some((v, i) => v !== old.position[i])) {
+          const forward = new THREE.Vector2(Math.cos(agent.base_yaw), Math.sin(agent.base_yaw)), delta = new THREE.Vector2(agent.position[1] - old.position[1], agent.position[0] - old.position[0]);
+          moving.set(agent.id, { move: t, direction: Math.sign(forward.x * delta.x - forward.y * delta.y) || 1 });
+        }
+      }
+      if (facts.changed.length) { this.dirtyInstances(); if (this.selected) this.highlight(this.selected.row, this.selected.col); }
+      if (!this.reducedMotion) this.runEvents(this.motion, t, dt);
+      if (t >= 1) {
+        this.clearMotion();
+        if (this.floor !== this.finalFloor) { this.setFloor(this.finalFloor); this.populate(this.frame); }
+      }
+    }
+    const seconds = time / 1000;
+    for (const machine of this.machines.values()) machine.tick?.(seconds, { ...(moving.get(machine.agent.id) || {}), reducedMotion: this.reducedMotion });
+    // An idle active machine breathes a little exhaust now and then.
+    this.clock.idle -= dt;
+    if (!this.reducedMotion && this.clock.idle <= 0) {
+      this.clock.idle = 1.3 + Math.random() * .8;
+      const active = this.machines.get(this.frame.current_agent), tile = this.frame.grid.tile_size_m;
+      if (active && !this.frame.done) { active.root.updateMatrixWorld(true); this.effects.puff(active.exhaust(), { count: 1, size: tile * .18, rise: 1.1, spread: tile * .05, color: 0x767b83, life: 1.2 }); }
+    }
+    this.effects.update(dt);
+    if (this.tween) {
+      const { from, to, start, duration } = this.tween, u = easeInOut(clamp((time - start) / duration, 0, 1));
+      this.camera.position.lerpVectors(from.position, to.position, u); this.controls.target.lerpVectors(from.target, to.target, u);
+      if (u >= 1) this.tween = null;
+    }
+    if (this.follow) {
+      const machine = this.machines.get(this.frame.current_agent);
+      if (machine) { const destination = machine.root.position.clone(); destination.y += this.frame.grid.tile_size_m; const delta = destination.sub(this.controls.target).multiplyScalar(.055); this.camera.position.add(delta); this.controls.target.add(delta); }
+    }
+  }
+
+  clearMotion() {
+    if (this.motion) for (const agent of this.motion.frame.agents) { const machine = this.machines.get(agent.id); if (machine) machine.tick?.(performance.now() / 1000, { reducedMotion: this.reducedMotion }); }
+    this.motion = null;
+  }
+  setLayer(name, visible) {
+    this.visibility[name] = visible;
+    if (name === 'tags') { for (const machine of this.machines.values()) machine.setTags(visible); return; }
+    if (!this.frame) return; this.piles?.setLayer(name, visible); if (name === 'grid') { this.gridLines.visible = visible; this.populate(this.frame); } else if (this.layers[name]) this.layers[name].visible = visible && this.frame.maps[LAYERS[name].map] != null; if (this.boundaries[name]) this.boundaries[name].visible = visible; }
+  setHeight(value) { this.heightScale = value; if (this.frame) this.setFrame(this.frame); }
+  flyTo(position, target, { instant = false } = {}) {
+    if (instant || this.reducedMotion) { this.tween = null; this.camera.position.copy(position); this.controls.target.copy(target); this.controls.update(); return; }
+    this.tween = { from: { position: this.camera.position.clone(), target: this.controls.target.clone() }, to: { position, target }, start: performance.now(), duration: 750 };
+  }
+  home({ instant = false } = {}) {
+    if (!this.frame) return; this.follow = false;
+    const aspect = this.camera.aspect, fit = this.presentation === 'paper' ? 1.45 : 1.75, distance = this.span * (aspect < 1 ? fit / aspect : fit);
+    this.flyTo(new THREE.Vector3(distance * .72, distance * .66, distance * .84), new THREE.Vector3(0, -this.span * .04, 0), { instant });
+    this.onCameraChange?.({ view: 'home', follow: false });
+  }
+  top() {
+    if (!this.frame) return; this.follow = false; this.camera.up.set(0, 1, 0);
+    this.flyTo(new THREE.Vector3(0, this.span * (this.presentation === 'paper' ? 1.62 : 1.92) / Math.min(this.camera.aspect, 1), this.span * .001), new THREE.Vector3(0, 0, 0));
+    this.onCameraChange?.({ view: 'top', follow: false });
+  }
+  setFollow(value) {
+    this.follow = value; this.tween = null;
+    if (value && this.frame) {
+      const machine = this.machines.get(this.frame.current_agent);
+      if (machine) {
+        const state = this.frame.agents.find(agent => agent.id === this.frame.current_agent), tile = this.frame.grid.tile_size_m;
+        const destination = machine.root.position.clone(); destination.y += tile;
+        const verticalFov = THREE.MathUtils.degToRad(this.camera.fov), horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * this.camera.aspect);
+        const radius = Math.max(state.reach[1], Math.hypot(state.width, state.height) * .65) * tile;
+        const distance = Math.max(this.span * .5, radius * 1.15 / Math.sin(Math.min(verticalFov, horizontalFov) / 2));
+        const offset = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(distance);
+        this.flyTo(destination.clone().add(offset), destination);
+      }
+    }
+    this.onCameraChange?.({ follow: value });
+  }
+  pick(event) {
+    if (!this.terrain) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
+    this.camera.updateMatrixWorld(); this.world.updateMatrixWorld(true); this.raycaster.setFromCamera(this.pointer, this.camera);
+    const objects = [this.terrain, this.obstacleProps]; if (this.piles.surface.visible) objects.push(this.piles.surface);
+    const hit = this.raycaster.intersectObjects(objects.filter(Boolean), true)[0];
+    let cell;
+    if (hit?.object === this.piles.surface) cell = this.piles.cellForHit(hit);
+    else if (hit?.object === this.terrain && hit.instanceId !== undefined) cell = { row: Math.floor(hit.instanceId / this.frame.grid.cols), col: hit.instanceId % this.frame.grid.cols };
+    else if (hit) { const { rows, cols, tile_size_m: tile } = this.frame.grid; cell = { row: clamp(Math.floor(hit.point.z / tile + rows / 2), 0, rows - 1), col: clamp(Math.floor(hit.point.x / tile + cols / 2), 0, cols - 1) }; }
+    if (cell) { this.highlight(cell.row, cell.col); this.onPick?.(cell); }
+  }
+  highlight(row, col) { if (row >= this.frame.grid.rows || col >= this.frame.grid.cols) { this.selected = null; this.selection.visible = false; return; } this.selected = { row, col }; this.selection.position.copy(this.surfacePoint(row, col)); this.selection.position.y += this.frame.grid.tile_size_m * .03; this.selection.visible = true; }
+  /** Render one frame at `scale`× the viewport (at least the device ratio) for figures. */
+  capture({ scale = 2 } = {}) {
+    const width = this.element.clientWidth || 1, height = this.element.clientHeight || 1;
+    const ratio = Math.min(Math.max(scale, this.pixelRatio), this.renderer.capabilities.maxTextureSize / Math.max(width, height));
+    // Multisampled HDR targets at print size are memory-heavy; FXAA covers edges.
+    this.renderer.setPixelRatio(ratio); this.renderer.setSize(width, height, false);
+    this.post?.setSamples(0); this.post?.setSize(width, height, ratio);
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    for (const material of this.lineMaterials) material.resolution.copy(size);
+    try { this.render(); return { url: this.renderer.domElement.toDataURL('image/png'), width: size.x, height: size.y }; }
+    finally { this.renderer.setPixelRatio(this.pixelRatio); this.post?.setSamples(4); this.resize(); }
+  }
+}
