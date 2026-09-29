@@ -80,6 +80,8 @@ REWARD_V2_BEHAVIOR_KEYS = (
     "reward_v2_retained_new_setup",
     "reward_v2_retained_inter_setup_m",
     "reward_v2_retained_heading_rad",
+    "reward_v2_material_handling",
+    "reward_v2_handled_volume",
 )
 
 # The terminal objective keeps success dominant and uses efficiency only to
@@ -1509,7 +1511,7 @@ class State(NamedTuple):
                 jnp.int32(0),
             )
             total = jnp.sum(eligible, dtype=jnp.int32)
-            pickup = jnp.minimum(total, jnp.int32(INTLOWDIM_MAX))
+            pickup = jnp.minimum(total, self._excavator_relift_limit())
             cumulative = jnp.cumsum(eligible, dtype=jnp.int32)
             removed_cumulative = (cumulative * pickup) // jnp.maximum(
                 total, jnp.int32(1)
@@ -2137,6 +2139,11 @@ class State(NamedTuple):
         # Alignment applies to fresh excavation, never to loose-soil recovery.
         return jnp.where(jnp.any(loose), loose, fresh)
 
+    def _excavator_relift_limit(self) -> Array:
+        configured = jnp.asarray(self.env_cfg.excavator_relift_capacity, dtype=jnp.int32)
+        enabled = (self._get_current_agent_state().agent_type[0] == 0) & (configured > 0)
+        return jnp.where(enabled, configured, jnp.int32(INTLOWDIM_MAX))
+
     def _dig_eligibility(
         self,
         dig_cone: Array,
@@ -2171,7 +2178,7 @@ class State(NamedTuple):
         lifting_positive_soil = selected_sum > 0
         dig_volume = jnp.where(
             lifting_positive_soil,
-            jnp.minimum(selected_sum, jnp.int32(INTLOWDIM_MAX)),
+            jnp.minimum(selected_sum, self._excavator_relift_limit()),
             dig_mask.sum(dtype=jnp.int32),
         )
         obstacle_overlap = jnp.any(
@@ -3851,11 +3858,18 @@ class State(NamedTuple):
             lambda: self._get_trench_specific_rewards(action),
             lambda: 0.0,
         )
+        old_loads = jnp.stack([a.loaded[0] for a in self.agent.agent_states]).astype(jnp.int32)
+        new_loads = jnp.stack([a.loaded[0] for a in new_state.agent.agent_states]).astype(jnp.int32)
+        active = self.agent.agent_active.astype(jnp.bool_)
         return {
             "slot": jnp.asarray(self.agent.current_agent, dtype=jnp.int32),
             "agent_reward": agent_reward,
             "trench": trench,
             "is_excavator": is_excavator,
+            # Preserve changes from every physical action within the round,
+            # including another agent receiving soil before its own action.
+            "pickup_units": jnp.where(active, jnp.maximum(new_loads - old_loads, 0), 0),
+            "unload_units": jnp.where(active, jnp.maximum(old_loads - new_loads, 0), 0),
             **self._reward_v2_behavior_costs(new_state),
         }
 
@@ -4096,6 +4110,9 @@ class State(NamedTuple):
                     "reward_v2_valid": zero,
                     "reward_v2_makespan": zero,
                     "reward_v2_makespan_fraction": zero,
+                    "reward_v2_transport_phi": zero,
+                    "reward_v2_transport_phi_next": zero,
+                    "reward_v2_transport_shaping": zero,
                     "reward_v2_lateral_dig": zero,
                     "reward_v2_base_travel": zero,
                     "reward_v2_base_turn": zero,
@@ -4109,6 +4126,8 @@ class State(NamedTuple):
                     "reward_v2_retained_new_setup": zero,
                     "reward_v2_retained_inter_setup_m": zero,
                     "reward_v2_retained_heading_rad": zero,
+                    "reward_v2_material_handling": zero,
+                    "reward_v2_handled_volume": zero,
                 },
             ),
         )
@@ -4127,6 +4146,13 @@ class State(NamedTuple):
             + agent_terms["reward_v2_retained_setup"]
             + agent_terms["reward_v2_retained_travel"]
             + agent_terms["reward_v2_retained_turn"]
+            + agent_terms["reward_v2_material_handling"]
+        )
+        transport_shaping = reward_v2_components["reward_v2_transport_shaping"]
+        reward_v2_agent = jnp.where(
+            new_state.env_cfg.transport_credit_coef != 0,
+            reward_v2_agent.at[slots].add(transport_shaping / slots.shape[0]),
+            reward_v2_agent,
         )
         components["agent_rewards"] = jnp.where(
             use_reward_v2,
@@ -4899,6 +4925,31 @@ class State(NamedTuple):
         v0 = self._required_excavation_volume()
         return jnp.where(v0 > 0, v0, self.material_v_reset)
 
+    def _transport_credit_potential(self) -> Float:
+        """Skid potential: beta * (stored source work - live carry work) / V.
+
+        Distance at the chassis centre is a bounded proxy, not bucket reach or
+        a footprint route planner. On admitted mass-conserving R2 states, both
+        carry-work terms are in [0, V * DISTANCE_BOUND]. Pickup need not have a
+        positive correction. Stored carry credit and baseline Phi stay intact.
+        """
+        distance = _as_2d_map(self.world.relocation_distance_map)
+        contributions = jnp.stack([
+            agent.carry_relocation_credit
+            - agent.loaded[0].astype(jnp.float32)
+            * distance[agent.pos_base[0], agent.pos_base[1]]
+            for agent in self.agent.agent_states
+        ])
+        skid = jnp.stack([agent.agent_type[0] == 2 for agent in self.agent.agent_states])
+        carry_delta = jnp.sum(jnp.where(
+            self.agent.agent_active.astype(jnp.bool_) & skid,
+            contributions,
+            jnp.float32(0.0),
+        ))
+        return jnp.float32(REWARD_V2_BETA) * carry_delta / jnp.maximum(
+            self._reward_v2_volume(), jnp.float32(1e-6)
+        )
+
     def _compute_material_work(self) -> Float:
         """Return remaining excavation plus off-zone and carried haul work."""
         target = _as_2d_map(self.world.target_map.map).astype(jnp.float32)
@@ -5072,6 +5123,7 @@ class State(NamedTuple):
             + behavior_components["reward_v2_retained_setup"]
             + behavior_components["reward_v2_retained_travel"]
             + behavior_components["reward_v2_retained_turn"]
+            + behavior_components["reward_v2_material_handling"]
         )
         # Keep the frozen reward expression exactly when all costs are disabled.
         coefficients = jnp.asarray(
@@ -5080,7 +5132,8 @@ class State(NamedTuple):
              new_state.env_cfg.base_turn_cost,
              new_state.env_cfg.retained_work_setup_cost,
              new_state.env_cfg.retained_work_travel_cost,
-             new_state.env_cfg.retained_work_turn_cost],
+             new_state.env_cfg.retained_work_turn_cost,
+             new_state.env_cfg.material_handling_cost],
             dtype=jnp.float32,
         )
         reward = jnp.where(jnp.any(coefficients != 0), reward + behavior_cost, reward)
@@ -5097,10 +5150,33 @@ class State(NamedTuple):
         makespan_fraction_next, _ = new_state._makespan_terms()
         makespan = -makespan_cost * (makespan_fraction_next - makespan_fraction)
         reward = jnp.where(makespan_cost != 0, reward + makespan, reward)
+        transport_coef = jnp.asarray(new_state.env_cfg.transport_credit_coef, dtype=jnp.float32)
+        # Physical endpoints, before auto-reset. True success AND horizon
+        # failure zero only this additional potential, never the baseline Phi.
+        transport_phi, transport_phi_next = jax.lax.cond(
+            transport_coef > 0,
+            lambda: (
+                transport_coef * self._transport_credit_potential(),
+                jnp.where(done, jnp.float32(0.0),
+                          transport_coef * new_state._transport_credit_potential()),
+            ),
+            lambda: (jnp.float32(0.0), jnp.float32(0.0)),
+        )
+        transport_shaping = (
+            jnp.float32(REWARD_V2_POTENTIAL_GAMMA) * transport_phi_next - transport_phi
+        )
+        reward = jnp.where(transport_coef != 0, reward + transport_shaping, reward)
         valid_transition = jnp.logical_and(valid > 0, valid_next > 0)
         valid_transition &= jnp.all(jnp.isfinite(coefficients) & (coefficients >= 0))
         valid_transition &= jnp.isfinite(makespan_cost) & (makespan_cost >= 0)
         valid_transition &= jnp.isfinite(makespan_setup_s) & (makespan_setup_s >= 0)
+        valid_transition &= jnp.isfinite(transport_coef) & (transport_coef >= 0)
+        valid_transition &= (transport_coef == 0) | (
+            (new_state.env_cfg.reward_v2_timing_variant == 0)
+            & jnp.isfinite(transport_phi) & jnp.isfinite(transport_phi_next)
+        )
+        relift_capacity = jnp.asarray(new_state.env_cfg.excavator_relift_capacity)
+        valid_transition &= (relift_capacity >= 0) & (relift_capacity <= INTLOWDIM_MAX)
         reward = jnp.where(valid_transition, reward, jnp.float32(jnp.nan))
         return reward, {
             "reward_v2_q": q,
@@ -5119,6 +5195,9 @@ class State(NamedTuple):
             "reward_v2_valid": valid_transition.astype(jnp.float32),
             "reward_v2_makespan": makespan,
             "reward_v2_makespan_fraction": makespan_fraction_next,
+            "reward_v2_transport_phi": transport_phi,
+            "reward_v2_transport_phi_next": transport_phi_next,
+            "reward_v2_transport_shaping": transport_shaping,
             **behavior_components,
         }
 
@@ -5134,6 +5213,16 @@ class State(NamedTuple):
         following = new_state._replace(
             agent=new_state.agent._replace(current_agent=self.agent.current_agent)
         )._get_current_agent_state()
+        # Native action endpoints; a round with two pickups charges both via
+        # _agent_reward_terms. Ground dumps/turning/WAIT add no loading effort;
+        # a bucket-to-truck transfer counts the receiver's loading.
+        load_deltas = jnp.stack([
+            after.loaded[0].astype(jnp.int32) - before.loaded[0].astype(jnp.int32)
+            for before, after in zip(self.agent.agent_states, new_state.agent.agent_states)
+        ])
+        handled_volume = jnp.sum(jnp.where(
+            self.agent.agent_active.astype(jnp.bool_), jnp.maximum(load_deltas, 0), 0,
+        )).astype(jnp.float32)
         is_excavator = current.agent_type[0] == 0
         fresh_map = self._get_fresh_target_excavation_map(
             self.world.action_map.map,
@@ -5175,6 +5264,11 @@ class State(NamedTuple):
             "reward_v2_fresh_dig_volume": fresh_volume,
             "reward_v2_base_travel_m": travel_m,
             "reward_v2_base_turn_rad": turn_rad,
+            "reward_v2_material_handling": (
+                -jnp.float32(new_state.env_cfg.material_handling_cost)
+                * handled_volume / jnp.maximum(self._reward_v2_volume(), jnp.float32(1e-6))
+            ),
+            "reward_v2_handled_volume": handled_volume,
             **self._reward_v2_retained_work_costs(new_state),
         }
 

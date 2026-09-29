@@ -114,6 +114,8 @@ def fake_transition_diagnostics(done):
         "productive_workspace_cycle": zeros_int,
         "productive_workspace_cycles": zeros_int,
         "transition_mass_residual": zeros_int,
+        "transition_pickup_units": jnp.zeros(done.shape + (4,), dtype=jnp.int32),
+        "transition_unload_units": done[..., None].astype(jnp.int32) * jnp.array([0, 7, 0, 0], dtype=jnp.int32),
         "target_mutation": zeros_bool,
         "obstacle_mutation": zeros_bool,
         "ended_reset_tier": zeros_int,
@@ -350,6 +352,11 @@ class StepOptimizationTest(unittest.TestCase):
                 batch, initial, actions, keys
             )
             actual = TerraEnvBatch.step(batch, initial, actions, keys)
+            # A terminal delivery must survive replacement of its state.
+            np.testing.assert_array_equal(
+                actual.info["transition_unload_units"][:, 1],
+                np.asarray(actions == 1, dtype=np.int32) * 7,
+            )
             expected_leaves = jax.tree_util.tree_leaves(expected)
             actual_leaves = jax.tree_util.tree_leaves(actual)
             self.assertEqual(len(actual_leaves), len(expected_leaves))

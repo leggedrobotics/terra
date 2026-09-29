@@ -10,6 +10,7 @@ from jax import Array
 from terra.actions import Action
 from terra.actions import TrackedActionType
 from terra.agent import Agent
+from terra.agent import MAX_AGENTS
 from terra.agent import num_agent_slots
 from terra.config import BatchConfig
 from terra.config import EnvConfig
@@ -228,6 +229,9 @@ class TerraEnv(NamedTuple):
             "reward_v2_valid": zero,
             "reward_v2_makespan": zero,
             "reward_v2_makespan_fraction": zero,
+            "reward_v2_transport_phi": zero,
+            "reward_v2_transport_phi_next": zero,
+            "reward_v2_transport_shaping": zero,
             "reward_v2_lateral_dig": zero,
             "reward_v2_base_travel": zero,
             "reward_v2_base_turn": zero,
@@ -241,6 +245,8 @@ class TerraEnv(NamedTuple):
             "reward_v2_retained_new_setup": zero,
             "reward_v2_retained_inter_setup_m": zero,
             "reward_v2_retained_heading_rad": zero,
+            "reward_v2_material_handling": zero,
+            "reward_v2_handled_volume": zero,
         }
 
     @staticmethod
@@ -253,6 +259,8 @@ class TerraEnv(NamedTuple):
             "productive_workspace_cycle": jnp.zeros((), dtype=jnp.int32),
             "productive_workspace_cycles": jnp.zeros((), dtype=jnp.int32),
             "transition_mass_residual": jnp.zeros((), dtype=jnp.int32),
+            "transition_pickup_units": jnp.zeros((MAX_AGENTS,), dtype=jnp.int32),
+            "transition_unload_units": jnp.zeros((MAX_AGENTS,), dtype=jnp.int32),
             "target_mutation": jnp.zeros((), dtype=jnp.bool_),
             "obstacle_mutation": jnp.zeros((), dtype=jnp.bool_),
         }
@@ -261,6 +269,7 @@ class TerraEnv(NamedTuple):
     def _transition_diagnostics(
         state: State,
         new_state: State,
+        agent_terms: dict[str, Array] | None = None,
     ) -> dict[str, Array]:
         """Measure physical effects before a terminal state can be reset."""
 
@@ -291,6 +300,15 @@ class TerraEnv(NamedTuple):
 
         old_loaded = _loaded_vector(state)
         new_loaded = _loaded_vector(new_state)
+        # Native per-action deltas preserve pickup followed by unload within
+        # one round. Single-action callers may use the endpoint fallback.
+        # Unload means bucket release, not accepted-zone delivery credit.
+        active = state.agent.agent_active.astype(jnp.bool_)
+        pickup_units = jnp.where(active, jnp.maximum(new_loaded - old_loaded, 0), 0)
+        unload_units = jnp.where(active, jnp.maximum(old_loaded - new_loaded, 0), 0)
+        if agent_terms is not None:
+            pickup_units = jnp.sum(agent_terms["pickup_units"], axis=0)
+            unload_units = jnp.sum(agent_terms["unload_units"], axis=0)
         old_mass = (
             state.world.action_map.map.astype(jnp.int32).sum()
             + old_loaded.sum()
@@ -323,6 +341,8 @@ class TerraEnv(NamedTuple):
             ),
             "productive_workspace_cycle": productive_workspace_cycle,
             "transition_mass_residual": jnp.abs(new_mass - old_mass),
+            "transition_pickup_units": pickup_units,
+            "transition_unload_units": unload_units,
             "target_mutation": jnp.any(
                 new_state.world.target_map.map != state.world.target_map.map
             ),
@@ -517,6 +537,7 @@ class TerraEnv(NamedTuple):
         transition_diagnostics = self._transition_diagnostics(
             state,
             new_state,
+            agent_terms,
         )
         new_state = self._accumulate_productive_workspace_cycles(
             state,
@@ -639,6 +660,7 @@ class TerraEnv(NamedTuple):
         transition_diagnostics = self._transition_diagnostics(
             state,
             new_state,
+            agent_terms,
         )
         new_state = self._accumulate_productive_workspace_cycles(
             state,
@@ -1313,6 +1335,8 @@ class TerraEnvBatch:
                         "productive_workspace_cycles"
                     ],
                     "transition_mass_residual": item.info["transition_mass_residual"],
+                    "transition_pickup_units": item.info["transition_pickup_units"],
+                    "transition_unload_units": item.info["transition_unload_units"],
                     "target_mutation": item.info["target_mutation"],
                     "obstacle_mutation": item.info["obstacle_mutation"],
                     "ended_reset_tier": item.info["ended_reset_tier"],

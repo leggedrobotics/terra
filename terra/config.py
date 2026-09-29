@@ -342,6 +342,16 @@ class EnvConfig(NamedTuple):
     makespan_cost: float = 0.0
     makespan_setup_s: float = 0.0  # overhead per new work pose (workspace)
 
+    # Optional R2 timing-0 potential correction for active skid loads. These
+    # fields stay appended because EnvConfig is stored positionally in pickles.
+    transport_credit_coef: float = 0.0
+    # Zero preserves the int8 carrier limit (127); a positive value caps only
+    # excavator loose-soil relifts, not fresh excavation. Use 52 to match skid.
+    excavator_relift_capacity: int = 0
+    # Per material unit loaded, divided by episode material volume. Counts
+    # fresh digging, relifting and skid pickup. Effort, not calibrated time.
+    material_handling_cost: float = 0.0
+
     @classmethod
     def new(cls):
         return EnvConfig()
