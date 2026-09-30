@@ -116,6 +116,19 @@ class AgentConfig(NamedTuple):
     # frozen v1 benchmark semantics; trainers set 5.5 as a treatment.
     dump_max_radius_m: float = 0.0
 
+    # Machine working rules (opt-in; 0 keeps the frozen v1 semantics). Metres,
+    # radial from the base centre like the cone, or metric gaps between cells.
+    # Raises the inner radius of the reach annulus for digging and dumping
+    # (default 0.5 m arm offset + half the longer chassis side, 3.64 m).
+    dig_min_radius_m: float = 0.0
+    # Additional inner radius for excavator dumps only; the dump cone never
+    # starts closer than the dig annulus.
+    dump_min_radius_m: float = 0.0
+    # An excavator may not move or turn to a pose whose chassis cells lie
+    # closer than this to excavated cells (action map < 0). The gap between
+    # two cells is the distance between their squares (State._dug_clearance_mask).
+    dug_clearance_m: float = 0.0
+
 
 class Rewards(NamedTuple):
     existence: float

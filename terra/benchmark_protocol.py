@@ -161,6 +161,10 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # The excavator dump reach was appended later; 0 keeps the v1 dump cone.
     if payload["agent"].pop("dump_max_radius_m") != 0.0:
         raise RuntimeError("The v1 benchmark requires agent.dump_max_radius_m=0.")
+    # The machine working rules were appended later still; 0 disables each.
+    for name in ("dig_min_radius_m", "dump_min_radius_m", "dug_clearance_m"):
+        if payload["agent"].pop(name) != 0.0:
+            raise RuntimeError(f"The v1 benchmark requires agent.{name}=0.")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

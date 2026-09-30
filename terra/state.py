@@ -59,6 +59,10 @@ CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
 REWARD_V2_HORIZON = jnp.float32(450.0)
 STALL_AGE_CAP_STEPS = 32
 
+# agent.dug_clearance_m is evaluated over offsets of at most this many cells,
+# which is exact for clearances up to this many tiles (3.4 m at 0.5714 m).
+DUG_CLEARANCE_WINDOW_TILES = 6
+
 # The terminal objective keeps success dominant and uses efficiency only to
 # order successful episodes. Its success base is supplied by the normalized
 # dense terminal component so annealing does not create a reward-scale jump.
@@ -566,6 +570,48 @@ class State(NamedTuple):
         """Chassis cells must be free of holes, positive soil and obstacles."""
         return ((map != 0) | (static_traversability_base == 1)).astype(IntLowDim)
 
+    def _dug_clearance_mask(self) -> Array:
+        """Cells an excavator chassis may not cover under ``agent.dug_clearance_m``.
+
+        The gap between two cells is the Euclidean distance between their
+        squares, ``tile * hypot(max(|dx| - 1, 0), max(|dy| - 1, 0))``: 0 for
+        edge- or corner-touching cells, one tile across one free cell. A cell
+        is blocked when its gap to any excavated cell (action map < 0) is below
+        the clearance. With 0.5714 m tiles, 0.6 m therefore needs two free
+        cells along an axis (1.14 m) or one free diagonal cell (0.81 m), and
+        any clearance up to one tile needs one free cell.
+
+        The squared gap is a separable min-plus dilation of the dug mask over
+        a fixed window (13 shifted minima per axis), so the clearance may be a
+        traced per-environment value. Only moves and turns use this mask; DO
+        never does, so the agent can always dig its own workspace, which starts
+        0.86 m past the chassis front at a 4 m inner radius. 0 disables it;
+        only excavators (agent type 0) are affected.
+        """
+        dug = _as_2d_map(self.world.action_map.map) < 0
+        window = DUG_CLEARANCE_WINDOW_TILES
+        offsets = range(-window, window + 1)
+        cost = [float(max(abs(k) - 1, 0) ** 2) for k in offsets]
+        inf = jnp.float32(jnp.inf)
+        n_x, n_y = dug.shape
+        padded = jnp.pad(dug, ((window, window), (0, 0)))
+        along_x = jnp.full(dug.shape, inf)
+        for k, c in zip(offsets, cost):
+            shifted = padded[window + k:window + k + n_x, :]
+            along_x = jnp.minimum(along_x, jnp.where(shifted, jnp.float32(c), inf))
+        padded = jnp.pad(along_x, ((0, 0), (window, window)), constant_values=inf)
+        gap_tiles_sq = jnp.full(dug.shape, inf)
+        for k, c in zip(offsets, cost):
+            gap_tiles_sq = jnp.minimum(
+                gap_tiles_sq, padded[:, window + k:window + k + n_y] + jnp.float32(c)
+            )
+        clearance = jnp.asarray(self.env_cfg.agent.dug_clearance_m, dtype=jnp.float32)
+        tile = jnp.asarray(self.env_cfg.tile_size, dtype=jnp.float32)
+        # A gap equal to the clearance is allowed; the tolerance absorbs fp32.
+        too_close = gap_tiles_sq < jnp.square(clearance / tile) - jnp.float32(1e-4)
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        return too_close & (clearance > 0.0) & is_excavator
+
     def _is_valid_move(self, agent_corners: Array, allow_truck_neutral: bool = False) -> Array:
         """
         Checks if the move is valid by computing the agent occupancy mask (using a
@@ -595,6 +641,11 @@ class State(NamedTuple):
 
         
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
+        # The destination must keep agent.dug_clearance_m from dug cells; the
+        # swept path of a translation is checked against holes only.
+        traversability_mask = jnp.where(
+            self._dug_clearance_mask(), 1, traversability_mask
+        )
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
 
@@ -1412,6 +1463,9 @@ class State(NamedTuple):
         and it is combined with a +-30 deg cabin sector by the caller. The
         fresh-trench alignment diagnostic normalises its perpendicular distance
         by ``r_max`` so both quantities are expressed in the same reach.
+        ``agent.dig_min_radius_m`` > 0 raises ``r_min`` (never lowers it) for
+        digging, pickup, dumping and the local-map observations; ``r_max`` is
+        unchanged.
         """
 
         dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
@@ -1428,6 +1482,9 @@ class State(NamedTuple):
 
         r_min = fixed_extension + min_distance_from_agent
         r_max = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
+        r_min = jnp.maximum(
+            r_min, jnp.asarray(self.env_cfg.agent.dig_min_radius_m, dtype=jnp.float32)
+        )
         return r_min, r_max
 
     def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
@@ -2037,16 +2094,19 @@ class State(NamedTuple):
         )
 
     def _build_dump_cone(self) -> Array:
-        """Excavator dump cone: the dig cone within ``agent.dump_max_radius_m``.
+        """Excavator dump cone: the dig cone within ``agent.dump_min_radius_m``
+        to ``agent.dump_max_radius_m``.
 
         Skid steers and trucks keep their own cone; a radius of 0 keeps the
-        full dig reach.
+        dig annulus on that side.
         """
         cone = self._build_dig_dump_cone()
         map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
         dump_r_max = jnp.asarray(self.env_cfg.agent.dump_max_radius_m, dtype=jnp.float32)
-        within_reach = jnp.logical_or(
-            dump_r_max <= 0.0, map_cyl_coords[0] <= dump_r_max + 1e-5
+        dump_r_min = jnp.asarray(self.env_cfg.agent.dump_min_radius_m, dtype=jnp.float32)
+        within_reach = jnp.logical_and(
+            jnp.logical_or(dump_r_max <= 0.0, map_cyl_coords[0] <= dump_r_max + 1e-5),
+            jnp.logical_or(dump_r_min <= 0.0, map_cyl_coords[0] >= dump_r_min - 1e-5),
         )
         is_excavator = self._get_current_agent_state().agent_type[0] == 0
         keep = jnp.logical_or(jnp.logical_not(is_excavator), within_reach)
