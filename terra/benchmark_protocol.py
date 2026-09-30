@@ -162,7 +162,12 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     if payload["agent"].pop("dump_max_radius_m") != 0.0:
         raise RuntimeError("The v1 benchmark requires agent.dump_max_radius_m=0.")
     # The machine working rules were appended later still; 0 disables each.
-    for name in ("dig_min_radius_m", "dump_min_radius_m", "dug_clearance_m"):
+    for name in (
+        "dig_min_radius_m",
+        "dump_min_radius_m",
+        "dug_clearance_m",
+        "dump_min_dug_distance_m",
+    ):
         if payload["agent"].pop(name) != 0.0:
             raise RuntimeError(f"The v1 benchmark requires agent.{name}=0.")
     config_sha256 = canonical_json_sha256(payload)

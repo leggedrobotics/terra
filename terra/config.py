@@ -128,6 +128,12 @@ class AgentConfig(NamedTuple):
     # closer than this to excavated cells (action map < 0). The gap between
     # two cells is the distance between their squares (State._dug_clearance_mask).
     dug_clearance_m: float = 0.0
+    # An excavator dump is refused when the centroid its load is concentrated
+    # around (State._apply_dump_mask) lies closer than this to an excavated
+    # cell, centre to centre. The dumpability mask already keeps dump cells
+    # two cells from dug cells; 4 cells (2.28 m) keeps the machine's 1.1 m dump
+    # support clear of its 1.14 m band.
+    dump_min_dug_distance_m: float = 0.0
 
 
 class Rewards(NamedTuple):

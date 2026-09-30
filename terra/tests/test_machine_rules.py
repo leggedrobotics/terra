@@ -197,6 +197,30 @@ def test_clearance_never_blocks_do_from_a_pose_already_too_close():
     )
 
 
+def test_dump_min_dug_distance_refuses_dumps_centred_near_dug_ground():
+    target = np.ones(SHAPE, dtype=np.int8)  # every cell is final dump ground
+    far = np.zeros(SHAPE, dtype=np.int8)
+    far[26:39, 58] = -1  # dug ground well past the cone
+    along = np.zeros(SHAPE, dtype=np.int8)
+    along[32, 39:46] = -1  # a cut along the arm: the admissible cells flank it
+    four_cells = 4 * float(_state().env_cfg.tile_size) - 1e-3
+    for action, admitted in ((far, True), (along, False)):
+        release = _state(target, action, loaded=20)
+        dumped = _do(release)
+        assert _loaded(dumped) == 0  # without the rule both dumps land
+        rule = _rules(release, dump_min_dug_distance_m=four_cells)
+        outcome = _do(rule)
+        if admitted:
+            np.testing.assert_array_equal(
+                np.asarray(outcome.world.action_map.map), np.asarray(dumped.world.action_map.map)
+            )
+        else:
+            assert _loaded(outcome) == 20
+            np.testing.assert_array_equal(
+                np.asarray(outcome.world.action_map.map), np.asarray(rule.world.action_map.map)
+            )
+
+
 def test_trench_retreat_completes_under_the_machine_rules():
     """Dig ahead, dump to the side, back away from the fresh cut: no deadlock."""
     target = np.zeros(SHAPE, dtype=np.int8)

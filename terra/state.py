@@ -2112,6 +2112,38 @@ class State(NamedTuple):
         keep = jnp.logical_or(jnp.logical_not(is_excavator), within_reach)
         return jnp.logical_and(cone.astype(jnp.bool_), keep).astype(cone.dtype)
 
+    def _dump_centroid_too_close_to_dug(self, dump_mask: Array) -> Array:
+        """True when ``agent.dump_min_dug_distance_m`` refuses this excavator dump.
+
+        The centroid is the one ``_apply_dump_mask`` concentrates the load
+        around: the mean of the admissible cells outside the chassis. Its
+        distance to the nearest excavated cell (action map < 0) is measured
+        centre to centre. 0 disables the rule.
+        """
+        map_shape = self.world.action_map.map.shape[-2:]
+        cells = jnp.reshape(dump_mask, map_shape).astype(jnp.bool_)
+        cells &= ~self._active_base_footprint_mask()
+        count = jnp.maximum(jnp.sum(cells), 1)
+        rows, cols = jnp.meshgrid(
+            jnp.arange(map_shape[0]), jnp.arange(map_shape[1]), indexing="ij"
+        )
+        centroid_row = jnp.sum(rows * cells) / count
+        centroid_col = jnp.sum(cols * cells) / count
+        dug = _as_2d_map(self.world.action_map.map) < 0
+        distance_sq = jnp.where(
+            dug, (rows - centroid_row) ** 2 + (cols - centroid_col) ** 2, jnp.inf
+        )
+        limit = jnp.asarray(
+            self.env_cfg.agent.dump_min_dug_distance_m, dtype=jnp.float32
+        ) / jnp.asarray(self.env_cfg.tile_size, dtype=jnp.float32)
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        return (
+            (limit > 0.0)
+            & is_excavator
+            & jnp.any(cells)
+            & (jnp.min(distance_sq) < jnp.square(limit) - jnp.float32(1e-4))
+        )
+
     def _workspace_intersects_obstacle(self) -> Array:
         """
         Returns True when the current workspace overlaps static obstacles.
@@ -3174,6 +3206,9 @@ class State(NamedTuple):
             is_transport,
             lambda: legal_reachable,
             lambda: excavator_dump_mask,
+        )
+        dump_mask = jnp.logical_and(
+            dump_mask, ~self._dump_centroid_too_close_to_dug(dump_mask)
         )
         containment_mask = jax.lax.cond(
             has_legal_reachable,
