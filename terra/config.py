@@ -134,10 +134,11 @@ class AgentConfig(NamedTuple):
     # two cells from dug cells; 4 cells (2.28 m) keeps the machine's 1.1 m dump
     # support clear of its 1.14 m band.
     dump_min_dug_distance_m: float = 0.0
-    # Rotate the chassis raster about the centre of the base cell, where the
-    # dig cone and the machine converter place the base, instead of about the
-    # cell's corner (utils.centred_agent_corners). False keeps the frozen v1
-    # raster, which sits one cell off the base at headings 3, 6 and 9.
+    # Raster the chassis as the cells whose centres lie inside its rectangle
+    # centred on the base cell, where the dig cone and the machine converter
+    # place the base (utils.centred_agent_corners). False keeps the frozen v1
+    # raster, rotated about the cell's corner and rounded outward: one cell off
+    # the base at headings 3, 6 and 9, and 90-91 cells at the oblique ones.
     centre_chassis_on_base: bool = False
 
 

@@ -502,7 +502,9 @@ class State(NamedTuple):
         Gets the coordinates of the 4 corners of the agent.
         The function uses a biased rounding strategy to avoid rectangle shrinkage.
         ``agent.centre_chassis_on_base`` rotates the chassis about the base
-        cell's centre instead (``utils.centred_agent_corners``).
+        cell's centre instead (``utils.centred_agent_corners``). The corners
+        are float32 either way; the release ones keep their integer values, so
+        every mask built from them is unchanged.
         """
         # Determine half dimensions using floor/ceil to properly handle odd dimensions.
         half_width_left = jnp.floor(agent_width / 2.0)

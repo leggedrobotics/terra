@@ -111,27 +111,27 @@ def test_centred_raster_matches_the_converter_placement_at_every_heading():
         mask = _raster(heading, True)
         release = _raster(heading, False)
         cells = {tuple(c) for c in np.argwhere(mask)}
-        # Point-symmetric about BASE, the base cell's centre.
-        assert cells == {(2 * POSITION[0] - i, 2 * POSITION[1] - j) for i, j in cells}, heading
-        # Every cell whose centre lies inside the converter-placed chassis is
-        # in the raster, and every raster cell touches that chassis, except one
-        # pair per oblique heading 0.013 tiles off (a corner rounded outward
-        # just past a grid line). Released, cells lie up to 1.15 tiles off.
+        # Exactly the cells whose centres lie inside the converter-placed 7 x 11
+        # chassis (BASE at the base cell's centre, yaw heading * 30 deg + 90 deg).
         base, forward, left = _converter_frame(heading)
+        inside = set()
         for i, j in np.ndindex(*SHAPE):
             offset = np.array([i + 0.5, j + 0.5]) - base
-            if abs(offset @ forward) < HEIGHT / 2 - 1e-6 and abs(offset @ left) < WIDTH / 2 - 1e-6:
-                assert (i, j) in cells, (heading, i, j)
-        assert max(_chassis_gap(cell, heading) for cell in cells) < 0.02, heading
-        if heading in (4, 5, 7):
-            assert max(_chassis_gap(tuple(c), heading) for c in np.argwhere(release)) > 0.9
-        assert len(cells) == (77 if heading % 3 == 0 else 101)
-        # The machine footprint stays within 0.04 m of the raster's squares (its
-        # right side is 2.035 m from BASE, the raster's 2.0 m); released, it
-        # reaches up to 0.69 m outside at the offset headings.
-        assert _machine_reach_outside(mask, heading) < 0.04, heading
+            if abs(offset @ forward) < HEIGHT / 2 and abs(offset @ left) < WIDTH / 2:
+                inside.add((i, j))
+        assert cells == inside, heading
+        assert len(cells) == (77 if heading % 3 == 0 else 79)
+        # Point-symmetric about BASE.
+        assert cells == {(2 * POSITION[0] - i, 2 * POSITION[1] - j) for i, j in cells}, heading
+        # The machine footprint stays within 0.21 m of the raster's squares
+        # (0.036 m at the axis-aligned headings: its right side is 2.035 m from
+        # BASE, the raster's 2.0 m). Released, it reaches up to 0.69 m outside,
+        # and raster cells lie up to 1.15 tiles off the converter's chassis.
+        assert _machine_reach_outside(mask, heading) < (0.04 if heading % 3 == 0 else 0.21), heading
         if heading in (3, 6, 9):
             assert _machine_reach_outside(release, heading) > 0.25, heading
+        if heading in (4, 5, 7):
+            assert max(_chassis_gap(tuple(c), heading) for c in np.argwhere(release)) > 0.9
 
 
 def test_centring_is_a_traced_per_environment_value():
