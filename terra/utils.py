@@ -143,16 +143,72 @@ def get_min_distance_point_to_lines(p, lines, trench_type):
     return d_min[0]
 
 
+# A rotated corner coordinate this close to a grid line is snapped onto it
+# before the outward rounding, so float32 cos/sin residue at the axis-aligned
+# headings cannot add a row of cells. The nearest a true corner of the 7 x 11
+# chassis comes to a grid line at the oblique headings is 0.013 tiles.
+CENTRED_CORNER_SNAP_TILES = 1e-3
+
+
+def centred_agent_corners(
+    pos_base: Array,
+    base_orientation: IntLowDim,
+    agent_width: IntLowDim,
+    agent_height: IntLowDim,
+    angles_base: IntLowDim,
+) -> Array:
+    """Chassis corners rotated about the centre of the base cell.
+
+    The agent_width x agent_height rectangle is centred on the base cell's
+    centre (``pos_base + 0.5`` in the continuous coordinates of
+    ``compute_polygon_mask``), where the dig cone measures its radii and the
+    machine converter places the base, and rotated by the base heading. Each
+    corner is rounded outward to the nearest cell corner, as the release
+    raster does, but symmetrically about that centre, so the raster is
+    point-symmetric about the base cell at every heading. The release raster
+    rotates about the cell's corner instead and lies one cell off the base at
+    headings 3, 6 and 9. The raster is exact for the odd sides that
+    ``TerraEnvBatch.update_env_cfgs`` enforces; an even side is centred and
+    rounded out to one more cell.
+    """
+    half_width = jnp.asarray(agent_width, dtype=jnp.float32) / 2.0
+    half_height = jnp.asarray(agent_height, dtype=jnp.float32) / 2.0
+    local_corners = jnp.array(
+        [
+            [-half_width, -half_height],
+            [half_width, -half_height],
+            [half_width, half_height],
+            [-half_width, half_height],
+        ]
+    )
+    angle_rad = (
+        jnp.asarray(base_orientation).astype(jnp.float32)
+        / jnp.asarray(angles_base, dtype=jnp.float32)
+    ) * (2 * jnp.pi)
+    cos_a = jnp.cos(angle_rad)
+    sin_a = jnp.sin(angle_rad)
+    R = jnp.array([[cos_a, -sin_a], [sin_a, cos_a]]).reshape((2, 2))
+    offsets = (R @ local_corners.T).T  # (4, 2) from the base cell centre
+    # Outward to a half-integer offset from the centre, i.e. to a cell corner.
+    magnitude = jnp.ceil(jnp.abs(offsets) - 0.5 - CENTRED_CORNER_SNAP_TILES) + 0.5
+    rounded = jnp.where(offsets < 0, -magnitude, magnitude)
+    centre = jnp.asarray(pos_base).astype(jnp.float32) + 0.5
+    return (centre + rounded).astype(IntLowDim)
+
+
 def get_agent_corners(
     pos_base: Array,
     base_orientation: IntLowDim,
     agent_width: IntLowDim,
     agent_height: IntLowDim,
     angles_base: IntLowDim,
+    centre_on_base=False,
 ):
     """
     Gets the coordinates of the 4 corners of the agent.
     The function uses a biased rounding strategy to avoid rectangle shrinkage.
+    ``centre_on_base`` (``agent.centre_chassis_on_base``, may be traced)
+    selects ``centred_agent_corners`` instead.
     """
     # Determine half dimensions using floor/ceil to properly handle odd dimensions.
     half_width_left = jnp.floor(agent_width / 2.0)
@@ -193,7 +249,12 @@ def get_agent_corners(
         jnp.ceil(global_corners_float),
     ).astype(IntLowDim)
 
-    return biased_corners
+    if centre_on_base is False:
+        return biased_corners
+    centred = centred_agent_corners(
+        pos_base, base_orientation, agent_width, agent_height, angles_base
+    )
+    return jnp.where(jnp.asarray(centre_on_base), centred, biased_corners)
 
 
 def compute_polygon_mask(corners: Array, map_width: int, map_height: int) -> Array:

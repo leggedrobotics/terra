@@ -33,6 +33,7 @@ from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
+from terra.utils import centred_agent_corners
 from terra.utils import compute_polygon_mask
 from terra.utils import compute_swept_polygon_mask
 from terra.utils import decrease_angle_circular
@@ -500,6 +501,8 @@ class State(NamedTuple):
         """
         Gets the coordinates of the 4 corners of the agent.
         The function uses a biased rounding strategy to avoid rectangle shrinkage.
+        ``agent.centre_chassis_on_base`` rotates the chassis about the base
+        cell's centre instead (``utils.centred_agent_corners``).
         """
         # Determine half dimensions using floor/ceil to properly handle odd dimensions.
         half_width_left = jnp.floor(agent_width / 2.0)
@@ -535,7 +538,15 @@ class State(NamedTuple):
             jnp.ceil(global_corners_float)
         ).astype(IntLowDim)
 
-        return biased_corners
+        centred_corners = centred_agent_corners(
+            pos_base, base_orientation, agent_width, agent_height,
+            self.env_cfg.agent.angles_base,
+        )
+        return jnp.where(
+            jnp.asarray(self.env_cfg.agent.centre_chassis_on_base),
+            centred_corners,
+            biased_corners,
+        )
 
     def _agent_base_footprint_mask(self, agent_state) -> Array:
         """Return one chassis footprint using the movement geometry."""

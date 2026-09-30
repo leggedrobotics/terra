@@ -495,6 +495,9 @@ def validate_benchmark_initial_agent(
             expected_width,
             expected_height,
             env_cfg.agent.angles_base,
+            centre_on_base=bool(np.asarray(
+                jax.device_get(env_cfg.agent.centre_chassis_on_base)
+            ).reshape(-1)[0]),
         )
     )
     map_bounds = np.asarray(padding.shape, dtype=np.int32)

@@ -170,6 +170,8 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     ):
         if payload["agent"].pop(name) != 0.0:
             raise RuntimeError(f"The v1 benchmark requires agent.{name}=0.")
+    if payload["agent"].pop("centre_chassis_on_base"):
+        raise RuntimeError("The v1 benchmark requires agent.centre_chassis_on_base=False.")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(
