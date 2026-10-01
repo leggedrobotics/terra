@@ -164,6 +164,9 @@ class State(NamedTuple):
     # loaded units at the scoop rate, travel between successive work poses
     # and makespan_setup_s per new work pose.
     machine_work_s: Array = jnp.zeros((4,), dtype=jnp.float32)
+    # Per-skid sum of load * chassis distance at pickup, separate from the
+    # ground-source credit used by baseline material work. Reset rebases it.
+    carry_transport_origin: Array = jnp.zeros((4,), dtype=jnp.float32)
 
 
     @classmethod
@@ -213,6 +216,21 @@ class State(NamedTuple):
                 ),
                 material_h_reset=state._compute_material_work(),
                 material_v_reset=state._haul_volume(),
+                # A prepared loaded start is a new episode: initialize only
+                # this derived shaping ledger at the current chassis poses.
+                # The supplied Agent tree and its material credits stay exact.
+                carry_transport_origin=jnp.stack([
+                    jnp.where(
+                        initial_agent.agent_active[i].astype(jnp.bool_)
+                        & (agent.agent_type[0] == 2),
+                        agent.loaded[0].astype(jnp.float32)
+                        * _as_2d_map(world.relocation_distance_map)[
+                            agent.pos_base[0], agent.pos_base[1]
+                        ],
+                        jnp.float32(0.0),
+                    )
+                    for i, agent in enumerate(initial_agent.agent_states)
+                ]),
             )
 
         # Get agent types from env_cfg, defaulting to (0, 2) for backwards compatibility
@@ -387,10 +405,39 @@ class State(NamedTuple):
         ]
 
         action_idx = jnp.squeeze(action)
-        return jax.lax.cond(
+        new_state = jax.lax.cond(
             jnp.logical_or(action_idx == -1, action_idx == 7),
             self._do_nothing,
             lambda: jax.lax.switch(action_idx, handlers_list),
+        )
+        return self._update_transport_origin(new_state)
+
+    def _update_transport_origin(self, new_state: "State") -> "State":
+        """Account for load changes once, after a native agent action.
+
+        New soil starts at the post-action chassis distance, so pickup and
+        top-up add no transport potential. Existing soil still receives any
+        actual movement credit. Unloading removes origin proportionally;
+        empty buckets clear it. Baseline carry_relocation_credit is untouched.
+        """
+        before = self._get_current_agent_state()
+        after = new_state._get_current_agent_state()
+        old_load = before.loaded[0].astype(jnp.float32)
+        new_load = after.loaded[0].astype(jnp.float32)
+        slot = self.agent.current_agent
+        retained_fraction = jnp.minimum(old_load, new_load) / jnp.maximum(
+            old_load, jnp.float32(1.0)
+        )
+        distance = _as_2d_map(new_state.world.relocation_distance_map)[
+            after.pos_base[0], after.pos_base[1]
+        ]
+        origin = (
+            self.carry_transport_origin[slot] * retained_fraction
+            + jnp.maximum(new_load - old_load, jnp.float32(0.0)) * distance
+        )
+        origin = jnp.where(after.agent_type[0] == 2, origin, jnp.float32(0.0))
+        return new_state._replace(
+            carry_transport_origin=new_state.carry_transport_origin.at[slot].set(origin)
         )
 
     def _with_traversability_mask(self) -> "State":
@@ -4926,19 +4973,22 @@ class State(NamedTuple):
         return jnp.where(v0 > 0, v0, self.material_v_reset)
 
     def _transport_credit_potential(self) -> Float:
-        """Skid potential: beta * (stored source work - live carry work) / V.
+        """Skid potential: beta * (pickup-origin work - live carry work) / V.
 
         Distance at the chassis centre is a bounded proxy, not bucket reach or
         a footprint route planner. On admitted mass-conserving R2 states, both
-        carry-work terms are in [0, V * DISTANCE_BOUND]. Pickup need not have a
-        positive correction. Stored carry credit and baseline Phi stay intact.
+        carry-work terms are in [0, V * DISTANCE_BOUND]. New pickups/top-ups
+        contribute zero potential; moving existing loads changes it. Gamma
+        still charges a small dwell rent when potential is positive. Ground
+        carry_relocation_credit and baseline Phi stay intact. The separate
+        origin ledger is episode-local and not added to policy observations.
         """
         distance = _as_2d_map(self.world.relocation_distance_map)
         contributions = jnp.stack([
-            agent.carry_relocation_credit
+            self.carry_transport_origin[i]
             - agent.loaded[0].astype(jnp.float32)
             * distance[agent.pos_base[0], agent.pos_base[1]]
-            for agent in self.agent.agent_states
+            for i, agent in enumerate(self.agent.agent_states)
         ])
         skid = jnp.stack([agent.agent_type[0] == 2 for agent in self.agent.agent_states])
         carry_delta = jnp.sum(jnp.where(

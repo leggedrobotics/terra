@@ -8,8 +8,9 @@ import pytest
 from terra.config import REWARD_V2_POTENTIAL_GAMMA, RewardStage
 from terra.actions import TrackedAction
 from terra.env import TerraEnv
+from terra.state import State
 from terra.tests.test_skid_steer_relocation import (
-    SHAPE, _bucket, _mass, _skid, _zone, backward, do, forward,
+    SHAPE, _bucket, _mass, _skid, _zone,
 )
 
 
@@ -18,6 +19,11 @@ reward = jax.jit(lambda old, new: old._get_reward_v2(
 ))
 potential = jax.jit(lambda state: state._transport_credit_potential())
 full_reward = jax.jit(lambda old, new, action: old._get_reward(new, action))
+# Exercise the exact native handlers plus the bookkeeping wrapper selected by
+# _apply_action, without compiling unrelated actions for every trace branch.
+forward = jax.jit(lambda s: s._update_transport_origin(s._handle_move_forward()))
+backward = jax.jit(lambda s: s._update_transport_origin(s._handle_move_backward()))
+do = jax.jit(lambda s: s._update_transport_origin(s._handle_do()))
 GAMMA = float(np.float32(REWARD_V2_POTENTIAL_GAMMA))
 
 
@@ -41,6 +47,87 @@ def trace():
     return states
 
 
+def test_pickup_starts_at_zero_transport_potential_and_keeps_handling_cost(trace):
+    before, after = trace[:2]
+    agent = after.agent.agent_states[0]
+    distance = np.asarray(after.world.relocation_distance_map)[tuple(agent.pos_base)]
+    # Regression: ground-source distance is smaller than chassis distance,
+    # which previously imposed a spurious negative transport term on pickup.
+    assert float(agent.carry_relocation_credit) - int(agent.loaded[0]) * distance < 0
+    np.testing.assert_allclose(after.carry_transport_origin[0], 40 * distance)
+    assert float(potential(before)) == 0 and float(potential(after)) == 0
+    cfg = before.env_cfg._replace(transport_credit_coef=1.0, material_handling_cost=0.25)
+    total, components = full_reward(before._replace(env_cfg=cfg),
+                                    after._replace(env_cfg=cfg), TrackedAction.forward())
+    assert float(components["reward_v2_transport_shaping"]) == 0
+    assert float(components["reward_v2_material_handling"]) == -0.25
+    assert float(total) < 0  # Handling and the ordinary step cost remain.
+    # Check that the public action dispatch actually applies the ledger once.
+    dispatched = jax.jit(lambda s: s._apply_action(TrackedAction.forward().action))(before)
+    dispatched = dispatched._replace(env_steps=after.env_steps)
+    for actual, expected in zip(jax.tree_util.tree_leaves(dispatched),
+                                jax.tree_util.tree_leaves(after)):
+        np.testing.assert_array_equal(actual, expected)
+
+
+def test_partial_load_top_up_does_not_erase_existing_transport_progress():
+    soil = np.zeros(SHAPE, dtype=np.int8)
+    soil[31:34, 24:27] = 1
+    soil[31:34, 34:37] = 1
+    state = _skid(_zone(), soil)
+    states = [state]
+    # Pick up 9, raise, advance twice, lower after an unsuccessful off-zone
+    # dump. The next FORWARD is blocked by pile 2 and tops up in place.
+    for transition in (forward, do, forward, forward, do, forward):
+        state = transition(state)._replace(env_steps=state.env_steps + 1)
+        states.append(state)
+    before, topped_up = states[-2:]
+    assert all(_mass(s) == 18 for s in states)
+    assert int(before.agent.agent_states[0].loaded[0]) == 9
+    assert int(topped_up.agent.agent_states[0].loaded[0]) == 18
+    np.testing.assert_array_equal(before.agent.agent_states[0].pos_base,
+                                  topped_up.agent.agent_states[0].pos_base)
+    phi = float(potential(before))
+    assert phi > 0
+    np.testing.assert_allclose(potential(topped_up), phi, atol=1e-7)
+    _, terms = reward(_coefficient(before, 1), _coefficient(topped_up, 1))
+    np.testing.assert_allclose(terms["reward_v2_transport_shaping"],
+                               (GAMMA - 1) * phi, atol=1e-7)
+    assert float(terms["reward_v2_valid"]) == 1
+    # Existing baseline material work remains continuous across the top-up.
+    np.testing.assert_allclose(before._compute_material_work(),
+                               topped_up._compute_material_work(), atol=1e-6)
+    toward = forward(topped_up)
+    assert float(potential(toward)) > float(potential(topped_up))
+
+    # Native skid dumps currently unload the whole bucket. The central ledger
+    # also apportions an eventual partial unload by its retained mass fraction.
+    partial = topped_up._set_agent_state_at(
+        0, topped_up.agent.agent_states[0]._replace(loaded=jnp.array([9], jnp.int8)))
+    partial = topped_up._update_transport_origin(partial)
+    np.testing.assert_allclose(partial.carry_transport_origin[0],
+                               topped_up.carry_transport_origin[0] / 2)
+
+
+def test_prepared_loaded_reset_rebases_only_the_transport_origin(trace):
+    loaded = trace[3]
+    assert float(potential(loaded)) > 0
+    reset = State.new(
+        loaded.key, loaded.env_cfg, loaded.world.target_map.map,
+        jnp.zeros(SHAPE, jnp.int8), -97 * jnp.ones((3, 3), jnp.float32), jnp.int32(-1),
+        -97 * jnp.ones((64, 3), jnp.float32), jnp.int32(-1),
+        jnp.ones(SHAPE, jnp.bool_), loaded.world.action_map.map,
+        distance_map_override=loaded.world.relocation_distance_map,
+        initial_agent=loaded.agent,
+    )
+    np.testing.assert_allclose(potential(reset), 0, atol=1e-7)
+    assert float(reset.carry_transport_origin[0]) > 0
+    for actual, expected in zip(jax.tree_util.tree_leaves(reset.agent),
+                                jax.tree_util.tree_leaves(loaded.agent)):
+        np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_allclose(reset._compute_material_work(), loaded._compute_material_work())
+
+
 def test_loaded_motion_is_dense_and_does_not_change_stored_credit(trace):
     old, toward, back = trace[2:5]
     credit = float(old.agent.agent_states[0].carry_relocation_credit)
@@ -48,6 +135,7 @@ def test_loaded_motion_is_dense_and_does_not_change_stored_credit(trace):
         assert _mass(state) == 40
     for state in (toward, back):
         assert float(state.agent.agent_states[0].carry_relocation_credit) == credit
+        np.testing.assert_array_equal(state.carry_transport_origin, old.carry_transport_origin)
     np.testing.assert_array_equal(back.agent.agent_states[0].pos_base,
                                   old.agent.agent_states[0].pos_base)
     _, advance = reward(_coefficient(old, 1.0), _coefficient(toward, 1.0))
@@ -78,6 +166,7 @@ def test_loaded_motion_is_dense_and_does_not_change_stored_credit(trace):
         np.testing.assert_allclose(total - baseline, -0.25 * volume / 40, atol=1e-6)
     diagnostics = TerraEnv._transition_diagnostics(trace[-2], trace[-1])
     np.testing.assert_array_equal(diagnostics["transition_unload_units"], [40, 0, 0, 0])
+    np.testing.assert_array_equal(trace[-1].carry_transport_origin, np.zeros(4))
     assert bool(trace[-1]._is_done(trace[-1].world.action_map.map, trace[-1].world.target_map.map)[1])
 
 
