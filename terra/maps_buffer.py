@@ -927,6 +927,9 @@ def metadata_sanity_check(metadata: dict[str, Any]) -> None:
 
 
 TRENCH_AXIS_RECORD_SIZE = 8
+# Finite trench sections one map may carry. trench_axis_membership stores one uint8 bit per section,
+# so 8 is the most it can hold (bearing walls need 6-8 sections; trench maps carry at most 4).
+MAX_TRENCH_SECTIONS = 8
 
 
 def _trench_records_from_metadata(
@@ -972,6 +975,17 @@ def _trench_records_from_metadata(
         raise RuntimeError(
             "Fresh-trench alignment requires generated trench_half_width_tiles."
         )
+    # Optional per-section half widths (narrow-wall foundations, whose walls differ
+    # in width); the scalar above stays the default for every section.
+    section_half_widths = metadata.get("trench_section_half_widths_tiles")
+    if section_half_widths is not None:
+        section_half_widths = [float(value) for value in section_half_widths]
+        if len(section_half_widths) != len(metadata.get("axes_ABC", []) or []) or not all(
+            np.isfinite(value) and value > 0.0 for value in section_half_widths
+        ):
+            raise RuntimeError(
+                "trench_section_half_widths_tiles needs one positive finite width per axis."
+            )
 
     if require_finite_segments and raw_axes and len(raw_segments) != len(raw_axes):
         raise RuntimeError(
@@ -1034,7 +1048,9 @@ def _trench_records_from_metadata(
                 float(axis["B"]),
                 float(axis["C"]),
                 *endpoints,
-                -97.0 if half_width is None else half_width,
+                section_half_widths[index]
+                if section_half_widths is not None
+                else (-97.0 if half_width is None else half_width),
             ]
         )
 
@@ -1527,7 +1543,7 @@ def load_single_map(map_path: str) -> Array:
     )
 
     # Try to load metadata
-    max_trench_type = 4
+    max_trench_type = MAX_TRENCH_SECTIONS
     max_foundation_border_type = 64
     trench_axes = -97.0 * np.ones(
         (max_trench_type, TRENCH_AXIS_RECORD_SIZE)
@@ -1587,11 +1603,9 @@ def load_maps_from_disk(
     require_exact_contract: bool = True,
     required_distance_protocol_id: str = LEGACY_DISTANCE_PROTOCOL_ID,
 ) -> Array:
-    # Set the max number of branches the trench has. v5-main net4 trenches carry
-    # four axes, so this pads to 4 and truncates anything longer (the foundation
-    # border path below has always truncated; the trench path used to produce a
-    # ragged list and crash in jnp.array).
-    max_trench_type = 4
+    # Maps carry at most MAX_TRENCH_SECTIONS finite sections; shorter lists are
+    # padded and longer ones truncated (refused for gated maps).
+    max_trench_type = MAX_TRENCH_SECTIONS
     max_foundation_border_type = 64
 
     dataset_size = int(os.getenv("DATASET_SIZE", -1))
