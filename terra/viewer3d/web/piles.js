@@ -6,11 +6,24 @@ const RING = [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2], [1, 2], [0, 2], [0, 1]];
 // connected deposits may form taller mounds. This does not redistribute soil.
 export const PILE_RISE_PER_CELL = 1.6;
 
+// Progress is a number for the whole map, or a per-cell function (row, col).
+const progressAt = (progress, row, col) => typeof progress === 'function' ? progress(row, col) : progress;
+
 function soilHeight(frame, row, col, previous, progress) {
   if (row < 0 || col < 0 || row >= frame.grid.rows || col >= frame.grid.cols || frame.maps.padding[row][col]) return 0;
   const after = frame.maps.action[row][col];
   const before = previous ? previous.maps.action[row][col] : after;
-  return Math.max(0, before + (after - before) * progress);
+  return Math.max(0, before + (after - before) * progressAt(progress, row, col));
+}
+
+// A half-cell node blends the progress of the cells that share it.
+function nodeProgress(frame, row2, col2, progress) {
+  if (typeof progress !== 'function') return progress;
+  const rows = row2 % 2 ? [(row2 - 1) / 2] : [row2 / 2 - 1, row2 / 2];
+  const cols = col2 % 2 ? [(col2 - 1) / 2] : [col2 / 2 - 1, col2 / 2];
+  let sum = 0, count = 0;
+  for (const row of rows) for (const col of cols) if (row >= 0 && col >= 0 && row < frame.grid.rows && col < frame.grid.cols) { sum += progress(row, col); count++; }
+  return count ? sum / count : 1;
 }
 
 // Half-cell coordinates: odd/odd is a cell center, even/even a shared corner.
@@ -48,14 +61,17 @@ export function pileHeightField(frame, previous = null, progress = 1, endpoints 
   for (let row = rows - 2; row >= 0; row--) for (let col = 0; col < cols; col++) {
     const index = row * cols + col; heights[index] = Math.min(heights[index], heights[index + cols] + rise);
   }
-  if (previous && progress > 0 && progress < 1) {
+  if (previous && (typeof progress === 'function' || (progress > 0 && progress < 1))) {
     const start = endpoints?.start ?? pileHeightField(frame, previous, 0);
     const end = endpoints?.end ?? pileHeightField(frame);
     // Morph the capped profiles, not the unbounded quantities: a 127-unit dump
     // should grow across the whole animation rather than instantly hit its cap.
     // The minimum of two slope-bounded fields is also slope-bounded. Keeping
     // the current support envelope prevents bridging a newly exposed hole.
-    for (let i = 0; i < heights.length; i++) heights[i] = Math.min(heights[i], start.heights[i] + (end.heights[i] - start.heights[i]) * progress);
+    for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+      const i = row * cols + col, p = nodeProgress(frame, row, col, progress);
+      heights[i] = Math.min(heights[i], start.heights[i] + (end.heights[i] - start.heights[i]) * p);
+    }
   }
   return { rows, cols, heights };
 }
@@ -85,7 +101,7 @@ export function pileTopology(frame, previous = null) {
 // A continuous surface, not a collection of per-cell soil props. Each cell fan
 // shares its boundary vertices with its neighbors and tapers at support edges.
 export class SoilPiles extends THREE.Group {
-  constructor(frame, { previous = null, unitHeight = frame.grid.tile_size_m * .48, layerSettings = {}, visibility = {}, palette = PALETTE } = {}) {
+  constructor(frame, { previous = null, unitHeight = frame.grid.tile_size_m * .48, layerSettings = {}, visibility = {}, palette = PALETTE, roughness = 0 } = {}) {
     super();
     this.frame = frame; this.previous = previous; this.unitHeight = unitHeight;
     this.endHeights = pileHeightField(frame);
@@ -97,8 +113,10 @@ export class SoilPiles extends THREE.Group {
     const colors = new Float32Array(positions.length), shade = new THREE.Color();
     for (let i = 0; i < this.topology.nodes.length; i++) {
       const [row2, col2] = this.topology.nodes[i];
-      positions[i * 3] = (col2 / 2 - cols / 2) * tile;
-      positions[i * 3 + 2] = (row2 / 2 - rows / 2) * tile;
+      // Optional stable jitter breaks the cell-aligned outline of loose soil.
+      const jitter = (seed, edge) => edge ? 0 : (((Math.sin(row2 * 12.9898 + col2 * 78.233 + seed) * 43758.5453) % 1 + 1) % 1 - .5) * 2 * roughness * tile;
+      positions[i * 3] = (col2 / 2 - cols / 2) * tile + jitter(1.7, col2 === 0 || col2 === cols * 2);
+      positions[i * 3 + 2] = (row2 / 2 - rows / 2) * tile + jitter(5.3, row2 === 0 || row2 === rows * 2);
       const noise = ((row2 * 37 + col2 * 61 + row2 * col2 * 7) % 29) / 29;
       shade.set(palette.loose).multiplyScalar(.95 + noise * .1); shade.toArray(colors, i * 3);
     }
@@ -134,7 +152,7 @@ export class SoilPiles extends THREE.Group {
 
   update(progress = 1) {
     this.progress = progress;
-    this.heights = progress <= 0 ? this.startHeights : progress >= 1 ? this.endHeights : pileHeightField(this.frame, this.previous, progress, this.endpoints);
+    this.heights = typeof progress === 'function' ? pileHeightField(this.frame, this.previous, progress, this.endpoints) : progress <= 0 ? this.startHeights : progress >= 1 ? this.endHeights : pileHeightField(this.frame, this.previous, progress, this.endpoints);
     const positions = this.positions.array;
     for (let i = 0; i < this.topology.nodes.length; i++) {
       const [row2, col2] = this.topology.nodes[i]; positions[i * 3 + 1] = this.nodeHeight(row2, col2);

@@ -90,21 +90,40 @@ raw map values. Displayed heights and carried quantities are abstract soil
 units, not calibrated cubic meters. Horizontal dimensions use the map's tile
 size. Height exaggeration changes only the picture.
 
-Two presentation styles share the same data. **Paper** (the default) is meant
-for figures: a white background, the grid on a plain block of banded earth,
-muted soil colors, grey obstacles, a colorblind-safe (Okabe-Ito) overlay
-palette, static patterns, number tags and rigid machine motion. **Diorama**
-puts the grid on a stylized island with turf, trees, a fence, road, office and
-clouds under a sky gradient, and adds dust/exhaust puffs and body sway. The
-surroundings lie outside the Terra grid and carry no map meaning. In both
+Three presentation styles share the same data. **Studio** (the default) is
+meant for papers and talks that need motion: the grid stands as a block of
+banded earth on a studio floor that shows only its shadow, under a soft
+backdrop, with natural soil colors, coated machine paint, steel buckets,
+ambient occlusion and no outlines. It hides the dig overlay on cells already cut
+to target, so the excavation reveals itself, and adds translucent dust. **Paper**
+is meant for static figures: a white background, the plain block, muted soil
+colors, grey obstacles, a colorblind-safe (Okabe-Ito) overlay palette, static
+patterns, number tags and rigid machine motion. **Diorama** puts the grid on a
+stylized island with turf, trees, a fence, road, office and clouds under a sky
+gradient, and adds dust/exhaust puffs and body sway. The surroundings lie
+outside the Terra grid and carry no map meaning. P cycles the styles. In all
 styles, cut walls show one stratum band per abstract soil unit, so cut depth
 can be counted, and soil clods illustrate transfers without changing the
 recording. The Machine tags switch hides the number tags and the active-machine
-ring. Rich lighting adds ambient occlusion and soft outlines; the viewer drops
-to fast graphics once if the first frames are slow, G toggles it, and both
-choices are remembered in the browser. Capture PNG renders the scene at twice
-the viewport resolution (at least the screen's pixel density) for print.
+ring. Rich lighting adds ambient occlusion and soft outlines (none in studio);
+the viewer drops to fast graphics once if the first frames are slow, G toggles
+it, and both choices are remembered in the browser. Capture PNG renders the
+scene at twice the viewport resolution (at least the screen's pixel density)
+for print.
 Reduced-motion system settings disable animation and effects.
+
+Digging and dumping are planned on the cells each machine changed. An
+excavator opens its bucket above the far edge of those cells, drags the teeth
+along the new cut floor toward the cab while each cell drops as the bucket
+passes, curls and lifts; it dumps by holding the bucket hinge above the deposit
+and opening the bucket, and the pile grows as the soil lands. A small extra
+slew centers the boom on the cells and returns before the step ends. A
+skid-steer loader lowers its bucket, drives into the soil and backs out to its
+recorded position, or drives up with the arms raised and tips the bucket. When
+one recorded frame changes several machines (joint team rounds), every machine
+animates its own work at the same time. The arm angles come from a two-link
+inverse kinematics solve; the motion is illustrative and the recorded state is
+unchanged.
 
 Positive soil is rendered as a joined, slope-limited mound surface. Single-cell
 dumps stay low instead of becoming spikes; wider connected piles can rise.

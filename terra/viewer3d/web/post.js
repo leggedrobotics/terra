@@ -85,7 +85,7 @@ export class PostPipeline {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.ink.uniforms.resolution.value.copy(size); this.ink.uniforms.thickness.value = 1.35 * pixelRatio;
   }
-  setLook({ vignette = 0 } = {}) { this.ink.uniforms.vignette.value = vignette; }
+  setLook({ vignette = 0, ink = .92 } = {}) { this.ink.uniforms.vignette.value = vignette; this.ink.uniforms.strength.value = ink; }
   setSamples(samples) {
     for (const target of [this.composer.renderTarget1, this.composer.renderTarget2]) if (target.samples !== samples) { target.samples = samples; target.dispose(); }
   }

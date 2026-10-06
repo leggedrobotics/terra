@@ -22,6 +22,27 @@ const LIVERIES = [
   { body: 0xe4553a, accent: 0xf6a93b, trim: 0x3b4047, bed: 0xf2a93b },
   { body: 0xf47b20, accent: 0xffa04d, trim: 0x2f3338 },
 ];
+// Studio style: one coated paint per machine. Excavators take their color from
+// the state slot, so two excavators on one site stay distinguishable.
+const STUDIO_EXCAVATORS = [0xe0a02b, 0x3f74a6, 0x5a8f5e, 0x8a6bb0];
+const STUDIO_TRUCK = 0xc9563d, STUDIO_LOADER = 0xdf7a2c;
+const coatCache = new Map();
+function coat(hex) {
+  if (!coatCache.has(hex)) coatCache.set(hex, new THREE.MeshPhysicalMaterial({ color: hex, roughness: .4, metalness: .05, clearcoat: .55, clearcoatRoughness: .28 }));
+  return coatCache.get(hex);
+}
+const studio = {
+  glass: paint(0x3a4d58, { roughness: .07, metalness: .25 }), steel: paint(0x4b5056, { roughness: .52, metalness: .3 }),
+  worn: paint(0x9da2a6, { roughness: .32, metalness: .8 }), lamp: paint(0xf6efd8, { emissive: 0xffe9b8, emissiveIntensity: .25 }),
+  soil: paint(0x6f5238, { roughness: 1, flatShading: true }),
+};
+function liveryFor(agent, style) {
+  if (style !== 'studio') return { ...LIVERIES[agent.type], paint };
+  const body = agent.type === 0 ? STUDIO_EXCAVATORS[agent.id % STUDIO_EXCAVATORS.length] : agent.type === 1 ? STUDIO_TRUCK : STUDIO_LOADER;
+  return { body, accent: body, trim: 0x2e3237, bed: body, studio: true, paint: coat };
+}
+/** Body color of a machine in a presentation style, for legends. */
+export function machineColor(agent, style = 'diorama') { return liveryFor(agent, style).body; }
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 24);
 const hexCylinder = new THREE.CylinderGeometry(1, 1, 1, 10);
@@ -188,32 +209,66 @@ function glassHighlight(parent, x, y, z, dx, dy, dz, axis = 'x') {
 }
 
 function cab(parent, L, W, S, x, z, livery) {
-  const body = paint(livery.body), group = new THREE.Group(); group.position.set(x, 0, z); parent.add(group);
-  const cx = .30 * L, cz = .39 * W, height = .5 * S;
+  const body = livery.paint(livery.body), group = new THREE.Group(); group.position.set(x, 0, z); parent.add(group);
+  const cx = .30 * L, cz = .39 * W, height = .5 * S, glass = livery.studio ? studio.glass : materials.glass;
   roundedBox(group, body, 0, .12 * S, 0, cx, .2 * S, cz, S * .04);
   // Frame, then inset glass on the front, sides and rear.
   roundedBox(group, body, 0, .36 * S, 0, cx * .96, height * .72, cz * .96, S * .05).name = 'cab-shell';
   const glassY = .39 * S, glassH = height * .56;
-  box(group, materials.glass, cx * .485, glassY, 0, S * .012, glassH, cz * .84);
+  box(group, glass, cx * .485, glassY, 0, S * .012, glassH, cz * .84);
   glassHighlight(group, cx * .492, glassY, 0, S * .01, glassH * .8, cz * .84, 'x');
-  for (const side of [-1, 1]) { box(group, materials.glass, -cx * .04, glassY, side * cz * .485, cx * .76, glassH, S * .012); glassHighlight(group, -cx * .04, glassY, side * cz * .492, cx * .76, glassH * .8, S * .01, 'z'); }
-  box(group, materials.glass, -cx * .485, glassY + glassH * .1, 0, S * .012, glassH * .6, cz * .7);
+  for (const side of [-1, 1]) { box(group, glass, -cx * .04, glassY, side * cz * .485, cx * .76, glassH, S * .012); glassHighlight(group, -cx * .04, glassY, side * cz * .492, cx * .76, glassH * .8, S * .01, 'z'); }
+  box(group, glass, -cx * .485, glassY + glassH * .1, 0, S * .012, glassH * .6, cz * .7);
   box(group, materials.seat, -cx * .12, .3 * S, 0, cx * .3, .16 * S, cz * .5);
-  roundedBox(group, paint(livery.trim), 0, .62 * S, 0, cx * 1.06, S * .05, cz * 1.06, S * .02);
-  for (const side of [-1, 1]) box(group, materials.lamp, cx * .5, .6 * S, side * cz * .3, S * .02, S * .035, cz * .12);
+  roundedBox(group, livery.paint(livery.studio ? livery.body : livery.trim), 0, .62 * S, 0, cx * (livery.studio ? .98 : 1.06), S * .05, cz * (livery.studio ? .98 : 1.06), S * .02);
+  for (const side of [-1, 1]) box(group, livery.studio ? studio.lamp : materials.lamp, cx * .5, .6 * S, side * cz * .3, S * .02, S * .035, cz * .12);
   return group;
 }
 
+function extrudeShape(shape, depth, bevel, segments = 12) {
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: bevel > 0, bevelSegments: 2, bevelSize: bevel, bevelThickness: bevel, curveSegments: segments, steps: 1 });
+  geometry.translate(0, 0, -depth / 2); return geometry;
+}
+function shapeOf(points) { const shape = new THREE.Shape(); shape.setFromPoints(points); return shape; }
+/** Offset a sampled curve by `distance` toward `inside`, as a closed plate outline. */
+function plateOutline(points, distance, inside) {
+  const inner = points.map((point, i) => {
+    const before = points[Math.max(0, i - 1)], after = points[Math.min(points.length - 1, i + 1)];
+    const normal = new THREE.Vector2(before.y - after.y, after.x - before.x).normalize();
+    if (normal.dot(inside.clone().sub(point)) < 0) normal.negate();
+    return point.clone().addScaledVector(normal, distance);
+  });
+  return [...points, ...inner.reverse()];
+}
+function convexHull(points) {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y), cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [], upper = [];
+  for (const point of sorted) { while (lower.length > 1 && cross(lower.at(-2), lower.at(-1), point) <= 0) lower.pop(); lower.push(point); }
+  for (const point of sorted.reverse()) { while (upper.length > 1 && cross(upper.at(-2), upper.at(-1), point) <= 0) upper.pop(); upper.push(point); }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+// General-purpose loader bucket: flat floor, rolled back, side plates, spill
+// guard, bolt-on steel cutting edge and a quick-attach plate. +x points ahead.
 function loaderBucket(parent, S, width, livery) {
   const root = new THREE.Group(); parent.add(root);
   root.name = 'loader-bucket';
-  box(root, materials.dark, S * .07, -S * .1, 0, S * .35, S * .06, width);
-  const back = box(root, materials.dark, -S * .12, .01 * S, 0, S * .06, S * .26, width); back.rotation.z = .25;
-  box(root, materials.dark, -S * .04, .14 * S, 0, S * .14, S * .04, width * .98).rotation.z = -.5;
-  for (const side of [-1, 1]) box(root, paint(livery.body), 0, .025 * S, side * width * .48, S * .31, S * .22, width * .055);
-  box(root, materials.metal, S * .25, -S * .12, 0, S * .06, S * .03, width * 1.01);
-  for (let i = 0; i < 6; i++) box(root, materials.metal, S * .29, -S * .115, (i / 5 - .5) * width * .86, S * .1, S * .035, width * .07);
-  const soil = mesh(root, lumpGeometry(3), materials.soil, .04 * S, .03 * S, 0); soil.scale.set(S * .2, S * .12, width * .42); soil.visible = false;
+  const u = S, shell = livery.studio ? studio.steel : materials.dark, sides = livery.studio ? studio.steel : livery.paint(livery.body), edge = livery.studio ? studio.worn : materials.metal;
+  const back = new THREE.Path();
+  back.moveTo(.29 * u, -.155 * u); back.lineTo(-.05 * u, -.135 * u);
+  back.quadraticCurveTo(-.16 * u, -.13 * u, -.165 * u, .0 * u); back.quadraticCurveTo(-.17 * u, .13 * u, -.12 * u, .185 * u);
+  const outline = back.getPoints(10), inside = new THREE.Vector2(.05 * u, .02 * u);
+  mesh(root, extrudeShape(shapeOf(plateOutline(outline, .022 * u, inside)), width * .97, .004 * u), shell).name = 'loader-bucket-shell';
+  const side = shapeOf([...outline, new THREE.Vector2(-.04 * u, .2 * u), new THREE.Vector2(.07 * u, .2 * u)]);
+  const sideGeometry = extrudeShape(side, width * .045, .006 * u);
+  for (const z of [-1, 1]) mesh(root, sideGeometry, sides, 0, 0, z * width * .49);
+  box(root, shell, .0 * u, .195 * u, 0, .17 * u, .02 * u, width * .99).rotation.z = .08;
+  const lip = box(root, edge, .31 * u, -.157 * u, 0, .07 * u, .022 * u, width * 1.0); lip.rotation.z = -.06;
+  box(root, shell, -.19 * u, .03 * u, 0, .03 * u, .26 * u, width * .62);
+  for (const z of [-1, 1]) box(root, shell, -.21 * u, .03 * u, z * width * .2, .05 * u, .24 * u, .04 * u);
+  anchor(root, 'loader-edge', .34 * u, -.15 * u, 0);
+  anchor(root, 'loader-lip', .16 * u, .05 * u, 0);
+  const soil = mesh(root, lumpGeometry(3), materials.soil, .06 * u, -.06 * u, 0); soil.name = 'bucket-soil'; soil.scale.set(u * .2, u * .14, width * .42); soil.visible = false;
   return { root, soil };
 }
 
@@ -235,50 +290,63 @@ function lumpGeometry(seed) {
   return geometry;
 }
 
+// Backhoe bucket in its own side-profile frame: +x points back toward the
+// machine (the opening faces the cab), +y up, main hinge pin at the origin.
+// A curved back plate wraps from the mounting brackets around the heel to a
+// steel cutting edge with teeth; flat side plates close the bowl.
 function excavatorBucket(parent, S, width, hingeWidth, livery) {
   const curl = new THREE.Group(); curl.name = 'bucket-curl'; parent.add(curl);
   const orientation = new THREE.Group(); orientation.name = 'bucket-orientation';
   // Reverse the bucket around its vertical axis; curl remains a separate hinge.
   // The bowl and payload are never flipped around pitch or roll to reverse it.
   orientation.rotation.y = Math.PI; curl.add(orientation);
-  const shell = new THREE.Shape();
-  shell.moveTo(-.14 * S, -.05 * S);
-  shell.bezierCurveTo(-.34 * S, -.12 * S, -.34 * S, -.34 * S, -.18 * S, -.43 * S);
-  shell.quadraticCurveTo(.04 * S, -.50 * S, .30 * S, -.40 * S);
-  shell.lineTo(.32 * S, -.34 * S);
-  shell.quadraticCurveTo(.06 * S, -.43 * S, -.15 * S, -.37 * S);
-  shell.bezierCurveTo(-.27 * S, -.30 * S, -.26 * S, -.16 * S, -.09 * S, -.105 * S);
-  shell.closePath();
-  const shellGeometry = new THREE.ExtrudeGeometry(shell, { depth: width, bevelEnabled: true, bevelSegments: 3, bevelSize: S * .008, bevelThickness: S * .008, curveSegments: 12, steps: 1 });
-  mesh(orientation, shellGeometry, materials.dark, 0, 0, -width / 2).name = 'bucket-shell';
+  const u = S, shell = livery.studio ? studio.steel : materials.dark, sides = livery.studio ? studio.steel : livery.paint(livery.body);
+  const steel = livery.studio ? studio.worn : materials.metal, brackets = livery.studio ? studio.steel : livery.paint(livery.accent);
+  const top = new THREE.Vector2(-.205 * u, -.07 * u), heel = new THREE.Vector2(.22 * u, -.53 * u), edge = new THREE.Vector2(.43 * u, -.41 * u), lip = new THREE.Vector2(.125 * u, -.05 * u);
+  const back = new THREE.Path(); back.moveTo(top.x, top.y);
+  back.bezierCurveTo(-.33 * u, -.15 * u, -.345 * u, -.36 * u, -.245 * u, -.47 * u);
+  back.bezierCurveTo(-.14 * u, -.585 * u, .07 * u, -.61 * u, heel.x, heel.y);
+  back.lineTo(edge.x, edge.y);
+  const outline = back.getPoints(14), cavity = new THREE.Vector2(.07 * u, -.3 * u);
+  mesh(orientation, extrudeShape(shapeOf(plateOutline(outline, .03 * u, cavity)), width * .96, .005 * u, 16), shell).name = 'bucket-shell';
+  const cheekGeometry = extrudeShape(shapeOf([...outline, lip, top]), width * .05, .006 * u, 16);
+  for (const side of [-1, 1]) mesh(orientation, cheekGeometry, sides, 0, 0, side * width * .475).name = `bucket-side-${side}`;
+  const topPlate = box(orientation, shell, (top.x + lip.x) / 2, (top.y + lip.y) / 2 - .012 * u, 0, lip.distanceTo(top) + .02 * u, .028 * u, width * .97);
+  topPlate.rotation.z = Math.atan2(lip.y - top.y, lip.x - top.x);
+  // Lower wear straps follow the heel; a thicker steel lip carries the teeth.
+  for (const z of [-.32, .32]) { const strap = box(orientation, steel, -.06 * u, -.585 * u, z * width, .26 * u, .018 * u, width * .07); strap.rotation.z = -.12; }
+  const along = edge.clone().sub(heel).normalize(), angle = Math.atan2(along.y, along.x);
+  const cuttingEdge = box(orientation, steel, edge.x - along.x * .02 * u, edge.y - along.y * .02 * u - .006 * u, 0, .11 * u, .032 * u, width * 1.0); cuttingEdge.rotation.z = angle; cuttingEdge.name = 'bucket-cutting-edge';
+  const tooth = shapeOf([[0, .026], [.07, .021], [.13, .006], [.145, -.001], [.075, -.014], [0, -.02]].map(([x, y]) => new THREE.Vector2(x * u, y * u)));
+  const toothWidth = Math.min(.055 * u, width * .13), toothGeometry = extrudeShape(tooth, toothWidth, .005 * u, 4), count = width > .3 * u ? 5 : 4;
+  for (let i = 0; i < count; i++) {
+    const z = (i / (count - 1) - .5) * width * .84, base = edge.clone().addScaledVector(along, .03 * u);
+    const adapter = box(orientation, shell, edge.x, edge.y + .004 * u, z, .075 * u, .045 * u, toothWidth * 1.35); adapter.rotation.z = angle;
+    const tip = mesh(orientation, toothGeometry, steel, base.x, base.y, z); tip.rotation.z = angle; tip.name = 'bucket-tooth';
+  }
+  const toothTip = edge.clone().addScaledVector(along, .175 * u);
 
-  const cheek = new THREE.Shape();
-  cheek.moveTo(-.14 * S, -.06 * S);
-  cheek.bezierCurveTo(-.34 * S, -.14 * S, -.34 * S, -.35 * S, -.17 * S, -.43 * S);
-  cheek.quadraticCurveTo(.05 * S, -.48 * S, .31 * S, -.39 * S);
-  cheek.lineTo(.19 * S, -.18 * S); cheek.quadraticCurveTo(.04 * S, -.10 * S, -.14 * S, -.06 * S);
-  const cheekThickness = width * .05;
-  const cheekGeometry = new THREE.ExtrudeGeometry(cheek, { depth: cheekThickness, bevelEnabled: true, bevelSegments: 3, bevelSize: S * .009, bevelThickness: S * .007, curveSegments: 12, steps: 1 });
-  for (const side of [-1, 1]) mesh(orientation, cheekGeometry, paint(livery.body), 0, 0, side * width * .475 - cheekThickness / 2);
-  roundedBox(orientation, materials.metal, S * .29, -S * .38, 0, S * .07, S * .06, width * 1.02, S * .012).rotation.z = .1;
-  const teeth = new THREE.Shape(); teeth.moveTo(0, -.035 * S); teeth.lineTo(.17 * S, -.016 * S); teeth.lineTo(.17 * S, .009 * S); teeth.lineTo(0, .035 * S); teeth.closePath();
-  const toothGeometry = new THREE.ExtrudeGeometry(teeth, { depth: width * .085, bevelEnabled: true, bevelSegments: 2, bevelSize: S * .006, bevelThickness: S * .006, steps: 1 });
-  for (let i = 0; i < 5; i++) mesh(orientation, toothGeometry, materials.chrome, S * .31, -S * .385, (i / 4 - .5) * width * .82 - width * .0425);
-
-  // Paired mounting ears enclose the main hinge and the moving linkage pin.
-  const ear = new THREE.Shape(); ear.moveTo(-.14 * S, -.11 * S); ear.lineTo(-.14 * S, .115 * S); ear.quadraticCurveTo(-.10 * S, .18 * S, -.045 * S, .15 * S); ear.lineTo(.075 * S, .025 * S); ear.quadraticCurveTo(.10 * S, -.025 * S, .055 * S, -.10 * S); ear.closePath();
+  // Paired mounting brackets enclose the main hinge and the moving linkage pin.
   // The bowl shrinks independently of the unchanged stick-eye housing. Keep
-  // clearance between the ear bevels and that housing, with pins through both.
-  const earThickness = width * .075, earBevel = S * .008, earGap = hingeWidth + S * .02;
+  // clearance between the bracket bevels and that housing, with pins through both.
+  const earThickness = width * .075, earBevel = u * .008, earGap = hingeWidth + u * .02;
   const earOffset = (earGap + earThickness) / 2 + earBevel;
-  const pinWidth = Math.max(width * .72, earGap + 2 * earThickness + 4 * earBevel + S * .014);
-  const earGeometry = new THREE.ExtrudeGeometry(ear, { depth: earThickness, bevelEnabled: true, bevelSegments: 3, bevelSize: S * .008, bevelThickness: earBevel, curveSegments: 10, steps: 1 });
-  for (const side of [-1, 1]) mesh(orientation, earGeometry, paint(livery.accent), 0, 0, side * earOffset - earThickness / 2).name = `bucket-ear-${side}`;
-  pin(orientation, materials.metal, 0, 0, 0, S * .045, pinWidth).name = 'bucket-main-pin';
-  const linkPin = anchor(orientation, 'bucket-link-pin', -.08 * S, .12 * S, 0);
-  pin(linkPin, materials.metal, 0, 0, 0, S * .032, pinWidth);
-  const soil = mesh(orientation, lumpGeometry(1), materials.soil, .005 * S, -.245 * S, 0); soil.name = 'bucket-soil'; soil.scale.set(S * .225, S * .125, width * .405); soil.visible = false;
-  return { curl, orientation, soil, linkPin };
+  const pinWidth = Math.max(width * .72, earGap + 2 * earThickness + 4 * earBevel + u * .014);
+  const linkCenter = new THREE.Vector2(-.08 * u, .12 * u), ring = (center, radius) => Array.from({ length: 20 }, (_, i) => center.clone().add(new THREE.Vector2(Math.cos(i / 20 * Math.PI * 2) * radius, Math.sin(i / 20 * Math.PI * 2) * radius)));
+  const ear = convexHull([...ring(new THREE.Vector2(0, 0), .075 * u), ...ring(linkCenter, .06 * u), new THREE.Vector2(.09 * u, -.06 * u), new THREE.Vector2(-.175 * u, -.075 * u)]);
+  const earGeometry = extrudeShape(shapeOf(ear), earThickness, earBevel, 10);
+  for (const side of [-1, 1]) mesh(orientation, earGeometry, brackets, 0, 0, side * earOffset).name = `bucket-ear-${side}`;
+  pin(orientation, steel, 0, 0, 0, u * .045, pinWidth).name = 'bucket-main-pin';
+  const linkPin = anchor(orientation, 'bucket-link-pin', linkCenter.x, linkCenter.y, 0);
+  pin(linkPin, steel, 0, 0, 0, u * .032, pinWidth);
+  anchor(orientation, 'bucket-teeth', toothTip.x, toothTip.y, 0);
+  const lipPoint = new THREE.Vector2((edge.x + lip.x) / 2 - .04 * u, (edge.y + lip.y) / 2);
+  // Outward normal of the opening (cutting edge to top plate), for checks.
+  const opening = new THREE.Vector2(lip.y - edge.y, edge.x - lip.x).normalize();
+  orientation.userData.opening = new THREE.Vector3(opening.x, opening.y, 0);
+  anchor(orientation, 'bucket-lip', lipPoint.x, lipPoint.y, 0);
+  const soil = mesh(orientation, lumpGeometry(1), materials.soil, .09 * u, -.28 * u, 0); soil.name = 'bucket-soil'; soil.scale.set(u * .25, u * .2, width * .4); soil.visible = false;
+  return { curl, orientation, soil, linkPin, toothTip, lipPoint };
 }
 
 function nameplate(agent, style) {
@@ -337,9 +405,11 @@ function blend(poses, keys, t) {
   return poses[keys[0][1]];
 }
 
+
 // Excavator arm poses: boom and stick angles (radians) plus the bucket's world pitch.
 const ARM = {
-  carry: { boom: .63, stick: -1.35, pitch: .04 },
+  // Travel pose: boom raised, stick tucked, bucket close to the cab.
+  carry: { boom: .86, stick: -1.92, pitch: .04 },
   reach: { boom: .30, stick: -1.05, pitch: -.42 },
   scoop: { boom: .20, stick: -1.30, pitch: .62 },
   raise: { boom: .80, stick: -1.02, pitch: .10 },
@@ -349,24 +419,72 @@ const ARM_KEYS = {
   dig: [[0, 'carry'], [.3, 'reach'], [.56, 'scoop'], [1, 'carry', backOut]],
   dump: [[0, 'carry'], [.34, 'raise'], [.62, 'pour'], [1, 'carry', backOut]],
 };
+// Bucket world pitch while travelling: curled to hold a load, slightly open when empty.
+const CARRY_PITCH = { empty: -.12, loaded: -.5 };
+// Loader arm and bucket-curl angles for its work poses.
+const LOADER = { ground: { arm: -.33, curl: -.06 }, raised: { arm: .45 }, tipped: { curl: -.95 } };
+const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+const easeIn = t => t * t, easeOut = t => 1 - (1 - t) * (1 - t);
+const steady = t => .75 * t + .25 * smooth(t);
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+/** Interpolate keyed work poses; numbers and Vector2 fields blend with the later key's easing. */
+function keyframe(keys, t) {
+  let i = 1;
+  while (i < keys.length - 1 && t > keys[i].t) i++;
+  const a = keys[i - 1], b = keys[i], u = (b.ease ?? smooth)(clamp01((t - a.t) / Math.max(1e-6, b.t - a.t)));
+  const pose = {};
+  for (const key of Object.keys(b)) {
+    if (key === 't' || key === 'ease') continue;
+    pose[key] = b[key]?.isVector2 ? a[key].clone().lerp(b[key], u) : a[key] + (b[key] - a[key]) * u;
+  }
+  return pose;
+}
+
+const rotate2 = (v, a) => new THREE.Vector2(v.x * Math.cos(a) - v.y * Math.sin(a), v.x * Math.sin(a) + v.y * Math.cos(a));
+
+/** Planar boom/stick kinematics about the boom pivot, with a two-link IK for the bucket hinge. */
+function excavatorArm(boom, first, second, bucket, size) {
+  const pivot = new THREE.Vector2(boom.position.x, boom.position.y);
+  // Bucket points live in the reversed orientation frame: flip x into the curl frame.
+  const offset = point => new THREE.Vector2(-point.x, point.y);
+  const teeth = offset(bucket.toothTip), lip = offset(bucket.lipPoint);
+  const hinge = (boomAngle, stickAngle) => new THREE.Vector2(first * Math.cos(boomAngle) + second * Math.cos(boomAngle + stickAngle), first * Math.sin(boomAngle) + second * Math.sin(boomAngle + stickAngle));
+  function solveHinge(target) {
+    const point = target.clone(), longest = (first + second) * .995, shortest = Math.abs(first - second) * 1.05 + 1e-6;
+    const length = point.length();
+    if (length > longest) point.multiplyScalar(longest / length); else if (length < shortest) point.multiplyScalar(shortest / Math.max(length, 1e-6));
+    const distance = point.length();
+    // Elbow up: the stick folds down from the boom, as on a backhoe.
+    const stickAngle = -Math.acos(clamp((distance * distance - first * first - second * second) / (2 * first * second), -1, 1));
+    const boomAngle = Math.atan2(point.y, point.x) - Math.atan2(second * Math.sin(stickAngle), first + second * Math.cos(stickAngle));
+    return { boom: boomAngle, stick: stickAngle };
+  }
+  return {
+    pivot, size, hinge, solveHinge, teeth, lip,
+    tip: (boomAngle, stickAngle, pitch) => hinge(boomAngle, stickAngle).add(rotate2(teeth, pitch)),
+    solveTip: (tip, pitch) => solveHinge(tip.clone().sub(rotate2(teeth, pitch))),
+  };
+}
 
 export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = {}) {
   const root = new THREE.Group(), L = agent.height * tile, W = agent.width * tile, S = Math.min(L, W);
-  const livery = LIVERIES[agent.type], wheeled = agent.action_type === 1 || agent.type === 1;
+  const livery = liveryFor(agent, style), wheeled = agent.action_type === 1 || agent.type === 1, studioLook = style === 'studio';
   root.name = `machine-${agent.id}`;
   const chassis = undercarriage(root, L, W, S, wheeled, livery, agent.type === 1);
   const suspension = new THREE.Group(); suspension.name = 'suspension'; root.add(suspension);
   const upper = new THREE.Group(); upper.position.y = .32 * S; suspension.add(upper);
-  const body = paint(livery.body), accent = paint(livery.accent), trim = paint(livery.trim);
+  const body = livery.paint(livery.body), accent = livery.paint(livery.accent), trim = livery.paint(livery.trim);
+  const soilMaterial = studioLook ? studio.soil : materials.soil, pinPaint = studioLook ? studio.steel : body, pinAccent = studioLook ? studio.steel : accent;
   const beaconMaterial = new THREE.MeshStandardMaterial({ color: 0xffa21f, roughness: .3, emissive: 0xff7a00, emissiveIntensity: .2, transparent: true, opacity: .92 });
-  let boom, stick, tool, load, bed, loaderArm, bucketRig, exhaust, beacon;
+  let boom, stick, tool, load, bed, loaderArm, bucketRig, exhaust, beacon, arm = null, teeth = null, lip = null;
   const hydraulics = [];
   hazardMaterial ||= new THREE.MeshStandardMaterial({ map: hazardTexture(), color: typeof document === 'undefined' ? 0xf4b21b : 0xffffff, roughness: .6 });
   if (agent.type === 0) {
     cylinder(upper, materials.dark, 0, .045 * S, 0, S * .31, S * .10);
     roundedBox(upper, body, -.10 * L, .16 * S, 0, L * .65, S * .23, W * .66, S * .065).name = 'excavator-upper-body';
-    roundedBox(upper, materials.dark, -.33 * L, .255 * S, 0, L * .20, S * .20, W * .65, S * .068).name = 'excavator-counterweight';
-    box(upper, hazardMaterial, -.434 * L, .255 * S, 0, L * .012, S * .09, W * .56);
+    roundedBox(upper, studioLook ? trim : materials.dark, -.33 * L, .255 * S, 0, L * .20, S * .20, W * .65, S * .068).name = 'excavator-counterweight';
+    box(upper, studioLook ? trim : hazardMaterial, -.434 * L, .255 * S, 0, L * .012, S * .09, W * .56);
     for (const side of [-1, 1]) box(upper, materials.tail, -.434 * L, .3 * S, side * W * .29, L * .012, S * .03, W * .05);
     // Engine hood with vent slats.
     roundedBox(upper, accent, -.22 * L, .29 * S, .16 * W, L * .26, S * .05, W * .3, S * .02);
@@ -384,11 +502,11 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     beam(boom, firstLength, S * .21, W * .12, accent, true);
     pin(boom, materials.dark, 0, 0, 0, S * .095, W * .19);
     pin(boom, materials.metal, 0, 0, 0, S * .050, W * .205);
-    for (const side of [-1, 1]) box(boom, materials.lamp, firstLength * .3, S * .1, side * W * .065, S * .04, S * .03, S * .012);
+    for (const side of [-1, 1]) box(boom, studioLook ? studio.lamp : materials.lamp, firstLength * .3, S * .1, side * W * .065, S * .04, S * .03, S * .012);
     for (const side of [-1, 1]) {
       const start = anchor(upper, `boom-cylinder-${side}-start`, .20 * L, .12 * S, (.09 + side * .12) * W);
       const end = anchor(boom, `boom-cylinder-${side}-end`, firstLength * .48, -.055 * S, side * W * .12);
-      pin(start, body, 0, 0, 0, S * .047, W * .055); pin(end, body, 0, 0, 0, S * .047, W * .055);
+      pin(start, pinPaint, 0, 0, 0, S * .047, W * .055); pin(end, pinPaint, 0, 0, 0, S * .047, W * .055);
       hydraulics.push(hydraulic(upper, start, end, S * .036, `boom-cylinder-${side}`));
     }
     stick = new THREE.Group(); stick.name = 'stick-pivot'; stick.position.x = firstLength; boom.add(stick);
@@ -397,14 +515,15 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     pin(stick, materials.dark, 0, 0, 0, S * .078, W * .16); pin(stick, materials.metal, 0, 0, 0, S * .040, W * .175);
     const stickStart = anchor(boom, 'stick-cylinder-start', firstLength * .40, S * .145, 0);
     const stickEnd = anchor(stick, 'stick-cylinder-end', -.09 * secondLength, S * .080, 0);
-    pin(stickStart, accent, 0, 0, 0, S * .048, W * .11); pin(stickEnd, body, 0, 0, 0, S * .043, W * .115);
+    pin(stickStart, pinAccent, 0, 0, 0, S * .048, W * .11); pin(stickEnd, pinPaint, 0, 0, 0, S * .043, W * .115);
     hydraulics.push(hydraulic(upper, stickStart, stickEnd, S * .040, 'stick-cylinder'));
 
     // Keep the bucket compact relative to the cab. Scale its bowl, payload and
     // local linkage together around the unchanged stick-end hinge.
-    const bucketScale = .65, bucketSize = S * bucketScale, bucketWidth = W * .39 * bucketScale;
+    const bucketScale = livery.studio ? .56 : .65, bucketSize = S * bucketScale, bucketWidth = W * .39 * bucketScale;
     const hingeWidth = W * .145, bucketPart = excavatorBucket(stick, bucketSize, bucketWidth, hingeWidth, livery);
-    tool = bucketPart.curl; tool.position.x = secondLength; load = bucketPart.soil;
+    tool = bucketPart.curl; tool.position.x = secondLength; load = bucketPart.soil; load.material = soilMaterial;
+    teeth = bucketPart.orientation.getObjectByName('bucket-teeth'); lip = bucketPart.orientation.getObjectByName('bucket-lip');
     anchor(stick, 'bucket-hinge', secondLength, 0, 0);
     pin(stick, body, secondLength, 0, 0, bucketSize * .068, hingeWidth).name = 'bucket-hinge-housing';
     const rockerOrigin = anchor(stick, 'bucket-rocker-pivot', secondLength - bucketSize * .24, bucketSize * .10, 0);
@@ -419,7 +538,7 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
       links.push({ first, second, z: side * bucketWidth * .30 });
     }
     const bucketCylinderStart = anchor(stick, 'bucket-cylinder-start', secondLength * .24, S * .12, 0);
-    pin(bucketCylinderStart, body, 0, 0, 0, bucketSize * .038, W * .115);
+    pin(bucketCylinderStart, pinPaint, 0, 0, 0, bucketSize * .038, W * .115);
     hydraulics.push(hydraulic(stick, bucketCylinderStart, rockerJoint, bucketSize * .030, 'bucket-cylinder'));
     bucketRig = {
       origin: rockerOrigin, joint: rockerJoint, destination: bucketPart.linkPin,
@@ -435,6 +554,7 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
         }
       },
     };
+    arm = excavatorArm(boom, firstLength, secondLength, bucketPart, bucketSize);
   } else if (agent.type === 1) {
     box(upper, materials.dark, 0, .02 * S, 0, L * .92, .09 * S, W * .62);
     for (const side of [-1, 1]) box(upper, trim, .05 * L, .08 * S, side * W * .44, L * .7, .05 * S, W * .1);
@@ -447,7 +567,7 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     exhaust = anchor(upper, 'exhaust', .2 * L, .78 * S, .3 * W);
     cylinder(upper, materials.chrome, .2 * L, .5 * S, .3 * W, S * .03, S * .52);
     const pivot = new THREE.Group(); pivot.name = 'truck-bed'; pivot.position.set(-.43 * L, .12 * S, 0); upper.add(pivot); bed = pivot;
-    const bedPaint = paint(livery.bed);
+    const bedPaint = livery.paint(livery.bed);
     box(pivot, bedPaint, .30 * L, 0, 0, L * .64, S * .08, W * .86);
     for (const side of [-1, 1]) {
       const wall = box(pivot, bedPaint, .30 * L, .2 * S, side * W * .41, .66 * L, S * .38, W * .05); wall.rotation.x = side * .08;
@@ -457,7 +577,7 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     box(pivot, bedPaint, .62 * L, .28 * S, 0, .04 * L, S * .52, W * .86);
     const canopy = box(pivot, bedPaint, .72 * L, .52 * S, 0, .22 * L, S * .04, W * .86); canopy.rotation.z = -.06;
     box(pivot, materials.dark, -.02 * L, .22 * S, 0, .03 * L, S * .3, W * .78);
-    load = mesh(pivot, lumpGeometry(2), materials.soil, L * .3, S * .2, 0); load.scale.set(L * .27, S * .2, W * .33);
+    load = mesh(pivot, lumpGeometry(2), soilMaterial, L * .3, S * .2, 0); load.scale.set(L * .27, S * .2, W * .33);
     for (const side of [-1, 1]) box(upper, materials.tail, -.47 * L, .05 * S, side * .32 * W, .02 * L, .05 * S, .1 * W);
   } else {
     // Compact loader: engine at the rear, a cage cab, and side lift arms.
@@ -468,7 +588,7 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     const cx = .34 * L, cz = .4 * W, ch = .46 * S;
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(cage, materials.darker, sx * cx * .47, ch / 2, sz * cz * .47, S * .035, ch, S * .035);
     roundedBox(cage, body, 0, ch, 0, cx * 1.06, S * .05, cz * 1.08, S * .02);
-    box(cage, materials.glass, cx * .47, ch * .52, 0, S * .01, ch * .78, cz * .86);
+    box(cage, studioLook ? studio.glass : materials.glass, cx * .47, ch * .52, 0, S * .01, ch * .78, cz * .86);
     glassHighlight(cage, cx * .478, ch * .52, 0, S * .01, ch * .6, cz * .86, 'x');
     for (const side of [-1, 1]) for (let i = 0; i < 4; i++) box(cage, materials.darker, (-.3 + i * .2) * cx, ch * .55, side * cz * .47, S * .012, ch * .8, S * .012);
     box(cage, materials.seat, -cx * .1, ch * .25, 0, cx * .35, ch * .3, cz * .5);
@@ -483,41 +603,146 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
       pin(beamGroup, materials.metal, 0, 0, 0, S * .05, W * .09);
     }
     rod(loaderArm, trim, [L * .66, -.04 * S, -W * .36], [L * .66, -.04 * S, W * .36], S * .04);
-    const bucketPart = loaderBucket(loaderArm, S * 1.22, W * .92, livery); tool = bucketPart.root; tool.position.set(.80 * L, -.10 * S, 0); load = bucketPart.soil;
+    const bucketPart = loaderBucket(loaderArm, S * 1.22, W * .92, livery); tool = bucketPart.root; tool.position.set(.80 * L, -.10 * S, 0); load = bucketPart.soil; load.material = soilMaterial;
+    teeth = tool.getObjectByName('loader-edge'); lip = tool.getObjectByName('loader-lip');
   }
   if (beacon) beacon.name = 'beacon';
-  const ringColor = SLOT_COLORS[agent.id % 4], ring = selectionRing(ringColor, style !== 'paper'), paper = style === 'paper';
-  if (paper) root.traverse(item => { if (item.name === 'glass-highlight') item.visible = false; });
+  const ringColor = SLOT_COLORS[agent.id % 4], ring = selectionRing(ringColor, style === 'diorama'), paper = style === 'paper';
+  if (style !== 'diorama') root.traverse(item => { if (item.name === 'glass-highlight') item.visible = false; });
   ring.scale.set(L * 1.34, W * 1.34 + (L - W) * .35, 1); ring.position.y = tile * .03; root.add(ring);
   let label = null;
-  if (labels) { label = nameplate(agent, style); label.position.set(-.05 * L, S * 1.12, 0); root.add(label); }
+  if (labels) { label = nameplate(agent, style === 'diorama' ? 'diorama' : 'paper'); label.position.set(-.05 * L, S * 1.12, 0); root.add(label); }
   const bucketTip = new THREE.Vector3();
   const motion = { last: null, treads: [0, 0], spin: 0, active: false, kind: '', phase: 1, lift: 0, tags: true };
   const wheelRadius = chassis.spinning[0]?.radius ?? S * .2;
   const load0 = load ? load.scale.clone() : null;
 
-  function setPose(state, active, phase = 0, kind = '') {
+  /** Changed cells in a machine frame; heights are the displayed surface before and after. */
+  function workCells(work, frame) {
+    root.updateWorldMatrix(true, true);
+    return work.cells.map(cell => {
+      const before = frame.worldToLocal(new THREE.Vector3(cell.x, cell.before, cell.z)), after = frame.worldToLocal(new THREE.Vector3(cell.x, cell.after, cell.z));
+      return { key: cell.key, x: before.x, z: before.z, before: before.y, after: after.y, weight: Math.max(1, Math.abs(cell.delta ?? 1)) };
+    });
+  }
+  const weighted = (cells, read) => cells.reduce((sum, cell) => sum + read(cell) * cell.weight, 0) / cells.reduce((sum, cell) => sum + cell.weight, 0);
+  const progressive = (cells, timing) => t => weighted(cells, cell => smooth(segment(t, ...timing.get(cell.key))));
+
+  // Dig: open the bucket above the far edge of the changed cells, drag the
+  // teeth along the new cut floor toward the cab, curl and lift. Dump: hold
+  // the hinge above the deposit and open the bucket. A small extra slew
+  // centers the boom on the cells and returns before the action ends.
+  function planExcavator(work) {
+    const cells = workCells(work, upper);
+    if (!cells.length) return null;
+    const cx = weighted(cells, cell => cell.x), cz = weighted(cells, cell => cell.z), radius = Math.hypot(cx, cz), lateral = boom.position.z;
+    const yaw = radius > Math.abs(lateral) * 1.5 ? clamp(Math.asin(clamp(lateral / radius, -1, 1)) - Math.atan2(cz, cx), -.6, .6) : 0;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw), u = arm.size, timing = new Map();
+    for (const cell of cells) { cell.s = cos * cell.x - sin * cell.z - arm.pivot.x; cell.before -= arm.pivot.y; cell.after -= arm.pivot.y; }
+    const carryTip = loaded => arm.tip(ARM.carry.boom, ARM.carry.stick, loaded ? CARRY_PITCH.loaded : CARRY_PITCH.empty);
+    if (work.kind === 'dig') {
+      const far = Math.max(...cells.map(cell => cell.s)) + tile * .3, near = Math.min(...cells.map(cell => cell.s)) - tile * .35;
+      const floor = Math.min(...cells.map(cell => cell.after)) - tile * .05, top = Math.max(...cells.map(cell => cell.before), floor + tile * .2);
+      const keys = [
+        { t: 0, point: carryTip(false), pitch: CARRY_PITCH.empty },
+        { t: .22, point: new THREE.Vector2(far + u * .12, top + u * .45), pitch: 1.25, ease: easeInOut },
+        { t: .34, point: new THREE.Vector2(far, floor + tile * .03), pitch: 1.05, ease: easeIn },
+        { t: .68, point: new THREE.Vector2(near, floor), pitch: .4, ease: steady },
+        { t: .8, point: new THREE.Vector2(near - u * .08, top + u * .3), pitch: -.55, ease: easeOut },
+        { t: 1, point: carryTip(true), pitch: CARRY_PITCH.loaded, ease: easeInOut },
+      ];
+      const span = Math.max(far - near, 1e-6);
+      for (const cell of cells) { const at = .34 + .34 * clamp01((far - cell.s) / span); timing.set(cell.key, [at - .05, at + .07]); }
+      return { kind: 'dig', space: 'tip', keys, yaw, yawWindow: [.24, .84], timing, fill: progressive(cells, timing), events: { bite: .34, drag: [.34, .68], breakout: .76 } };
+    }
+    const pour = 1.8, centre = weighted(cells, cell => cell.s), peak = Math.max(...cells.map(cell => Math.max(cell.before, cell.after)));
+    // Place the hinge so the open bucket's lip sits above the deposit centre.
+    const above = new THREE.Vector2(centre - rotate2(arm.lip, pour).x, peak + u * .78), carryHinge = arm.hinge(ARM.carry.boom, ARM.carry.stick);
+    const keys = [
+      { t: 0, point: carryHinge, pitch: CARRY_PITCH.loaded },
+      { t: .3, point: above, pitch: -.4, ease: easeInOut },
+      { t: .6, point: above.clone().add(new THREE.Vector2(0, u * .04)), pitch: pour, ease: easeInOut },
+      { t: .72, point: above.clone().add(new THREE.Vector2(0, u * .07)), pitch: pour + .12, ease: steady },
+      { t: 1, point: carryHinge, pitch: CARRY_PITCH.empty, ease: easeInOut },
+    ];
+    for (const cell of cells) timing.set(cell.key, [.46, .8]);
+    return { kind: 'dump', space: 'hinge', keys, yaw, yawWindow: [.3, .78], timing, fill: t => 1 - smooth(segment(t, .38, .66)), events: { pour: [.38, .7] } };
+  }
+
+  // Loader pickup: lower the bucket flat, drive into the soil, roll it back
+  // and reverse. Dump: drive up with the arms raised and tip the bucket.
+  function planLoader(work) {
+    const cells = workCells(work, root);
+    if (!cells.length) return null;
+    const saved = [loaderArm.rotation.z, tool.rotation.z];
+    const reach = (armAngle, curl, point) => { loaderArm.rotation.z = armAngle; tool.rotation.z = curl; root.updateWorldMatrix(true, true); return root.worldToLocal(point.getWorldPosition(new THREE.Vector3())).x; };
+    const groundEdge = reach(LOADER.ground.arm, LOADER.ground.curl, teeth), raisedLip = reach(LOADER.raised.arm, LOADER.tipped.curl, lip);
+    loaderArm.rotation.z = saved[0]; tool.rotation.z = saved[1];
+    const near = Math.min(...cells.map(cell => cell.x)), far = Math.max(...cells.map(cell => cell.x)), timing = new Map();
+    const idle = state => ({ arm: state.shovel_lifted ? .35 : -.2, curl: state.loaded > 0 ? .22 : 0, lunge: 0 });
+    const from = idle(work.from), to = idle(work.to);
+    if (work.kind === 'dig') {
+      const lunge = clamp(near - groundEdge + tile * .35, 0, 3.5);
+      const keys = [
+        { t: 0, ...from },
+        { t: .2, arm: LOADER.ground.arm, curl: LOADER.ground.curl, lunge: lunge * .2, ease: easeInOut },
+        { t: .5, arm: LOADER.ground.arm, curl: LOADER.ground.curl, lunge, ease: steady },
+        { t: .62, arm: LOADER.ground.arm + .03, curl: .5, lunge, ease: easeOut },
+        { t: .8, arm: -.1, curl: .38, lunge: lunge * .5, ease: easeInOut },
+        { t: 1, ...to, ease: easeInOut },
+      ];
+      const span = Math.max(far - near, 1e-6);
+      for (const cell of cells) { const at = .3 + .2 * clamp01((cell.x - near) / span); timing.set(cell.key, [at - .05, at + .07]); }
+      return { kind: 'dig', space: 'loader', keys, timing, fill: progressive(cells, timing), events: { bite: .3, drag: [.3, .55] } };
+    }
+    const lunge = clamp(weighted(cells, cell => cell.x) - raisedLip, 0, 3.5);
+    const keys = [
+      { t: 0, ...from },
+      { t: .32, arm: LOADER.raised.arm, curl: .3, lunge, ease: easeInOut },
+      { t: .55, arm: LOADER.raised.arm, curl: LOADER.tipped.curl, lunge, ease: easeInOut },
+      { t: .68, arm: LOADER.raised.arm - .03, curl: LOADER.tipped.curl, lunge, ease: steady },
+      { t: 1, ...to, ease: easeInOut },
+    ];
+    for (const cell of cells) timing.set(cell.key, [.46, .8]);
+    return { kind: 'dump', space: 'loader', keys, timing, fill: t => 1 - smooth(segment(t, .36, .6)), events: { pour: [.36, .66] } };
+  }
+
+  function setPose(state, active, phase = 0, kind = '', plan = null) {
     upper.rotation.y = state.cabin_yaw;
     for (const wheelPart of chassis.steering) wheelPart.rotation.y = Math.max(-.6, Math.min(.6, state.wheel_angle * Math.PI / 9));
     motion.active = active; motion.kind = kind; motion.phase = phase;
-    ring.visible = active && motion.tags;
+    ring.visible = active && motion.tags && !studioLook;
     const carrying = state.loaded > 0;
-    load.visible = carrying || (kind === 'dump' && phase < .52) || (kind === 'transfer' && phase < .52) || (kind === 'dig' && phase > .5);
-    if (kind === 'receive') load.visible = phase > .62;
-    if (load0 && agent.type !== 0) {
-      // Loose payload height saturates with the carried amount; display only.
-      const before = kind === 'dump' ? Math.max(1, state.previous_loaded ?? state.loaded) : state.loaded;
-      let fill = .55 + .45 * (1 - Math.exp(-Math.max(before, 1) / 18));
-      if (kind === 'dump') { fill *= 1 - smooth(segment(phase, .22, .5)); load.visible = phase < .5; }
-      load.scale.set(load0.x, load0.y * Math.max(fill, .02), load0.z * (kind === 'dump' ? .7 + .3 * fill : 1));
+    if (plan && load0) {
+      const fill = plan.fill(phase), heap = .35 + .65 * fill;
+      load.visible = fill > .03;
+      load.scale.set(load0.x * (.65 + .35 * fill), load0.y * heap, load0.z * (.75 + .25 * fill));
+    } else {
+      load.visible = carrying || (kind === 'dump' && phase < .52) || (kind === 'transfer' && phase < .52) || (kind === 'dig' && phase > .5);
+      if (kind === 'receive') load.visible = phase > .62;
+      if (load0 && agent.type !== 0) {
+        // Loose payload height saturates with the carried amount; display only.
+        const before = kind === 'dump' ? Math.max(1, state.previous_loaded ?? state.loaded) : state.loaded;
+        let fill = .55 + .45 * (1 - Math.exp(-Math.max(before, 1) / 18));
+        if (kind === 'dump') { fill *= 1 - smooth(segment(phase, .22, .5)); load.visible = phase < .5; }
+        load.scale.set(load0.x, load0.y * Math.max(fill, .02), load0.z * (kind === 'dump' ? .7 + .3 * fill : 1));
+      }
     }
     if (boom) {
-      const keys = kind === 'dig' ? ARM_KEYS.dig : kind === 'dump' || kind === 'transfer' ? ARM_KEYS.dump : null;
-      const pose = keys ? blend(ARM, keys, phase) : ARM.carry;
-      boom.rotation.z = pose.boom; stick.rotation.z = pose.stick;
-      // An inward-facing bucket empties by lowering its inward cutting edge.
-      // Compensate the arm pose so carry stays upright and yaw never becomes curl.
-      tool.rotation.z = pose.pitch - boom.rotation.z - stick.rotation.z;
+      if (plan) {
+        const pose = keyframe(plan.keys, phase), [inside, outside] = plan.yawWindow;
+        upper.rotation.y = state.cabin_yaw + plan.yaw * smooth(segment(phase, 0, inside)) * (1 - smooth(segment(phase, outside, 1)));
+        const angles = plan.space === 'hinge' ? arm.solveHinge(pose.point) : arm.solveTip(pose.point, pose.pitch);
+        boom.rotation.z = angles.boom; stick.rotation.z = angles.stick; tool.rotation.z = pose.pitch - angles.boom - angles.stick;
+      } else {
+        const keys = kind === 'dig' ? ARM_KEYS.dig : kind === 'dump' || kind === 'transfer' ? ARM_KEYS.dump : null;
+        const poses = { ...ARM, carry: { ...ARM.carry, pitch: carrying ? CARRY_PITCH.loaded : CARRY_PITCH.empty } };
+        const pose = keys ? blend(poses, keys, phase) : poses.carry;
+        boom.rotation.z = pose.boom; stick.rotation.z = pose.stick;
+        // An inward-facing bucket empties by lowering its inward cutting edge.
+        // Compensate the arm pose so carry stays upright and yaw never becomes curl.
+        tool.rotation.z = pose.pitch - boom.rotation.z - stick.rotation.z;
+      }
       root.updateWorldMatrix(true, true); bucketRig.update();
       for (const actuator of hydraulics) actuator.update();
     }
@@ -526,26 +751,32 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
       bed.rotation.z = .62 * tilt;
     }
     if (loaderArm) {
+      if (plan) {
+        const pose = keyframe(plan.keys, phase);
+        loaderArm.rotation.z = pose.arm; tool.rotation.z = pose.curl;
+        if (pose.lunge) root.translateX(pose.lunge);
+        return;
+      }
       const lifted = state.shovel_lifted ? .35 : -.2, loadedCurl = carrying ? .22 : 0;
-      let arm = lifted, curl = loadedCurl;
+      let armAngle = lifted, curl = loadedCurl;
       if (kind === 'dig') {
-        arm = phase < .35 ? THREE.MathUtils.lerp(-.2, -.3, smooth(segment(phase, 0, .35))) : phase < .6 ? -.3 : THREE.MathUtils.lerp(-.3, lifted, backOut(segment(phase, .6, 1)));
+        armAngle = phase < .35 ? THREE.MathUtils.lerp(-.2, -.3, smooth(segment(phase, 0, .35))) : phase < .6 ? -.3 : THREE.MathUtils.lerp(-.3, lifted, backOut(segment(phase, .6, 1)));
         curl = phase < .35 ? -.15 * smooth(segment(phase, 0, .35)) : phase < .6 ? THREE.MathUtils.lerp(-.15, .3, smooth(segment(phase, .35, .6))) : THREE.MathUtils.lerp(.3, loadedCurl, smooth(segment(phase, .6, 1)));
       } else if (kind === 'dump') {
-        arm = phase < .6 ? THREE.MathUtils.lerp(.35, .45, smooth(segment(phase, 0, .35))) : THREE.MathUtils.lerp(.45, lifted, smooth(segment(phase, .6, 1)));
+        armAngle = phase < .6 ? THREE.MathUtils.lerp(.35, .45, smooth(segment(phase, 0, .35))) : THREE.MathUtils.lerp(.45, lifted, smooth(segment(phase, .6, 1)));
         curl = phase < .3 ? .22 * (1 - segment(phase, 0, .3)) : phase < .65 ? -.8 * smooth(segment(phase, .3, .5)) : THREE.MathUtils.lerp(-.8, loadedCurl, smooth(segment(phase, .65, 1)));
-      } else if (kind === 'turn') {
-        arm = lifted;
       }
-      loaderArm.rotation.z = arm; tool.rotation.z = curl;
+      loaderArm.rotation.z = armAngle; tool.rotation.z = curl;
     }
   }
 
   return {
-    root, agent, bucketRig, hydraulics, suspension, ringColor,
+    root, agent, bucketRig, hydraulics, suspension, ringColor, arm,
     setPose,
+    /** Plan the display motion of one dig/dump on its changed cells; null when unsupported. */
+    plan(work) { return arm ? planExcavator(work) : loaderArm ? planLoader(work) : null; },
     /** Show or hide the number tag and the active-machine ring. */
-    setTags(visible) { motion.tags = visible; if (label) label.visible = visible; ring.visible = visible && motion.active; },
+    setTags(visible) { motion.tags = visible; if (label) label.visible = visible; ring.visible = visible && motion.active && !studioLook; },
     /** Accumulate tread and wheel travel from successive display poses. */
     drive(position, yaw) {
       const last = motion.last;
@@ -562,11 +793,14 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
     /** Idle life and move reactions; `move` is a signed 0..1 travel progress. */
     tick(time, { move = null, direction = 1, reducedMotion = false } = {}) {
       const active = motion.active;
-      if (paper) {
-        // Figure style: no flashing, pulsing or body sway; machines move rigidly.
-        beaconMaterial.emissiveIntensity = .15; ring.material.opacity = active ? .9 : 0; ring.rotation.z = 0;
+      if (paper || studioLook) {
+        // Figure styles: no flashing, pulsing or idle shake. Studio keeps a
+        // slight pitch as the machine pulls away and stops.
+        beaconMaterial.emissiveIntensity = studioLook ? .08 : .15; ring.material.opacity = active && paper ? .9 : 0; ring.rotation.z = 0;
         if (label) { label.material.opacity = 1; label.position.y = S * 1.12; }
-        suspension.position.y = 0; suspension.rotation.z = 0; return;
+        suspension.position.y = 0;
+        suspension.rotation.z = studioLook && move !== null && !reducedMotion ? -Math.sin(move * Math.PI * 2) * .014 * direction : 0;
+        return;
       }
       beaconMaterial.emissiveIntensity = active ? .5 + .9 * Math.max(0, Math.sin(time * 7)) ** 3 : .15;
       ring.material.opacity = active ? .75 + .25 * Math.sin(time * 3.2) : 0;
@@ -580,6 +814,10 @@ export function makeMachine(agent, tile, { labels = true, style = 'diorama' } = 
       if (move !== null) suspension.position.y += Math.abs(Math.sin(move * Math.PI * 3)) * S * .008;
     },
     tip() { load.getWorldPosition(bucketTip); return bucketTip.clone(); },
+    /** World position of the excavator teeth or loader cutting edge. */
+    teeth() { return (teeth ?? load).getWorldPosition(new THREE.Vector3()); },
+    /** World position where soil leaves the open bucket. */
+    lip() { return (lip ?? load).getWorldPosition(new THREE.Vector3()); },
     exhaust() { return exhaust ? exhaust.getWorldPosition(new THREE.Vector3()) : root.position.clone(); },
     bedLip() { return bed ? bed.localToWorld(new THREE.Vector3(-.02 * L, .05 * S, 0)) : this.tip(); },
     dispose() {

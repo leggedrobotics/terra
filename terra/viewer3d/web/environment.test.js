@@ -57,10 +57,12 @@ test('effects expire and never outlive their pools', () => {
       effects.throwClods(new THREE.Vector3(0, 2, 0), new THREE.Vector3(1, 0, 0), { count: 10 });
       effects.burst(new THREE.Vector3(), { count: 10 });
       effects.puff(new THREE.Vector3(), { count: 10 });
+      effects.dustEnabled = true; effects.dust(new THREE.Vector3(), { count: 10 });
     }
-    assert.ok(effects.clods.length <= 320 && effects.puffs.length <= 260);
+    assert.ok(effects.clods.length <= effects.clodMesh.instanceMatrix.count && effects.puffs.length <= effects.puffMesh.instanceMatrix.count);
+    assert.ok(effects.dusts.length <= effects.dustPoints.geometry.attributes.size.count);
     for (let t = 0; t < 200; t++) effects.update(1 / 30);
-    assert.equal(effects.clods.length, 0); assert.equal(effects.puffs.length, 0);
-    assert.equal(effects.clodMesh.count, 0); assert.equal(effects.puffMesh.count, 0);
+    assert.equal(effects.clods.length, 0); assert.equal(effects.puffs.length, 0); assert.equal(effects.dusts.length, 0);
+    assert.equal(effects.clodMesh.count, 0); assert.equal(effects.puffMesh.count, 0); assert.equal(effects.dustPoints.geometry.drawRange.count, 0);
   } finally { effects.dispose(); }
 });

@@ -119,22 +119,29 @@ function pallet(parent, x, z, rotation, context, rand) {
   return group;
 }
 
-// Figure style: only a block of banded earth under the exact grid footprint,
-// like a geological block diagram. No decoration at all.
-function createPlinth(frame) {
+// Figure styles: only a block of banded earth under the exact grid footprint,
+// like a geological block diagram. Studio adds a floor that shows only the
+// block's shadow, so it stands on the backdrop. No decoration at all.
+function createPlinth(frame, palette = PALETTES.paper, studio = false) {
   const { rows, cols, tile_size_m: tile } = frame.grid, span = Math.max(rows, cols) * tile;
   const root = new THREE.Group(); root.name = 'Terra plinth';
   const geometry = new THREE.BoxGeometry(cols * tile, 1, rows * tile); geometry.translate(0, -.5, 0);
-  const block = new THREE.Mesh(geometry, earthMaterial('soil', { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 }, PALETTES.paper));
-  block.name = 'plinth'; block.receiveShadow = true; root.add(block);
+  const block = new THREE.Mesh(geometry, earthMaterial('soil', { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2 }, palette));
+  block.name = 'plinth'; block.receiveShadow = true; block.castShadow = studio; root.add(block);
+  let floor = null;
+  if (studio) {
+    floor = new THREE.Mesh(new THREE.PlaneGeometry(span * 12, span * 12), new THREE.ShadowMaterial({ color: 0x2c2620, opacity: .28 }));
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'studio-floor'; root.add(floor);
+  }
   root.userData.extent = { hx: cols * tile / 2, hz: rows * tile / 2 };
-  root.setFloor = floor => {
+  root.setFloor = level => {
     // The block continues the terrain columns' walls below their shared floor.
-    const bottom = Math.min(-Math.max(span * .06, 1.8), floor - tile * .8);
-    block.position.y = floor; block.scale.y = floor - bottom; shared.uFloor.value = floor;
+    const bottom = Math.min(-Math.max(span * (studio ? .085 : .06), 1.8), level - tile * .8);
+    block.position.y = level; block.scale.y = level - bottom; shared.uFloor.value = level;
+    if (floor) floor.position.y = bottom - .002;
   };
   root.update = () => {};
-  root.dispose = () => { geometry.dispose(); block.material.dispose(); root.removeFromParent(); };
+  root.dispose = () => { geometry.dispose(); block.material.dispose(); if (floor) { floor.geometry.dispose(); floor.material.dispose(); } root.removeFromParent(); };
   return root;
 }
 
@@ -145,6 +152,7 @@ function createPlinth(frame) {
  */
 export function createEnvironment(frame, { style = 'diorama' } = {}) {
   if (style === 'paper') return createPlinth(frame);
+  if (style === 'studio') return createPlinth(frame, PALETTES.studio, true);
   const { rows, cols, tile_size_m: tile } = frame.grid, hx = cols * tile / 2, hz = rows * tile / 2, span = Math.max(rows, cols) * tile;
   const apron = THREE.MathUtils.clamp(span * .2, 6, 22), root = new THREE.Group(); root.name = 'Terra surroundings';
   const rand = random(rows * 7919 + cols * 104729 + Math.round(tile * 1000));

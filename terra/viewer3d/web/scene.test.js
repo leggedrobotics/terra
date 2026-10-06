@@ -55,3 +55,14 @@ test('anchors match the current surface while digging through zero into a cut', 
   }
   scene.piles.dispose();
 });
+
+test('joint rounds attribute every changed cell to the machine whose load explains it', () => {
+  const scene = Object.create(TerraScene.prototype);
+  const agent = (id, position, loaded) => ({ id, type: 0, position, loaded, base_yaw: 0, cabin_yaw: 0, wheel_angle: 0, shovel_lifted: 0 });
+  const before = { ...frame([[0, 0, 0], [0, 0, 0], [0, 0, 0]]), agents: [agent(0, [0, 0], 0), agent(1, [2, 2], 5)] };
+  const after = { ...frame([[-3, 0, 0], [0, 0, 0], [0, 5, 0]]), agents: [agent(0, [0, 0], 3), agent(1, [2, 2], 0)] };
+  const actors = scene.actorWork(before, after);
+  assert.equal(actors.get(0).kind, 'dig'); assert.equal(actors.get(1).kind, 'dump');
+  assert.deepEqual(actors.get(0).cells.map(cell => [cell.row, cell.col]), [[0, 0]]);
+  assert.deepEqual(actors.get(1).cells.map(cell => [cell.row, cell.col]), [[2, 1]]);
+});

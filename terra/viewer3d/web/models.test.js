@@ -8,7 +8,7 @@ const closePoint = (actual, expected, description) => assert.ok(actual.distanceT
 const worldPosition = object => object.getWorldPosition(new THREE.Vector3());
 const worldAxis = (object, axis) => axis.clone().applyQuaternion(object.getWorldQuaternion(new THREE.Quaternion()));
 
-test('excavator bucket reverses by yaw beneath a separate curl hinge and carries upright', () => {
+test('excavator bucket reverses by yaw beneath a separate curl hinge and carries its load upright', () => {
   const machine = makeMachine(agent, .5, { labels: false });
   try {
     machine.setPose(agent, true);
@@ -18,8 +18,9 @@ test('excavator bucket reverses by yaw beneath a separate curl hinge and carries
     assert.equal(orientation.rotation.y, Math.PI); assert.equal(orientation.rotation.x, 0); assert.equal(orientation.rotation.z, 0);
     assert.equal(curl.rotation.y, 0); assert.equal(curl.rotation.x, 0);
     const forward = new THREE.Vector3(Math.cos(agent.cabin_yaw), 0, -Math.sin(agent.cabin_yaw));
-    assert.ok(worldAxis(orientation, new THREE.Vector3(1, 0, 0)).dot(forward) < -.99, 'the cutting edge must face inward');
-    assert.ok(worldAxis(orientation, new THREE.Vector3(0, 1, 0)).y > .99, 'carried soil must remain upright');
+    const inward = worldAxis(orientation, new THREE.Vector3(1, 0, 0)).setY(0).normalize();
+    assert.ok(inward.dot(forward) < -.99, 'the cutting edge must face inward');
+    assert.ok(worldAxis(orientation, orientation.userData.opening).y > .85, 'a carried load must face up out of the curled bucket');
     assert.ok(machine.root.getObjectByName('bucket-soil').position.y < 0, 'the load sits inside the bowl below its top hinge');
   } finally { machine.dispose(); }
 });
@@ -76,8 +77,8 @@ test('excavator bucket stays compact across machine footprints and map scales', 
       bucket.rotation.set(0, 0, 0);
       const size = new THREE.Box3().setFromObject(bucket, true).getSize(new THREE.Vector3());
       const S = Math.min(width, height) * tile, W = width * tile;
-      assert.ok(size.x > S * .48 && size.x < S * .54, 'bucket length must not dominate the machine');
-      assert.ok(size.y > S * .38 && size.y < S * .43, 'bowl and mounting ears stay near cab height');
+      assert.ok(size.x > S * .55 && size.x < S * .63, 'bucket length must not dominate the machine');
+      assert.ok(size.y > S * .48 && size.y < S * .56, 'bowl and mounting brackets stay below cab height');
       assert.ok(size.z > W * .24 && size.z < W * .28, 'bucket stays about one quarter of track width');
       const load = machine.root.getObjectByName('bucket-soil');
       assert.ok(load.position.y + load.scale.y < 0, 'scaled load remains below the hinge');
@@ -102,5 +103,55 @@ test('rounded excavator panels preserve their specified footprint dimensions', (
     body.geometry.computeBoundingBox(); const size = body.geometry.boundingBox.getSize(new THREE.Vector3());
     assert.ok(Math.abs(size.x - agent.height * .5 * .65) < 1e-6);
     assert.ok(Math.abs(size.z - agent.width * .5 * .66) < 1e-6);
+  } finally { machine.dispose(); }
+});
+
+// Cells straight ahead of a machine at the origin facing +x (yaw 0).
+const ahead = (distances, before, after, delta) => distances.map((x, i) => ({ key: i, x, z: 0, before, after, delta }));
+
+test('a planned dig drags the teeth along the cut floor, fills the bucket and ends in the loaded carry pose', () => {
+  const state = { ...agent, cabin_yaw: 0, loaded: 0 }, machine = makeMachine(state, .5, { labels: false });
+  try {
+    machine.setPose(state, true, 1, '');
+    const cells = ahead([2.5, 3, 3.5], 0, -.5, -1), plan = machine.plan({ kind: 'dig', from: state, to: { ...state, loaded: 27 }, cells });
+    assert.equal(plan.kind, 'dig'); assert.equal(plan.fill(0), 0); assert.ok(Math.abs(plan.fill(1) - 1) < 1e-9);
+    let previous = -1;
+    for (let t = 0; t <= 1; t += .05) { const fill = plan.fill(t); assert.ok(fill >= previous - 1e-12, 'the bucket only fills'); previous = fill; }
+    const [start, end] = plan.events.drag;
+    for (const t of [start + .05, (start + end) / 2, end - .05]) {
+      machine.setPose({ ...state, loaded: 27 }, true, t, 'dig', plan); machine.root.updateWorldMatrix(true, true);
+      const teeth = machine.teeth();
+      assert.ok(Math.abs(teeth.y - (-.5 - .025)) < .06, `teeth follow the cut floor at t=${t.toFixed(2)}: ${teeth.y}`);
+      assert.ok(teeth.x > 2.2 && teeth.x < 3.8 && Math.abs(teeth.z) < .1, 'teeth stay over the changed cells (the offset boom strokes parallel to its plane)');
+    }
+    // Cells nearer the far edge are cut first, as the bucket passes them.
+    assert.ok(plan.timing.get(2)[0] < plan.timing.get(1)[0] && plan.timing.get(1)[0] < plan.timing.get(0)[0]);
+    machine.setPose({ ...state, loaded: 27 }, true, 1, 'dig', plan); const planned = machine.root.getObjectByName('boom-pivot').rotation.z;
+    machine.setPose({ ...state, loaded: 27 }, true, 1, ''); assert.ok(Math.abs(machine.root.getObjectByName('boom-pivot').rotation.z - planned) < 1e-6, 'the dig ends in the idle carry pose');
+  } finally { machine.dispose(); }
+});
+
+test('a planned dump opens the bucket over the deposit and empties it', () => {
+  const state = { ...agent, cabin_yaw: 0, loaded: 27 }, machine = makeMachine(state, .5, { labels: false });
+  try {
+    machine.setPose(state, true, 1, '');
+    const plan = machine.plan({ kind: 'dump', from: state, to: { ...state, loaded: 0 }, cells: ahead([3, 3.5], 0, .4, 1) });
+    machine.setPose({ ...state, loaded: 0 }, true, .65, 'dump', plan); machine.root.updateWorldMatrix(true, true);
+    const lip = machine.lip(), orientation = machine.root.getObjectByName('bucket-orientation');
+    assert.ok(Math.abs(lip.x - 3.25) < .6 && Math.abs(lip.z) < .1 && lip.y > .4, `soil leaves the bucket above the deposit: ${lip.toArray()}`);
+    assert.ok(worldAxis(orientation, orientation.userData.opening).y < 0, 'the opening faces down while pouring');
+    assert.equal(plan.fill(0), 1); assert.equal(plan.fill(1), 0);
+  } finally { machine.dispose(); }
+});
+
+test('a loader pickup drives into the soil and backs out to its recorded position', () => {
+  const state = { ...agent, type: 2, cabin_yaw: 0, loaded: 0 }, machine = makeMachine(state, .5, { labels: false });
+  try {
+    machine.setPose(state, true, 1, '');
+    const plan = machine.plan({ kind: 'dig', from: state, to: { ...state, loaded: 20 }, cells: ahead([5, 5.5], .4, 0, -1) });
+    machine.setPose({ ...state, loaded: 20 }, true, .5, 'dig', plan);
+    assert.ok(machine.root.position.x > .5, 'the loader drives toward the soil');
+    machine.root.position.set(0, 0, 0); machine.setPose({ ...state, loaded: 20 }, true, 1, 'dig', plan);
+    assert.equal(machine.root.position.x, 0); assert.ok(plan.fill(1) > .999);
   } finally { machine.dispose(); }
 });

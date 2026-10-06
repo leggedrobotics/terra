@@ -246,7 +246,8 @@ JAX_PLATFORMS=cpu python -m terra.viewer3d
 ```
 
 It shows terrain heights, articulated machines, soil transfers, task overlays,
-and a replay timeline, in a plain figure style or a stylized diorama. Use
+and a replay timeline, in a studio style for papers and talks, a plain figure
+style or a stylized diorama. Use
 `--map /path/to/single-map` for your own site or `--replay episode.json.gz` for
 a recording. See the [viewer guide](terra/viewer3d/README.md) and
 [design specification](VISUALIZATION_3D_DESIGN.md).

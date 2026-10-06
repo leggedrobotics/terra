@@ -200,7 +200,7 @@ export function createObstacleProps(frame, options = {}) {
   if (!Number.isFinite(tile) || tile <= 0 || !Number.isFinite(unitHeight) || unitHeight <= 0) throw new Error('Obstacle display scale must be finite and positive.');
   const { rows, cols } = inspectMask(frame.maps.padding);
   if (rows !== frame.grid.rows || cols !== frame.grid.cols || !Array.isArray(frame.maps.action) || frame.maps.action.length !== rows || frame.maps.action.some(row => !Array.isArray(row) || row.length !== cols || row.some(value => !Number.isFinite(value)))) throw new Error('Obstacle terrain must match the frame grid and contain finite heights.');
-  const plans = planObstacleFootprints(frame.maps.padding), root = new THREE.Group(), context = { paper: options.style === 'paper' };
+  const plans = planObstacleFootprints(frame.maps.padding), root = new THREE.Group(), context = { paper: options.style !== 'diorama' };
   root.name = 'Terra obstacle props'; root.userData.footprints = plans;
   for (const plan of plans) {
     const prop = new THREE.Group(); prop.name = `${plan.kind}-${plan.row}-${plan.col}`; prop.userData.footprint = { ...plan };

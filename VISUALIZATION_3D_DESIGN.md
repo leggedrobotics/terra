@@ -27,7 +27,7 @@ at ordinary play zoom. Keep obstacle graphics inside the cells Terra marks as
 occupied. Favor consistent shapes, colors, and lighting over physical realism.
 
 Revision 2026-09-27 adds two presentation styles over the same scene. The
-default *paper* style targets journal figures: white background, the grid on a
+*paper* style (then the default) targets journal figures: white background, the grid on a
 plain banded-earth block (a block diagram), muted soil, grey obstacles,
 Okabe-Ito overlays with static patterns and outlines, plain number tags,
 neutral tone mapping and rigid machine motion, with 2× PNG capture. The
@@ -38,6 +38,17 @@ use optional ambient occlusion and soft outlines, one stratum band per soil
 unit on cut walls, animated track shoes and wheels, and keyframed work actions
 (anticipation, action, follow-through) with soil clods. These are illustrations
 only; decoration never enters a Terra cell.
+
+Revision 2026-10-05 adds a default *studio* style for papers and talks that
+need motion: the plain earth block on a shadow-only studio floor under a soft
+backdrop, natural soil colors with fine grain, coated machine paint, steel
+buckets, ambient occlusion without outlines, translucent dust and the dig
+overlay hidden on cells already cut to target. The excavator bucket is rebuilt
+as a curved back plate, side plates, wear straps, a steel cutting edge with
+teeth and pinned brackets; the loader carries a general-purpose bucket. Dig and
+dump motions are now planned on the changed cells with inverse kinematics:
+changed cells follow the bucket instead of easing together, and joint frames
+animate every machine that worked.
 
 Keep most of the viewport for the scene. Use compact controls for the current
 machine, soil carried, step, reward, episode outcome, and selected cell. Dig

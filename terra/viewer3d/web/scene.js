@@ -11,7 +11,7 @@ import { createObstacleProps } from './obstacles.js';
 import { createEnvironment } from './environment.js';
 import { Effects } from './effects.js';
 import { PostPipeline } from './post.js';
-import { PALETTE, PALETTES, earthMaterial, shared, skyTexture, zoneMaterial } from './materials.js';
+import { PALETTE, PALETTES, earthMaterial, shared, skyTexture, studioBackdrop, zoneMaterial } from './materials.js';
 
 const LAYERS = {
   dig: { color: 0xe69f00, opacity: .55, map: 'target', pattern: 'hatch', test: v => v < 0 },
@@ -27,6 +27,10 @@ const backOut = t => { const c = 1.4; return 1 + (c + 1) * (t - 1) ** 3 + c * (t
 const mix = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const WORK_KINDS = ['dig', 'dump', 'transfer'];
+const PRESENTATIONS = ['studio', 'paper', 'diorama'];
+// Studio zones: a static hatch for the cut and a light tint for disposal.
+const STUDIO_LAYERS = { dig: { color: 0xd98a1c, opacity: .42 }, dump: { color: 0x2f8f6a, opacity: .2, pattern: 'solid' } };
+const layersFor = presentation => presentation === 'studio' ? Object.fromEntries(Object.entries(LAYERS).map(([name, settings]) => [name, { ...settings, ...STUDIO_LAYERS[name] }])) : LAYERS;
 const QUALITY_KEY = 'terra-viewer3d-quality', PRESENTATION_KEY = 'terra-viewer3d-presentation';
 function disposeProps(group) {
   if (!group) return;
@@ -67,7 +71,7 @@ export class TerraScene {
     const quality = stored(QUALITY_KEY); this.quality = quality === 'fast' ? 'fast' : 'high';
     // Without a stored choice, fall back once to fast graphics on slow GPUs.
     this.perf = quality ? null : { frames: 0, elapsed: 0 };
-    this.presentation = stored(PRESENTATION_KEY) === 'diorama' ? 'diorama' : 'paper';
+    const presentation = stored(PRESENTATION_KEY); this.presentation = PRESENTATIONS.includes(presentation) ? presentation : 'studio';
     try { this.post = new PostPipeline(this.renderer, this.scene, this.camera); } catch (error) { console.warn('Post-processing unavailable', error); this.post = null; this.quality = 'fast'; }
     this.lineMaterials = new Set(); this.applyLook();
     let pointerStart = null;
@@ -88,22 +92,24 @@ export class TerraScene {
     if (average > 1 / 24) { this.quality = 'fast'; this.onQualityChange?.('fast'); }
   }
   setQuality(value) { this.quality = value === 'fast' || !this.post ? 'fast' : 'high'; store(QUALITY_KEY, this.quality); return this.quality; }
-  /** 'paper': neutral figure style on white; 'diorama': the stylized island. */
+  /** 'studio': the grid as an earth block on a studio floor with realistic
+   * materials; 'paper': neutral figure style on white; 'diorama': the stylized island. */
   applyLook() {
-    const paper = this.presentation === 'paper'; this.palette = PALETTES[this.presentation];
+    const look = this.presentation, paper = look === 'paper', studio = look === 'studio', diorama = look === 'diorama'; this.palette = PALETTES[look];
     // An HDR white clear color tone-maps to (near) pure white in the rich pipeline.
-    this.scene.background = paper ? new THREE.Color(12, 12, 12) : (this.sky ||= skyTexture());
-    this.scene.fog = !paper && this.span ? new THREE.Fog(new THREE.Color(PALETTE.sky[1]), this.span * 3.2, this.span * 7.5) : null;
-    this.renderer.toneMapping = paper ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
-    this.hemi.color.set(paper ? 0xffffff : 0xcfe4ff); this.hemi.groundColor.set(paper ? 0x8d8880 : 0x9a7650); this.hemi.intensity = paper ? .9 : .8;
-    this.sun.color.set(paper ? 0xffffff : 0xffe9c9); this.sun.intensity = paper ? 2.3 : 2.7;
-    this.fill.color.set(paper ? 0xffffff : 0xa9c9ff); this.fill.intensity = paper ? .45 : .35;
-    this.effects.puffsEnabled = !paper; shared.uMotion.value = paper ? 0 : 1;
-    this.post?.setLook({ vignette: paper ? 0 : .16 });
+    this.scene.background = paper ? new THREE.Color(12, 12, 12) : studio ? (this.backdrop ||= studioBackdrop()) : (this.sky ||= skyTexture());
+    this.scene.fog = diorama && this.span ? new THREE.Fog(new THREE.Color(PALETTE.sky[1]), this.span * 3.2, this.span * 7.5) : null;
+    this.renderer.toneMapping = paper ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1;
+    this.scene.environmentIntensity = studio ? .5 : .28;
+    this.hemi.color.set(paper ? 0xffffff : studio ? 0xe1eaf3 : 0xcfe4ff); this.hemi.groundColor.set(paper ? 0x8d8880 : studio ? 0x7a6a58 : 0x9a7650); this.hemi.intensity = paper ? .9 : studio ? .6 : .8;
+    this.sun.color.set(paper ? 0xffffff : studio ? 0xfff0dc : 0xffe9c9); this.sun.intensity = paper ? 2.3 : studio ? 2.9 : 2.7; this.sun.shadow.radius = studio ? 5 : 3;
+    this.fill.color.set(paper ? 0xffffff : studio ? 0xc6d9f5 : 0xa9c9ff); this.fill.intensity = paper ? .45 : studio ? .4 : .35;
+    this.effects.puffsEnabled = diorama; this.effects.dustEnabled = studio; this.effects.palette = this.palette.clods; shared.uMotion.value = diorama ? 1 : 0;
+    this.post?.setLook({ vignette: diorama ? .16 : studio ? .12 : 0, ink: studio ? 0 : .92 });
     if (this.element.ownerDocument?.body) this.element.ownerDocument.body.dataset.presentation = this.presentation;
   }
   setPresentation(value) {
-    this.presentation = value === 'diorama' ? 'diorama' : 'paper'; store(PRESENTATION_KEY, this.presentation);
+    this.presentation = PRESENTATIONS.includes(value) ? value : 'studio'; store(PRESENTATION_KEY, this.presentation);
     this.applyLook();
     if (this.frame) {
       // Rebuild materials, surroundings and machines for the new look; keep the view.
@@ -118,7 +124,7 @@ export class TerraScene {
     const width = this.element.clientWidth || 1, height = this.element.clientHeight || 1;
     this.renderer.setSize(width, height, false); this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
     this.post?.setSize(width, height, this.pixelRatio);
-    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2()); this.effects.setViewport(size.y, this.camera.fov);
     for (const material of this.lineMaterials ?? []) material.resolution.copy(size);
   }
   point(row, col, height = 0) { const { rows, cols, tile_size_m: tile } = this.frame.grid; return new THREE.Vector3((col + .5 - cols / 2) * tile, height * this.unitHeight, (row + .5 - rows / 2) * tile); }
@@ -166,7 +172,8 @@ export class TerraScene {
     this.terrain = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), [sides, sides, top, bottom, sides, sides], count); this.terrain.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.terrain.castShadow = true; this.terrain.receiveShadow = true; this.world.add(this.terrain);
     this.environment = createEnvironment(frame, { style: this.presentation }); this.world.add(this.environment);
     this.layers = {}; this.boundaries = {}; this.boundaryEntries = new Map();
-    for (const [name, settings] of Object.entries(LAYERS)) {
+    this.layerSettings = layersFor(this.presentation);
+    for (const [name, settings] of Object.entries(this.layerSettings)) {
       const geometry = new THREE.PlaneGeometry(1, 1); geometry.rotateX(-Math.PI / 2);
       const material = zoneMaterial({ color: settings.color, opacity: settings.opacity, pattern: settings.pattern, polygonOffset: true, polygonOffsetFactor: -2 });
       const layer = new THREE.InstancedMesh(geometry, material, count); layer.instanceMatrix.setUsage(THREE.DynamicDrawUsage); layer.visible = this.visibility[name]; layer.renderOrder = 3 + Object.keys(this.layers).length; layer.frustumCulled = false; layer.userData.skipAO = true; this.layers[name] = layer; this.world.add(layer);
@@ -205,7 +212,7 @@ export class TerraScene {
     disposeProps(this.obstacleProps);
     this.obstacleProps = createObstacleProps(frame, { unitHeight: this.unitHeight, style: this.presentation }); this.world.add(this.obstacleProps);
     disposeProps(this.piles);
-    this.piles = new SoilPiles(frame, { previous: mayAnimate ? previous : null, unitHeight: this.unitHeight, layerSettings: LAYERS, visibility: this.visibility, palette: this.palette });
+    this.piles = new SoilPiles(frame, { previous: mayAnimate ? previous : null, unitHeight: this.unitHeight, layerSettings: this.layerSettings, visibility: this.visibility, palette: this.palette, roughness: this.presentation === 'studio' ? .16 : 0 });
     this.world.add(this.piles); this.piles.update(mayAnimate ? 0 : 1);
     this.populate(frame);
     const liveIds = new Set(frame.agents.map(agent => agent.id));
@@ -218,9 +225,19 @@ export class TerraScene {
       this.poseMachine(machine, agent, frame, 1);
     }
     if (mayAnimate) {
+      // Every machine that changed animates in the same transition: joint team
+      // rounds move several machines at once. Dig and dump motions are planned
+      // on the cells each machine changed, which then follow the bucket.
+      const actors = this.actorWork(previous, frame), timing = new Map();
+      for (const actor of actors.values()) {
+        const machine = this.machines.get(actor.id);
+        if ((actor.kind === 'dig' || actor.kind === 'dump') && machine?.plan) actor.plan = machine.plan({ kind: actor.kind, from: actor.from, to: actor.to, cells: actor.cells.map(cell => this.workCell(cell, previous, frame)) });
+        for (const [key, window] of actor.plan?.timing ?? []) timing.set(key, window);
+        actor.events = this.planEvents(actor); actor.fired = new Set();
+      }
       // Work actions get a little more time for anticipation and follow-through.
-      const span = WORK_KINDS.includes(facts.kind) ? duration * 1.3 : duration;
-      this.motion = { previous, frame, facts, start: performance.now(), duration: clamp(span, 100, 900), events: this.planEvents(facts, previous, frame), fired: new Set() };
+      const work = [...actors.values()].some(actor => WORK_KINDS.includes(actor.kind)), span = work ? duration * 1.3 : duration;
+      this.motion = { previous, frame, facts, actors, timing, start: performance.now(), duration: clamp(span, 100, 900) };
       for (const cell of facts.changed) this.updateCell(cell.row, cell.col, previous.maps.action[cell.row][cell.col]); this.dirtyInstances();
       this.update(performance.now());
     }
@@ -289,7 +306,9 @@ export class TerraScene {
     dummy.rotation.set(0, 0, 0); dummy.position.set(point.x, this.floor + thickness / 2, point.z); dummy.scale.set(tile, thickness, tile); dummy.updateMatrix(); this.terrain.setMatrixAt(index, dummy.matrix);
     let offset = 0;
     for (const [name, layer] of Object.entries(this.layers)) {
-      const settings = LAYERS[name], map = frame.maps[settings.map], visible = !soil && map != null && settings.test(map[row][col]) && !frame.maps.padding[row][col];
+      // Studio shows only the cut still to be made: finished target cells reveal the excavated soil.
+      const settings = LAYERS[name], map = frame.maps[settings.map], finished = name === 'dig' && this.presentation === 'studio' && map != null && height <= map[row][col];
+      const visible = !soil && !finished && map != null && settings.test(map[row][col]) && !frame.maps.padding[row][col];
       dummy.position.set(point.x, point.y + tile * (.008 + offset * .003), point.z); dummy.scale.set(visible ? tile : 0, 1, visible ? tile : 0); dummy.updateMatrix(); layer.setMatrixAt(index, dummy.matrix); offset++;
     }
     if (this.gridEntries.has(index)) this.gridLines.geometry.attributes.position.array.set(this.flatGridCell(row, col, height), this.gridEntries.get(index));
@@ -306,32 +325,74 @@ export class TerraScene {
     if (this.gridLines.geometry.attributes.position) this.gridLines.geometry.attributes.position.needsUpdate = true;
   }
 
-  poseMachine(machine, state, frame, progress, oldState, oldFrame, kind = '') {
+  poseMachine(machine, state, frame, progress, oldState, oldFrame, kind = '', plan = null) {
     const from = oldState || state, turning = kind === 'turn' ? backOut(progress) : progress;
     const position = state.position.map((v, i) => mix(from.position[i], v, progress));
     const point = this.point(position[0], position[1]); point.y = mix(this.displayHeightAt(...from.position), this.displayHeightAt(...state.position), progress);
     machine.root.position.copy(point); machine.root.rotation.y = shortestAngle(from.base_yaw, state.base_yaw, turning);
-    machine.setPose({ ...state, previous_loaded: from.loaded, cabin_yaw: shortestAngle(from.cabin_yaw, state.cabin_yaw, turning), wheel_angle: mix(from.wheel_angle, state.wheel_angle, progress) }, state.id === frame.current_agent, progress, kind);
+    machine.setPose({ ...state, previous_loaded: from.loaded, cabin_yaw: shortestAngle(from.cabin_yaw, state.cabin_yaw, turning), wheel_angle: mix(from.wheel_angle, state.wheel_angle, progress) }, state.id === frame.current_agent, progress, kind, plan);
     machine.drive?.(machine.root.position, machine.root.rotation.y);
   }
 
-  /** Timed display events for one transition, in normalized motion time. */
-  planEvents(facts, previous, frame) {
-    const events = [], actor = frame.agents.find(agent => agent.id === frame.actor_id), before = previous.agents.find(agent => agent.id === frame.actor_id);
-    if (!actor || !before) return events;
-    const moved = actor.position.some((v, i) => v !== before.position[i]);
+  /** Per-machine work in one transition. Each changed cell belongs to the
+   * machine whose load change explains it, otherwise to the nearest machine. */
+  actorWork(previous, frame) {
+    const before = new Map(previous.agents.map(agent => [agent.id, agent]));
+    const loads = new Map(frame.agents.map(agent => [agent.id, agent.loaded - (before.get(agent.id)?.loaded ?? agent.loaded)]));
+    const owned = new Map(frame.agents.map(agent => [agent.id, []]));
+    for (const cell of transitionFacts(previous, frame).changed) {
+      const explaining = frame.agents.filter(agent => cell.delta < 0 ? loads.get(agent.id) > 0 : loads.get(agent.id) < 0);
+      let owner = null, distance = Infinity;
+      for (const agent of explaining.length ? explaining : frame.agents) {
+        const d = Math.hypot(agent.position[0] - cell.row, agent.position[1] - cell.col);
+        if (d < distance) { distance = d; owner = agent; }
+      }
+      owned.get(owner.id).push(cell);
+    }
+    const actors = new Map();
+    for (const agent of frame.agents) {
+      const old = before.get(agent.id); if (!old) continue;
+      const cells = owned.get(agent.id), load = loads.get(agent.id);
+      const recipient = frame.agents.find(other => other.id !== agent.id && loads.get(other.id) > 0 && !owned.get(other.id).some(cell => cell.delta < 0));
+      const moved = agent.position.some((v, i) => v !== old.position[i]), slewed = agent.cabin_yaw !== old.cabin_yaw;
+      const turned = slewed || agent.base_yaw !== old.base_yaw || agent.wheel_angle !== old.wheel_angle || agent.shovel_lifted !== old.shovel_lifted;
+      let kind = '';
+      if (cells.some(cell => cell.delta < 0) && load > 0) kind = 'dig';
+      else if (cells.some(cell => cell.delta > 0) && load < 0) kind = 'dump';
+      else if (load < 0 && recipient) kind = 'transfer';
+      else if (cells.length) kind = 'terrain';
+      else if (moved) kind = 'move';
+      else if (turned) kind = 'turn';
+      actors.set(agent.id, { id: agent.id, kind, cells, load, from: old, to: agent, swing: kind === 'turn' && slewed && agent.base_yaw === old.base_yaw, recipient: kind === 'transfer' ? recipient : null });
+    }
+    return actors;
+  }
+
+  /** A changed cell in world space with its displayed surface height before and after. */
+  workCell(cell, previous, frame) {
+    const point = this.point(cell.row, cell.col), blocked = frame.maps.padding[cell.row][cell.col];
+    const display = (value, start) => value > 0 && !blocked ? this.piles.endpointHeight(cell.row, cell.col, start) : value * this.unitHeight;
+    return { key: cell.row * frame.grid.cols + cell.col, row: cell.row, col: cell.col, delta: cell.delta, x: point.x, z: point.z, before: display(previous.maps.action[cell.row][cell.col], true), after: display(frame.maps.action[cell.row][cell.col], false) };
+  }
+
+  /** Timed display events for one machine's transition, in normalized motion time. */
+  planEvents(actor) {
+    const events = [], { kind, plan, from, to } = actor;
+    if (!kind || kind === 'terrain') return events;
+    const moved = to.position.some((v, i) => v !== from.position[i]);
     events.push({ at: 0, once: 'exhaust-start' });
     if (moved) events.push({ from: .05, to: .9, stream: 'tracks', rate: 16 });
-    const cells = kind => facts.changed.filter(cell => kind === 'dig' ? cell.delta < 0 : cell.delta > 0);
-    if (facts.kind === 'dig') {
-      const bite = actor.type === 2 ? .38 : .32;
-      events.push({ at: bite, once: 'bite', cells: cells('dig') });
-      events.push({ from: bite, to: bite + .22, stream: 'scoop', cells: cells('dig'), rate: 70 });
-    } else if (facts.kind === 'dump') {
-      const [start, end] = actor.type === 1 ? [.32, .72] : actor.type === 2 ? [.34, .62] : [.44, .74];
-      events.push({ from: start, to: end, stream: actor.type === 1 ? 'bed' : 'pour', cells: cells('dump'), rate: 60 });
-      events.push({ at: (start + end) / 2 + .1, once: 'landing', cells: cells('dump') });
-    } else if (facts.kind === 'transfer') {
+    const cells = sign => actor.cells.filter(cell => sign < 0 ? cell.delta < 0 : cell.delta > 0);
+    if (kind === 'dig') {
+      const bite = plan?.events.bite ?? (to.type === 2 ? .38 : .32), [start, end] = plan?.events.drag ?? [bite, bite + .22];
+      events.push({ at: bite, once: 'bite', cells: cells(-1) });
+      events.push({ from: start, to: end, stream: 'scoop', cells: cells(-1), rate: plan ? 34 : 70 });
+      if (plan?.events.breakout) events.push({ at: plan.events.breakout, once: 'spill' });
+    } else if (kind === 'dump') {
+      const [start, end] = plan?.events.pour ?? (to.type === 1 ? [.32, .72] : to.type === 2 ? [.34, .62] : [.44, .74]);
+      events.push({ from: start, to: end, stream: to.type === 1 ? 'bed' : 'pour', cells: cells(1), rate: plan ? 230 : 60 });
+      events.push({ at: Math.min(.95, (start + end) / 2 + .1), once: 'landing', cells: cells(1) });
+    } else if (kind === 'transfer') {
       events.push({ from: .44, to: .72, stream: 'transfer', rate: 55 });
     }
     return events;
@@ -344,43 +405,56 @@ export class TerraScene {
   }
 
   runEvents(motion, t, dt) {
-    const actor = this.machines.get(motion.frame.actor_id); if (!actor) return;
-    actor.root.updateMatrixWorld(true);
-    const tile = motion.frame.grid.tile_size_m, fx = this.effects;
-    for (const [index, event] of motion.events.entries()) {
-      if (event.once) {
-        if (motion.fired.has(index) || t < event.at) continue;
-        motion.fired.add(index);
-        if (event.once === 'exhaust-start') fx.puff(actor.exhaust(), { count: 4, size: tile * .28, rise: 1.4, spread: tile * .15, color: 0x5e636b, life: 1.1 });
-        else if (event.once === 'bite') {
-          const at = this.centroid(event.cells) ?? actor.tip();
-          fx.burst(at, { count: 14, speed: 2.4, size: tile * .09 }); fx.puff(at, { count: 7, size: tile * .38, spread: tile * .6, rise: .5 });
-        } else if (event.once === 'landing') {
-          const at = this.centroid(event.cells); if (at) fx.puff(at, { count: 8, size: tile * .42, spread: tile * .7, rise: .4 });
+    const tile = motion.frame.grid.tile_size_m, fx = this.effects, studio = this.presentation === 'studio';
+    for (const actor of motion.actors.values()) {
+      const machine = this.machines.get(actor.id); if (!machine || !actor.events.length) continue;
+      machine.root.updateMatrixWorld(true);
+      for (const [index, event] of actor.events.entries()) {
+        if (event.once) {
+          if (actor.fired.has(index) || t < event.at) continue;
+          actor.fired.add(index);
+          if (event.once === 'exhaust-start') { if (!studio) fx.puff(machine.exhaust(), { count: 4, size: tile * .28, rise: 1.4, spread: tile * .15, color: 0x5e636b, life: 1.1 }); }
+          else if (event.once === 'bite') {
+            const at = studio ? machine.teeth() : this.centroid(event.cells) ?? machine.tip();
+            fx.burst(at, { count: studio ? 9 : 14, speed: studio ? 1.6 : 2.4, size: tile * (studio ? .06 : .09) });
+            fx.puff(at, { count: 7, size: tile * .38, spread: tile * .6, rise: .5 }); fx.dust(at, { count: 6, size: tile * 1.1, spread: tile * .5, life: 1.6 });
+          } else if (event.once === 'landing') {
+            const at = this.centroid(event.cells); if (at) { fx.puff(at, { count: 8, size: tile * .42, spread: tile * .7, rise: .4 }); fx.dust(at, { count: 9, size: tile * 1.5, spread: tile * .8, life: 2 }); }
+          } else if (event.once === 'spill') {
+            fx.throwClods(machine.lip(), machine.lip().setY(this.groundAt(machine.lip().x, machine.lip().z)), { count: 5, flight: .4, spread: tile * .3, size: tile * .06 });
+          }
+        } else if (t >= event.from && t <= event.to) {
+          event.carry = (event.carry ?? 0) + event.rate * dt;
+          let count = Math.floor(event.carry); event.carry -= count;
+          while (count-- > 0) this.emitStream(event, machine, motion, tile);
         }
-      } else if (t >= event.from && t <= event.to) {
-        event.carry = (event.carry ?? 0) + event.rate * dt;
-        let count = Math.floor(event.carry); event.carry -= count;
-        while (count-- > 0) this.emitStream(event, actor, motion, tile);
       }
     }
   }
 
   emitStream(event, actor, motion, tile) {
-    const fx = this.effects, pick = cells => cells?.length ? this.surfacePoint(...Object.values(cells[Math.floor(Math.random() * cells.length)]).slice(0, 2)) : null;
+    const fx = this.effects, studio = this.presentation === 'studio';
+    const pick = cells => cells?.length ? this.surfacePoint(...Object.values(cells[Math.floor(Math.random() * cells.length)]).slice(0, 2)) : null;
     if (event.stream === 'tracks') {
       const state = motion.frame.agents.find(agent => agent.id === actor.agent.id);
       const back = new THREE.Vector3(-actor.agent.height * tile * .45, 0, (Math.random() < .5 ? -1 : 1) * actor.agent.width * tile * .35).applyAxisAngle(new THREE.Vector3(0, 1, 0), actor.root.rotation.y).add(actor.root.position);
-      if (state && Math.random() < .5) fx.puff(back, { count: 1, size: tile * .3, spread: tile * .2, rise: .35, life: .8 });
+      if (state && Math.random() < .5) { fx.puff(back, { count: 1, size: tile * .3, spread: tile * .2, rise: .35, life: .8 }); if (Math.random() < .4) fx.dust(back, { count: 1, size: tile * .9, spread: tile * .3, life: 1.3, opacity: .16 }); }
       if (Math.random() < .25) fx.puff(actor.exhaust(), { count: 1, size: tile * .2, rise: 1.3, spread: tile * .08, color: 0x6a6f77, life: 1 });
     } else if (event.stream === 'scoop') {
-      const from = pick(event.cells); if (from) fx.throwClods(from, actor.tip(), { count: 1, flight: .22, spread: 0, size: tile * .08, settle: false, jitter: tile * .3 });
+      if (studio) {
+        // Loose soil rolls off the teeth and spills beside the bucket.
+        const teeth = actor.teeth(), ground = teeth.clone().add(new THREE.Vector3((Math.random() - .5) * tile * 1.2, 0, (Math.random() - .5) * tile * 1.2));
+        ground.y = this.groundAt(ground.x, ground.z);
+        fx.throwClods(teeth.clone().add(new THREE.Vector3(0, tile * .12, 0)), ground, { count: 1, flight: .28, spread: tile * .15, size: tile * .055, jitter: tile * .2 });
+        if (Math.random() < .12) fx.dust(teeth, { count: 1, size: tile * .8, spread: tile * .3, life: 1.2, opacity: .14 });
+      } else { const from = pick(event.cells); if (from) fx.throwClods(from, actor.tip(), { count: 1, flight: .22, spread: 0, size: tile * .08, settle: false, jitter: tile * .3 }); }
     } else if (event.stream === 'pour' || event.stream === 'bed') {
       const to = pick(event.cells); if (!to) return;
-      const from = event.stream === 'bed' ? actor.bedLip() : actor.tip();
-      fx.throwClods(from, to, { count: 1, flight: .34, spread: tile * .45, size: tile * .095, jitter: tile * .12 });
+      const from = event.stream === 'bed' ? actor.bedLip() : studio ? actor.lip() : actor.tip();
+      fx.throwClods(from, to, { count: 1, flight: studio ? .42 : .34, spread: tile * .45, size: tile * (studio ? .06 : .095), jitter: tile * (studio ? .22 : .12) });
+      if (studio && Math.random() < .06) fx.dust(from, { count: 1, size: tile * .9, spread: tile * .3, life: 1.4, opacity: .12 });
     } else if (event.stream === 'transfer') {
-      const recipient = this.machines.get(motion.facts.recipient?.id); if (!recipient) return;
+      const recipient = this.machines.get(motion.actors.get(actor.agent.id)?.recipient?.id); if (!recipient) return;
       recipient.root.updateMatrixWorld(true);
       fx.throwClods(actor.tip(), recipient.tip(), { count: 1, flight: .3, spread: tile * .2, size: tile * .09, settle: false, jitter: tile * .1 });
     }
@@ -394,12 +468,17 @@ export class TerraScene {
     this.environment?.update(time / 1000);
     const moving = new Map();
     if (this.motion) {
-      const { previous, frame, facts, start, duration } = this.motion, t = clamp((time - start) / duration, 0, 1), eased = smooth(t);
-      if (facts.changed.length) this.piles.update(eased);
-      for (const cell of facts.changed) this.updateCell(cell.row, cell.col, mix(previous.maps.action[cell.row][cell.col], frame.maps.action[cell.row][cell.col], eased));
+      const { previous, frame, facts, start, duration, actors, timing } = this.motion, t = clamp((time - start) / duration, 0, 1), eased = smooth(t), cols = frame.grid.cols;
+      // Planned cells change while the bucket passes them; others ease together.
+      const progressAt = (row, col) => { const window = timing.get(row * cols + col); return window ? smooth(clamp((t - window[0]) / (window[1] - window[0]), 0, 1)) : eased; };
+      if (facts.changed.length) this.piles.update(timing.size ? progressAt : eased);
+      for (const cell of facts.changed) this.updateCell(cell.row, cell.col, mix(previous.maps.action[cell.row][cell.col], frame.maps.action[cell.row][cell.col], progressAt(cell.row, cell.col)));
       for (const agent of frame.agents) {
-        const old = previous.agents.find(a => a.id === agent.id), kind = agent.id === frame.actor_id ? facts.kind : agent.id === facts.recipient?.id && facts.kind === 'transfer' ? 'receive' : '';
-        this.poseMachine(this.machines.get(agent.id), agent, frame, eased, old, previous, kind === 'turn' || kind === 'move' ? (old && agent.position.some((v, i) => v !== old.position[i]) ? 'move' : 'turn') : kind);
+        const old = previous.agents.find(a => a.id === agent.id), actor = actors.get(agent.id);
+        let kind = actor?.kind === 'terrain' ? '' : actor?.kind ?? '';
+        if (!kind && [...actors.values()].some(other => other.recipient?.id === agent.id)) kind = 'receive';
+        if (kind === 'turn' || kind === 'move') kind = old && agent.position.some((v, i) => v !== old.position[i]) ? 'move' : 'turn';
+        this.poseMachine(this.machines.get(agent.id), agent, frame, actor?.plan ? t : eased, old, previous, kind, actor?.plan);
         if (old && agent.position.some((v, i) => v !== old.position[i])) {
           const forward = new THREE.Vector2(Math.cos(agent.base_yaw), Math.sin(agent.base_yaw)), delta = new THREE.Vector2(agent.position[1] - old.position[1], agent.position[0] - old.position[0]);
           moving.set(agent.id, { move: t, direction: Math.sign(forward.x * delta.x - forward.y * delta.y) || 1 });
@@ -448,13 +527,13 @@ export class TerraScene {
   }
   home({ instant = false } = {}) {
     if (!this.frame) return; this.follow = false;
-    const aspect = this.camera.aspect, fit = this.presentation === 'paper' ? 1.45 : 1.75, distance = this.span * (aspect < 1 ? fit / aspect : fit);
+    const aspect = this.camera.aspect, fit = this.presentation === 'diorama' ? 1.75 : 1.45, distance = this.span * (aspect < 1 ? fit / aspect : fit);
     this.flyTo(new THREE.Vector3(distance * .72, distance * .66, distance * .84), new THREE.Vector3(0, -this.span * .04, 0), { instant });
     this.onCameraChange?.({ view: 'home', follow: false });
   }
   top() {
     if (!this.frame) return; this.follow = false; this.camera.up.set(0, 1, 0);
-    this.flyTo(new THREE.Vector3(0, this.span * (this.presentation === 'paper' ? 1.62 : 1.92) / Math.min(this.camera.aspect, 1), this.span * .001), new THREE.Vector3(0, 0, 0));
+    this.flyTo(new THREE.Vector3(0, this.span * (this.presentation === 'diorama' ? 1.92 : 1.62) / Math.min(this.camera.aspect, 1), this.span * .001), new THREE.Vector3(0, 0, 0));
     this.onCameraChange?.({ view: 'top', follow: false });
   }
   setFollow(value) {

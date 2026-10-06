@@ -8,12 +8,14 @@ export const PALETTE = {
   sand: 0xd6ae76, dug: [0xc28a58, 0xad7248, 0x96603d, 0x7f5134], loose: 0xa86c3a,
   strata: [0xc6905c, 0xae7549, 0xd0a26c, 0x9c6a45], rock: 0x8e867d,
   grass: [0x8cc152, 0x74ad45], grassEdge: 0x5f933c,
-  sky: [0x8cc6ea, 0xcfe5ef, 0xf7e7cc],
+  sky: [0x8cc6ea, 0xcfe5ef, 0xf7e7cc], clods: [0xa8713f, 0xb98049, 0x94602f, 0xc48f58],
 };
 // Muted earth tones for figures: neutral tone mapping keeps these close to print.
 export const PALETTES = {
   diorama: PALETTE,
-  paper: { ...PALETTE, name: 'paper', sand: 0xd8cdb9, dug: [0xc4ad8d, 0xae9575, 0x977e60, 0x80684e], loose: 0xab8a64, strata: [0xc8b494, 0xb29c7c, 0xd3c3a6, 0xa38d6e], rock: 0x9b968e },
+  paper: { ...PALETTE, name: 'paper', sand: 0xd8cdb9, dug: [0xc4ad8d, 0xae9575, 0x977e60, 0x80684e], loose: 0xab8a64, strata: [0xc8b494, 0xb29c7c, 0xd3c3a6, 0xa38d6e], rock: 0x9b968e, clods: [0xab8a64, 0x9c7c58, 0xb89a74, 0x8f7050] },
+  // Natural soil: a dry surface, darker moist cuts and freshly turned piles.
+  studio: { ...PALETTE, name: 'studio', sand: 0xa58d69, dug: [0x88694b, 0x795d42, 0x6a5139, 0x5c4631], loose: 0x9a7b56, strata: [0x98795a, 0x846749, 0xa18567, 0x775d43], rock: 0x6f6a63, clods: [0x6c4f35, 0x7b5d40, 0x5d442e, 0x8a6c4e] },
 };
 
 export const shared = {
@@ -71,8 +73,11 @@ export function earthMaterial(mode, parameters = {}, palette = PALETTE) {
   const top = mode === 'island'
     ? `float g = smoothstep(.3, .72, tFbm(vTWorld.xz * .28)); diffuseColor.rgb = mix(${grassA}, ${grassB}, g) * (.94 + tNoise(vTWorld.xz * 3.1) * .1);`
     : mode === 'pile'
-      ? `diffuseColor.rgb *= (.84 + .2 * smoothstep(0., 5., vTWorld.y / uUnit)) * (.92 + tFbm(vTWorld.xz * 2.6) * .16);`
-      : `diffuseColor.rgb *= .9 + tFbm(vTWorld.xz * 1.15) * .2;`;
+      ? `diffuseColor.rgb *= (.84 + .2 * smoothstep(0., 5., vTWorld.y / uUnit)) * (.92 + tFbm(vTWorld.xz * 2.6) * .16)${palette.name === 'studio' ? ' * (.94 + tNoise(vTWorld.xz * 11.) * .12)' : ''};`
+      : palette.name === 'studio'
+        // Studio soil adds a fine grain on top of the broad mottling.
+        ? `diffuseColor.rgb *= (.88 + tFbm(vTWorld.xz * 1.15) * .2) * (.95 + tNoise(vTWorld.xz * 9.) * .1);`
+        : `diffuseColor.rgb *= .9 + tFbm(vTWorld.xz * 1.15) * .2;`;
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms, shared);
     shader.vertexShader = `varying vec3 vTWorld;\nvarying vec3 vTNormal;\n${shader.vertexShader}`
@@ -112,6 +117,16 @@ export function zoneMaterial({ color: hex, opacity, pattern = 'solid', ...rest }
   };
   material.customProgramCacheKey = () => `terra-zone-${kind}`;
   return material;
+}
+
+/** Studio backdrop: a lit center fading to cool grey edges behind the floor. */
+export function studioBackdrop() {
+  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 288;
+  const ctx = canvas.getContext('2d'), gradient = ctx.createRadialGradient(256, 170, 20, 256, 150, 330);
+  gradient.addColorStop(0, '#f2f1ec'); gradient.addColorStop(.55, '#d9dcdc'); gradient.addColorStop(1, '#9fa9b0');
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, 512, 288);
+  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 /** Vertical sky gradient as a screen-space background texture. */

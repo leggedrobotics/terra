@@ -200,8 +200,9 @@ function bindControls() {
   });
 }
 function showQuality(quality) { $('quality').setAttribute('aria-pressed', String(quality === 'high')); }
-function showPresentation(value) { $('presentation').querySelector('span').textContent = value === 'paper' ? 'Paper' : 'Diorama'; }
-function togglePresentation() { if (!scene) return; const value = scene.setPresentation(scene.presentation === 'paper' ? 'diorama' : 'paper'); showPresentation(value); updateInspector(); notify(value === 'paper' ? 'Paper style · plain figure look' : 'Diorama style · stylized island'); }
+const STYLES = { studio: ['Studio', 'Studio style · earth block on a studio floor'], paper: ['Paper', 'Paper style · plain figure look'], diorama: ['Diorama', 'Diorama style · stylized island'] };
+function showPresentation(value) { $('presentation').querySelector('span').textContent = STYLES[value][0]; }
+function togglePresentation() { if (!scene) return; const order = Object.keys(STYLES), value = scene.setPresentation(order[(order.indexOf(scene.presentation) + 1) % order.length]); showPresentation(value); updateInspector(); notify(STYLES[value][1]); }
 function toggleQuality() { if (!scene) return; const quality = scene.setQuality(scene.quality === 'high' ? 'fast' : 'high'); showQuality(quality); notify(quality === 'high' ? 'Rich lighting on · ambient occlusion and outlines' : 'Fast graphics · plain lighting'); }
 function updateLayerButton() { text('layers-toggle', [...document.querySelectorAll('[data-layer]')].some(input => input.checked && !input.disabled) ? 'Hide all' : 'Show all'); }
 
