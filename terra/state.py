@@ -249,7 +249,7 @@ class State(NamedTuple):
             agent_types=agent_types,
             action_types=action_types,
         )
-        agent = jax.tree_map(
+        agent = jax.tree_util.tree_map(
             lambda x: x if isinstance(x, Array) else jnp.array(x), agent
         )
 
