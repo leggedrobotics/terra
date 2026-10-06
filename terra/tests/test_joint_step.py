@@ -20,7 +20,10 @@ def _team(positions, angles=None):
     target = np.zeros(SHAPE, dtype=np.int8)
     target[40:50, 40:50] = -1
     target[5:10, 5:10] = 1
-    state = _state(target, env_cfg=_env_config((0,) * len(positions)))
+    # Historical chassis contention and reward aggregation; full-workspace
+    # rejection has separate native contracts in test_workspace_guard.
+    state = _state(target, env_cfg=_env_config((0,) * len(positions))._replace(
+        workspace_guard_enabled=False))
     for slot, position in enumerate(positions):
         state = _set_pose(state, slot, np.asarray(position, dtype=np.int16))
     if angles is not None:

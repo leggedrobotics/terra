@@ -339,13 +339,66 @@ class State(NamedTuple):
         order = jnp.reshape(jnp.asarray(order, dtype=jnp.int32), (num_agents,))
         state = self
         terms = []
+        if num_agents > 1:
+            from terra.workspace_guard import pose_reservation, sweep_reservation, component_conflicts
+            from terra.workspace_interactions import (
+                candidate_component_exceptions, stationary_component_exceptions,
+            )
+
+            def corners(agent_state):
+                return self._get_agent_corners(
+                    agent_state.pos_base, agent_state.angle_base,
+                    self.env_cfg.agent.width, self.env_cfg.agent.height,
+                )
+
+            initial_reservations = [
+                pose_reservation(a, corners(a), self.env_cfg)
+                for a in self.agent.agent_states[:num_agents]
+            ]
+            reservations = jax.tree_util.tree_map(lambda *x: jnp.stack(x), *initial_reservations)
         for position in range(num_agents):
             slot = order[position]
             before = state._replace(agent=state.agent._replace(current_agent=slot))
             agent_action = jax.lax.dynamic_slice(actions, (slot,), (1,))
-            state = before._apply_action(agent_action)
+            candidate = before._apply_action(agent_action)
+            blocked = jnp.bool_(False)
+            if num_agents > 1:
+                old_agent = before._get_current_agent_state()
+                new_agent = candidate._get_current_agent_state()
+                proposed = sweep_reservation(
+                    old_agent, new_agent, corners(old_agent), corners(new_agent), self.env_cfg,
+                )
+                exceptions = jax.lax.cond(
+                    self.env_cfg.workspace_loading_pairs != 0,
+                    lambda: candidate_component_exceptions(before, candidate, actions, slot),
+                    lambda: jnp.zeros((MAX_AGENTS, MAX_AGENTS, 2, 2), dtype=jnp.bool_),
+                )
+                for peer in range(num_agents):
+                    peer_reservation = jax.tree_util.tree_map(lambda x: x[peer], reservations)
+                    active_pair = (self.agent.agent_active[slot].astype(jnp.bool_)
+                                   & self.agent.agent_active[peer].astype(jnp.bool_) & (slot != peer))
+                    blocked |= active_pair & jnp.any(
+                        component_conflicts(proposed, peer_reservation, self.env_cfg)
+                        & ~exceptions[slot, peer])
+                blocked &= self.env_cfg.workspace_guard_enabled
+                # Reject the entire native candidate, including terrain, load,
+                # carry credit and work accounting. PPO still owns the requested
+                # action; only executed-action reward terms see WAIT.
+                state = jax.lax.cond(blocked, lambda: before, lambda: candidate)
+                reservations = jax.tree_util.tree_map(
+                    lambda old, new: old.at[slot].set(jnp.where(blocked, old[slot], new)),
+                    reservations, proposed,
+                )
+            else:
+                state = candidate
+            effective_action = jnp.where(blocked, jnp.full_like(agent_action, 7), agent_action)
             if with_reward_terms:
-                terms.append(before._agent_reward_terms(state, agent_action))
+                terms.append({
+                    **before._agent_reward_terms(state, effective_action),
+                    "workspace_blocked": blocked,
+                    "workspace_conflicts": jnp.int32(0),
+                    "effective_action": jnp.squeeze(effective_action).astype(jnp.int32),
+                })
             if position < num_agents - 1:
                 state = state._with_traversability_mask()
         state = state._replace(
@@ -354,6 +407,25 @@ class State(NamedTuple):
         )
         if not with_reward_terms:
             return state, None
+        if num_agents > 1:
+            # Independently audit the actual accepted reservations. They include
+            # each accepted sweep until the round ends, even if its endpoint is
+            # already clear. A WAIT never releases a machine's workspace.
+            conflicts = jnp.int32(0)
+            # Accepted loading phases may retain their authorized overlap. The
+            # action-specific checks above already rejected incompatible moves.
+            exceptions = stationary_component_exceptions(state)
+            for left in range(num_agents):
+                for right in range(left + 1, num_agents):
+                    a = jax.tree_util.tree_map(lambda x: x[left], reservations)
+                    b = jax.tree_util.tree_map(lambda x: x[right], reservations)
+                    active_pair = (self.agent.agent_active[left].astype(jnp.bool_)
+                                   & self.agent.agent_active[right].astype(jnp.bool_))
+                    conflicts += (active_pair & jnp.any(
+                        component_conflicts(a, b, self.env_cfg)
+                        & ~exceptions[left, right])).astype(jnp.int32)
+            terms[-1]["workspace_conflicts"] = jnp.where(
+                self.env_cfg.workspace_guard_enabled, conflicts, 0)
         return state, jax.tree_util.tree_map(lambda *x: jnp.stack(x), *terms)
 
     def _apply_action(self, action: Array) -> "State":
@@ -1002,7 +1074,7 @@ class State(NamedTuple):
 
     def _handle_move_forward_wheeled(self) -> "State":
         """
-        Moves the wheeled vehicle forward along an arc determined by wheel angle - if not loaded
+        Wheeled carriers may drive loaded; excavators must first release soil.
         """
         def _move_forward_wheeled():
             cur = self._get_current_agent_state()
@@ -1010,13 +1082,13 @@ class State(NamedTuple):
             orientation_vector = self._base_orientation_to_one_hot_forward(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(True))
 
-        return jax.lax.cond(
-            self._get_current_agent_state().loaded[0] > 0, self._do_nothing, _move_forward_wheeled
-        )
+        cur = self._get_current_agent_state()
+        can_move = (cur.loaded[0] == 0) | (cur.agent_type[0] == 1) | (cur.agent_type[0] == 2)
+        return jax.lax.cond(can_move, _move_forward_wheeled, self._do_nothing)
 
     def _handle_move_backward_wheeled(self) -> "State":
         """
-        Moves the wheeled vehicle backward along an arc determined by wheel angle - if not loaded
+        Wheeled carriers retain their load while reversing away from loading.
         """
         def _move_backward_wheeled():
             cur = self._get_current_agent_state()
@@ -1024,9 +1096,9 @@ class State(NamedTuple):
             orientation_vector = self._base_orientation_to_one_hot_backwards(base_orientation)
             return self._move_on_orientation_with_steering(orientation_vector, jnp.bool_(False))
 
-        return jax.lax.cond(
-            self._get_current_agent_state().loaded[0] > 0, self._do_nothing, _move_backward_wheeled
-        )
+        cur = self._get_current_agent_state()
+        can_move = (cur.loaded[0] == 0) | (cur.agent_type[0] == 1) | (cur.agent_type[0] == 2)
+        return jax.lax.cond(can_move, _move_backward_wheeled, self._do_nothing)
 
     def _apply_base_rotation_mask(self, old_angle_base: Array, new_angle_base: Array) -> Array:
         """
@@ -2998,6 +3070,9 @@ class State(NamedTuple):
                 & not_current
                 & whole_load_fits
             )
+            from terra.workspace_interactions import configured_loading_pairs
+            candidates &= (~jnp.asarray(self.env_cfg.workspace_guard_enabled)
+                           | configured_loading_pairs(self)[current_idx])
 
             any_candidate = jnp.any(candidates)
 

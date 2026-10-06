@@ -30,6 +30,10 @@ class DispatchState(NamedTuple):
     def _mark(self, value):
         return self._replace(marker=jnp.int32(value))
 
+    def _update_transport_origin(self, candidate):
+        # This fixture isolates dispatch; native ledger behavior has its own tests.
+        return candidate
+
     def _handle_move_forward(self):
         return self._mark(10)
 
@@ -119,6 +123,9 @@ def fake_transition_diagnostics(done):
         "target_mutation": zeros_bool,
         "obstacle_mutation": zeros_bool,
         "ended_reset_tier": zeros_int,
+        "workspace_blocked": jnp.zeros(done.shape + (1,), dtype=jnp.bool_),
+        "workspace_conflicts": zeros_int,
+        "effective_actions": jnp.full(done.shape + (1,), 7, dtype=jnp.int32),
     }
 
 

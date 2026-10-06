@@ -352,6 +352,14 @@ class EnvConfig(NamedTuple):
     # fresh digging, relifting and skid pickup. Effort, not calibrated time.
     material_handling_cost: float = 0.0
 
+    # Reserve body and full working envelope, including travel/WAIT, for every
+    # active pair. Disable only to reproduce an explicitly unguarded baseline.
+    workspace_guard_enabled: bool = True
+    # Directed excavator-slot -> truck-slot loading registrations. Construct
+    # with workspace_interactions.loading_pair_mask; zero grants no exceptions.
+    # Appended because EnvConfig is stored positionally in existing checkpoints.
+    workspace_loading_pairs: int = 0
+
     @classmethod
     def new(cls):
         return EnvConfig()

@@ -157,6 +157,9 @@ class TerraEnv(NamedTuple):
             distance_map_override=distance_map,
             initial_agent=initial_agent,
         )
+        if initial_agent is not None and num_agent_slots(env_cfg) > 1:
+            from terra.workspace_guard import validate_prepared_workspace
+            validate_prepared_workspace(state)
         state = self.wrap_state(
             state, executable_dig_observation=self.executable_dig_observation
         )
@@ -175,7 +178,7 @@ class TerraEnv(NamedTuple):
             "task_done": jnp.zeros((), dtype=jnp.bool_),
             "ended_reset_tier": jnp.asarray(state.reset_tier, dtype=jnp.int32),
             "reward_components": self._zero_reward_components(state),
-            **self._zero_transition_diagnostics(),
+            **self._zero_transition_diagnostics(num_agent_slots(state.env_cfg)),
         }
 
         return TimeStep(
@@ -250,7 +253,7 @@ class TerraEnv(NamedTuple):
         }
 
     @staticmethod
-    def _zero_transition_diagnostics() -> dict[str, Array]:
+    def _zero_transition_diagnostics(num_agents: int) -> dict[str, Array]:
         """Return fixed-shape transition diagnostics for reset timesteps."""
         return {
             "timeout": jnp.zeros((), dtype=jnp.bool_),
@@ -263,6 +266,9 @@ class TerraEnv(NamedTuple):
             "transition_unload_units": jnp.zeros((MAX_AGENTS,), dtype=jnp.int32),
             "target_mutation": jnp.zeros((), dtype=jnp.bool_),
             "obstacle_mutation": jnp.zeros((), dtype=jnp.bool_),
+            "workspace_blocked": jnp.zeros((num_agents,), dtype=jnp.bool_),
+            "workspace_conflicts": jnp.zeros((), dtype=jnp.int32),
+            "effective_actions": jnp.full((num_agents,), 7, dtype=jnp.int32),
         }
 
     @staticmethod
@@ -326,6 +332,15 @@ class TerraEnv(NamedTuple):
             & (old_loaded == 0)
             & (new_loaded > 0)
         ).astype(jnp.int32)
+        num_agents = num_agent_slots(state.env_cfg)
+        workspace_blocked = jnp.zeros((num_agents,), dtype=jnp.bool_)
+        workspace_conflicts = jnp.int32(0)
+        effective_actions = jnp.full((num_agents,), 7, dtype=jnp.int32)
+        if agent_terms is not None and "workspace_blocked" in agent_terms:
+            slots = agent_terms["slot"]
+            workspace_blocked = workspace_blocked.at[slots].set(agent_terms["workspace_blocked"])
+            workspace_conflicts = jnp.sum(agent_terms["workspace_conflicts"]).astype(jnp.int32)
+            effective_actions = effective_actions.at[slots].set(agent_terms["effective_action"])
         return {
             "timeout": (
                 new_state.env_steps
@@ -349,6 +364,9 @@ class TerraEnv(NamedTuple):
             "obstacle_mutation": jnp.any(
                 new_state.world.padding_mask.map != state.world.padding_mask.map
             ),
+            "workspace_blocked": workspace_blocked,
+            "workspace_conflicts": workspace_conflicts,
+            "effective_actions": effective_actions,
         }
 
     @staticmethod
@@ -1340,6 +1358,9 @@ class TerraEnvBatch:
                     "target_mutation": item.info["target_mutation"],
                     "obstacle_mutation": item.info["obstacle_mutation"],
                     "ended_reset_tier": item.info["ended_reset_tier"],
+                    "workspace_blocked": item.info["workspace_blocked"],
+                    "workspace_conflicts": item.info["workspace_conflicts"],
+                    "effective_actions": item.info["effective_actions"],
                 }
                 return item._replace(
                     state=state_reset,

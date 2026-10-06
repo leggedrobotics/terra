@@ -9,9 +9,11 @@ from terra.settings import IntLowDim
 from terra.settings import IntMap
 from terra.utils import compute_polygon_mask
 from terra.utils import get_agent_corners
+from terra.workspace_guard import pose_reservation, reservations_conflict
 
 
 TRACKED_MIN_BORDER_DISTANCE_TILES = 8
+MAX_RESET_PLACEMENT_ATTEMPTS = 2048
 
 
 MAX_AGENTS = 4
@@ -140,9 +142,11 @@ class Agent(NamedTuple):
             carry_relocation_credit=jnp.float32(0.0),
         )
         
-        # Place agents one by one so each avoids the footprints placed before it.
+        # Empty random fleets start with separate full workspaces. Loading
+        # permissions do not waive this initial separation requirement.
         combined_mask = initial_mask
         built_states = []
+        built_reservations = []
         
         for i in range(MAX_AGENTS):
             if i >= n_agents:
@@ -185,6 +189,8 @@ class Agent(NamedTuple):
                 allowed_mask,
                 require_all_allowed,
                 min_border_distance=min_border_distance,
+                prior_reservations=tuple(built_reservations),
+                agent_type=agent_type_val,
             )
             angle_i = angle_i.astype(IntLowDim)
             
@@ -207,6 +213,7 @@ class Agent(NamedTuple):
             )
             agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
             combined_mask = jnp.logical_or(combined_mask, agent_mask)
+            built_reservations.append(pose_reservation(st_i, agent_corners, env_cfg))
 
         # built_states is already MAX_AGENTS length
 
@@ -251,9 +258,11 @@ def _get_random_init_state(
     allowed_mask: Array,
     require_all_allowed: Array = jnp.bool_(True),
     min_border_distance: int = -1,
+    prior_reservations: tuple = (),
+    agent_type: int = 0,
 ):
     def _get_random_agent_state(carry):
-        key, padding_mask, pos_base, angle_base = carry
+        key, padding_mask, pos_base, angle_base, attempts = carry
         max_center_coord = jnp.ceil(
             jnp.max(
                 jnp.array([env_cfg.agent.width / 2 - 1, env_cfg.agent.height / 2 - 1])
@@ -292,10 +301,10 @@ def _get_random_init_state(
         angle_base = jax.random.randint(
             subkey_angle, (1,), 0, env_cfg.agent.angles_base, dtype=IntMap
         )
-        return key, padding_mask, pos_base, angle_base
+        return key, padding_mask, pos_base, angle_base, attempts + 1
 
     def _check_agent_obstacles_intersection(carry):
-        key, padding_mask, pos_base, angle_base = carry
+        key, padding_mask, pos_base, angle_base, attempts = carry
         map_width = padding_mask.shape[0]
         map_height = padding_mask.shape[1]
 
@@ -352,7 +361,25 @@ def _get_random_init_state(
                 operand=None,
             )
             
-            return obstacle_inside | action_illegal | allowed_violation | border_violation
+            workspace_violation = jnp.bool_(False)
+            if prior_reservations:
+                candidate = AgentState(
+                    pos_base=pos_base,
+                    angle_base=angle_base,
+                    angle_cabin=jnp.zeros(1, dtype=IntLowDim),
+                    wheel_angle=jnp.zeros(1, dtype=IntLowDim),
+                    loaded=jnp.zeros(1, dtype=IntLowDim),
+                    agent_type=jnp.asarray(agent_type, dtype=IntLowDim).reshape(1),
+                    action_type=jnp.zeros(1, dtype=IntLowDim),
+                    shovel_lifted=jnp.zeros(1, dtype=IntLowDim),
+                )
+                reservation = pose_reservation(candidate, agent_corners_xy, env_cfg)
+                workspace_violation = jnp.asarray(env_cfg.workspace_guard_enabled) & jnp.any(
+                    jnp.stack([reservations_conflict(reservation, prior, env_cfg)
+                               for prior in prior_reservations])
+                )
+            return (obstacle_inside | action_illegal | allowed_violation
+                    | border_violation | workspace_violation)
 
         keep_searching = jax.lax.cond(
             jnp.any(pos_base < 0) | jnp.any(angle_base < 0),
@@ -361,18 +388,40 @@ def _get_random_init_state(
         )
         return keep_searching
 
-    key, padding_mask, pos_base, angle_base = jax.lax.while_loop(
-        _check_agent_obstacles_intersection,
+    carry = jax.lax.while_loop(
+        lambda carry: (carry[-1] < MAX_RESET_PLACEMENT_ATTEMPTS)
+                      & _check_agent_obstacles_intersection(carry),
         _get_random_agent_state,
         (
             key,
             padding_mask,
             jnp.array([-1, -1], dtype=IntMap),
             jnp.full((1,), -1, dtype=IntMap),
+            jnp.int32(0),
         ),
     )
+    exhausted = _check_agent_obstacles_intersection(carry)
+
+    def report_failure(failed):
+        jax.debug.callback(_raise_reset_placement_error, failed, len(prior_reservations))
+        return jnp.bool_(False)
+
+    # A vmapped cond executes both branches, including debug callbacks. A
+    # one-iteration loop has no host callback when the entire batch succeeds.
+    # In a mixed batch the callback itself checks its own failure flag.
+    jax.lax.while_loop(lambda failed: failed, report_failure, exhausted)
+    key, padding_mask, pos_base, angle_base, _ = carry
 
     return pos_base, angle_base, key
+
+
+def _raise_reset_placement_error(failed, slot):
+    if bool(failed):
+        raise RuntimeError(
+            f'Random reset could not place agent slot {int(slot)} after '
+            f'{MAX_RESET_PLACEMENT_ATTEMPTS} attempts; check free terrain and '
+            'full-workspace separation.'
+        )
 
 
 
