@@ -43,3 +43,27 @@ browser memory limit. JSON gzip is handled by Python, not the local file picker.
 WebGL2 is required. PNG capture exports the rendered scene, without HTML panels.
 `window.terraViewer` exposes the scene and `show(index, options)` for scripted
 captures and debugging; the viewer itself does not use it.
+
+## Postprocessed metric plans
+
+`postprocessed.js` provides `PostprocessedEpisode` for the separate
+`terra.postprocessed.v1` playback format produced by Moleworks ROS TerraMapMaker.
+The TerraMapMaker dashboard and standalone player bundle it with this same
+studio scene. The normal native-replay file picker still uses `terra.viewer3d.v1`.
+
+Metric playback retains the original grid (up to 1,048,576 cells), separate native
+and loose soil heights in metres, exact route samples, stable agent IDs and
+explicit ownership of every changed cell. Array rows advance plan Y and columns
+plan X. `origin_xy_m` is the map position of cell `[0,0]`'s centre; optional grid
+`yaw_rad` rotates these axes into map coordinates. Machine and cabin headings
+are absolute map headings, and steering is supplied in radians. Reverse seeking
+reconstructs the same terrain without quantizing heights or using uint16 indices.
+
+`metric-terrain.js` merges exactly coplanar cell faces and exposed wall spans;
+it never resamples the grid. Picking still returns individual grid cells.
+Metric motion interpolates only saved route segments with bounded heading
+interpolation. Explicit `relocate` frames snap, making missing routes visible.
+Workspace, reservation and route overlays belong to the TerraMapMaker adapter.
+Arm animation and display durations remain illustrative. Rendering a rejected
+proposal does not change its validation status or establish native/physical
+execution.

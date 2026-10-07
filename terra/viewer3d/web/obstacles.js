@@ -11,10 +11,10 @@ function hash(value, salt = 0) {
 const noise = (seed, salt) => hash(seed, salt) / 0xffffffff;
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-function inspectMask(padding) {
+function inspectMask(padding, maxSize = 128) {
   if (!Array.isArray(padding) || !padding.length || !Array.isArray(padding[0]) || !padding[0].length) throw new Error('Obstacle padding must be a nonempty rectangular array.');
   const rows = padding.length, cols = padding[0].length;
-  if (rows > 128 || cols > 128 || padding.some(row => !Array.isArray(row) || row.length !== cols || row.some(value => ![0, 1, false, true].includes(value)))) throw new Error('Obstacle padding must contain aligned 0/1 cells, at most 128 × 128.');
+  if (rows > maxSize || cols > maxSize || padding.some(row => !Array.isArray(row) || row.length !== cols || row.some(value => ![0, 1, false, true].includes(value)))) throw new Error(`Obstacle padding must contain aligned 0/1 cells, at most ${maxSize} × ${maxSize}.`);
   return { rows, cols };
 }
 
@@ -88,8 +88,8 @@ function expandInsideComponent(rectangle, member, rows, cols) {
  * Rectangles may overlap within a component. That lets thin branches join a
  * neighboring boulder instead of leaving one miniature rock per leftover cell.
  */
-export function planObstacleFootprints(padding) {
-  const { rows, cols } = inspectMask(padding), plans = [];
+export function planObstacleFootprints(padding, maxSize = 128) {
+  const { rows, cols } = inspectMask(padding, maxSize), plans = [];
   const components = componentsOf(padding, rows, cols);
   for (const [componentIndex, component] of components.entries()) {
     const height = component.maxRow - component.minRow + 1, width = component.maxCol - component.minCol + 1;
@@ -198,9 +198,10 @@ export function createObstacleProps(frame, options = {}) {
   if (typeof options === 'number') options = { tile: options };
   const tile = options.tile ?? frame.grid.tile_size_m, unitHeight = options.unitHeight ?? tile * .48;
   if (!Number.isFinite(tile) || tile <= 0 || !Number.isFinite(unitHeight) || unitHeight <= 0) throw new Error('Obstacle display scale must be finite and positive.');
-  const { rows, cols } = inspectMask(frame.maps.padding);
+  const maxSize = frame.metric ? 1048576 : 128;
+  const { rows, cols } = inspectMask(frame.maps.padding, maxSize);
   if (rows !== frame.grid.rows || cols !== frame.grid.cols || !Array.isArray(frame.maps.action) || frame.maps.action.length !== rows || frame.maps.action.some(row => !Array.isArray(row) || row.length !== cols || row.some(value => !Number.isFinite(value)))) throw new Error('Obstacle terrain must match the frame grid and contain finite heights.');
-  const plans = planObstacleFootprints(frame.maps.padding), root = new THREE.Group(), context = { paper: options.style !== 'diorama' };
+  const plans = planObstacleFootprints(frame.maps.padding, maxSize), root = new THREE.Group(), context = { paper: options.style !== 'diorama' };
   root.name = 'Terra obstacle props'; root.userData.footprints = plans;
   for (const plan of plans) {
     const prop = new THREE.Group(); prop.name = `${plan.kind}-${plan.row}-${plan.col}`; prop.userData.footprint = { ...plan };
