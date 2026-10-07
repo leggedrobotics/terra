@@ -51,6 +51,16 @@ captures and debugging; the viewer itself does not use it.
 The TerraMapMaker dashboard and standalone player bundle it with this same
 studio scene. The normal native-replay file picker still uses `terra.viewer3d.v1`.
 
+The paired [Moleworks ROS workflow](https://github.com/leggedrobotics/moleworks_ros/blob/terra-fleet-postprocess/scripts/TerraMapMaker/README.md#checking-plans-in-one-page)
+documents dashboard export, standalone playback and a runnable two-excavator
+example. Install this directory's dependencies with `npm ci`, then pass its
+absolute path as `--terra-viewer` (or `TERRA_VIEWER_WEB` for `plan fleet`). The ROS
+exporter bundles the adapter and scene directly; a separate `npm run build` is
+only needed to update the normal Python viewer's checked-in static bundle.
+Postprocessing saved traces does not require Terra policy inference. Capturing
+new joint-action traces requires the separate joint Terra runtime described in
+the ROS workflow; this viewer branch does not provide those APIs.
+
 Metric playback retains the original grid (up to 1,048,576 cells), separate native
 and loose soil heights in metres, exact route samples, stable agent IDs and
 explicit ownership of every changed cell. Array rows advance plan Y and columns
