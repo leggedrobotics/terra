@@ -30,6 +30,7 @@ from terra.config import REWARD_V2_V21_SHAPING_GAMMA
 from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
+from terra.dig_direction import boundary_pull_details, pull_stroke_details
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
@@ -1314,6 +1315,68 @@ class State(NamedTuple):
         return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_foundation_border_mask(self) -> Array:
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            lambda: self._get_pull_boundary_details()[0],
+            self._get_legacy_foundation_border_mask,
+        )
+
+    def _get_precision_required_band(self) -> Array:
+        """Fixed target cells requiring a tangential pull in this episode.
+
+        This uses the dig rule's finite boundary distances. It depends on the
+        immutable target and episode settings, not current excavation progress
+        or the machine pose. Legacy and bulk episodes expose an empty band.
+        """
+        enabled = jnp.bool_(self.env_cfg.pull_direction_alignment) & jnp.bool_(
+            self.env_cfg.enforce_foundation_border_alignment
+        )
+        return jax.lax.cond(
+            enabled,
+            lambda: self._get_pull_boundary_details()[0],
+            lambda: jnp.zeros_like(_as_2d_map(self.world.target_map.map), dtype=jnp.bool_),
+        )
+
+    def _get_pull_boundary_details(self) -> tuple[Array, Array, Array]:
+        """Metric boundary band, radial-pull permission, and angular error.
+
+        Optional precision applies to all target edges, including trench ends.
+        Boundary geometry belongs to the fixed target, never the evolving hole.
+        """
+        records = _as_axes_table(self.world.foundation_border_axes)
+        # Keep the original foundation metadata count for unrelated legacy
+        # dump applicability. Prepared geometry has its own sentinel padding.
+        count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
+        edge, allowed, error = boundary_pull_details(
+            _as_2d_map(self.world.target_map.map),
+            records,
+            count,
+            self._get_current_agent_state().pos_base.astype(jnp.float32),
+            self.env_cfg.tile_size,
+            self.env_cfg.edge_band_width_m,
+            self.env_cfg.edge_pull_tolerance_rad,
+        )
+        precision = jnp.bool_(self.env_cfg.enforce_foundation_border_alignment)
+        return edge & precision, allowed | ~precision, jnp.where(precision, error, 0.0)
+
+    def _get_pull_dig_permission(self) -> Array:
+        """Bulk stroke room, plus parallel pulling at requested precision edges."""
+        records = _as_axes_table(self.world.foundation_border_axes)
+        count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
+        min_radius, max_radius = self._dig_cone_radius_bounds()
+        allowed, _ = pull_stroke_details(
+            _as_2d_map(self.world.target_map.map), records, count,
+            self._get_current_agent_state().pos_base,
+            self.env_cfg.tile_size, min_radius, max_radius,
+            self.env_cfg.dig_pull_min_length_m,
+        )
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.enforce_foundation_border_alignment),
+            lambda: allowed & self._get_pull_boundary_details()[1],
+            lambda: allowed,
+        )
+
+    def _get_legacy_foundation_border_mask(self) -> Array:
         """Returns a boolean mask for the inside border band of dig target tiles."""
         dig_target_full = self.world.target_map.map < 0
         # This geometry is always per-map 2D. In some traced paths XLA can see
@@ -1349,6 +1412,13 @@ class State(NamedTuple):
         return jnp.logical_and(dig_target, jnp.logical_not(eroded))
 
     def _get_foundation_border_alignment_mask(self, workspace_mask_flat: Array) -> Array:
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            lambda: self._get_pull_dig_permission().reshape(-1),
+            lambda: self._get_legacy_foundation_border_alignment_mask(workspace_mask_flat),
+        )
+
+    def _get_legacy_foundation_border_alignment_mask(self, workspace_mask_flat: Array) -> Array:
         """
         Border tiles must be dug with arm aligned to edge direction.
         Uses stricter tolerance for horizontal/vertical edges, looser for diagonal edges.
@@ -2296,6 +2366,9 @@ class State(NamedTuple):
         enforce_border_alignment = jnp.bool_(
             getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
         )
+        # New-mode permission is applied once through the shared fresh-cell
+        # context in _dig_eligibility, including the executable observations.
+        enforce_border_alignment &= ~jnp.bool_(self.env_cfg.pull_direction_alignment)
         border_alignment_mask = jax.lax.cond(
             enforce_border_alignment,
             lambda: self._get_foundation_border_alignment_mask(dig_mask),
@@ -2343,7 +2416,7 @@ class State(NamedTuple):
             return self._admit_fresh_trench_cells(dig_mask, context[1], context[2])
 
         dig_mask = jax.lax.cond(
-            jnp.bool_(self.env_cfg.enforce_trench_dig_alignment),
+            jnp.bool_(self.env_cfg.enforce_trench_dig_alignment) | jnp.bool_(self.env_cfg.pull_direction_alignment),
             _align_fresh_cells,
             lambda: dig_mask,
         )
@@ -2478,6 +2551,19 @@ class State(NamedTuple):
         valid_axes = jnp.arange(max_axes) < trench_type
         if records.shape[1] >= 8:
             segment_vectors = records[:, 5:7] - records[:, 3:5]
+            normal_norms = jnp.linalg.norm(axes[:, :2], axis=1)
+            start_residuals = jnp.abs(
+                axes[:, 0] * records[:, 4] + axes[:, 1] * records[:, 3] + axes[:, 2]
+            ) / jnp.maximum(normal_norms, 1e-6)
+            end_residuals = jnp.abs(
+                axes[:, 0] * records[:, 6] + axes[:, 1] * records[:, 5] + axes[:, 2]
+            ) / jnp.maximum(normal_norms, 1e-6)
+            valid_lines = (
+                jnp.all(jnp.isfinite(records[:, :8]), axis=1)
+                & (normal_norms > 1e-6)
+                & (start_residuals <= 0.05 + 1e-5)
+                & (end_residuals <= 0.05 + 1e-5)
+            )
             finite_section_metadata = jnp.logical_and(
                 jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
                 jnp.logical_and(
@@ -2486,6 +2572,7 @@ class State(NamedTuple):
                     > jnp.float32(1e-6),
                 ),
             )
+            finite_section_metadata &= (~jnp.bool_(self.env_cfg.pull_direction_alignment) | valid_lines)
         else:
             finite_section_metadata = jnp.zeros(
                 (max_axes,), dtype=jnp.bool_
@@ -2690,6 +2777,7 @@ class State(NamedTuple):
             ),
             axis=0,
         )
+
         return (
             section_membership,
             axis_has_fresh,
@@ -2718,6 +2806,24 @@ class State(NamedTuple):
         )
 
     def _fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
+        """Shared per-cell permission; new bulk strokes do not need trench axes."""
+        def pull_context():
+            target = _as_2d_map(self.world.target_map.map)
+            fresh = (target < 0) & (_as_2d_map(self.world.action_map.map) == 0)
+            current = self._get_current_agent_state()
+            permission = jax.lax.cond(
+                (current.agent_type[0] == 0) & (current.loaded[0] == 0),
+                self._get_pull_dig_permission,
+                lambda: jnp.ones(target.shape, jnp.bool_),
+            )
+            return fresh, fresh, permission
+
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            pull_context, self._legacy_fresh_trench_pose_valid_cells,
+        )
+
+    def _legacy_fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
         """Per-cell view of the fresh-trench gate for the CURRENT base pose.
 
         Returns ``(fresh_target, fresh_trench_target, pose_valid)`` as [H, W]
@@ -2769,6 +2875,26 @@ class State(NamedTuple):
         return fresh_target, fresh_trench_target, pose_valid
 
     def _get_fresh_trench_dig_alignment_details(
+        self, dig_mask: Array | None = None
+    ) -> tuple[Array, Array, Array, Array]:
+        # Chassis yaw/standoff are not new-mode constraints. Retain feature
+        # shapes, report actual admission, and neutralize those old errors.
+        def pull_details():
+            candidate = dig_mask
+            if candidate is None:
+                candidate = self._mask_out_wrong_dig_tiles(self._build_dig_dump_cone())
+            fresh, scoped, permission = self._fresh_trench_pose_valid_cells()
+            admitted = self._admit_fresh_trench_cells(candidate, scoped, permission)
+            applicable = jnp.any(fresh.reshape(-1) & jnp.asarray(candidate).reshape(-1))
+            valid = ~applicable | jnp.any(admitted.reshape(-1) & fresh.reshape(-1))
+            return valid, jnp.float32(0), jnp.float32(0), admitted
+
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment), pull_details,
+            lambda: self._get_legacy_fresh_trench_dig_alignment_details(dig_mask),
+        )
+
+    def _get_legacy_fresh_trench_dig_alignment_details(
         self, dig_mask: Array | None = None
     ) -> tuple[Array, Array, Array, Array]:
         """Measure and filter a prospective fresh-trench dig.
@@ -4121,7 +4247,11 @@ class State(NamedTuple):
         # Each excavator gets its own trench reward based on its position
         current_agent_type = self._get_current_agent_state().agent_type[0]
         is_excavator = current_agent_type == 0
-        should_apply_trench = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
+        should_apply_trench = (
+            jnp.bool_(self.env_cfg.apply_trench_rewards)
+            & is_excavator
+            & ~jnp.bool_(self.env_cfg.pull_direction_alignment)
+        )
         
         trench_r = jax.lax.cond(
             should_apply_trench,

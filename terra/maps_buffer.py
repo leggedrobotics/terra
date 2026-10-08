@@ -41,7 +41,8 @@ class MapsBuffer(NamedTuple):
     # The first three columns preserve the legacy line-equation interface.
     trench_axes: Array
     trench_types: Array  # [map_type, n_maps], number of trench axes, or -1 if unavailable
-    foundation_border_axes: Array  # [map_type, n_maps, n_border_axes_per_map, 3]
+    # Legacy ABC lines; pull-direction mode prepares ABC,y0,x0,y1,x1 records.
+    foundation_border_axes: Array
     foundation_border_types: Array  # [map_type, n_maps], number of border axes, or -1
     action_maps: Array  # [map_type, n_maps, W, H]
     slot_indices: Array  # [map_type, n_maps], zero-based manifest slot

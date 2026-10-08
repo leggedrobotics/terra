@@ -139,6 +139,10 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # whenever the gate itself is disabled, which the v1 benchmark requires.
     payload.pop("trench_dig_standoff_enforced")
     payload.pop("trench_dig_max_offset_m")
+    if payload.pop("pull_direction_alignment"):
+        raise RuntimeError("The v1 benchmark requires pull_direction_alignment=False.")
+    for name in ("edge_band_width_m", "edge_pull_tolerance_rad", "trench_pull_tolerance_rad", "dig_pull_min_length_m"):
+        payload.pop(name)
     # Later foundation and retained-work behavior fields preserve v1 only at
     # their inert defaults. Exclude them from this base receipt, not from
     # EnvConfig or checkpoint/evaluation treatment metadata. A changed default
