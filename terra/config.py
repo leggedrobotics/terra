@@ -357,6 +357,15 @@ class EnvConfig(NamedTuple):
     retained_work_travel_cost: float = 0.0  # per inter-work straight-line metre
     retained_work_turn_cost: float = 0.0  # per inter-work wrapped base radian
 
+    # Append only: old EnvConfig pickles reconstruct positionally.
+    # Fresh excavation follows each cell's radial pull toward the base.
+    # This opt-in supersedes legacy edge/trench pose gates.
+    pull_direction_alignment: bool = False
+    edge_band_width_m: float = 0.6
+    edge_pull_tolerance_rad: float = 0.436332313  # 25 degrees
+    trench_pull_tolerance_rad: float = 0.261799388  # Reserved strict-draft field; unused.
+    dig_pull_min_length_m: float = 2.5  # 0.5 m entry + 1.5 m work + 0.5 m exit
+
     @classmethod
     def new(cls):
         return EnvConfig()

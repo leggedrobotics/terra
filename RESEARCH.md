@@ -25,6 +25,16 @@ operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 - `terra/config.py`: curriculum and reward/environment configuration
 - `terra/maps_buffer.py`: dataset and map metadata loading
 
+## October 6 experimental cutting-space rule
+
+The opt-in [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) requires
+2.5 m of continuous radial target space and optionally parallel pulls at
+precision edges. Manual native straight and L-shaped trenches complete with
+legal disposal and egress. Frozen GRU u110000 transfers poorly: 0/32 matched
+road-network starts versus 32/32 with its original rules. The experiment stays
+default off; bulk completion accepts implicit ramped margins, without modeling
+physical ramp height or bucket volume.
+
 ## September 21 metadata precision and endpoint clearance
 
 Straight-trench replay exposed two geometry defects. Float16 storage moved a
