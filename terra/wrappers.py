@@ -530,6 +530,11 @@ class LocalMapWrapper:
         angle_diff = jnp.abs((edge_angle - arm_angle + jnp.pi) % (2.0 * jnp.pi) - jnp.pi)
         angle_diff = jnp.minimum(angle_diff, jnp.pi - angle_diff)
         edge_alignment_error_map = angle_diff * border_mask
+        edge_alignment_error_map = jax.lax.cond(
+            jnp.bool_(state.env_cfg.pull_direction_alignment),
+            lambda: state._get_pull_boundary_details()[2] * border_mask,
+            lambda: edge_alignment_error_map,
+        )
         local_map_edge_alignment_error = LocalMapWrapper._wrap_with_masks(
             state, edge_alignment_error_map, local_cartesian_masks, current_arm_angle
         )

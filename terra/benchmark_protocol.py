@@ -139,6 +139,10 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # whenever the gate itself is disabled, which the v1 benchmark requires.
     payload.pop("trench_dig_standoff_enforced")
     payload.pop("trench_dig_max_offset_m")
+    if payload.pop("pull_direction_alignment"):
+        raise RuntimeError("The v1 benchmark requires pull_direction_alignment=False.")
+    for name in ("edge_band_width_m", "edge_pull_tolerance_rad", "trench_pull_tolerance_rad", "dig_pull_min_length_m"):
+        payload.pop(name)
     # Later foundation and retained-work behavior fields preserve v1 only at
     # their inert defaults. Exclude them from this base receipt, not from
     # EnvConfig or checkpoint/evaluation treatment metadata. A changed default
@@ -161,6 +165,17 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # The excavator dump reach was appended later; 0 keeps the v1 dump cone.
     if payload["agent"].pop("dump_max_radius_m") != 0.0:
         raise RuntimeError("The v1 benchmark requires agent.dump_max_radius_m=0.")
+    # The machine working rules were appended later still; 0 disables each.
+    for name in (
+        "dig_min_radius_m",
+        "dump_min_radius_m",
+        "dug_clearance_m",
+        "dump_min_dug_distance_m",
+    ):
+        if payload["agent"].pop(name) != 0.0:
+            raise RuntimeError(f"The v1 benchmark requires agent.{name}=0.")
+    if payload["agent"].pop("centre_chassis_on_base"):
+        raise RuntimeError("The v1 benchmark requires agent.centre_chassis_on_base=False.")
     config_sha256 = canonical_json_sha256(payload)
     if config_sha256 != FROZEN_ENV_CONFIG_SHA256:
         raise RuntimeError(

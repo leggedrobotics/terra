@@ -5,7 +5,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { makeMachine, SLOT_COLORS } from './models.js';
-import { shortestAngle, transitionFacts, isJointFrame, workspaceVertexToWorld } from './data.js';
+import { shortestAngle, transitionFacts, diggingView, isJointFrame, workspaceVertexToWorld } from './data.js';
 import { SoilPiles } from './piles.js';
 import { createObstacleProps } from './obstacles.js';
 import { createEnvironment } from './environment.js';
@@ -19,8 +19,15 @@ const LAYERS = {
   dump: { color: 0x009e73, opacity: .5, map: 'target', pattern: 'dots', test: v => v > 0 },
   restricted: { color: 0xd55e00, opacity: .42, map: 'dumpability_static', pattern: 'cross', test: v => !v },
   dumpability: { color: 0x0072b2, opacity: .28, map: 'dumpability', pattern: 'solid', test: v => !!v },
-  interaction: { color: 0x56b4e9, opacity: .26, map: 'interaction', pattern: 'solid', test: v => !!v },
+  interaction: { color: 0x56b4e9, opacity: .20, map: '_workspace', pattern: 'solid', test: v => !!v },
+  footprint: { color: 0x274c59, opacity: .12, map: 'footprint', pattern: 'solid', test: v => !!v },
+  precision: { color: 0x7553b5, opacity: .08, map: 'precision_required_band', pattern: 'solid', test: v => !!v },
+  eligibleNow: { color: 0x009b68, opacity: .80, map: '_digging', pattern: 'solid', test: v => v === 1 },
+  eligibleSwing: { color: 0xe4a317, opacity: .82, map: '_digging', pattern: 'dots', test: v => v === 2 },
+  eligibleBlocked: { color: 0xc74d45, opacity: .58, map: '_digging', pattern: 'hatch', test: v => v === 3 },
+  eligibleLoaded: { color: 0x929ba0, opacity: .85, map: '_digging', pattern: 'solid', test: v => v === 4 },
 };
+const ELIGIBILITY_LAYERS = ['eligibleNow', 'eligibleSwing', 'eligibleBlocked', 'eligibleLoaded'];
 const matrix = new THREE.Matrix4(), dummy = new THREE.Object3D(), color = new THREE.Color();
 const smooth = t => t * t * (3 - 2 * t);
 const easeInOut = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -72,7 +79,7 @@ export class TerraScene {
     this.sun.shadow.mapSize.set(2048, 2048); this.sun.shadow.bias = -.0004; this.sun.shadow.radius = 3; this.scene.add(this.sun); this.scene.add(this.sun.target);
     this.fill = new THREE.DirectionalLight(0xa9c9ff, .35); this.scene.add(this.fill);
     this.world = new THREE.Group(); this.scene.add(this.world); this.machines = new Map(); this.heightScale = 1;
-    this.visibility = { dig: true, dump: true, restricted: false, dumpability: false, interaction: true, workspace: true, grid: false, tags: true };
+    this.visibility = { dig: true, dump: true, restricted: false, dumpability: false, interaction: true, workspace: true, footprint: true, precision: true, eligibility: true, eligibleNow: true, eligibleSwing: true, eligibleBlocked: true, eligibleLoaded: true, grid: false, tags: true };
     this.raycaster = new THREE.Raycaster(); this.pointer = new THREE.Vector2(); this.selected = null;
     this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.effects = new Effects({ groundHeight: (x, z) => this.groundAt(x, z) }); this.scene.add(this.effects);
@@ -189,15 +196,15 @@ export class TerraScene {
       let capacity = count, slots = null;
       if (frame.metric) {
         slots = new Int32Array(count).fill(-1); capacity = 0;
-        const map = frame.maps[settings.map];
+        const map = this.layerMaps[settings.map];
         if (map != null) for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (!frame.maps.padding[row][col] && settings.test(map[row][col])) slots[row * cols + col] = capacity++;
       }
       const layer = new THREE.InstancedMesh(geometry, material, capacity); layer.userData.cellSlots = slots; layer.instanceMatrix.setUsage(THREE.DynamicDrawUsage); layer.visible = this.visibility[name]; layer.renderOrder = 3 + Object.keys(this.layers).length; layer.frustumCulled = false; layer.userData.skipAO = true; this.layers[name] = layer; this.world.add(layer);
-      if (name === 'dig' || name === 'dump' || name === 'interaction') {
-        const material = new LineMaterial({ color: new THREE.Color(settings.color).multiplyScalar(.82), linewidth: 2.6, transparent: true, opacity: .95, depthWrite: false });
+      if (name === 'dig' || name === 'dump' || name === 'interaction' || name === 'precision' || name === 'footprint') {
+        const material = new LineMaterial({ color: new THREE.Color(settings.color).multiplyScalar(name === 'precision' ? 1 : .82), linewidth: name === 'precision' ? 3.5 : 2.6, transparent: true, opacity: .95, depthWrite: false });
         material.resolution.copy(this.renderer.getDrawingBufferSize(new THREE.Vector2())); this.lineMaterials.add(material);
         const line = new LineSegments2(new LineSegmentsGeometry(), material);
-        line.renderOrder = 14; line.visible = this.visibility[name]; line.frustumCulled = false; this.boundaries[name] = line; this.world.add(line);
+        line.renderOrder = name === 'precision' ? 18 : 14; line.visible = this.visibility[name]; line.frustumCulled = false; this.boundaries[name] = line; this.world.add(line);
       }
     }
     this.gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x6b5132, transparent: true, opacity: .22, depthWrite: false })); this.gridLines.renderOrder = 10; this.gridLines.visible = this.visibility.grid; this.gridLines.frustumCulled = false; this.world.add(this.gridLines);
@@ -220,6 +227,9 @@ export class TerraScene {
     if (previous?.metric && this.motion?.facts.changed.length) { this.setFloor(this.finalFloor); this.populate(previous); }
     const dimensionsChanged = !previous || !!previous.metric !== !!frame.metric || previous.grid.rows !== frame.grid.rows || previous.grid.cols !== frame.grid.cols || previous.grid.tile_size_m !== frame.grid.tile_size_m;
     this.clearMotion(); this.frame = frame; this.unitHeight = (frame.metric ? 1 : frame.grid.tile_size_m * .48) * this.heightScale; shared.uUnit.value = this.unitHeight;
+    // Native inspector masks are absent from metric plans; avoid scanning their large grids.
+    const digging = frame.maps.fresh_dig_current != null && frame.maps.fresh_dig_swing != null ? diggingView(frame) : null;
+    this.layerMaps = { ...frame.maps, _workspace: frame.maps.work_cone ?? frame.maps.interaction, _digging: digging?.cells ?? null };
     if (dimensionsChanged || reset) this.buildWorld(frame);
     const facts = transitionFacts(previous, frame);
     const mayAnimate = !isJointFrame(frame) && animate && !reset && !dimensionsChanged && !this.reducedMotion && previous && !previous.done && frame.step === previous.step + 1;
@@ -236,7 +246,7 @@ export class TerraScene {
     const unchangedTerrain = frame.metric && previous?.metric && !dimensionsChanged && !reset && previousUnitHeight === this.unitHeight && !facts.changed.length && !frame.metric.terrain_changes.length && previous.metric.native.every((row, i) => row === frame.metric.native[i]) && previous.metric.loose.every((row, i) => row === frame.metric.loose[i]);
     if (!unchangedTerrain) {
       disposeProps(this.piles);
-      this.piles = frame.metric ? new MetricColumns() : new SoilPiles(frame, { previous: mayAnimate ? previous : null, unitHeight: this.unitHeight, layerSettings: this.layerSettings, visibility: this.visibility, palette: this.palette, roughness: this.presentation === 'studio' ? .16 : 0 });
+      this.piles = frame.metric ? new MetricColumns() : new SoilPiles({ ...frame, maps: this.layerMaps }, { previous: mayAnimate ? previous : null, unitHeight: this.unitHeight, layerSettings: this.layerSettings, visibility: this.visibility, palette: this.palette, roughness: this.presentation === 'studio' ? .16 : 0 });
       this.world.add(this.piles); this.piles.update(mayAnimate ? 0 : 1);
       this.populate(frame);
     }
@@ -289,11 +299,11 @@ export class TerraScene {
     this.dirtyInstances();
     if (!frame.metric) { this.terrain.instanceColor.needsUpdate = true; this.terrain.computeBoundingSphere(); }
     this.gridLines.geometry.dispose(); this.gridLines.geometry = new THREE.BufferGeometry(); this.gridLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gridPositions, 3));
-    for (const [name, layer] of Object.entries(this.layers)) layer.visible = this.visibility[name] && frame.maps[LAYERS[name].map] != null;
+    for (const [name, layer] of Object.entries(this.layers)) layer.visible = this.visibility[name] && this.layerMaps[LAYERS[name].map] != null;
     for (const [name, boundary] of Object.entries(this.boundaries)) {
-      const positions = [], test = LAYERS[name].test, map = frame.maps[LAYERS[name].map];
+      const positions = [], test = LAYERS[name].test, map = this.layerMaps[LAYERS[name].map];
       const member = (row, col) => map != null && row >= 0 && row < rows && col >= 0 && col < cols && !frame.maps.padding[row][col] && test(map[row][col]);
-      for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (member(row, col)) {
+      if (map != null) for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (member(row, col)) {
         const index = row * cols + col;
         const edges = [[row - 1, col, [[0, 0], [0, 1], [0, 2]]], [row + 1, col, [[2, 0], [2, 1], [2, 2]]], [row, col - 1, [[0, 0], [1, 0], [2, 0]]], [row, col + 1, [[0, 2], [1, 2], [2, 2]]]];
         for (const [neighborRow, neighborCol, nodes] of edges) if (!member(neighborRow, neighborCol)) {
@@ -351,7 +361,7 @@ export class TerraScene {
 
   boundaryHeight(row, col, row2, col2) {
     const height = this.displayHeights[row][col];
-    return (!this.frame.metric && height > 0 ? this.piles.nodeHeight(row2, col2) : height * this.unitHeight) + this.frame.grid.tile_size_m * .035;
+    return (!this.frame.metric && height > 0 ? this.piles.nodeHeight(row2, col2) : height * this.unitHeight) + this.frame.grid.tile_size_m * .06;
   }
 
   updateCell(row, col, height) {
@@ -369,7 +379,7 @@ export class TerraScene {
       const slot = frame.metric ? layer.userData.cellSlots[index] : index;
       if (slot < 0) continue;
       // Studio shows only the cut still to be made: finished target cells reveal the excavated soil.
-      const settings = LAYERS[name], map = frame.maps[settings.map], finished = name === 'dig' && this.presentation === 'studio' && map != null && height <= map[row][col];
+      const settings = LAYERS[name], map = this.layerMaps[settings.map], finished = name === 'dig' && this.presentation === 'studio' && map != null && height <= map[row][col];
       const visible = !soil && !finished && map != null && settings.test(map[row][col]) && !frame.maps.padding[row][col];
       dummy.position.set(point.x, point.y + tile * (.008 + offset * .003), point.z); dummy.scale.set(visible ? tile : 0, 1, visible ? tile : 0); dummy.updateMatrix(); layer.setMatrixAt(slot, dummy.matrix); offset++;
     }
@@ -594,8 +604,9 @@ export class TerraScene {
   setLayer(name, visible) {
     this.visibility[name] = visible;
     if (name === 'workspace') { if (this.reservationOutlines) this.reservationOutlines.visible = visible; return; }
+    if (name === 'eligibility') { for (const layer of ELIGIBILITY_LAYERS) this.setLayer(layer, visible); return; }
     if (name === 'tags') { for (const machine of this.machines.values()) machine.setTags(visible); return; }
-    if (!this.frame) return; this.piles?.setLayer(name, visible); if (name === 'grid') { this.gridLines.visible = visible; this.populate(this.frame); } else if (this.layers[name]) this.layers[name].visible = visible && this.frame.maps[LAYERS[name].map] != null; if (this.boundaries[name]) this.boundaries[name].visible = visible; }
+    if (!this.frame) return; this.piles?.setLayer(name, visible); if (name === 'grid') { this.gridLines.visible = visible; this.populate(this.frame); } else if (this.layers[name]) this.layers[name].visible = visible && this.layerMaps[LAYERS[name].map] != null; if (this.boundaries[name]) this.boundaries[name].visible = visible && !!this.boundaries[name].geometry.attributes.instanceStart; }
   setHeight(value) { this.heightScale = value; if (this.frame) this.setFrame(this.frame); }
   flyTo(position, target, { instant = false } = {}) {
     if (instant || this.reducedMotion) { this.tween = null; this.camera.position.copy(position); this.controls.target.copy(target); this.controls.update(); return; }
@@ -607,9 +618,10 @@ export class TerraScene {
     this.flyTo(new THREE.Vector3(distance * .72, distance * .66, distance * .84), new THREE.Vector3(0, -this.span * .04, 0), { instant });
     this.onCameraChange?.({ view: 'home', follow: false });
   }
-  top() {
+  top({ instant = false } = {}) {
     if (!this.frame) return; this.follow = false; this.camera.up.set(0, 1, 0);
-    this.flyTo(new THREE.Vector3(0, this.span * (this.presentation === 'diorama' ? 1.92 : 1.62) / Math.min(this.camera.aspect, 1), this.span * .001), new THREE.Vector3(0, 0, 0));
+    const distance = this.span * .5 / Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) / Math.min(this.camera.aspect, 1) * 1.3;
+    this.flyTo(new THREE.Vector3(0, distance, this.span * .001), new THREE.Vector3(0, 0, 0), { instant });
     this.onCameraChange?.({ view: 'top', follow: false });
   }
   setFollow(value) {

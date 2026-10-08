@@ -30,6 +30,23 @@ postprocessed geometric validity and physical execution remain separate results.
 - `terra/config.py`: curriculum and reward/environment configuration
 - `terra/maps_buffer.py`: dataset and map metadata loading
 
+## October 6 experimental cutting-space rule
+
+The opt-in [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) requires
+2.5 m of continuous radial target space and optionally parallel pulls at
+precision edges. Chosen synthetic straight and L-shaped trenches complete with
+legal disposal and egress. Frozen GRU u110000 transfers poorly: 0/32 matched
+road-network starts versus 32/32 with its original rules. The experiment stays
+default off; bulk completion accepts implicit ramped margins, without modeling
+physical ramp height or bucket volume.
+
+The [manual pull-rule inspector](terra/viewer3d/README.md#pull-rule-inspector)
+adds native eligibility overlays, controls, undo and replay. On October 8, an
+assisted precision-foundation attempt on slot 17411 excavated and legally disposed
+419/480 cells in 445 actions; 61 cells remained, including 30 precision-edge cells.
+An independent native replay reproduced the result. This is an incomplete
+planning/disposal sequence, not proof of full-map finishability or policy quality.
+
 ## September 21 metadata precision and endpoint clearance
 
 Straight-trench replay exposed two geometry defects. Float16 storage moved a

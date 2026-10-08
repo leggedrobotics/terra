@@ -3,7 +3,7 @@ export const SCHEMA = 'terra.viewer3d.v1';
 export const TYPES = ['Excavator', 'Truck', 'Skid steer'];
 export const ACTIONS = ['Forward', 'Backward', 'Turn clockwise', 'Turn anticlockwise', 'Cabin clockwise', 'Cabin anticlockwise', 'Work', 'Wait'];
 const requiredMaps = ['action', 'target', 'padding', 'dumpability'];
-const diagnosticMaps = ['dumpability_static', 'interaction', 'traversability'];
+const diagnosticMaps = ['dumpability_static', 'interaction', 'traversability', 'precision_required_band', 'fresh_dig_current', 'fresh_dig_swing', 'remaining_target', 'footprint', 'work_cone', 'pull_permission'];
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 const integer = (value) => Number.isSafeInteger(value);
 function expect(condition, message) { if (!condition) throw new Error(message); }
@@ -103,6 +103,30 @@ export function actionName(frame, previous) {
   }
   return ACTIONS[frame.action];
 }
+
+/** Classify backend masks for display; never infer a native action's legality. */
+export function diggingView(frame) {
+  const { maps, grid } = frame;
+  const loaded = (frame.agents.find(agent => agent.id === frame.current_agent)?.loaded ?? 0) > 0;
+  const available = maps.fresh_dig_current != null && maps.fresh_dig_swing != null;
+  const counts = { current: 0, swing: 0, blocked: 0, remaining: 0, precision: 0 };
+  const cells = Array.from({ length: grid.rows }, () => Array(grid.cols).fill(0));
+  for (let row = 0; row < grid.rows; row++) for (let col = 0; col < grid.cols; col++) {
+    if (maps.padding[row][col]) continue;
+    if (maps.precision_required_band?.[row][col]) counts.precision++;
+    const remaining = maps.remaining_target != null ? !!maps.remaining_target[row][col] : maps.target[row][col] < 0 && maps.action[row][col] > maps.target[row][col];
+    if (!remaining) continue;
+    counts.remaining++;
+    if (!available) continue;
+    if (loaded) { cells[row][col] = 4; continue; }
+    if (maps.fresh_dig_current[row][col]) { cells[row][col] = 1; counts.current++; }
+    else if (maps.fresh_dig_swing[row][col]) { cells[row][col] = 2; counts.swing++; }
+    else { cells[row][col] = 3; counts.blocked++; }
+  }
+  return { available, loaded, cells, counts };
+}
+
+export const DIGGING_LABELS = ['No remaining dig target', 'Dig now', 'Swing cabin only', 'Not diggable from this base', 'Unload first'];
 
 export function transitionFacts(previous, frame) {
   if (!previous || frame.grid.rows !== previous.grid.rows || frame.grid.cols !== previous.grid.cols) return { kind: 'snapshot', changed: [], removed: 0, placed: 0, message: 'Initial state' };

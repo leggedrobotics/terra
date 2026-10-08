@@ -30,9 +30,11 @@ from terra.config import REWARD_V2_V21_SHAPING_GAMMA
 from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
+from terra.dig_direction import boundary_pull_details, pull_stroke_details
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
+from terra.utils import centred_agent_corners
 from terra.utils import compute_polygon_mask
 from terra.utils import compute_swept_polygon_mask
 from terra.utils import decrease_angle_circular
@@ -58,6 +60,10 @@ CLEAN_EXCAVATOR_WORKSPACE_INNER_TEETH = True
 CORRECTED_DENSE_CONTRACT = "exact_visible_dump_v1"
 REWARD_V2_HORIZON = jnp.float32(450.0)
 STALL_AGE_CAP_STEPS = 32
+
+# agent.dug_clearance_m is evaluated over offsets of at most this many cells,
+# which is exact for clearances up to this many tiles (3.4 m at 0.5714 m).
+DUG_CLEARANCE_WINDOW_TILES = 6
 
 # The terminal objective keeps success dominant and uses efficiency only to
 # order successful episodes. Its success base is supplied by the normalized
@@ -496,6 +502,10 @@ class State(NamedTuple):
         """
         Gets the coordinates of the 4 corners of the agent.
         The function uses a biased rounding strategy to avoid rectangle shrinkage.
+        ``agent.centre_chassis_on_base`` rotates the chassis about the base
+        cell's centre instead (``utils.centred_agent_corners``). The corners
+        are float32 either way; the release ones keep their integer values, so
+        every mask built from them is unchanged.
         """
         # Determine half dimensions using floor/ceil to properly handle odd dimensions.
         half_width_left = jnp.floor(agent_width / 2.0)
@@ -531,7 +541,15 @@ class State(NamedTuple):
             jnp.ceil(global_corners_float)
         ).astype(IntLowDim)
 
-        return biased_corners
+        centred_corners = centred_agent_corners(
+            pos_base, base_orientation, agent_width, agent_height,
+            self.env_cfg.agent.angles_base,
+        )
+        return jnp.where(
+            jnp.asarray(self.env_cfg.agent.centre_chassis_on_base),
+            centred_corners,
+            biased_corners,
+        )
 
     def _agent_base_footprint_mask(self, agent_state) -> Array:
         """Return one chassis footprint using the movement geometry."""
@@ -566,6 +584,48 @@ class State(NamedTuple):
         """Chassis cells must be free of holes, positive soil and obstacles."""
         return ((map != 0) | (static_traversability_base == 1)).astype(IntLowDim)
 
+    def _dug_clearance_mask(self) -> Array:
+        """Cells an excavator chassis may not cover under ``agent.dug_clearance_m``.
+
+        The gap between two cells is the Euclidean distance between their
+        squares, ``tile * hypot(max(|dx| - 1, 0), max(|dy| - 1, 0))``: 0 for
+        edge- or corner-touching cells, one tile across one free cell. A cell
+        is blocked when its gap to any excavated cell (action map < 0) is below
+        the clearance. With 0.5714 m tiles, 0.6 m therefore needs two free
+        cells along an axis (1.14 m) or one free diagonal cell (0.81 m), and
+        any clearance up to one tile needs one free cell.
+
+        The squared gap is a separable min-plus dilation of the dug mask over
+        a fixed window (13 shifted minima per axis), so the clearance may be a
+        traced per-environment value. Only moves and turns use this mask; DO
+        never does, so the agent can always dig its own workspace, which starts
+        0.86 m past the chassis front at a 4 m inner radius. 0 disables it;
+        only excavators (agent type 0) are affected.
+        """
+        dug = _as_2d_map(self.world.action_map.map) < 0
+        window = DUG_CLEARANCE_WINDOW_TILES
+        offsets = range(-window, window + 1)
+        cost = [float(max(abs(k) - 1, 0) ** 2) for k in offsets]
+        inf = jnp.float32(jnp.inf)
+        n_x, n_y = dug.shape
+        padded = jnp.pad(dug, ((window, window), (0, 0)))
+        along_x = jnp.full(dug.shape, inf)
+        for k, c in zip(offsets, cost):
+            shifted = padded[window + k:window + k + n_x, :]
+            along_x = jnp.minimum(along_x, jnp.where(shifted, jnp.float32(c), inf))
+        padded = jnp.pad(along_x, ((0, 0), (window, window)), constant_values=inf)
+        gap_tiles_sq = jnp.full(dug.shape, inf)
+        for k, c in zip(offsets, cost):
+            gap_tiles_sq = jnp.minimum(
+                gap_tiles_sq, padded[:, window + k:window + k + n_y] + jnp.float32(c)
+            )
+        clearance = jnp.asarray(self.env_cfg.agent.dug_clearance_m, dtype=jnp.float32)
+        tile = jnp.asarray(self.env_cfg.tile_size, dtype=jnp.float32)
+        # A gap equal to the clearance is allowed; the tolerance absorbs fp32.
+        too_close = gap_tiles_sq < jnp.square(clearance / tile) - jnp.float32(1e-4)
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        return too_close & (clearance > 0.0) & is_excavator
+
     def _is_valid_move(self, agent_corners: Array, allow_truck_neutral: bool = False) -> Array:
         """
         Checks if the move is valid by computing the agent occupancy mask (using a
@@ -595,6 +655,11 @@ class State(NamedTuple):
 
         
         traversability_mask = jnp.where(polygon_mask_2, 1, traversability_mask)
+        # The destination must keep agent.dug_clearance_m from dug cells; the
+        # swept path of a translation is checked against holes only.
+        traversability_mask = jnp.where(
+            self._dug_clearance_mask(), 1, traversability_mask
+        )
         # For a valid move, all cells covered by the agent must be traversable (== 0).
         valid_traversability = jnp.all(jnp.where(polygon_mask, traversability_mask, 0) == 0)
 
@@ -1250,6 +1315,68 @@ class State(NamedTuple):
         return wrap_angle_rad(base_angle + cabin_angle)
 
     def _get_foundation_border_mask(self) -> Array:
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            lambda: self._get_pull_boundary_details()[0],
+            self._get_legacy_foundation_border_mask,
+        )
+
+    def _get_precision_required_band(self) -> Array:
+        """Fixed target cells requiring a tangential pull in this episode.
+
+        This uses the dig rule's finite boundary distances. It depends on the
+        immutable target and episode settings, not current excavation progress
+        or the machine pose. Legacy and bulk episodes expose an empty band.
+        """
+        enabled = jnp.bool_(self.env_cfg.pull_direction_alignment) & jnp.bool_(
+            self.env_cfg.enforce_foundation_border_alignment
+        )
+        return jax.lax.cond(
+            enabled,
+            lambda: self._get_pull_boundary_details()[0],
+            lambda: jnp.zeros_like(_as_2d_map(self.world.target_map.map), dtype=jnp.bool_),
+        )
+
+    def _get_pull_boundary_details(self) -> tuple[Array, Array, Array]:
+        """Metric boundary band, radial-pull permission, and angular error.
+
+        Optional precision applies to all target edges, including trench ends.
+        Boundary geometry belongs to the fixed target, never the evolving hole.
+        """
+        records = _as_axes_table(self.world.foundation_border_axes)
+        # Keep the original foundation metadata count for unrelated legacy
+        # dump applicability. Prepared geometry has its own sentinel padding.
+        count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
+        edge, allowed, error = boundary_pull_details(
+            _as_2d_map(self.world.target_map.map),
+            records,
+            count,
+            self._get_current_agent_state().pos_base.astype(jnp.float32),
+            self.env_cfg.tile_size,
+            self.env_cfg.edge_band_width_m,
+            self.env_cfg.edge_pull_tolerance_rad,
+        )
+        precision = jnp.bool_(self.env_cfg.enforce_foundation_border_alignment)
+        return edge & precision, allowed | ~precision, jnp.where(precision, error, 0.0)
+
+    def _get_pull_dig_permission(self) -> Array:
+        """Bulk stroke room, plus parallel pulling at requested precision edges."""
+        records = _as_axes_table(self.world.foundation_border_axes)
+        count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
+        min_radius, max_radius = self._dig_cone_radius_bounds()
+        allowed, _ = pull_stroke_details(
+            _as_2d_map(self.world.target_map.map), records, count,
+            self._get_current_agent_state().pos_base,
+            self.env_cfg.tile_size, min_radius, max_radius,
+            self.env_cfg.dig_pull_min_length_m,
+        )
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.enforce_foundation_border_alignment),
+            lambda: allowed & self._get_pull_boundary_details()[1],
+            lambda: allowed,
+        )
+
+    def _get_legacy_foundation_border_mask(self) -> Array:
         """Returns a boolean mask for the inside border band of dig target tiles."""
         dig_target_full = self.world.target_map.map < 0
         # This geometry is always per-map 2D. In some traced paths XLA can see
@@ -1285,6 +1412,13 @@ class State(NamedTuple):
         return jnp.logical_and(dig_target, jnp.logical_not(eroded))
 
     def _get_foundation_border_alignment_mask(self, workspace_mask_flat: Array) -> Array:
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            lambda: self._get_pull_dig_permission().reshape(-1),
+            lambda: self._get_legacy_foundation_border_alignment_mask(workspace_mask_flat),
+        )
+
+    def _get_legacy_foundation_border_alignment_mask(self, workspace_mask_flat: Array) -> Array:
         """
         Border tiles must be dug with arm aligned to edge direction.
         Uses stricter tolerance for horizontal/vertical edges, looser for diagonal edges.
@@ -1412,6 +1546,9 @@ class State(NamedTuple):
         and it is combined with a +-30 deg cabin sector by the caller. The
         fresh-trench alignment diagnostic normalises its perpendicular distance
         by ``r_max`` so both quantities are expressed in the same reach.
+        ``agent.dig_min_radius_m`` > 0 raises ``r_min`` (never lowers it) for
+        digging, pickup, dumping and the local-map observations; ``r_max`` is
+        unchanged.
         """
 
         dig_portion_radius = self.env_cfg.agent.dig_radius_tiles
@@ -1428,6 +1565,9 @@ class State(NamedTuple):
 
         r_min = fixed_extension + min_distance_from_agent
         r_max = fixed_extension + min_distance_from_agent + dig_portion_radius * tile_size
+        r_min = jnp.maximum(
+            r_min, jnp.asarray(self.env_cfg.agent.dig_min_radius_m, dtype=jnp.float32)
+        )
         return r_min, r_max
 
     def _get_dig_dump_mask_cyl(self, map_cyl_coords: Array) -> Array:
@@ -2037,20 +2177,55 @@ class State(NamedTuple):
         )
 
     def _build_dump_cone(self) -> Array:
-        """Excavator dump cone: the dig cone within ``agent.dump_max_radius_m``.
+        """Excavator dump cone: the dig cone within ``agent.dump_min_radius_m``
+        to ``agent.dump_max_radius_m``.
 
         Skid steers and trucks keep their own cone; a radius of 0 keeps the
-        full dig reach.
+        dig annulus on that side.
         """
         cone = self._build_dig_dump_cone()
         map_cyl_coords, _ = self._get_map_local_and_cyl_coords()
         dump_r_max = jnp.asarray(self.env_cfg.agent.dump_max_radius_m, dtype=jnp.float32)
-        within_reach = jnp.logical_or(
-            dump_r_max <= 0.0, map_cyl_coords[0] <= dump_r_max + 1e-5
+        dump_r_min = jnp.asarray(self.env_cfg.agent.dump_min_radius_m, dtype=jnp.float32)
+        within_reach = jnp.logical_and(
+            jnp.logical_or(dump_r_max <= 0.0, map_cyl_coords[0] <= dump_r_max + 1e-5),
+            jnp.logical_or(dump_r_min <= 0.0, map_cyl_coords[0] >= dump_r_min - 1e-5),
         )
         is_excavator = self._get_current_agent_state().agent_type[0] == 0
         keep = jnp.logical_or(jnp.logical_not(is_excavator), within_reach)
         return jnp.logical_and(cone.astype(jnp.bool_), keep).astype(cone.dtype)
+
+    def _dump_centroid_too_close_to_dug(self, dump_mask: Array) -> Array:
+        """True when ``agent.dump_min_dug_distance_m`` refuses this excavator dump.
+
+        The centroid is the one ``_apply_dump_mask`` concentrates the load
+        around: the mean of the admissible cells outside the chassis. Its
+        distance to the nearest excavated cell (action map < 0) is measured
+        centre to centre. 0 disables the rule.
+        """
+        map_shape = self.world.action_map.map.shape[-2:]
+        cells = jnp.reshape(dump_mask, map_shape).astype(jnp.bool_)
+        cells &= ~self._active_base_footprint_mask()
+        count = jnp.maximum(jnp.sum(cells), 1)
+        rows, cols = jnp.meshgrid(
+            jnp.arange(map_shape[0]), jnp.arange(map_shape[1]), indexing="ij"
+        )
+        centroid_row = jnp.sum(rows * cells) / count
+        centroid_col = jnp.sum(cols * cells) / count
+        dug = _as_2d_map(self.world.action_map.map) < 0
+        distance_sq = jnp.where(
+            dug, (rows - centroid_row) ** 2 + (cols - centroid_col) ** 2, jnp.inf
+        )
+        limit = jnp.asarray(
+            self.env_cfg.agent.dump_min_dug_distance_m, dtype=jnp.float32
+        ) / jnp.asarray(self.env_cfg.tile_size, dtype=jnp.float32)
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        return (
+            (limit > 0.0)
+            & is_excavator
+            & jnp.any(cells)
+            & (jnp.min(distance_sq) < jnp.square(limit) - jnp.float32(1e-4))
+        )
 
     def _workspace_intersects_obstacle(self) -> Array:
         """
@@ -2191,6 +2366,9 @@ class State(NamedTuple):
         enforce_border_alignment = jnp.bool_(
             getattr(self.env_cfg, "enforce_foundation_border_alignment", False)
         )
+        # New-mode permission is applied once through the shared fresh-cell
+        # context in _dig_eligibility, including the executable observations.
+        enforce_border_alignment &= ~jnp.bool_(self.env_cfg.pull_direction_alignment)
         border_alignment_mask = jax.lax.cond(
             enforce_border_alignment,
             lambda: self._get_foundation_border_alignment_mask(dig_mask),
@@ -2238,7 +2416,7 @@ class State(NamedTuple):
             return self._admit_fresh_trench_cells(dig_mask, context[1], context[2])
 
         dig_mask = jax.lax.cond(
-            jnp.bool_(self.env_cfg.enforce_trench_dig_alignment),
+            jnp.bool_(self.env_cfg.enforce_trench_dig_alignment) | jnp.bool_(self.env_cfg.pull_direction_alignment),
             _align_fresh_cells,
             lambda: dig_mask,
         )
@@ -2373,6 +2551,19 @@ class State(NamedTuple):
         valid_axes = jnp.arange(max_axes) < trench_type
         if records.shape[1] >= 8:
             segment_vectors = records[:, 5:7] - records[:, 3:5]
+            normal_norms = jnp.linalg.norm(axes[:, :2], axis=1)
+            start_residuals = jnp.abs(
+                axes[:, 0] * records[:, 4] + axes[:, 1] * records[:, 3] + axes[:, 2]
+            ) / jnp.maximum(normal_norms, 1e-6)
+            end_residuals = jnp.abs(
+                axes[:, 0] * records[:, 6] + axes[:, 1] * records[:, 5] + axes[:, 2]
+            ) / jnp.maximum(normal_norms, 1e-6)
+            valid_lines = (
+                jnp.all(jnp.isfinite(records[:, :8]), axis=1)
+                & (normal_norms > 1e-6)
+                & (start_residuals <= 0.05 + 1e-5)
+                & (end_residuals <= 0.05 + 1e-5)
+            )
             finite_section_metadata = jnp.logical_and(
                 jnp.all(records[:, 3:8] > jnp.float32(-96.0), axis=1),
                 jnp.logical_and(
@@ -2381,6 +2572,7 @@ class State(NamedTuple):
                     > jnp.float32(1e-6),
                 ),
             )
+            finite_section_metadata &= (~jnp.bool_(self.env_cfg.pull_direction_alignment) | valid_lines)
         else:
             finite_section_metadata = jnp.zeros(
                 (max_axes,), dtype=jnp.bool_
@@ -2585,6 +2777,7 @@ class State(NamedTuple):
             ),
             axis=0,
         )
+
         return (
             section_membership,
             axis_has_fresh,
@@ -2613,6 +2806,24 @@ class State(NamedTuple):
         )
 
     def _fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
+        """Shared per-cell permission; new bulk strokes do not need trench axes."""
+        def pull_context():
+            target = _as_2d_map(self.world.target_map.map)
+            fresh = (target < 0) & (_as_2d_map(self.world.action_map.map) == 0)
+            current = self._get_current_agent_state()
+            permission = jax.lax.cond(
+                (current.agent_type[0] == 0) & (current.loaded[0] == 0),
+                self._get_pull_dig_permission,
+                lambda: jnp.ones(target.shape, jnp.bool_),
+            )
+            return fresh, fresh, permission
+
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment),
+            pull_context, self._legacy_fresh_trench_pose_valid_cells,
+        )
+
+    def _legacy_fresh_trench_pose_valid_cells(self) -> tuple[Array, Array, Array]:
         """Per-cell view of the fresh-trench gate for the CURRENT base pose.
 
         Returns ``(fresh_target, fresh_trench_target, pose_valid)`` as [H, W]
@@ -2664,6 +2875,26 @@ class State(NamedTuple):
         return fresh_target, fresh_trench_target, pose_valid
 
     def _get_fresh_trench_dig_alignment_details(
+        self, dig_mask: Array | None = None
+    ) -> tuple[Array, Array, Array, Array]:
+        # Chassis yaw/standoff are not new-mode constraints. Retain feature
+        # shapes, report actual admission, and neutralize those old errors.
+        def pull_details():
+            candidate = dig_mask
+            if candidate is None:
+                candidate = self._mask_out_wrong_dig_tiles(self._build_dig_dump_cone())
+            fresh, scoped, permission = self._fresh_trench_pose_valid_cells()
+            admitted = self._admit_fresh_trench_cells(candidate, scoped, permission)
+            applicable = jnp.any(fresh.reshape(-1) & jnp.asarray(candidate).reshape(-1))
+            valid = ~applicable | jnp.any(admitted.reshape(-1) & fresh.reshape(-1))
+            return valid, jnp.float32(0), jnp.float32(0), admitted
+
+        return jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment), pull_details,
+            lambda: self._get_legacy_fresh_trench_dig_alignment_details(dig_mask),
+        )
+
+    def _get_legacy_fresh_trench_dig_alignment_details(
         self, dig_mask: Array | None = None
     ) -> tuple[Array, Array, Array, Array]:
         """Measure and filter a prospective fresh-trench dig.
@@ -3114,6 +3345,9 @@ class State(NamedTuple):
             is_transport,
             lambda: legal_reachable,
             lambda: excavator_dump_mask,
+        )
+        dump_mask = jnp.logical_and(
+            dump_mask, ~self._dump_centroid_too_close_to_dug(dump_mask)
         )
         containment_mask = jax.lax.cond(
             has_legal_reachable,
@@ -4013,7 +4247,11 @@ class State(NamedTuple):
         # Each excavator gets its own trench reward based on its position
         current_agent_type = self._get_current_agent_state().agent_type[0]
         is_excavator = current_agent_type == 0
-        should_apply_trench = jnp.logical_and(self.env_cfg.apply_trench_rewards, is_excavator)
+        should_apply_trench = (
+            jnp.bool_(self.env_cfg.apply_trench_rewards)
+            & is_excavator
+            & ~jnp.bool_(self.env_cfg.pull_direction_alignment)
+        )
         
         trench_r = jax.lax.cond(
             should_apply_trench,

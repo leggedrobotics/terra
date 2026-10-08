@@ -742,6 +742,9 @@ class TerraEnv(NamedTuple):
             "reachability_mask": state.world.reachability_mask.map,
             "action_map": state.world.action_map.map,
             "target_map": state.world.target_map.map,
+            # Immutable task requirement; optional policy preprocessing adds
+            # this as a spatial channel for mixed bulk/precision training.
+            "precision_required_band": state._get_precision_required_band(),
             "agent_width": state.agent.width,
             "agent_height": state.agent.height,
             "padding_mask": state.world.padding_mask.map,
@@ -795,8 +798,10 @@ class TerraEnvBatch:
         movement_feasibility_observation: bool = False,
         previous_outcome_observation: bool = False,
         executable_dig_observation: bool = False,
+        pull_direction_alignment: bool = False,
     ) -> None:
         self.executable_dig_observation = bool(executable_dig_observation)
+        self.pull_direction_alignment = bool(pull_direction_alignment)
         self.maps_buffer, self.batch_cfg = init_maps_buffer(
             batch_cfg,
             shuffle_maps,
@@ -804,6 +809,26 @@ class TerraEnvBatch:
             required_distance_protocol_id=distance_protocol_id,
             partial_reset_root=partial_reset_root,
         )
+        # The frozen bulk teacher needs the generator's original ABC axes;
+        # the student's finite contours have different observation semantics.
+        self.legacy_foundation_border_axes = self.maps_buffer.foundation_border_axes
+        if self.pull_direction_alignment:
+            # Static geometry is prepared once, outside JIT. The ordinary
+            # loader and legacy three-column records are unchanged otherwise.
+            from terra.dig_direction import MAX_BOUNDARY_SEGMENTS, boundary_records_from_mask
+
+            targets = np.asarray(self.maps_buffer.maps)
+            records = np.empty((*targets.shape[:2], MAX_BOUNDARY_SEGMENTS, 7), dtype=np.float32)
+            for index in np.ndindex(targets.shape[:2]):
+                try:
+                    records[index], _ = boundary_records_from_mask(
+                        targets[index] < 0
+                    )
+                except ValueError as exc:
+                    raise ValueError(f"Pull-direction boundary at map {index}: {exc}") from exc
+            self.maps_buffer = self.maps_buffer._replace(
+                foundation_border_axes=jnp.asarray(records),
+            )
         self.partial_reset_supported_levels = np.asarray(
             self.maps_buffer.partial_reset_supported_levels,
             dtype=np.bool_,
@@ -913,6 +938,32 @@ class TerraEnvBatch:
         """
         # During jit/pmap tracing, env_cfgs fields can be tracers and cannot be converted
         # to NumPy. Skip Python-side validation in traced contexts.
+        if isinstance(env_cfgs.pull_direction_alignment, jax.core.Tracer):
+            return
+        pull_mode = np.asarray(env_cfgs.pull_direction_alignment, dtype=bool)
+        prepared_pull = getattr(self, "pull_direction_alignment", False)
+        if np.any(pull_mode != prepared_pull):
+            raise RuntimeError(
+                "EnvConfig.pull_direction_alignment must match TerraEnvBatch's "
+                "pull_direction_alignment geometry preparation option."
+            )
+        if prepared_pull:
+            length = np.asarray(env_cfgs.dig_pull_min_length_m)
+            if not np.all(np.isfinite(length) & (length > 0)):
+                raise RuntimeError("dig_pull_min_length_m must be positive and finite.")
+            width = np.asarray(env_cfgs.edge_band_width_m)
+            if not np.all(np.isfinite(width) & (width > 0)):
+                raise RuntimeError("edge_band_width_m must be positive and finite.")
+            for name in ("edge_pull_tolerance_rad", "trench_pull_tolerance_rad"):
+                tolerance = np.asarray(getattr(env_cfgs, name))
+                if not np.all(np.isfinite(tolerance) & (tolerance >= 0) & (tolerance < np.pi / 2)):
+                    raise RuntimeError(f"{name} must lie in [0, pi/2).")
+            if np.any(np.asarray(env_cfgs.apply_trench_rewards)):
+                raise RuntimeError(
+                    "pull_direction_alignment requires apply_trench_rewards=False: "
+                    "legacy chassis/line shaping does not describe radial pulls."
+                )
+            return
         if isinstance(env_cfgs.enforce_foundation_border_alignment, jax.core.Tracer):
             return
         enforce = np.asarray(env_cfgs.enforce_foundation_border_alignment)
@@ -934,9 +985,11 @@ class TerraEnvBatch:
     ) -> None:
         """Fail before tracing when a gated trench lacks finite sections."""
 
-        if isinstance(env_cfgs.enforce_trench_dig_alignment, jax.core.Tracer):
+        if isinstance(env_cfgs.enforce_trench_dig_alignment, jax.core.Tracer) or isinstance(
+            env_cfgs.pull_direction_alignment, jax.core.Tracer
+        ):
             return
-        if not np.any(np.asarray(env_cfgs.enforce_trench_dig_alignment)):
+        if not np.any(np.asarray(env_cfgs.enforce_trench_dig_alignment) & ~np.asarray(env_cfgs.pull_direction_alignment)):
             return
         yaw_tolerance = np.asarray(env_cfgs.trench_dig_yaw_tolerance_rad)
         standoff_min = np.asarray(env_cfgs.trench_dig_standoff_min_m)
@@ -977,6 +1030,16 @@ class TerraEnvBatch:
             & np.isfinite(records[..., 7])
             & (records[..., 7] > 0.0)
         )
+        if np.any(np.asarray(env_cfgs.pull_direction_alignment)):
+            norm = np.linalg.norm(records[..., :2], axis=-1)
+            start_residual = abs(records[..., 0] * starts[..., 1] + records[..., 1] * starts[..., 0] + records[..., 2]) / np.maximum(norm, 1e-6)
+            end_residual = abs(records[..., 0] * ends[..., 1] + records[..., 1] * ends[..., 0] + records[..., 2]) / np.maximum(norm, 1e-6)
+            finite_segments &= (
+                np.all(np.isfinite(records[..., :3]), axis=-1)
+                & (norm > 1e-6)
+                & (start_residual <= 0.05 + 1e-5)
+                & (end_residual <= 0.05 + 1e-5)
+            )
         trench_family_ids = [
             index
             for index, name in enumerate(self.maps_buffer.family_names)

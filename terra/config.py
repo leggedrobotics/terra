@@ -116,6 +116,31 @@ class AgentConfig(NamedTuple):
     # frozen v1 benchmark semantics; trainers set 5.5 as a treatment.
     dump_max_radius_m: float = 0.0
 
+    # Machine working rules (opt-in; 0 keeps the frozen v1 semantics). Metres,
+    # radial from the base centre like the cone, or metric gaps between cells.
+    # Raises the inner radius of the reach annulus for digging and dumping
+    # (default 0.5 m arm offset + half the longer chassis side, 3.64 m).
+    dig_min_radius_m: float = 0.0
+    # Additional inner radius for excavator dumps only; the dump cone never
+    # starts closer than the dig annulus.
+    dump_min_radius_m: float = 0.0
+    # An excavator may not move or turn to a pose whose chassis cells lie
+    # closer than this to excavated cells (action map < 0). The gap between
+    # two cells is the distance between their squares (State._dug_clearance_mask).
+    dug_clearance_m: float = 0.0
+    # An excavator dump is refused when the centroid its load is concentrated
+    # around (State._apply_dump_mask) lies closer than this to an excavated
+    # cell, centre to centre. The dumpability mask already keeps dump cells
+    # two cells from dug cells; 4 cells (2.28 m) keeps the machine's 1.1 m dump
+    # support clear of its 1.14 m band.
+    dump_min_dug_distance_m: float = 0.0
+    # Raster the chassis as the cells whose centres lie inside its rectangle
+    # centred on the base cell, where the dig cone and the machine converter
+    # place the base (utils.centred_agent_corners). False keeps the frozen v1
+    # raster, rotated about the cell's corner and rounded outward: one cell off
+    # the base at headings 3, 6 and 9, and 90-91 cells at the oblique ones.
+    centre_chassis_on_base: bool = False
+
 
 class Rewards(NamedTuple):
     existence: float
@@ -331,6 +356,15 @@ class EnvConfig(NamedTuple):
     retained_work_setup_cost: float = 0.0
     retained_work_travel_cost: float = 0.0  # per inter-work straight-line metre
     retained_work_turn_cost: float = 0.0  # per inter-work wrapped base radian
+
+    # Append only: old EnvConfig pickles reconstruct positionally.
+    # Fresh excavation follows each cell's radial pull toward the base.
+    # This opt-in supersedes legacy edge/trench pose gates.
+    pull_direction_alignment: bool = False
+    edge_band_width_m: float = 0.6
+    edge_pull_tolerance_rad: float = 0.436332313  # 25 degrees
+    trench_pull_tolerance_rad: float = 0.261799388  # Reserved strict-draft field; unused.
+    dig_pull_min_length_m: float = 2.5  # 0.5 m entry + 1.5 m work + 0.5 m exit
 
     @classmethod
     def new(cls):

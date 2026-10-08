@@ -22,6 +22,13 @@ def main(argv=None):
         action="store_true",
         help="Record and open a real Terra dig/dump demonstration.",
     )
+    inputs.add_argument("--pull-inspector", action="store_true",
+                        help="Inspect the exact saved October 8 pull-rule starts with native manual actions.")
+    parser.add_argument("--initial-states", type=Path, help="Saved diagnostic initial_states.pkl for --pull-inspector.")
+    parser.add_argument("--manual-output", type=Path, help="Directory for manual actions and complete native state recordings.")
+    parser.add_argument("--case", default="17411", help="Saved source slot for the pull inspector.")
+    parser.add_argument("--precision-mode", choices=("bulk", "precision"), default="precision")
+    parser.add_argument("--start", type=int, default=0, choices=(0, 1))
     parser.add_argument(
         "--export",
         type=Path,
@@ -58,6 +65,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not 0 <= args.port <= 65535:
         parser.error("port must be between 0 and 65535.")
+    if args.pull_inspector and (args.initial_states is None or not args.initial_states.is_file()):
+        parser.error("--pull-inspector requires --initial-states /path/to/initial_states.pkl (an existing saved native state bank).")
     from .replay import ReplayRecorder, load_replay
     from .server import STATIC_DIR, make_server
 
@@ -78,19 +87,27 @@ def main(argv=None):
         os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
         os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
-        from .session import ManualSession
-
         print(
             "Preparing Terra for manual play (the first JAX compilation takes a moment)...",
             flush=True,
         )
-        session = ManualSession(
-            map_path=args.map,
-            seed=args.seed,
-            max_steps=args.max_steps,
-            agent_types=tuple(args.agents),
-            action_types=tuple(args.action_types) if args.action_types else None,
-        )
+        if args.pull_inspector:
+            from .pull_session import PullSession
+            options = dict(case_id=args.case, precision=args.precision_mode == "precision", start=args.start)
+            if args.initial_states:
+                options["initial_states"] = args.initial_states
+            if args.manual_output:
+                options["output"] = args.manual_output
+            session = PullSession(**options)
+        else:
+            from .session import ManualSession
+            session = ManualSession(
+                map_path=args.map,
+                seed=args.seed,
+                max_steps=args.max_steps,
+                agent_types=tuple(args.agents),
+                action_types=tuple(args.action_types) if args.action_types else None,
+            )
         recorder = session.play_demo() if args.demo_replay else session.recorder
         if args.demo_replay:
             replay = recorder.to_dict()

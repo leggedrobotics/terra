@@ -66,3 +66,18 @@ test('joint rounds attribute every changed cell to the machine whose load explai
   assert.deepEqual(actors.get(0).cells.map(cell => [cell.row, cell.col]), [[0, 0]]);
   assert.deepEqual(actors.get(1).cells.map(cell => [cell.row, cell.col]), [[2, 1]]);
 });
+
+test('top camera fits the whole grid in wide and narrow viewports; native columns remain X and rows Z', () => {
+  const scene = Object.create(TerraScene.prototype);
+  scene.frame = frame([[0, 0, 0], [0, 0, 0], [0, 0, 0]]); scene.span = 3; scene.unitHeight = .48;
+  assert.ok(scene.point(1, 2).x > scene.point(1, 1).x);
+  assert.ok(scene.point(2, 1).z > scene.point(1, 1).z);
+  for (const aspect of [.5, 1, 2]) {
+    scene.camera = new THREE.PerspectiveCamera(32, aspect, .1, 100);
+    scene.flyTo = (position, target, options) => {
+      const height = 2 * position.distanceTo(target) * Math.tan(THREE.MathUtils.degToRad(scene.camera.fov) / 2);
+      assert.ok(height > scene.span); assert.ok(height * aspect > scene.span); assert.equal(options.instant, true);
+    };
+    scene.top({ instant: true });
+  }
+});

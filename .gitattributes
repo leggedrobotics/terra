@@ -1,0 +1,2 @@
+# Bundled dependency shader strings retain upstream whitespace.
+terra/viewer3d/static/viewer.js -whitespace linguist-generated=true

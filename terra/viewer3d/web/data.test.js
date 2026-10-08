@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateReplay, validateFrame, transitionFacts, actionName, shortestAngle, formatReward } from './data.js';
+import { validateReplay, validateFrame, transitionFacts, actionName, shortestAngle, formatReward, diggingView } from './data.js';
 
 function fixture() {
   return {
@@ -46,4 +46,44 @@ test('small policy rewards remain distinguishable from zero', () => {
   assert.equal(formatReward(-.0042857146), '-0.00429');
   assert.equal(formatReward(.0000012), '+0.00000120');
   assert.equal(formatReward(.68), '+0.68');
+});
+
+function inspectionFixture() {
+  const frame = fixture().frames[0];
+  frame.maps.target = [[-1, -1, -1], [-1, -1, -1]];
+  frame.maps.action = [[0, 0, 0], [-1, 0, 0]];
+  frame.maps.precision_required_band = [[1, 1, 1], [1, 0, 0]];
+  frame.maps.fresh_dig_current = [[1, 0, 0], [1, 0, 1]];
+  frame.maps.fresh_dig_swing = [[1, 1, 0], [1, 0, 1]];
+  return frame;
+}
+test('native current dig wins over swing union; only remaining, unpadded targets receive colors', () => {
+  const frame = inspectionFixture(), before = structuredClone(frame);
+  const view = diggingView(frame);
+  assert.deepEqual(view.cells, [[1, 2, 3], [0, 3, 0]]);
+  assert.deepEqual(view.counts, { current: 1, swing: 1, blocked: 2, remaining: 4, precision: 4 });
+  assert.deepEqual(frame, before);
+});
+test('loaded state is neutral even when recorded masks contain empty-bucket permissions; edge band stays visible', () => {
+  const frame = inspectionFixture(); frame.agents[0].loaded = 3;
+  const view = diggingView(frame);
+  assert.deepEqual(view.cells, [[4, 4, 4], [0, 4, 0]]);
+  assert.equal(view.counts.current + view.counts.swing + view.counts.blocked, 0);
+  assert.equal(view.counts.precision, 4); assert.equal(view.loaded, true);
+});
+test('unavailable native masks never fabricate red cells from a geometric preview', () => {
+  const frame = inspectionFixture(); delete frame.maps.fresh_dig_swing;
+  frame.maps.pull_permission = [[1, 1, 1], [1, 1, 1]];
+  const view = diggingView(frame);
+  assert.equal(view.available, false); assert.deepEqual(view.cells, [[0, 0, 0], [0, 0, 0]]);
+});
+test('authoritative remaining mask is honored, and optional overlays survive portable replay validation', () => {
+  const replay = fixture(), frame = inspectionFixture(); replay.frames[0] = frame;
+  frame.maps.remaining_target = [[0, 1, 1], [0, 0, 0]];
+  frame.diagnostics = { step_budget: 450, loaded: false, accepted_unload_now: false };
+  replay.metadata.selected_case = { case_id: '17411', precision: true, start: 0 };
+  const restored = validateReplay(JSON.parse(JSON.stringify(replay)));
+  assert.deepEqual(restored, replay); assert.deepEqual(diggingView(restored.frames[0]).cells, [[0, 2, 3], [0, 0, 0]]);
+  restored.frames[0].maps.fresh_dig_current[0][0] = 3;
+  assert.throws(() => validateReplay(restored), /fresh_dig_current/);
 });

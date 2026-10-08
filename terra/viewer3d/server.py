@@ -99,13 +99,9 @@ def make_server(*, session=None, replay=None, port=8765):
                 with lock:
                     data = session.recorder.to_dict() if session is not None else replay
                 if route == "/api/session":
-                    self.reply(
-                        200,
-                        {
-                            "mode": "manual" if session is not None else "replay",
-                            "replay": data,
-                        },
-                    )
+                    with lock:
+                        payload = session.payload() if session is not None else {"mode": "replay", "replay": data}
+                    self.reply(200, payload)
                 else:
                     self.reply(200, data, download="terra-replay.json")
             elif route == "/favicon.ico":
@@ -117,7 +113,7 @@ def make_server(*, session=None, replay=None, port=8765):
             if not self.same_origin():
                 return
             route = urlsplit(self.path).path
-            if route not in ("/api/action", "/api/reset"):
+            if route not in ("/api/action", "/api/reset", "/api/undo", "/api/continue", "/api/export"):
                 self.reply(404, {"error": "Not found."})
                 return
             if session is None:
@@ -134,14 +130,27 @@ def make_server(*, session=None, replay=None, port=8765):
                 if not isinstance(data, dict):
                     raise ValueError("Request must be a JSON object.")
                 with lock:
+                    pull_session = hasattr(session, "continue_exploring")
                     if route == "/api/action":
-                        if set(data) != {"action"}:
-                            raise ValueError("Send exactly one action field.")
-                        result = {"frame": session.step(data["action"])}
+                        allowed = {"action", "continue_after_timeout"} if pull_session else {"action"}
+                        if "action" not in data or set(data) - allowed:
+                            raise ValueError("Send an action and optional continue_after_timeout.")
+                        options = {key: value for key, value in data.items() if key != "action"}
+                        result = {"frame": session.step(data["action"], **options)}
+                        if pull_session:
+                            result.update(can_undo=bool(session.actions), exploring=session.exploring)
+                    elif route == "/api/reset":
+                        allowed = {"case_id", "precision", "start"} if pull_session else set()
+                        if set(data) - allowed:
+                            raise ValueError("Reset accepts case_id, precision, and start in the pull inspector.")
+                        result = session.reset(**data)
                     else:
                         if data:
-                            raise ValueError("Reset expects an empty JSON object.")
-                        result = session.reset()
+                            raise ValueError("This action expects an empty JSON object.")
+                        if not pull_session:
+                            raise RuntimeError("This operation is available in the pull inspector.")
+                        result = {"/api/undo": session.undo, "/api/continue": session.continue_exploring,
+                                  "/api/export": session.export}[route]()
                 self.reply(200, result)
             except TimeoutError:
                 self.reply(408, {"error": "Request body timed out."})

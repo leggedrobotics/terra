@@ -61,6 +61,54 @@ The manual viewer checks the chosen seed's placements before starting Terra's
 reset sampler. If it cannot place every machine within 4,096 proposals each,
 it reports the failure; try another seed, fewer agents, or more free space.
 
+## Pull-rule inspector
+
+Control an excavator from an exact saved initial state, with native pull-rule
+eligibility and unload checks:
+
+```bash
+JAX_PLATFORMS=cpu python -m terra.viewer3d \
+  --pull-inspector --initial-states /path/to/initial_states.pkl \
+  --manual-output manual-recordings \
+  --case 17411 --precision-mode precision --start 0
+```
+
+`--initial-states` is required. It is an external, trusted Python pickle
+containing parallel `episodes` metadata and `initial` native State lists, not
+a JSON viewer replay. Only load a bank you trust. The inspector selects the
+saved `greedy` entries and offers their cases, starts, and bulk/precision modes.
+Each state must use the pull rule, one tracked excavator, and a 450-action
+horizon. Configurations must match across the bank except for the precision
+requirement (`enforce_foundation_border_alignment`). No pose is recreated.
+
+While the bucket is empty, green marks the exact fresh cells a native `DO`
+would excavate now; amber marks additional cells available after cabin rotation
+at the same base pose; red marks remaining targets unavailable at every cabin
+heading from this pose. The purple outline is the immutable precision-required
+band. The footprint is native; the workspace cone is a geometric preview,
+not an eligibility promise. While loaded, fresh eligibility is suppressed.
+Use Q/E to swing toward a direction reported as unloadable, then Space to
+unload; the status distinguishes accepted disposal from off-zone unloading.
+
+Undo restores the native state and action history. Reset and the case controls
+return to the selected saved start. At 450 actions the episode freezes;
+**Continue exploring** explicitly permits further actions without changing
+the 450-action configuration. A finish after the budget is exploratory, not a
+450-action episode success.
+Export writes the replay, action tape, and complete native physical states under
+`--manual-output`; resetting also saves a nonempty tape. Local policy-observation
+caches are not refreshed by this interactive path: rebuild them with the normal
+Terra wrapper before using an exported state as policy input.
+
+The main integration passed 64 JavaScript checks and four Python lifecycle
+checks (`python -m unittest terra.tests.test_pull_viewer_session -v`, with
+`TERRA_PULL_TEST_INITIAL_STATES=/path/to/initial_states.pkl` set). A live
+native HTTP check matched the green mask to all 44 excavated cells in a
+ten-action dig/unload tape, verified 44 units of accepted disposal, loaded-mask
+suppression, exact undo, all listed case/mode resets, and native-state export.
+These checks do not establish full-map solvability or browser acceptance;
+the rendered browser interaction was not verified.
+
 ## Play and inspect
 
 | Control | Manual play | Recorded playback |

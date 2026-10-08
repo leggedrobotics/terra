@@ -15,6 +15,7 @@ requires = [
     "opencv-python",
     "pathlib",
     "scikit-image",
+    "shapely>=2.0",
 ]
 
 setup(

@@ -175,7 +175,8 @@ class Agent(NamedTuple):
             
             # Update mask only if we placed an agent
             agent_corners = get_agent_corners(
-                pos_i, angle_i, width, height, env_cfg.agent.angles_base
+                pos_i, angle_i, width, height, env_cfg.agent.angles_base,
+                centre_on_base=env_cfg.agent.centre_chassis_on_base,
             )
             agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
             new_combined_mask = jnp.where(should_place, 
@@ -274,7 +275,8 @@ class Agent(NamedTuple):
 
             # Update combined mask to avoid placing next agent on top of this one
             agent_corners = get_agent_corners(
-                pos_i, angle_i, width, height, env_cfg.agent.angles_base
+                pos_i, angle_i, width, height, env_cfg.agent.angles_base,
+                centre_on_base=env_cfg.agent.centre_chassis_on_base,
             )
             agent_mask = compute_polygon_mask(agent_corners, map_width, map_height)
             combined_mask = jnp.logical_or(combined_mask, agent_mask)
@@ -379,7 +381,8 @@ def _get_random_init_state(
             The padding mask is the map encoding obstacles (1 for obstacle and 0 for no obstacle).
             """
             agent_corners_xy = get_agent_corners(
-                pos_base, angle_base, agent_width, agent_height, env_cfg.agent.angles_base
+                pos_base, angle_base, agent_width, agent_height, env_cfg.agent.angles_base,
+                centre_on_base=env_cfg.agent.centre_chassis_on_base,
             )
             polygon_mask = compute_polygon_mask(
                 agent_corners_xy, map_width, map_height

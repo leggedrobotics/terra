@@ -21,24 +21,30 @@
  * THE SOFTWARE.
  */
 import { TerraScene } from './scene.js';
-import { validateReplay, validateFrame, terrainFacts, transitionFacts, actionName, formatReward, TYPES, isJointFrame, jointRequests } from './data.js';
+import { validateReplay, validateFrame, terrainFacts, transitionFacts, actionName, formatReward, TYPES, diggingView, DIGGING_LABELS, isJointFrame, jointRequests } from './data.js';
+import { manualControls, unloadGuidance } from './manual.js';
 
 const $ = id => document.getElementById(id);
 const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
 const text = (id, value) => { $(id).textContent = value; };
 let scene, replay, index = 0, mode = 'replay', liveMode = null, imported = false, busy = false, playing = false, selected = null, eventTimer, lastTick = 0;
+let sessionInfo = {};
 const embedded = $('terra-replay');
 const offline = !!embedded?.textContent.trim();
 
 function showError(error) { $('loading').hidden = true; text('error-message', error?.message || String(error)); $('error').hidden = false; }
 function notify(message, duration = 3100) { clearTimeout(eventTimer); text('event', message); $('event').classList.add('visible'); eventTimer = setTimeout(() => $('event').classList.remove('visible'), duration); }
 function frame() { return replay?.frames[index]; }
-function manualReady() { return !!replay && mode === 'manual' && !imported && !busy && !playing && index === replay.frames.length - 1 && !frame().done; }
+function controlsState() { return manualControls({ replay, index, mode, imported, busy, playing, session: sessionInfo }); }
+function manualReady() { return controlsState().action; }
 
 function updateControls() {
-  const ready = manualReady(), current = frame();
+  const controls = controlsState(), ready = controls.action, current = frame();
   document.querySelectorAll('[data-action]').forEach(button => { button.disabled = !ready; });
-  $('reset').disabled = busy || mode !== 'manual' || imported;
+  $('reset').disabled = !controls.reset;
+  $('undo').disabled = !controls.undo;
+  for (const id of ['case-select', 'precision-select', 'start-select']) $(id).disabled = busy || mode !== 'manual' || imported;
+  $('continue').hidden = !controls.continueVisible; $('continue').disabled = !controls.continueEnabled;
   $('export').disabled = !replay || busy;
   $('screenshot').disabled = !scene || !replay;
   $('open-file').disabled = busy;
@@ -50,7 +56,7 @@ function updateControls() {
   $('resume-live').hidden = !liveMode || offline || (!imported && !(mode === 'manual' && replay && index < replay.frames.length - 1));
   $('resume-live').disabled = busy;
   const historical = replay && index < replay.frames.length - 1;
-  text('manual-status', busy ? 'STEPPING…' : imported || mode !== 'manual' ? 'REPLAY ONLY' : historical ? 'HISTORY' : current?.done ? 'ENDED' : playing ? 'PLAYBACK' : 'LIVE');
+  text('manual-status', busy ? 'Working…' : imported || mode !== 'manual' ? 'Replay' : historical ? 'History' : sessionInfo.exploring ? 'Exploring' : current?.done ? 'Ended' : playing ? 'Playback' : 'Live');
   text('session-mode', imported ? 'Imported replay' : mode === 'manual' ? (historical ? 'Manual · history' : 'Manual session') : 'Replay session');
 }
 
@@ -64,13 +70,17 @@ function updateInspector() {
   const rows = document.createElement('div'); rows.className = 'cell-data'; inspector.append(rows);
   const mask = (name, positive, negative) => maps[name] == null ? 'Unavailable' : maps[name][row][col] ? positive : negative;
   const target = maps.target[row][col];
+  const digging = diggingView(snapshot);
   const fields = [
     ['Raw soil height', `${maps.action[row][col]} units`],
     ['Target', target < 0 ? `Dig ${-target}` : target > 0 ? `Dump ${target}` : 'Neutral'],
     ['Obstacle', maps.padding[row][col] ? 'Yes' : 'No'],
     ['Static dumping', mask('dumpability_static', 'Allowed', 'Prohibited')],
     ['Dumpable now', mask('dumpability', 'Yes', 'No')],
-    ['Native interaction mask', mask('interaction', 'Inside', 'Outside')],
+    [maps.work_cone != null ? 'Workspace preview' : 'Native interaction mask', mask(maps.work_cone != null ? 'work_cone' : 'interaction', 'Inside', 'Outside')],
+    ...(maps.footprint != null ? [['Machine footprint', mask('footprint', 'Inside', 'Outside')]] : []),
+    ...(maps.precision_required_band != null ? [['Precise edge', mask('precision_required_band', 'Required', 'Not required')]] : []),
+    ...(digging.available ? [['Fresh excavation', DIGGING_LABELS[digging.cells[row][col]]]] : []),
     ['Traversability feature', maps.traversability == null ? 'Unavailable' : ({ '-1': 'Occupied (−1)', 0: 'Clear (0)', 1: 'Blocked (1)' })[Number(maps.traversability[row][col])]],
   ];
   for (const [name, value] of fields) { const label = document.createElement('span'), content = document.createElement('strong'); label.textContent = name; content.textContent = value; rows.append(label, content); }
@@ -81,6 +91,7 @@ function updateUI() {
   const joint = isJointFrame(snapshot), requests = joint ? jointRequests(snapshot) : [];
   document.body.dataset.joint = String(joint);
   text('title', replay.metadata.title); text('source', replay.metadata.source);
+  $('source').title = replay.metadata.source;
   text('grid-spec', `${snapshot.grid.rows} × ${snapshot.grid.cols} · ${number(snapshot.grid.tile_size_m)} m / cell`);
   text('agent-count', `${snapshot.agents.length} machine${snapshot.agents.length === 1 ? '' : 's'}`);
   text('machine-heading', joint ? 'FLEET · JOINT ROUND' : 'ACTIVE MACHINE');
@@ -89,6 +100,30 @@ function updateUI() {
   $('load').replaceChildren(document.createTextNode(number(joint ? facts.carried : agent.loaded))); const unit = document.createElement('small'); unit.textContent = ' units'; $('load').append(unit);
   text('reward', formatReward(snapshot.reward));
   text('outcome', snapshot.task_done ? 'Task complete' : snapshot.done ? 'Episode ended · task incomplete' : joint ? `Joint round ${snapshot.step} · native endpoint` : `Ready · machine ${agent.id + 1} acts next`); $('outcome').classList.toggle('done', snapshot.done);
+  const diagnostics = snapshot.diagnostics, digging = diggingView(snapshot);
+  const selectedCase = replay.metadata.selected_case || (!imported ? sessionInfo.selected_case : null);
+  $('rule-badge').hidden = !selectedCase;
+  if (selectedCase) text('rule-badge', selectedCase.precision ? 'Precise edges' : 'Bulk excavation');
+  $('native-status').hidden = !diagnostics;
+  $('dig-legend').hidden = !digging.available;
+  $('scene-legend').hidden = digging.available;
+  if (diagnostics) {
+    const budget = diagnostics.step_budget ?? 450, exploring = !!diagnostics.exploring || (!imported && index === replay.frames.length - 1 && !!sessionInfo.exploring);
+    text('step-budget', `${snapshot.step} / ${budget}`);
+    text('budget-note', exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? 'Budget reached · episode frozen' : `${Math.max(0, diagnostics.remaining_steps ?? budget - snapshot.step)} actions left`);
+    $('native-status').classList.toggle('exploring', exploring);
+    text('native-action-message', diagnostics.message || 'Ready for a native simulator action.');
+    text('do-status', digging.loaded ? (diagnostics.accepted_unload_now ? 'Unload allowed now' : diagnostics.accepted_unload_any ? 'Turn cabin to unload' : 'No accepted unload here') : digging.counts.current ? `Dig ${digging.counts.current} fresh cells now` : diagnostics.do_kind === 'relift' ? 'Work picks up loose soil' : 'No fresh dig at this heading');
+    text('dump-status', unloadGuidance(diagnostics));
+  }
+  if (digging.available) {
+    text('dig-current-count', digging.counts.current); text('dig-swing-count', digging.counts.swing); text('dig-blocked-count', digging.counts.blocked);
+    $('dig-legend').classList.toggle('loaded', digging.loaded);
+    $('eligibility-keys').hidden = digging.loaded;
+    $('unload-first').hidden = !digging.loaded;
+    text('eligibility-note', digging.loaded ? 'Dig colors are paused while carrying soil. The precision outline stays visible.' : `${digging.counts.remaining} target cells remain · colors apply to this base position`);
+    $('precision-key').hidden = digging.counts.precision === 0;
+  }
   const tags = $('agent-list'); tags.replaceChildren(); tags.hidden = snapshot.agents.length <= 1;
   for (const item of snapshot.agents) {
     const tag = document.createElement('span'); tag.className = `agent-tag${!joint && item.id === snapshot.current_agent ? ' active' : ''}`;
@@ -101,7 +136,10 @@ function updateUI() {
     }
     tags.append(tag);
   }
-  text('cut-units', `${number(facts.cut)} units`); text('fill-units', `${number(facts.fill)} units`);
+  const metrics = diagnostics?.metrics;
+  text('cut-label', metrics ? 'Excavated target' : 'Excavated'); text('fill-label', metrics ? 'Accepted disposal' : 'Placed soil');
+  text('cut-units', metrics ? `${number(metrics.dug)} / ${number(metrics.required)} units` : `${number(facts.cut)} units`);
+  text('fill-units', metrics ? `${number(metrics.disposed)} / ${number(metrics.required)} units` : `${number(facts.fill)} units`);
   text('scene-caption', `${number(snapshot.grid.cols * snapshot.grid.tile_size_m)} × ${number(snapshot.grid.rows * snapshot.grid.tile_size_m)} m worksite · ${joint ? 'native joint endpoints' : 'illustrative soil mounds'}`);
   text('step-label', joint ? 'JOINT ROUND' : 'STEP');
   text('replay-note', joint ? 'Recorded macro endpoints only; no interpolated travel or physical-time claim.' : 'Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.');
@@ -116,9 +154,9 @@ function updateUI() {
   left.querySelector('.turn-label').textContent = agent.action_type === 1 ? 'Steer left' : 'Turn left'; right.querySelector('.turn-label').textContent = agent.action_type === 1 ? 'Steer right' : 'Turn right';
   left.title = `${agent.action_type === 1 ? 'Steer left' : 'Turn anticlockwise'} · Left or A`; right.title = `${agent.action_type === 1 ? 'Steer right' : 'Turn clockwise'} · Right or D`;
   text('work-label', agent.type === 2 ? (agent.shovel_lifted ? 'Lower shovel / dump' : 'Lift shovel') : agent.loaded > 0 ? 'Dump / transfer soil' : agent.type === 1 ? 'Dump (empty)' : 'Dig soil');
-  for (const [name, map] of [['interaction', 'interaction'], ['restricted', 'dumpability_static'], ['dumpability', 'dumpability']]) { const checkbox = document.querySelector(`[data-layer="${name}"]`); checkbox.disabled = snapshot.maps[map] == null; checkbox.closest('label').title = snapshot.maps[map] == null ? 'This diagnostic layer is unavailable in the recording.' : ''; }
+  for (const [name, map] of [['interaction', snapshot.maps.work_cone != null ? 'work_cone' : 'interaction'], ['footprint', 'footprint'], ['restricted', 'dumpability_static'], ['dumpability', 'dumpability'], ['precision', 'precision_required_band'], ['eligibility', 'fresh_dig_current']]) { const checkbox = document.querySelector(`[data-layer="${name}"]`); checkbox.disabled = snapshot.maps[map] == null; checkbox.closest('label').title = snapshot.maps[map] == null ? 'This diagnostic layer is unavailable in the recording.' : ''; }
   document.querySelector('[data-layer="workspace"]').disabled = !snapshot.workspace_polygons?.length;
-  updateInspector(); updateControls();
+  updateLayerButton(); updateInspector(); updateControls();
 }
 
 function showFrame(next, { animate = false, reset = false, announce = false } = {}) {
@@ -127,7 +165,7 @@ function showFrame(next, { animate = false, reset = false, announce = false } = 
   const snapshot = frame();
   scene.setFrame(snapshot, { animate: !isJointFrame(snapshot) && animate && index === oldIndex + 1, reset, duration: Math.min(650, 800 / Number($('speed').value)) });
   updateUI();
-  if (announce && index > 0) { const previous = replay.frames[index - 1]; if (snapshot.step > previous.step && !previous.done) notify(`${actionName(snapshot, previous)} · ${transitionFacts(previous, snapshot).message}`); else notify('Episode boundary · initial snapshot'); }
+  if (announce && index > 0) { const previous = replay.frames[index - 1]; if (snapshot.step > previous.step) notify(snapshot.diagnostics?.message || `${actionName(snapshot, previous)} · ${transitionFacts(previous, snapshot).message}`); else notify('Episode boundary · initial snapshot'); }
   else if (reset) { clearTimeout(eventTimer); $('event').classList.remove('visible'); }
 }
 
@@ -152,9 +190,11 @@ async function request(path, body) {
 function loadSession(session, { local = false } = {}) {
   validateReplay(session.replay); if (!['manual', 'replay'].includes(session.mode)) throw new Error('Unknown viewer session mode.');
   replay = session.replay; mode = session.mode; imported = local; index = 0; selected = null; playing = false;
-  if (!local) liveMode = session.mode;
+  if (!local) { liveMode = session.mode; sessionInfo = session; }
+  configureCases();
   $('cell-inspector').replaceChildren(); const eyebrow = document.createElement('span'); eyebrow.className = 'eyebrow'; eyebrow.textContent = 'CELL INSPECTOR'; const hint = document.createElement('span'); hint.className = 'cell-hint'; hint.textContent = 'Click the terrain to inspect a cell'; $('cell-inspector').append(eyebrow, hint);
   showFrame(mode === 'manual' && !local ? replay.frames.length - 1 : 0, { reset: true });
+  if (!local && sessionInfo.cases?.length) scene.top({ instant: true });
   $('loading').hidden = true; $('error').hidden = true;
 }
 
@@ -162,7 +202,8 @@ async function performAction(action) {
   if (!manualReady()) return;
   busy = true; updateControls();
   try {
-    const { frame: next } = await request('/api/action', { action }); validateFrame(next);
+    const result = await request('/api/action', { action }), next = result.frame; validateFrame(next);
+    sessionInfo = { ...sessionInfo, can_undo: result.can_undo ?? sessionInfo.can_undo, exploring: result.exploring ?? sessionInfo.exploring };
     replay.frames.push(next); showFrame(replay.frames.length - 1, { animate: true, announce: true });
   } catch (error) { showError(error); }
   finally { busy = false; updateControls(); }
@@ -171,17 +212,72 @@ async function performAction(action) {
 async function resetSession() {
   if (busy || mode !== 'manual' || imported) return;
   busy = true; setPlaying(false); updateControls();
-  try { loadSession(await request('/api/reset', {})); notify('Episode reset · ready to play'); }
+  const choice = sessionInfo.cases?.length ? { case_id: $('case-select').value, precision: $('precision-select').value === 'precision', start: Number($('start-select').value) } : {};
+  try { loadSession(await request('/api/reset', choice)); notify('Episode reset · native initial state restored'); }
+  catch (error) { showError(error); }
+  finally { busy = false; updateControls(); }
+}
+
+function configureCases() {
+  const cases = sessionInfo.cases || [];
+  $('case-controls').hidden = imported || mode !== 'manual' || !cases.length;
+  if (imported || !cases.length) return;
+  const select = $('case-select'); select.replaceChildren();
+  for (const item of cases) { const option = document.createElement('option'); option.value = item.id; option.textContent = item.title || `Map ${item.source_slot}`; select.append(option); }
+  select.value = sessionInfo.selected_case?.case_id ?? cases[0].id;
+  configureCaseChoices(true);
+}
+
+function configureCaseChoices(fromSession = false) {
+  const item = sessionInfo.cases?.find(value => String(value.id) === $('case-select').value); if (!item) return;
+  const precision = fromSession ? (sessionInfo.selected_case?.precision ? 'precision' : 'bulk') : $('precision-select').value;
+  const rule = $('precision-select'); rule.replaceChildren();
+  for (const name of item.modes || ['bulk', 'precision']) { const option = document.createElement('option'); option.value = name; option.textContent = name === 'precision' ? 'Precise edges' : 'Bulk excavation'; rule.append(option); }
+  if ([...rule.options].some(option => option.value === precision)) rule.value = precision;
+  const start = fromSession ? sessionInfo.selected_case?.start ?? 0 : Number($('start-select').value);
+  const starts = $('start-select'); starts.replaceChildren();
+  for (const value of item.starts || [0]) { const option = document.createElement('option'); option.value = value; option.textContent = `Start ${Number(value) + 1}`; starts.append(option); }
+  if ([...starts.options].some(option => Number(option.value) === start)) starts.value = start;
+  $('start-label').hidden = starts.options.length <= 1;
+  updatePendingCase();
+}
+
+function updatePendingCase() {
+  const current = sessionInfo.selected_case;
+  const changed = current && (String(current.case_id) !== $('case-select').value || !!current.precision !== ($('precision-select').value === 'precision') || Number(current.start ?? 0) !== Number($('start-select').value));
+  text('case-note', changed ? 'Selection changed. Reset to apply.' : 'Reset restores the saved initial state.');
+  $('case-note').classList.toggle('pending', !!changed);
+}
+
+async function sessionCommand(path, message) {
+  if (busy || imported || mode !== 'manual') return;
+  busy = true; setPlaying(false); updateControls();
+  try { loadSession(await request(path, {})); notify(message); }
   catch (error) { showError(error); }
   finally { busy = false; updateControls(); }
 }
 
 function download(url, filename, revoke = false) { const anchor = document.createElement('a'); anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove(); if (revoke) setTimeout(() => URL.revokeObjectURL(url), 1000); }
-function exportReplay() { if (!replay) return; const blob = new Blob([JSON.stringify(replay)], { type: 'application/json' }); download(URL.createObjectURL(blob), 'terra-replay.json', true); notify(`Exported ${replay.frames.length} recorded snapshots`); }
+async function exportReplay() {
+  if (!replay || busy) return;
+  busy = true; updateControls();
+  try {
+    let recording = replay;
+    if (mode === 'manual' && !imported && sessionInfo.cases?.length) { const result = await request('/api/export', {}); if (result.replay) recording = validateReplay(result.replay); }
+    const blob = new Blob([JSON.stringify(recording)], { type: 'application/json' });
+    download(URL.createObjectURL(blob), 'terra-replay.json', true);
+    notify(`Exported ${recording.frames.length} snapshots with recorded overlays`);
+  } catch (error) { showError(error); }
+  finally { busy = false; updateControls(); }
+}
 
 function bindControls() {
   document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', event => { performAction(Number(button.dataset.action)); if (event.detail > 0) $('viewport').focus({ preventScroll: true }); }));
   $('reset').addEventListener('click', event => { resetSession(); if (event.detail > 0) $('viewport').focus({ preventScroll: true }); });
+  $('undo').addEventListener('click', () => sessionCommand('/api/undo', 'Undo · previous native state restored'));
+  $('continue').addEventListener('click', () => sessionCommand('/api/continue', 'Exploration enabled · actions are outside the 450-step episode'));
+  $('case-select').addEventListener('change', () => configureCaseChoices());
+  $('precision-select').addEventListener('change', updatePendingCase); $('start-select').addEventListener('change', updatePendingCase);
   $('previous').addEventListener('click', () => { setPlaying(false); showFrame(index - 1); });
   $('next').addEventListener('click', () => { setPlaying(false); showFrame(index + 1, { animate: true, announce: true }); });
   $('play').addEventListener('click', togglePlayback);
