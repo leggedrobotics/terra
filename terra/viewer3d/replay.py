@@ -7,7 +7,16 @@ import json
 from pathlib import Path
 import re
 
-from .snapshots import SCHEMA, snapshot_from_timestep, validate_frame
+import numpy as np
+
+from .snapshots import (
+    MAX_AGENTS,
+    SCHEMA,
+    _field,
+    _Selection,
+    snapshot_from_timestep,
+    validate_frame,
+)
 
 
 def _json_text(value):
@@ -88,6 +97,92 @@ class ReplayRecorder:
             if frame["step"] == previous["step"] + 1:
                 frame["actor_id"] = previous["current_agent"]
                 validate_frame(frame)
+        self.frames.append(frame)
+        return frame
+
+    def append_joint(
+        self,
+        timestep,
+        *,
+        requested_actions,
+        effective_actions,
+        order,
+        workspace_blocked,
+        workspace_polygons,
+        env_index=None,
+    ):
+        """Record an actual joint endpoint with explicit native transition evidence.
+
+        Action and rejection vectors use original machine slots, including any
+        inactive slots. ``order`` contains each active slot once. These vectors
+        may carry the timestep's batch axes or already select one environment.
+        Polygons always select one environment: one ``body`` and one ``work``
+        polygon per active slot, with vertices in cell-edge grid coordinates.
+
+        Pass all four transition arguments as ``None`` for the reset frame at
+        step zero. Subsequent frames require every argument; neither execution
+        order, rejected commands nor reservation geometry is inferred here.
+        """
+        frame = snapshot_from_timestep(timestep, env_index=env_index)
+        transition = {
+            "joint_actions": requested_actions,
+            "effective_joint_actions": effective_actions,
+            "joint_order": order,
+            "workspace_blocked": workspace_blocked,
+        }
+        absent = [name for name, value in transition.items() if value is None]
+        if absent and (len(absent) != len(transition) or frame["step"] != 0):
+            raise ValueError(
+                "Joint transitions require requested_actions, effective_actions, "
+                "order and workspace_blocked; only reset may supply all as None"
+            )
+        state = _field(timestep, "state")
+        action_map = _field(_field(_field(state, "world"), "action_map"), "map")
+        selection = _Selection(action_map, env_index)
+        vector_shapes = tuple((count,) for count in range(1, MAX_AGENTS + 1))
+        for name, value in transition.items():
+            # Preserve validation of mixed Python lists such as [False, 2];
+            # NumPy would otherwise silently convert the boolean to slot zero.
+            if name != "workspace_blocked" and isinstance(value, (tuple, list)):
+                if any(
+                    isinstance(item, (bool, np.bool_))
+                    for item in np.asarray(value, dtype=object).flat
+                ):
+                    raise ValueError(f"{name} must contain integers, not booleans")
+            frame[name] = (
+                None
+                if value is None
+                else selection.array(value, name, vector_shapes).tolist()
+            )
+        if not isinstance(workspace_polygons, (list, tuple)):
+            raise ValueError(
+                "workspace_polygons must contain native body/work polygons"
+            )
+        polygons = []
+        for polygon in workspace_polygons:
+            if not isinstance(polygon, Mapping):
+                raise ValueError("A workspace polygon must be an object")
+            detached = deepcopy(dict(polygon))
+            if "id" in detached:
+                identity = np.asarray(detached["id"])
+                if identity.shape != ():
+                    raise ValueError("Workspace polygon id must be a scalar")
+                detached["id"] = identity.item()
+            if "vertices" in detached:
+                detached["vertices"] = np.asarray(detached["vertices"]).tolist()
+            polygons.append(detached)
+        frame["workspace_polygons"] = polygons
+        validate_frame(frame)
+        expected = {
+            (agent["id"], component)
+            for agent in frame["agents"]
+            for component in ("body", "work")
+        }
+        if {(p["id"], p["component"]) for p in polygons} != expected:
+            raise ValueError(
+                "Joint capture requires native body and work polygons for every active slot"
+            )
+        _json_text(frame)
         self.frames.append(frame)
         return frame
 

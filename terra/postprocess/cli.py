@@ -115,9 +115,35 @@ def solo_command(args):
 
 
 def render_command(args):
-    from .render import write_html
+    from .render import write_html, write_video
 
-    _json({"page": str(write_html(args.recording, args.out).resolve())})
+    if args.out.suffix.lower() == ".html":
+        _json({"page": str(write_html(args.recording, args.out).resolve())})
+    elif args.out.suffix.lower() in (".mp4", ".gif"):
+        _json(
+            write_video(
+                args.recording,
+                args.out,
+                **{
+                    name: getattr(args, name)
+                    for name in (
+                        "fps",
+                        "step_seconds",
+                        "start",
+                        "stop",
+                        "width",
+                        "height",
+                        "camera",
+                        "quality",
+                        "presentation",
+                        "browser",
+                        "ffmpeg",
+                    )
+                },
+            )
+        )
+    else:
+        raise ValueError("Render output must end in .html, .mp4 or .gif")
     return 0
 
 
@@ -226,9 +252,31 @@ def parser():
     command.add_argument("--ros-repo", type=Path, help="also run ROS admission checks")
     command.set_defaults(run=solo_command)
 
-    command = commands.add_parser("render", help="render a native or metric recording")
+    command = commands.add_parser("render", help="3D recording to HTML, MP4 or GIF")
     command.add_argument("recording", type=Path)
     command.add_argument("--out", type=Path, required=True)
+    command.add_argument("--fps", type=int, default=20, help="video frame rate")
+    command.add_argument(
+        "--step-seconds",
+        type=float,
+        default=0.5,
+        help="video hold per recorded state; rounded to whole frames",
+    )
+    command.add_argument(
+        "--start", type=int, default=0, help="first recorded frame (inclusive)"
+    )
+    command.add_argument("--stop", type=int, help="last recorded frame (inclusive)")
+    command.add_argument("--width", type=int, default=1280)
+    command.add_argument("--height", type=int, default=720)
+    command.add_argument("--camera", choices=("home", "top"), default="home")
+    command.add_argument("--quality", choices=("fast", "high"), default="high")
+    command.add_argument(
+        "--presentation", choices=("studio", "paper", "diorama"), default="studio"
+    )
+    command.add_argument(
+        "--browser", type=Path, help="optional Chromium/Chrome executable"
+    )
+    command.add_argument("--ffmpeg", default="ffmpeg", help="video encoder executable")
     command.set_defaults(run=render_command)
 
     command = commands.add_parser("dashboard", help="compare converted plan versions")
@@ -242,7 +290,9 @@ def parser():
     command.add_argument("--out", type=Path, required=True)
     command.set_defaults(run=gallery_command)
 
-    command = commands.add_parser("animate", help="export a plan as MP4 or GIF")
+    command = commands.add_parser(
+        "animate", help="2D solo plan comparison as MP4 or GIF"
+    )
     command.add_argument("evaluation", type=Path)
     command.add_argument("--out", type=Path, required=True)
     command.add_argument("--mode", choices=("native", "machine", "side-by-side"))

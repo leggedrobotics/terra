@@ -1,4 +1,4 @@
-"""Export native Terra replays and metric plans as portable, offline HTML."""
+"""Export native Terra replays and metric plans using the shared 3D viewer."""
 
 from collections.abc import Mapping
 import gzip
@@ -24,12 +24,8 @@ def player_bundle(bundle=None):
     )
 
 
-def write_html(data_or_path, out, *, bundle=None):
-    """Write one native or metric recording using installed assets; return its Path.
-
-    Reading and rendering recordings does not initialize JAX or a ROS runtime.
-    Node is only needed when developing the checked-in browser bundles.
-    """
+def load_recording(data_or_path):
+    """Read and validate either supported recording schema without a simulator."""
     if isinstance(data_or_path, Mapping):
         data = dict(data_or_path)
     else:
@@ -39,20 +35,34 @@ def write_html(data_or_path, out, *, bundle=None):
             data = json.load(stream)
     if not isinstance(data, dict):
         raise ValueError("A recording must be a JSON object")
-    out = Path(out)
     if data.get("schema") == "terra.viewer3d.v1":
-        from terra.viewer3d import ReplayRecorder, validate_replay
+        from terra.viewer3d import validate_replay
 
         validate_replay(data)
+    elif data.get("schema") == "terra.postprocessed.v1":
+        from . import timeline
+
+        timeline.validate(data)
+    else:
+        raise ValueError("Expected terra.viewer3d.v1 or terra.postprocessed.v1")
+    return data
+
+
+def write_html(data_or_path, out, *, bundle=None):
+    """Write one native or metric recording using installed assets; return its Path.
+
+    Reading and rendering recordings does not initialize JAX or a ROS runtime.
+    Node is only needed when developing the checked-in browser bundles.
+    """
+    data = load_recording(data_or_path)
+    out = Path(out)
+    if data["schema"] == "terra.viewer3d.v1":
+        from terra.viewer3d import ReplayRecorder
+
         recorder = ReplayRecorder(metadata=data["metadata"])
         recorder.frames.extend(data["frames"])
         out.parent.mkdir(parents=True, exist_ok=True)
         return recorder.save_html(out)
-    if data.get("schema") != "terra.postprocessed.v1":
-        raise ValueError("Expected terra.viewer3d.v1 or terra.postprocessed.v1")
-    from . import timeline
-
-    timeline.validate(data)
     javascript, _ = player_bundle(bundle)
     payload = json.dumps(data, separators=(",", ":"), allow_nan=False).replace(
         "<", "\\u003c"
@@ -78,3 +88,10 @@ def write_html(data_or_path, out, *, bundle=None):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     return out
+
+
+def write_video(data_or_path, out, **options):
+    """Export MP4/GIF with the same viewer; browser dependencies are optional."""
+    from .video import write_video as export
+
+    return export(data_or_path, out, **options)

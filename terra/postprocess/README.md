@@ -1,10 +1,40 @@
-# Terra postprocessing and rendering
+# Terra recordings, postprocessing and media
 
 `terra-postprocess` is the shared entry point for saved solo plans, exact fleet
 traces, native recordings, comparison dashboards and galleries. The Python API
 is `terra.postprocess`; `python -m terra.postprocess` runs the same commands.
-The renderer and its browser assets are shipped with Terra. Normal export does
-not need Node.js, ROS, a viewer checkout or a running web server.
+The renderer and its browser assets are shipped with Terra. HTML export does
+not need Node.js, ROS, a browser installation or a running web server. Video
+export uses the same scene through headless Chromium and an encoder.
+
+## Choose a pipeline
+
+1. **Record the native episode** in its matching policy and environment runtime.
+   Save selected states with `terra.viewer3d.ReplayRecorder`; use `append_joint`
+   for joint rounds. The [recording guide](../viewer3d/README.md#record-from-a-rollout)
+   covers sequential and joint captures. Policy loading, recurrent state,
+   resets, action selection and RNG stay in the evaluation adapter.
+2. **Optionally postprocess** exact fleet substeps with `fleet`, or a saved solo
+   conversion with `solo`. Postprocessing produces a separate metric timeline
+   and validation report. It is not required to make a native video.
+3. **Render either recording** with `render --out FILE.html`, `.mp4` or `.gif`.
+   The same command supports solo, two excavators and mixed fleets.
+4. **Index results** with `gallery`, or compare converted solo versions with
+   `dashboard`. Keep successes, failures and missing recordings visible.
+
+| Use | Entry point | Output |
+| --- | --- | --- |
+| Saved native or processed recording | `terra-postprocess render` | 3D HTML, MP4 or GIF |
+| Fleet cleanup and workspace refinement | `terra-postprocess fleet` | Report, timelines and original/refined HTML |
+| Solo converted-plan review | `terra-postprocess solo` or `evaluate` | Report, timeline and HTML |
+| Result index or version comparison | `terra-postprocess gallery` or `dashboard` | HTML |
+| Manual environment inspection | `python -m terra.viewer3d` | Live 3D viewer; export JSON or PNG |
+| Solo waypoint/conversion comparison | `terra-postprocess animate` | 2D MP4 or GIF |
+
+The older Pygame viewer in `terra.viz` and the compatible policy GIF tools in
+`terra-baselines` remain useful for 2D diagnostics. They do not export the 3D
+scene. There is no generic joint-checkpoint loader: new policy captures still
+need the model and native joint-step adapter paired with that checkpoint.
 
 ## Install
 
@@ -25,7 +55,19 @@ python -m pip install numpy scipy 'shapely>=2.0' PyYAML Pillow
 
 The offline commands do not import JAX. Native capture uses the environment and
 configuration that produced the plan; it does not change the training runtime.
-MP4 export additionally uses ffmpeg or imageio-ffmpeg, with GIF as the fallback.
+
+For 3D video, also install the optional browser dependency and Chromium:
+
+```bash
+python -m pip install -e '.[postprocess,video]'
+python -m playwright install chromium
+```
+
+The video exporter also needs `ffmpeg` on `PATH`, or an executable selected with
+`--ffmpeg`. An installed Chrome or Chromium can be selected with `--browser`
+instead of installing Playwright's Chromium. In an offline-tools-only environment,
+install `playwright` alongside the portable dependencies above; keep the Terra
+installation on `--no-deps` to avoid changing training dependencies.
 
 ## Native recordings and processed plans
 
@@ -57,15 +99,37 @@ are illustrative, not controller trajectories or physical durations.
 ```bash
 terra-postprocess render episode.json.gz --out episode.html
 terra-postprocess render postprocessed.json.gz --out refined.html
+terra-postprocess render episode.json.gz --out episode.mp4
+terra-postprocess render postprocessed.json.gz --out refined.gif
 ```
 
-Both commands write a self-contained offline HTML page. The Python equivalent:
+The output extension selects the format. HTML is a self-contained interactive
+page that opens offline. Its Python equivalent:
 
 ```python
 from terra.postprocess.render import write_html
 
 write_html("episode.json.gz", "episode.html")
 ```
+
+Video shows each selected recorded endpoint for a fixed duration. It does not
+interpolate machine motion, infer joint substeps or rerun the environment.
+Native joint reservations and processed workspace/route overlays use the same
+geometry as their HTML players. Display time is independent of physical time.
+
+```bash
+# Inclusive recording indices 0 through 30; half a second per endpoint.
+terra-postprocess render episode.json.gz --out clip.mp4 --start 0 --stop 30 --step-seconds 0.5 --fps 20
+
+# A top view for inspection.
+terra-postprocess render postprocessed.json.gz --out top.mp4 --camera top --width 1280 --height 720
+```
+
+Video defaults are 1280 × 720, 20 fps and 0.5 seconds per recorded endpoint.
+`--camera` selects `home` or `top`; `--presentation` selects `studio`, `paper`
+or `diorama`; `--quality` selects `fast` or `high`. `--start` and `--stop` are
+inclusive recording indices, not native step numbers. Omit them for the whole
+recording. `--browser` and `--ffmpeg` accept explicit executable paths.
 
 The existing `terra.viewer3d` manual-play application remains available. Both
 paths share its scene and machine renderer. Developers rebuild the native and
@@ -136,11 +200,18 @@ commands forward portable replay/rendering operations to this package and supply
 the ROS validators. There is one portable processor and renderer implementation;
 the robot runtime remains the authority for field admission.
 
-For a 2D animation:
+For the older 2D solo comparison:
 
 ```bash
 terra-postprocess animate evaluated --out plan.mp4 --mode side-by-side --stills 4
 ```
+
+This command accepts a schema-v2 native source directory or a solo evaluation
+directory, not a native snapshot recording or fleet metric timeline. Its
+`native`, `machine` and `side-by-side` modes compare waypoint work with the
+converted plan; the native panel reconstructs waypoint changes rather than
+replaying exact rollout states. MP4 needs ffmpeg or imageio-ffmpeg; this 2D
+command falls back to GIF if neither is available.
 
 ## Galleries and comparisons
 

@@ -56,7 +56,8 @@ The map option accepts Terra's existing single-map directory formats:
 Manual maps must be square, 32–128 cells per side. The viewer uses the current
 default environment configuration with the requested agent types and horizon;
 it does not infer a checkpoint's reward or environment settings from a map.
-For an exact policy episode, use the checkpoint exporter below.
+For a policy episode, capture states in its matching evaluation runtime as
+described under [Record from a rollout](#record-from-a-rollout).
 The manual viewer checks the chosen seed's placements before starting Terra's
 reset sampler. If it cannot place every machine within 4,096 proposals each,
 it reports the failure; try another seed, fewer agents, or more free space.
@@ -167,9 +168,10 @@ passes, curls and lifts; it dumps by holding the bucket hinge above the deposit
 and opening the bucket, and the pile grows as the soil lands. A small extra
 slew centers the boom on the cells and returns before the step ends. A
 skid-steer loader lowers its bucket, drives into the soil and backs out to its
-recorded position, or drives up with the arms raised and tips the bucket. When
-one recorded frame changes several machines (joint team rounds), every machine
-animates its own work at the same time. The arm angles come from a two-link
+recorded position, or drives up with the arms raised and tips the bucket.
+Joint-round recordings show discrete endpoints: their within-round motion and
+per-machine soil changes cannot be reconstructed from endpoint snapshots.
+For sequential recorded actions, the arm angles come from a two-link
 inverse kinematics solve; the motion is illustrative and the recorded state is
 unchanged.
 
@@ -193,17 +195,24 @@ recording; **Return to live session** reconnects to the current manual episode.
 python -m terra.viewer3d --replay episode.json
 python -m terra.viewer3d --replay episode.json.gz
 
-# Portable HTML: opens directly in a browser, with no server or network.
-python -m terra.viewer3d --replay episode.json.gz --export episode.html
-
 # Generate a real example without starting the viewer service.
 python -m terra.viewer3d --demo-replay --export example.json.gz
-python -m terra.viewer3d --demo-replay --export example.html
+
+# Shared export for native recordings and postprocessed metric timelines.
+terra-postprocess render episode.json.gz --out episode.html
+terra-postprocess render episode.json.gz --out episode.mp4
 ```
 
-JSON/gzip/HTML replay operations do not initialize JAX. WebGL2 support is
-required to draw the scene. Full snapshots make seeking exact but use more RAM
-than a video; use one episode per file and gzip for storage/transfer.
+Reading JSON/gzip and rendering saved recordings do not initialize JAX. WebGL2
+is required to draw the scene. HTML opens offline without a server or network;
+video needs the optional browser and encoder dependencies in the
+[media workflow](../postprocess/README.md#install). Video holds exact recorded
+endpoints for the selected duration, without interpolating motion. Full snapshots
+make interactive seeking exact but use more RAM than a video; use one episode
+per file and gzip for storage/transfer. The viewer's `--replay ... --export ...`
+and `ReplayRecorder.save_html()` APIs remain available for native recordings.
+
+## Record from a rollout
 
 From a Python rollout, explicitly select one environment from a batch:
 
@@ -227,19 +236,59 @@ For an unbatched timestep omit `env_index`. For `[device, env, ...]` input use
 host-side operation and should be used for selected evaluation episodes, not
 every training environment inside a JIT loop.
 
-The sibling repository provides `inference/export_3d_replay.py`, with recurrent
-policy support and terminal-state retention. See its
-[`inference/VIEWER3D.md`](../../../terra-baselines/inference/VIEWER3D.md).
-Use the Terra and terra-baselines revisions paired with your checkpoint. The
-canonical local checkouts inspected on 2026-09-07 have a pre-existing mismatch:
-baseline imports require `REWARD_V2_DISTANCE_BOUND` and `RewardStage`, which that
-Terra checkout lacks. The exporter reports this without substituting policy
-or environment constants. The supplied-model export API works with the current
-Terra environment and is covered by a real CPU rollout test.
-An existing saved checkpoint was also exported for three actions using an
-isolated matching Terra revision, preserving its 44 m map and 5 × 9 machine
-footprint. The baseline guide records this smoke test and its source pairing;
-it is not a policy benchmark.
+Use the Terra and terra-baselines revisions paired with the checkpoint. The
+evaluation adapter still owns model loading, observation construction,
+recurrent state, reset/step RNG and action selection. `ReplayRecorder` records
+the resulting native states; it is not a checkpoint loader. A newly captured
+episode can differ from an earlier GPU evaluation even when the checkpoint and
+seed match, so retain those outcomes separately. See the baselines
+[inference guide](https://github.com/leggedrobotics/terra-baselines/blob/main/inference/README.md)
+for the existing policy diagnostics.
+
+For a joint-step runtime, record the full requested/effective transition and
+the native reservation polygons explicitly:
+
+```python
+from terra.viewer3d import ReplayRecorder
+
+recording = ReplayRecorder(metadata={"title": "Joint policy episode", "source": "evaluation"})
+recording.append_joint(
+    timestep,
+    requested_actions=None,
+    effective_actions=None,
+    order=None,
+    workspace_blocked=None,
+    workspace_polygons=initial_native_polygons[world],
+    env_index=world,
+)
+
+# Inside the matching evaluator, after one native joint step:
+recording.append_joint(
+    timestep,
+    requested_actions=requested_actions,
+    effective_actions=timestep.info["effective_actions"],
+    order=execution_order,
+    workspace_blocked=timestep.info["workspace_blocked"],
+    workspace_polygons=current_native_polygons[world],
+    env_index=world,
+)
+recording.save("joint_episode.json.gz")
+```
+
+The reset call is at native step zero. Transition vectors use stable agent
+slots; they may be selected vectors or carry the timestep's batch axes, selected
+with `env_index`. `execution_order` is the actual native order, not an inferred
+agent sequence. Reservation polygons must already be selected for that world
+and include the native body/work geometry of its active slots, for example
+`{"id": 0, "component": "body", "vertices": [[x, y], ...]}`. Vertices use
+native cell-edge grid coordinates without a half-cell shift. Missing guard
+results, order or geometry must be supplied by the matching runtime adapter.
+
+Joint endpoint recordings are sufficient for rendering. Fleet postprocessing
+additionally needs exact ordered substeps from
+`terra.postprocess.fleet.NativeFleetRecorder`; it cannot recover those substeps
+from an endpoint delta. See the
+[fleet workflow](../postprocess/README.md#two-excavators-or-an-excavator-and-skid).
 
 ## Joint recordings and postprocessed plans
 
@@ -249,9 +298,10 @@ and rejected actions for each stable machine slot. Solid work and dashed body
 outlines use cell-edge coordinates. Joint frames remain discrete endpoints,
 without inferred action attribution or interpolated work.
 
-Use `terra-postprocess render RECORDING --out replay.html` for either native
-recordings or metric processed timelines. Fleet cleanup, refined workspaces,
-comparison dashboards and galleries share this renderer; their workflow lives
+Use `terra-postprocess render RECORDING --out replay.html` (or `.mp4`/`.gif`)
+for either native recordings or metric processed timelines. Fleet cleanup,
+refined workspaces, comparison dashboards and galleries share this renderer;
+their workflow lives
 in the [postprocessing README](../postprocess/README.md). A native task outcome,
 a processed-plan verdict and physical execution evidence are separate results.
 

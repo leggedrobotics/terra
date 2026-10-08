@@ -39,10 +39,19 @@ The JAX installation is hardware-dependent and therefore needs to be done separa
 
 ## Usage
 
-Saved-plan processing and rendering use `terra-postprocess`: fleet cleanup and
-workspace refinement, native or metric 3D playback, and galleries of successful
-and failed cases. See the [postprocessing workflow](terra/postprocess/README.md)
-for installation, commands and the ROS conversion boundary.
+Saved recordings and plans use `terra-postprocess`: record the native episode,
+optionally clean and refine its plan, then render either recording as offline
+3D HTML, MP4 or GIF. Galleries keep native and postprocessed outcomes separate.
+
+```bash
+terra-postprocess render episode.json.gz --out episode.html
+terra-postprocess render episode.json.gz --out episode.mp4
+terra-postprocess gallery gallery.json --out index.html
+```
+
+See the [media and postprocessing workflow](terra/postprocess/README.md) for
+recording requirements, video dependencies, fleet cleanup and the ROS conversion
+boundary. Rendering saved recordings does not run a policy.
 
 For keyboard-controlled excavation with a 3D/top-down map, replay, and optional
 native precision-edge eligibility overlays, see the [Terra 3D viewer](terra/viewer3d/README.md).
@@ -258,7 +267,9 @@ It shows terrain heights, articulated machines, soil transfers, task overlays,
 and a replay timeline, in a studio style for papers and talks, a plain figure
 style or a stylized diorama. Use
 `--map /path/to/single-map` for your own site or `--replay episode.json.gz` for
-a recording. See the [viewer guide](terra/viewer3d/README.md) and
+a recording. Use `terra-postprocess render` to export saved recordings as HTML
+or video. See the [viewer guide](terra/viewer3d/README.md),
+[media workflow](terra/postprocess/README.md) and
 [design specification](VISUALIZATION_3D_DESIGN.md).
 
 ### Original 2D viewer

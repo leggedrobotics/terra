@@ -30,6 +30,7 @@ setup(
     },
     extras_require={
         "postprocess": ["numpy", "scipy", "shapely>=2.0", "PyYAML", "Pillow"],
+        "video": ["playwright>=1.40"],
     },
     entry_points={
         "console_scripts": ["terra-postprocess=terra.postprocess.cli:main"],

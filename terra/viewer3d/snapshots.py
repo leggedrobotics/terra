@@ -257,6 +257,29 @@ def validate_frame(frame):
                 slots(values, name, flags=name == "workspace_blocked")
                 if requested is None or len(values) != len(requested):
                     raise ValueError(f"{name} must match requested slots")
+        order = frame.get("joint_order")
+        if order is not None:
+            if requested is None:
+                raise ValueError("joint_order requires requested actions")
+            if not isinstance(order, list):
+                raise ValueError("joint_order must be a list of active machine slots")
+            for identity in order:
+                _integer(identity, "joint_order slot", 0, MAX_AGENTS - 1)
+            if len(order) != len(ids) or set(order) != ids:
+                raise ValueError(
+                    "joint_order must contain each active machine slot once"
+                )
+        effective = frame.get("effective_joint_actions")
+        blocked = frame.get("workspace_blocked")
+        if effective is not None and blocked is not None:
+            expected = [
+                7 if rejected else action
+                for action, rejected in zip(requested, blocked)
+            ]
+            if effective != expected:
+                raise ValueError(
+                    "Effective actions disagree with native rejection flags"
+                )
     polygons = frame.get("workspace_polygons")
     if polygons is not None:
         if not isinstance(polygons, list):

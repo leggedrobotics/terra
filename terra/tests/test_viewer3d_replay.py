@@ -293,5 +293,155 @@ class ReplayTest(unittest.TestCase):
             validate_replay(original)
 
 
+class JointReplayTest(unittest.TestCase):
+    def setUp(self):
+        self.timestep = timestep_fixture()
+        self.recorder = ReplayRecorder()
+        self.evidence = {
+            "requested_actions": np.array([5, 7, 0, 7], dtype=np.int8),
+            "effective_actions": np.array([5, 7, 7, 7], dtype=np.int8),
+            "order": np.array([2, 0], dtype=np.int32),
+            "workspace_blocked": np.array([False, False, True, False]),
+            "workspace_polygons": [
+                {
+                    "id": np.int32(slot),
+                    "component": component,
+                    "vertices": np.array(
+                        [[0.25, 0.5], [1.25, 0.5], [1.25, 1.5], [0.25, 1.5]]
+                    ),
+                }
+                for slot in (0, 2)
+                for component in ("body", "work")
+            ],
+        }
+
+    def test_joint_evidence_is_detached_and_round_trips(self):
+        frame = self.recorder.append_joint(self.timestep, **self.evidence)
+        self.assertIsNone(frame["action"])
+        self.assertIsNone(frame["actor_id"])
+        self.assertEqual(frame["joint_actions"], [5, 7, 0, 7])
+        self.assertEqual(frame["effective_joint_actions"], [5, 7, 7, 7])
+        self.assertEqual(frame["joint_order"], [2, 0])
+        self.assertEqual(frame["workspace_blocked"], [False, False, True, False])
+        self.assertEqual([agent["id"] for agent in frame["agents"]], [0, 2])
+        self.assertEqual(frame["workspace_polygons"][0]["vertices"][0], [0.25, 0.5])
+        self.evidence["requested_actions"][0] = 0
+        self.evidence["order"][0] = 0
+        self.evidence["workspace_polygons"][0]["vertices"][0] = [7, 8]
+        self.assertEqual(frame["joint_actions"], [5, 7, 0, 7])
+        self.assertEqual(frame["joint_order"], [2, 0])
+        self.assertEqual(frame["workspace_polygons"][0]["vertices"][0], [0.25, 0.5])
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.recorder.save(Path(directory) / "joint.json.gz")
+            self.assertEqual(load_replay(path), self.recorder.to_dict())
+
+    def test_reset_keeps_explicit_absence_of_transition(self):
+        self.timestep.state.env_steps = np.int32(0)
+        reset = {
+            **dict.fromkeys(
+                ("requested_actions", "effective_actions", "order", "workspace_blocked")
+            ),
+            "workspace_polygons": self.evidence["workspace_polygons"],
+        }
+        frame = self.recorder.append_joint(self.timestep, **reset)
+        for key in (
+            "joint_actions",
+            "effective_joint_actions",
+            "joint_order",
+            "workspace_blocked",
+        ):
+            self.assertIsNone(frame[key])
+        self.timestep.state.env_steps = np.int32(1)
+        with self.assertRaisesRegex(ValueError, "only reset"):
+            self.recorder.append_joint(self.timestep, **reset)
+        self.assertEqual(len(self.recorder.frames), 1)
+
+    def test_batched_evidence_selects_native_slots_before_host_transfer(self):
+        batch = batch_fixture(self.timestep, (2, 3))
+        evidence = {
+            name: (
+                value
+                if name == "workspace_polygons"
+                else np.broadcast_to(value, (2, 3) + value.shape).copy()
+            )
+            for name, value in self.evidence.items()
+        }
+        evidence["requested_actions"][1, 2, 0] = 6
+        evidence["effective_actions"][1, 2, 0] = 6
+        requested = evidence["requested_actions"]
+
+        class DeviceBatch:
+            shape = requested.shape
+
+            def __array__(self, *args, **kwargs):
+                raise AssertionError("The full decision batch must not be transferred")
+
+            def __getitem__(self, index):
+                return requested[index]
+
+        evidence["requested_actions"] = DeviceBatch()
+        frame = self.recorder.append_joint(batch, env_index=(1, 2), **evidence)
+        self.assertEqual(frame["joint_actions"], [6, 7, 0, 7])
+        self.assertEqual(frame["effective_joint_actions"], [6, 7, 7, 7])
+        self.assertEqual(frame["joint_order"], [2, 0])
+        # Already selected vectors are also accepted with a batched timestep.
+        frame = self.recorder.append_joint(batch, env_index=(1, 2), **self.evidence)
+        self.assertEqual(frame["joint_actions"], [5, 7, 0, 7])
+
+    def test_rejects_missing_or_inconsistent_evidence_without_appending(self):
+        cases = [
+            ("requested_actions", None),
+            ("effective_actions", None),
+            ("order", None),
+            ("workspace_blocked", None),
+            ("requested_actions", [5, 7]),
+            ("requested_actions", [5.0, 7.0, 0.0, 7.0]),
+            ("effective_actions", [5, 7, 0, 7]),
+            ("effective_actions", [7, 7, 7, 7]),
+            ("order", [0, 0]),
+            ("order", [0, 1]),
+            ("order", [0]),
+            ("order", [0, 1, 2, 3]),
+            ("order", [False, 2]),
+            ("workspace_blocked", [0, 0, 1, 0]),
+            ("workspace_blocked", [False, False, True]),
+            ("workspace_polygons", None),
+            ("workspace_polygons", []),
+            ("workspace_polygons", self.evidence["workspace_polygons"][:3]),
+            ("workspace_polygons", self.evidence["workspace_polygons"] * 2),
+        ]
+        for key, value in cases:
+            with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                self.recorder.append_joint(
+                    self.timestep, **{**self.evidence, key: value}
+                )
+            self.assertFalse(self.recorder.frames)
+        for key in self.evidence:
+            missing = {
+                name: value for name, value in self.evidence.items() if name != key
+            }
+            with self.subTest(missing=key), self.assertRaises(TypeError):
+                self.recorder.append_joint(self.timestep, **missing)
+            self.assertFalse(self.recorder.frames)
+
+    def test_saved_order_and_guard_evidence_are_validated_when_present(self):
+        self.recorder.append_joint(self.timestep, **self.evidence)
+        for key, value in (
+            ("joint_order", [0, 0]),
+            ("joint_order", [0.0, 2.0]),
+            ("effective_joint_actions", [5, 7, 0, 7]),
+            ("workspace_blocked", [False, False, False, False]),
+        ):
+            document = self.recorder.to_dict()
+            document["frames"][0][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                validate_replay(document)
+        # Historical endpoint recordings may lack order and guard metadata.
+        legacy = self.recorder.to_dict()
+        for key in ("joint_order", "effective_joint_actions", "workspace_blocked"):
+            del legacy["frames"][0][key]
+        self.assertEqual(validate_replay(legacy), legacy)
+
+
 if __name__ == "__main__":
     unittest.main()
