@@ -33,6 +33,16 @@ from terra.config import REWARD_V2_SUCCESS_BONUS
 from terra.config import REWARD_V2_TIMING_V21
 from terra.config import REWARD_V2_V21_SHAPING_GAMMA
 from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
+from terra.config import TIME_BASE_TURN_S_PER_RAD
+from terra.config import TIME_CABIN_TURN_S_PER_RAD
+from terra.config import TIME_DIG_S_PER_M3
+from terra.config import TIME_NAV_SPEED_MPS
+from terra.config import TIME_RELEASE_GRID
+from terra.config import TIME_RELOCATION_S
+from terra.config import TIME_SETUP_S
+from terra.config import TIME_SKID_LOAD_S_PER_M3
+from terra.config import TIME_SKID_SPEED_MPS
+from terra.config import TIME_SKID_UNLOAD_S
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.utils import angle_idx_to_rad
@@ -167,6 +177,16 @@ class State(NamedTuple):
     # Per-skid sum of load * chassis distance at pickup, separate from the
     # ground-source credit used by baseline material work. Reset rebases it.
     carry_transport_origin: Array = jnp.zeros((4,), dtype=jnp.float32)
+    # Elapsed-time clock (TIME_* in config), per slot: time at which the last
+    # executed action finishes, summed action durations, latest finish time of
+    # the slot's executed reservations per raster cell, an open workspace visit
+    # (worked here, no base motion since) and base motion since the last work.
+    machine_clock_s: Array = jnp.zeros((4,), dtype=jnp.float32)
+    machine_busy_s: Array = jnp.zeros((4,), dtype=jnp.float32)
+    machine_release_s: Array = jnp.zeros(
+        (4, TIME_RELEASE_GRID, TIME_RELEASE_GRID), dtype=jnp.float32)
+    machine_visit_open: Array = jnp.zeros((4,), dtype=jnp.bool_)
+    machine_moved: Array = jnp.zeros((4,), dtype=jnp.bool_)
 
 
     @classmethod
@@ -385,12 +405,13 @@ class State(NamedTuple):
                 # carry credit and work accounting. PPO still owns the requested
                 # action; only executed-action reward terms see WAIT.
                 state = jax.lax.cond(blocked, lambda: before, lambda: candidate)
+                state = before._time_advance(state, proposed)
                 reservations = jax.tree_util.tree_map(
                     lambda old, new: old.at[slot].set(jnp.where(blocked, old[slot], new)),
                     reservations, proposed,
                 )
             else:
-                state = candidate
+                state = before._time_advance(candidate, None)
             effective_action = jnp.where(blocked, jnp.full_like(agent_action, 7), agent_action)
             if with_reward_terms:
                 terms.append({
@@ -4232,6 +4253,9 @@ class State(NamedTuple):
                     "reward_v2_valid": zero,
                     "reward_v2_makespan": zero,
                     "reward_v2_makespan_fraction": zero,
+                    "reward_v2_elapsed_time": zero,
+                    "reward_v2_time_finish_s": zero,
+                    "reward_v2_time_busy_s": zero,
                     "reward_v2_transport_phi": zero,
                     "reward_v2_transport_phi_next": zero,
                     "reward_v2_transport_shaping": zero,
@@ -4262,6 +4286,7 @@ class State(NamedTuple):
         ).at[slots].set(
             reward_v2_components["reward_v2_shaping"] / slots.shape[0]
             + reward_v2_components["reward_v2_makespan"] / slots.shape[0]
+            + reward_v2_components["reward_v2_elapsed_time"] / slots.shape[0]
             + agent_terms["reward_v2_lateral_dig"]
             + agent_terms["reward_v2_base_travel"]
             + agent_terms["reward_v2_base_turn"]
@@ -5016,6 +5041,126 @@ class State(NamedTuple):
         )
         return jnp.sum(required - completed) + jnp.sum(off_zone)
 
+    def _time_action_duration_s(self, after: "State") -> tuple[Float, Array, Array]:
+        """Seconds of current_agent's executed action, and its visit flags.
+
+        ``self`` is the state before the action and ``after`` the accepted
+        state (``self`` again when blocked). Excavators pay travel, turns,
+        TIME_DIG_S_PER_M3 per loaded m^3 (dig or relift; dumping is inside that
+        rate), TIME_SETUP_S once per workspace visit and TIME_RELOCATION_S when
+        the visit follows base motion. Skid steers pay travel, turns, loading
+        and one unload. Returns (duration, visit_open, moved) for the slot.
+        """
+        slot = self.agent.current_agent
+        cur = self._get_current_agent_state()
+        nxt = after._get_current_agent_state()
+        tile = jnp.float32(self.env_cfg.tile_size)
+
+        def turn_rad(before, later, bins):
+            bins = jnp.float32(bins)
+            delta = (jnp.ravel(later)[0].astype(jnp.float32)
+                     - jnp.ravel(before)[0].astype(jnp.float32))
+            return jnp.abs((delta + bins / 2) % bins - bins / 2) * (2 * jnp.pi / bins)
+
+        travel_m = jnp.linalg.norm(
+            nxt.pos_base.astype(jnp.float32) - cur.pos_base.astype(jnp.float32)) * tile
+        base_rad = turn_rad(cur.angle_base, nxt.angle_base, self.env_cfg.agent.angles_base)
+        cabin_rad = turn_rad(cur.angle_cabin, nxt.angle_cabin, self.env_cfg.agent.angles_cabin)
+        load_before = cur.loaded[0].astype(jnp.float32)
+        load_after = nxt.loaded[0].astype(jnp.float32)
+        loaded_m3 = jnp.maximum(load_after - load_before, 0.0) * tile * tile * tile
+        base_moved = (travel_m > 0) | (base_rad > 0)
+        # Effective tracked-excavator DO (dig, relift or dump), as counted by
+        # the retained-work accounting in _handle_do.
+        work_event = after.retained_work_events[slot] > self.retained_work_events[slot]
+        new_visit = work_event & ~self.machine_visit_open[slot]
+        relocation = new_visit & self.machine_moved[slot]
+        turns_s = base_rad * TIME_BASE_TURN_S_PER_RAD
+        excavator_s = (
+            travel_m / TIME_NAV_SPEED_MPS + turns_s + cabin_rad * TIME_CABIN_TURN_S_PER_RAD
+            + loaded_m3 * TIME_DIG_S_PER_M3
+            + new_visit.astype(jnp.float32) * TIME_SETUP_S
+            + relocation.astype(jnp.float32) * TIME_RELOCATION_S
+        )
+        skid_s = (
+            travel_m / TIME_SKID_SPEED_MPS + turns_s + loaded_m3 * TIME_SKID_LOAD_S_PER_M3
+            + (load_after < load_before).astype(jnp.float32) * TIME_SKID_UNLOAD_S
+        )
+        duration = jnp.where(cur.agent_type[0] == 0, excavator_s, skid_s)
+        visit_open = jnp.where(
+            base_moved, False, work_event | self.machine_visit_open[slot])
+        moved = jnp.where(work_event, False, self.machine_moved[slot] | base_moved)
+        return duration.astype(jnp.float32), visit_open, moved
+
+    def _time_reservation_cells(self, reservation, pad_m) -> Array:
+        """Release-raster cells whose centre lies in a body/work envelope grown
+        by ``pad_m`` metres (the guard's projection intervals on 30 axes)."""
+        from terra.workspace_guard import AXES
+
+        cells = _as_2d_map(self.world.target_map.map).shape[0]
+        size = jnp.float32(self.env_cfg.tile_size) * cells / TIME_RELEASE_GRID
+        index = np.arange(TIME_RELEASE_GRID, dtype=np.float32) + 0.5
+        grid = np.stack(np.meshgrid(index, index, indexing="ij"), axis=-1)
+        points = jnp.asarray(grid) * size
+        projection = jnp.matmul(points, AXES.T, precision=jax.lax.Precision.HIGHEST)
+        lower = jnp.asarray(reservation.lower, dtype=jnp.float32) - pad_m
+        upper = jnp.asarray(reservation.upper, dtype=jnp.float32) + pad_m
+        inside = jnp.all(
+            (projection[:, :, None, :] >= lower) & (projection[:, :, None, :] <= upper),
+            axis=-1,
+        )
+        return jnp.any(inside, axis=-1)
+
+    def _time_advance(self, after: "State", reservation=None) -> "State":
+        """Advance current_agent's clock by its executed action.
+
+        The action starts at the later of the slot's own clock and the latest
+        release time, over the cells it covers, of every other active slot;
+        then the slot's own release time becomes its finish over its envelope
+        grown by the guard's one-tile stand-off. Without a reservation (single
+        machine) there are no dependencies.
+        """
+        slot = self.agent.current_agent
+        duration, visit_open, moved = self._time_action_duration_s(after)
+        executed = duration > 0
+        start = self.machine_clock_s[slot]
+        release = self.machine_release_s
+        if reservation is not None:
+            covered = self._time_reservation_cells(reservation, 0.0)
+            peers = (self.agent.agent_active.astype(jnp.bool_)
+                     & (jnp.arange(self.machine_clock_s.shape[0]) != slot))
+            blocking = jnp.where(covered[None] & peers[:, None, None], release, 0.0)
+            start = jnp.maximum(start, jnp.max(blocking))
+            grown = self._time_reservation_cells(
+                reservation, jnp.float32(self.env_cfg.tile_size))
+        finish = start + duration
+        clock = jnp.where(
+            executed, self.machine_clock_s.at[slot].set(finish), self.machine_clock_s)
+        if reservation is not None:
+            own = jnp.where(grown, jnp.maximum(release[slot], finish), release[slot])
+            release = jnp.where(executed, release.at[slot].set(own), release)
+        return after._replace(
+            machine_clock_s=clock,
+            machine_busy_s=self.machine_busy_s.at[slot].add(duration),
+            machine_release_s=release,
+            machine_visit_open=self.machine_visit_open.at[slot].set(visit_open),
+            machine_moved=self.machine_moved.at[slot].set(moved),
+        )
+
+    def _time_finish_s(self) -> Float:
+        """T: the latest clock over active machines."""
+        active = self.agent.agent_active.astype(jnp.bool_)
+        return jnp.max(jnp.where(active, self.machine_clock_s, jnp.float32(0.0)))
+
+    def _time_reference_s(self) -> Float:
+        """T_ref: the episode's R2 volume dug at TIME_DIG_S_PER_M3. It is fixed
+        for an episode and identical for every fleet on the same map."""
+        tile = jnp.float32(self.env_cfg.tile_size)
+        return jnp.maximum(
+            self._reward_v2_volume() * tile * tile * tile * jnp.float32(TIME_DIG_S_PER_M3),
+            jnp.float32(1e-6),
+        )
+
     def _makespan_terms(self) -> tuple[Float, Float]:
         """Makespan lower bound and fair share, as fractions of the job time.
 
@@ -5275,6 +5420,16 @@ class State(NamedTuple):
         makespan_fraction_next, _ = new_state._makespan_terms()
         makespan = -makespan_cost * (makespan_fraction_next - makespan_fraction)
         reward = jnp.where(makespan_cost != 0, reward + makespan, reward)
+        # Elapsed time: growth of the latest machine clock T (dependency delays
+        # included) and summed busy seconds, both over the episode's T_ref.
+        # The episode sum of the first term is -elapsed_time_cost * T_end / T_ref.
+        elapsed_cost = jnp.asarray(new_state.env_cfg.elapsed_time_cost, dtype=jnp.float32)
+        busy_cost = jnp.asarray(new_state.env_cfg.busy_time_cost, dtype=jnp.float32)
+        time_reference = self._time_reference_s()
+        elapsed_s = new_state._time_finish_s() - self._time_finish_s()
+        busy_s = jnp.sum(new_state.machine_busy_s - self.machine_busy_s)
+        elapsed_time = -(elapsed_cost * elapsed_s + busy_cost * busy_s) / time_reference
+        reward = jnp.where((elapsed_cost != 0) | (busy_cost != 0), reward + elapsed_time, reward)
         transport_coef = jnp.asarray(new_state.env_cfg.transport_credit_coef, dtype=jnp.float32)
         # Physical endpoints, before auto-reset. True success AND horizon
         # failure zero only this additional potential, never the baseline Phi.
@@ -5295,6 +5450,8 @@ class State(NamedTuple):
         valid_transition &= jnp.all(jnp.isfinite(coefficients) & (coefficients >= 0))
         valid_transition &= jnp.isfinite(makespan_cost) & (makespan_cost >= 0)
         valid_transition &= jnp.isfinite(makespan_setup_s) & (makespan_setup_s >= 0)
+        valid_transition &= jnp.isfinite(elapsed_cost) & (elapsed_cost >= 0)
+        valid_transition &= jnp.isfinite(busy_cost) & (busy_cost >= 0)
         valid_transition &= jnp.isfinite(transport_coef) & (transport_coef >= 0)
         valid_transition &= (transport_coef == 0) | (
             (new_state.env_cfg.reward_v2_timing_variant == 0)
@@ -5320,6 +5477,9 @@ class State(NamedTuple):
             "reward_v2_valid": valid_transition.astype(jnp.float32),
             "reward_v2_makespan": makespan,
             "reward_v2_makespan_fraction": makespan_fraction_next,
+            "reward_v2_elapsed_time": elapsed_time,
+            "reward_v2_time_finish_s": new_state._time_finish_s(),
+            "reward_v2_time_busy_s": jnp.sum(new_state.machine_busy_s),
             "reward_v2_transport_phi": transport_phi,
             "reward_v2_transport_phi_next": transport_phi_next,
             "reward_v2_transport_shaping": transport_shaping,

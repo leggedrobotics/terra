@@ -62,6 +62,27 @@ MAKESPAN_BUCKET_M3 = 0.3
 MAKESPAN_CYCLE_S = 30.0
 MAKESPAN_NAV_SPEED_MPS = 0.5
 
+# Elapsed-time clock (State.machine_clock_s). Every executed action gets a
+# duration; it starts when its machine is free and after every earlier action
+# of another machine whose workspace reservation (with the guard's one-tile
+# stand-off) overlaps it. WAIT and blocked requests take no time themselves.
+# Excavator values: M445 field run of 2026-10-07 (bank 0338): 415 s +
+# 226 s/m^3 per dug workspace; relocation overhead and turn rates are
+# assumptions (the field navigation was unusually slow).
+TIME_DIG_S_PER_M3 = 226.0  # dig or relift, per loaded m^3 (includes dumping)
+TIME_SETUP_S = 415.0  # once per workspace visit
+TIME_RELOCATION_S = 15.0  # per new visit preceded by base motion
+TIME_NAV_SPEED_MPS = 0.5  # executed base translation
+TIME_BASE_TURN_S_PER_RAD = 5.0
+TIME_CABIN_TURN_S_PER_RAD = 1.0 / 0.28  # measured cabin rate
+# Skid steer placeholders, not calibrated: pickup per loaded m^3, one unload,
+# executed translation.
+TIME_SKID_LOAD_S_PER_M3 = 60.0
+TIME_SKID_UNLOAD_S = 20.0
+TIME_SKID_SPEED_MPS = 1.0
+# Fixed raster for the per-machine release times (cells of the 64x64 maps).
+TIME_RELEASE_GRID = 64
+
 # Backplay-inspired reset tiers. Tier zero always selects the canonical full
 # reset; tiers 1-3 substitute only the generated action map for the canonical
 # source slot.
@@ -359,6 +380,13 @@ class EnvConfig(NamedTuple):
     # with workspace_interactions.loading_pair_mask; zero grants no exceptions.
     # Appended because EnvConfig is stored positionally in existing checkpoints.
     workspace_loading_pairs: int = 0
+    # Elapsed-time objective (appended; EnvConfig is stored positionally).
+    # R2 adds -elapsed_time_cost * dT / T_ref - busy_time_cost * sum(d) / T_ref,
+    # T the latest machine clock, d the executed action durations and T_ref
+    # the episode's R2 volume at TIME_DIG_S_PER_M3. A positive elapsed cost
+    # also switches agent-state features 9-10 to own clock and T over T_ref.
+    elapsed_time_cost: float = 0.0
+    busy_time_cost: float = 0.0
 
     @classmethod
     def new(cls):
