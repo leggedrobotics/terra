@@ -9,3 +9,12 @@
 .scene-panel{background:#cfe5ef}
 body[data-presentation=paper] .scene-panel{background:#fff}
 .tags{background:#1f2426;border-radius:50%}
+
+/* Joint native recordings: both slots remain visible without an active actor. */
+body[data-joint=true] .agent-list{display:grid;gap:8px}
+body[data-joint=true] .agent-tag{display:block;padding:8px;white-space:normal;line-height:1.5}
+.joint-request{display:block;font-size:10px;color:#b9cfc3;margin-top:3px}
+.joint-request.blocked{color:#ffc29b}
+.workspace-note{font-size:10px;line-height:1.5;color:#a9beb0;margin:0 0 14px}
+body[data-joint=true] .timeline-label>span:first-child{white-space:normal}
+body[data-joint=true] #action-label{display:block;margin:4px 0 0;font-size:10px}

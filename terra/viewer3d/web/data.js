@@ -49,10 +49,51 @@ export function validateFrame(frame, context = 'Frame') {
   }
   expect(ids.has(frame.current_agent), `${context}: the active agent does not exist.`);
   expect(frame.actor_id === null || ids.has(frame.actor_id), `${context}: the preceding actor does not exist.`);
+  if (isJointFrame(frame)) {
+    expect(frame.action === null && frame.actor_id === null, `${context}: a joint round cannot name one action or actor.`);
+    const validSlots = (values, test) => Array.isArray(values) && values.length <= 4 && [...ids].every(id => id < values.length) && values.every(test);
+    expect(frame.joint_actions === null || validSlots(frame.joint_actions, v => integer(v) && v >= 0 && v <= 7), `${context}: joint requests must use stable machine slots.`);
+    expect(frame.workspace_blocked == null || validSlots(frame.workspace_blocked, v => typeof v === 'boolean'), `${context}: invalid per-machine workspace rejection flags.`);
+    if (frame.effective_joint_actions != null) {
+      expect(validSlots(frame.effective_joint_actions, v => integer(v) && v >= 0 && v <= 7), `${context}: invalid effective joint actions.`);
+      expect(frame.joint_actions !== null && frame.effective_joint_actions.length === frame.joint_actions.length, `${context}: effective actions must match requested slots.`);
+    }
+    if (frame.workspace_blocked != null) expect(frame.joint_actions !== null && frame.workspace_blocked.length === frame.joint_actions.length, `${context}: rejection flags must match requested slots.`);
+  }
+  if (frame.workspace_polygons != null) {
+    expect(Array.isArray(frame.workspace_polygons), `${context}: workspace polygons must be an array.`);
+    const components = new Set();
+    for (const polygon of frame.workspace_polygons) {
+      expect(polygon && ids.has(polygon.id) && ['body', 'work'].includes(polygon.component), `${context}: unknown workspace component or machine.`);
+      const key = `${polygon.id}:${polygon.component}`;
+      expect(!components.has(key), `${context}: repeated workspace component.`); components.add(key);
+      expect(Array.isArray(polygon.vertices) && polygon.vertices.length >= 3 && polygon.vertices.every(v => Array.isArray(v) && v.length === 2 && v.every(finite)), `${context}: invalid workspace vertices.`);
+    }
+  }
   return frame;
 }
 
+export function isJointFrame(frame) { return !!frame && Object.prototype.hasOwnProperty.call(frame, 'joint_actions'); }
+
+/** Requests use original machine slots, not observation order. No effect is inferred. */
+export function jointRequests(frame) {
+  return frame.agents.map(agent => {
+    const action = frame.joint_actions?.[agent.id] ?? null;
+    let name = action === null ? 'No request · reset' : ACTIONS[action];
+    if (agent.action_type === 1 && (action === 2 || action === 3)) name = action === 2 ? 'Steer left' : 'Steer right';
+    if (action === 6) name = agent.type === 2 ? 'Shovel action' : 'Work (dig / dump)';
+    if (agent.type === 2 && (action === 4 || action === 5)) name = 'Cabin request (no-op)';
+    return { id: agent.id, name, blocked: frame.workspace_blocked?.[agent.id] ?? null };
+  });
+}
+
+/** Projection-bound vertices are cell EDGES, unlike the cell-centre pose API. */
+export function workspaceVertexToWorld(grid, [row, col], height = 0) {
+  return [(col - grid.cols / 2) * grid.tile_size_m, height, (row - grid.rows / 2) * grid.tile_size_m];
+}
+
 export function actionName(frame, previous) {
+  if (isJointFrame(frame)) return frame.joint_actions === null ? 'Initial joint state' : 'Requested: ' + jointRequests(frame).map(r => `${r.id + 1} ${r.name}${r.blocked ? ' [blocked]' : ''}`).join(' · ');
   if (frame.action === null) return 'Initial state';
   const actor = (previous || frame).agents.find(a => a.id === frame.actor_id) || frame.agents[0];
   if (actor.action_type === 1 && (frame.action === 2 || frame.action === 3)) return frame.action === 2 ? 'Steer left' : 'Steer right';
@@ -70,6 +111,14 @@ export function transitionFacts(previous, frame) {
   for (let row = 0; row < frame.grid.rows; row++) for (let col = 0; col < frame.grid.cols; col++) {
     const delta = frame.maps.action[row][col] - previous.maps.action[row][col];
     if (delta) { changed.push({ row, col, delta }); if (delta < 0) removed -= delta; else placed += delta; }
+  }
+  if (isJointFrame(frame)) {
+    const machineChanged = frame.agents.some(agent => {
+      const old = previous.agents.find(a => a.id === agent.id);
+      return !old || agent.position.some((v, i) => v !== old.position[i]) || ['loaded', 'base_yaw', 'cabin_yaw', 'wheel_angle', 'shovel_lifted'].some(key => agent[key] !== old[key]);
+    });
+    const message = changed.length ? `Joint round · ${changed.length} terrain cells changed` : machineChanged ? 'Joint round · machine states changed' : 'Joint round · no recorded state change';
+    return { kind: 'joint', changed, removed, placed, message };
   }
   const actor = frame.agents.find(a => a.id === frame.actor_id);
   const oldActor = previous.agents.find(a => a.id === frame.actor_id);

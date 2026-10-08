@@ -21,7 +21,7 @@
  * THE SOFTWARE.
  */
 import { TerraScene } from './scene.js';
-import { validateReplay, validateFrame, terrainFacts, transitionFacts, actionName, formatReward, TYPES } from './data.js';
+import { validateReplay, validateFrame, terrainFacts, transitionFacts, actionName, formatReward, TYPES, isJointFrame, jointRequests } from './data.js';
 
 const $ = id => document.getElementById(id);
 const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
@@ -70,7 +70,7 @@ function updateInspector() {
     ['Obstacle', maps.padding[row][col] ? 'Yes' : 'No'],
     ['Static dumping', mask('dumpability_static', 'Allowed', 'Prohibited')],
     ['Dumpable now', mask('dumpability', 'Yes', 'No')],
-    ['Workspace', mask('interaction', 'Inside', 'Outside')],
+    ['Native interaction mask', mask('interaction', 'Inside', 'Outside')],
     ['Traversability feature', maps.traversability == null ? 'Unavailable' : ({ '-1': 'Occupied (−1)', 0: 'Clear (0)', 1: 'Blocked (1)' })[Number(maps.traversability[row][col])]],
   ];
   for (const [name, value] of fields) { const label = document.createElement('span'), content = document.createElement('strong'); label.textContent = name; content.textContent = value; rows.append(label, content); }
@@ -78,26 +78,46 @@ function updateInspector() {
 
 function updateUI() {
   const snapshot = frame(), agent = snapshot.agents.find(item => item.id === snapshot.current_agent), facts = terrainFacts(snapshot);
+  const joint = isJointFrame(snapshot), requests = joint ? jointRequests(snapshot) : [];
+  document.body.dataset.joint = String(joint);
   text('title', replay.metadata.title); text('source', replay.metadata.source);
   text('grid-spec', `${snapshot.grid.rows} × ${snapshot.grid.cols} · ${number(snapshot.grid.tile_size_m)} m / cell`);
   text('agent-count', `${snapshot.agents.length} machine${snapshot.agents.length === 1 ? '' : 's'}`);
-  text('agent-id', String(agent.id + 1).padStart(2, '0')); text('machine-name', TYPES[agent.type]);
-  text('embodiment', agent.action_type === 1 ? 'Wheeled' : 'Tracked');
-  $('load').replaceChildren(document.createTextNode(number(agent.loaded))); const unit = document.createElement('small'); unit.textContent = ' units'; $('load').append(unit);
+  text('machine-heading', joint ? 'FLEET · JOINT ROUND' : 'ACTIVE MACHINE');
+  text('agent-id', joint ? `${snapshot.agents.length}` : String(agent.id + 1).padStart(2, '0')); text('machine-name', joint ? `${snapshot.agents.length} machines` : TYPES[agent.type]);
+  text('embodiment', joint ? 'Recorded endpoints' : agent.action_type === 1 ? 'Wheeled' : 'Tracked');
+  $('load').replaceChildren(document.createTextNode(number(joint ? facts.carried : agent.loaded))); const unit = document.createElement('small'); unit.textContent = ' units'; $('load').append(unit);
   text('reward', formatReward(snapshot.reward));
-  text('outcome', snapshot.task_done ? 'Task complete' : snapshot.done ? 'Episode ended · task incomplete' : `Ready · machine ${agent.id + 1} acts next`); $('outcome').classList.toggle('done', snapshot.done);
+  text('outcome', snapshot.task_done ? 'Task complete' : snapshot.done ? 'Episode ended · task incomplete' : joint ? `Joint round ${snapshot.step} · native endpoint` : `Ready · machine ${agent.id + 1} acts next`); $('outcome').classList.toggle('done', snapshot.done);
   const tags = $('agent-list'); tags.replaceChildren(); tags.hidden = snapshot.agents.length <= 1;
-  for (const item of snapshot.agents) { const tag = document.createElement('span'); tag.className = `agent-tag${item.id === snapshot.current_agent ? ' active' : ''}`; tag.textContent = `${String(item.id + 1).padStart(2, '0')} ${TYPES[item.type]} · ${item.loaded}`; tags.append(tag); }
+  for (const item of snapshot.agents) {
+    const tag = document.createElement('span'); tag.className = `agent-tag${!joint && item.id === snapshot.current_agent ? ' active' : ''}`;
+    tag.textContent = `${String(item.id + 1).padStart(2, '0')} ${TYPES[item.type]} · ${item.loaded} units`;
+    if (joint) {
+      const request = requests.find(r => r.id === item.id), detail = document.createElement('span');
+      detail.className = `joint-request${request.blocked ? ' blocked' : ''}`;
+      detail.textContent = `${snapshot.joint_actions === null ? '' : 'Requested: '}${request.name}${request.blocked ? ' · workspace blocked' : ''}`;
+      tag.append(detail);
+    }
+    tags.append(tag);
+  }
   text('cut-units', `${number(facts.cut)} units`); text('fill-units', `${number(facts.fill)} units`);
-  text('scene-caption', `${number(snapshot.grid.cols * snapshot.grid.tile_size_m)} × ${number(snapshot.grid.rows * snapshot.grid.tile_size_m)} m worksite · illustrative soil mounds`);
+  text('scene-caption', `${number(snapshot.grid.cols * snapshot.grid.tile_size_m)} × ${number(snapshot.grid.rows * snapshot.grid.tile_size_m)} m worksite · ${joint ? 'native joint endpoints' : 'illustrative soil mounds'}`);
+  text('step-label', joint ? 'JOINT ROUND' : 'STEP');
+  text('replay-note', joint ? 'Recorded macro endpoints only; no interpolated travel or physical-time claim.' : 'Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.');
+  $('manual-heading').closest('section').hidden = joint;
+  $('workspace-note').hidden = !snapshot.workspace_polygons?.length;
+  $('camera-follow').disabled = joint;
+  $('camera-follow').title = joint ? 'Single-machine follow is unavailable for joint snapshots; use Orbit or Top.' : 'Follow active machine · F';
   text('step', snapshot.step); text('frame-count', `${index + 1} / ${replay.frames.length}`); text('action-label', actionName(snapshot, replay.frames[index - 1]));
-  $('seek').max = String(replay.frames.length - 1); $('seek').value = String(index); $('seek').setAttribute('aria-valuetext', `Snapshot ${index + 1} of ${replay.frames.length}, step ${snapshot.step}`);
+  $('seek').max = String(replay.frames.length - 1); $('seek').value = String(index); $('seek').setAttribute('aria-valuetext', `Snapshot ${index + 1} of ${replay.frames.length}, ${joint ? 'joint round' : 'step'} ${snapshot.step}`);
   const left = $('left-action'), right = $('right-action');
   left.dataset.action = agent.action_type === 1 ? '2' : '3'; right.dataset.action = agent.action_type === 1 ? '3' : '2';
   left.querySelector('.turn-label').textContent = agent.action_type === 1 ? 'Steer left' : 'Turn left'; right.querySelector('.turn-label').textContent = agent.action_type === 1 ? 'Steer right' : 'Turn right';
   left.title = `${agent.action_type === 1 ? 'Steer left' : 'Turn anticlockwise'} · Left or A`; right.title = `${agent.action_type === 1 ? 'Steer right' : 'Turn clockwise'} · Right or D`;
   text('work-label', agent.type === 2 ? (agent.shovel_lifted ? 'Lower shovel / dump' : 'Lift shovel') : agent.loaded > 0 ? 'Dump / transfer soil' : agent.type === 1 ? 'Dump (empty)' : 'Dig soil');
   for (const [name, map] of [['interaction', 'interaction'], ['restricted', 'dumpability_static'], ['dumpability', 'dumpability']]) { const checkbox = document.querySelector(`[data-layer="${name}"]`); checkbox.disabled = snapshot.maps[map] == null; checkbox.closest('label').title = snapshot.maps[map] == null ? 'This diagnostic layer is unavailable in the recording.' : ''; }
+  document.querySelector('[data-layer="workspace"]').disabled = !snapshot.workspace_polygons?.length;
   updateInspector(); updateControls();
 }
 
@@ -105,7 +125,7 @@ function showFrame(next, { animate = false, reset = false, announce = false } = 
   if (!replay) return;
   const oldIndex = index; index = Math.max(0, Math.min(replay.frames.length - 1, next));
   const snapshot = frame();
-  scene.setFrame(snapshot, { animate: animate && index === oldIndex + 1, reset, duration: Math.min(650, 800 / Number($('speed').value)) });
+  scene.setFrame(snapshot, { animate: !isJointFrame(snapshot) && animate && index === oldIndex + 1, reset, duration: Math.min(650, 800 / Number($('speed').value)) });
   updateUI();
   if (announce && index > 0) { const previous = replay.frames[index - 1]; if (snapshot.step > previous.step && !previous.done) notify(`${actionName(snapshot, previous)} · ${transitionFacts(previous, snapshot).message}`); else notify('Episode boundary · initial snapshot'); }
   else if (reset) { clearTimeout(eventTimer); $('event').classList.remove('visible'); }

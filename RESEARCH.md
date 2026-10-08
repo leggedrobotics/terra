@@ -12,6 +12,11 @@ Terra is the abstract JAX environment. The sibling `terra-baselines` repository
 owns PPO training, evaluation, checkpoints, inference, and experiment
 operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 
+Terra also owns portable saved-plan postprocessing and rendering through
+[`terra.postprocess`](terra/postprocess/README.md). ROS owns robot-specific
+conversion, profiles, Nav2 validation and execution. Native rollout success,
+postprocessed geometric validity and physical execution remain separate results.
+
 ## Canonical environment sources
 
 - [Audited dataset reference and terrain figures](docs/DATASET.md)

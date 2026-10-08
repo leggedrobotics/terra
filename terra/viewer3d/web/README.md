@@ -47,19 +47,20 @@ captures and debugging; the viewer itself does not use it.
 ## Postprocessed metric plans
 
 `postprocessed.js` provides `PostprocessedEpisode` for the separate
-`terra.postprocessed.v1` playback format produced by Moleworks ROS TerraMapMaker.
-The TerraMapMaker dashboard and standalone player bundle it with this same
-studio scene. The normal native-replay file picker still uses `terra.viewer3d.v1`.
+`terra.postprocessed.v1` playback format produced by
+[`terra.postprocess`](../../postprocess/README.md). `plan-view.js` builds the
+standalone player and dashboard adapter with this same studio scene. `npm run
+build` updates both checked-in bundles; normal HTML export uses those packaged
+assets without Node or a viewer checkout. The native-replay file picker still
+uses `terra.viewer3d.v1`.
 
-The paired [Moleworks ROS workflow](https://github.com/leggedrobotics/moleworks_ros/blob/main/scripts/TerraMapMaker/README.md#checking-plans-in-one-page)
-documents dashboard export, standalone playback and a runnable two-excavator
-example. Install this directory's dependencies with `npm ci`, then pass its
-absolute path as `--terra-viewer` (or `TERRA_VIEWER_WEB` for `plan fleet`). The ROS
-exporter bundles the adapter and scene directly; a separate `npm run build` is
-only needed to update the normal Python viewer's checked-in static bundle.
-Postprocessing saved traces does not require Terra policy inference. Capturing
-new joint-action traces requires the separate joint Terra runtime described in
-the ROS workflow; the viewer does not provide those APIs.
+The Terra postprocessing README owns dashboard export, standalone playback and
+the runnable two-excavator example. Saved traces need no policy inference.
+Capturing new joint-action traces requires the matching native Terra runtime;
+the viewer does not provide those APIs. Joint-round recordings preserve stable
+machine slots, requested/effective actions and rejection flags. Their stationary
+reservation outlines use native cell-edge coordinates, and playback shows exact
+endpoints without interpolating joint motion or assigning soil to one machine.
 
 Metric playback retains the original grid (up to 1,048,576 cells), separate native
 and loose soil heights in metres, exact route samples, stable agent IDs and
@@ -73,7 +74,7 @@ reconstructs the same terrain without quantizing heights or using uint16 indices
 it never resamples the grid. Picking still returns individual grid cells.
 Metric motion interpolates only saved route segments with bounded heading
 interpolation. Explicit `relocate` frames snap, making missing routes visible.
-Workspace, reservation and route overlays belong to the TerraMapMaker adapter.
+Workspace, reservation and route overlays belong to `postprocessed-view.js`.
 Arm animation and display durations remain illustrative. Rendering a rejected
 proposal does not change its validation status or establish native/physical
 execution.

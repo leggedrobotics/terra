@@ -234,6 +234,55 @@ def validate_frame(frame):
         actor = _integer(frame["actor_id"], "actor_id", 0, MAX_AGENTS - 1)
         if actor not in ids:
             raise ValueError("actor_id must identify an active agent")
+    if "joint_actions" in frame:
+        if frame["action"] is not None or frame["actor_id"] is not None:
+            raise ValueError("A joint round cannot name one action or actor")
+
+        def slots(values, name, *, flags=False):
+            if not isinstance(values, list) or not max(ids) < len(values) <= MAX_AGENTS:
+                raise ValueError(f"{name} must use stable machine slots")
+            for value in values:
+                if flags:
+                    if type(value) is not bool:
+                        raise ValueError(f"{name} must contain boolean rejection flags")
+                else:
+                    _integer(value, name, 0, 7)
+
+        requested = frame["joint_actions"]
+        if requested is not None:
+            slots(requested, "joint_actions")
+        for name in ("effective_joint_actions", "workspace_blocked"):
+            values = frame.get(name)
+            if values is not None:
+                slots(values, name, flags=name == "workspace_blocked")
+                if requested is None or len(values) != len(requested):
+                    raise ValueError(f"{name} must match requested slots")
+    polygons = frame.get("workspace_polygons")
+    if polygons is not None:
+        if not isinstance(polygons, list):
+            raise ValueError("workspace_polygons must be an array")
+        components = set()
+        for polygon in polygons:
+            if not isinstance(polygon, dict):
+                raise ValueError("A workspace polygon must be an object")
+            identity = _integer(
+                polygon.get("id"), "workspace polygon id", 0, MAX_AGENTS - 1
+            )
+            component = polygon.get("component")
+            if identity not in ids or component not in ("body", "work"):
+                raise ValueError("Unknown workspace component or machine")
+            key = (identity, component)
+            if key in components:
+                raise ValueError("Repeated workspace component")
+            components.add(key)
+            vertices = polygon.get("vertices")
+            if not isinstance(vertices, list) or len(vertices) < 3:
+                raise ValueError("Workspace polygons require at least three vertices")
+            for vertex in vertices:
+                if not isinstance(vertex, list) or len(vertex) != 2:
+                    raise ValueError("Workspace vertices must contain row and column")
+                for value in vertex:
+                    _number(value, "workspace vertex")
     return frame
 
 

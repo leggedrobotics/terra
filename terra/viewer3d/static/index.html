@@ -30,7 +30,9 @@
         <div class="section-label"><h2 id="layers-heading">MAP LAYERS</h2><button class="text-button" id="layers-toggle">Hide all</button></div>
         <label class="layer"><span><i class="swatch cut"></i>Dig targets</span><input type="checkbox" data-layer="dig" checked><span class="switch"></span></label>
         <label class="layer"><span><i class="swatch fill"></i>Dump targets</span><input type="checkbox" data-layer="dump" checked><span class="switch"></span></label>
-        <label class="layer"><span><i class="swatch reach"></i>Agent workspaces</span><input type="checkbox" data-layer="interaction" checked><span class="switch"></span></label>
+        <label class="layer"><span><i class="swatch reach"></i>Reserved workspaces</span><input type="checkbox" data-layer="workspace" checked><span class="switch"></span></label>
+        <p id="workspace-note" class="workspace-note" hidden>Machine-colour outlines: solid work bounds, dashed body bounds. Exact stationary endpoints, projected on the ground plane; motion sweeps and stand-off margin are not drawn.</p>
+        <label class="layer"><span><i class="swatch reach"></i>Native interaction mask</span><input type="checkbox" data-layer="interaction" checked><span class="switch"></span></label>
         <label class="layer"><span><i class="swatch restricted"></i>No dumping · static</span><input type="checkbox" data-layer="restricted"><span class="switch"></span></label>
         <label class="layer"><span><i class="swatch allowed"></i>Currently dumpable</span><input type="checkbox" data-layer="dumpability"><span class="switch"></span></label>
         <label class="layer"><span><i class="swatch grid"></i>Cell grid</span><input type="checkbox" data-layer="grid"><span class="switch"></span></label>
@@ -51,7 +53,7 @@
         <div class="manual-bottom"><button data-action="7" class="quiet">Wait <kbd>N</kbd></button><button id="reset" class="quiet">Reset <kbd>R</kbd></button></div>
         <button id="resume-live" class="quiet full-width" hidden>Return to live session</button>
       </section>
-      <section class="soil-summary"><div><span>Excavated</span><strong id="cut-units">—</strong></div><div><span>Placed soil</span><strong id="fill-units">—</strong></div><p>Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.</p></section>
+      <section class="soil-summary"><div><span>Excavated</span><strong id="cut-units">—</strong></div><div><span>Placed soil</span><strong id="fill-units">—</strong></div><p id="replay-note">Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.</p></section>
       <details class="help"><summary>Controls &amp; scene notes</summary><p>Drag to orbit. Right-drag or two fingers to pan. Scroll or pinch to zoom. H returns home, T looks down, F follows the active machine, G toggles rich lighting (ambient occlusion and outlines) for slower graphics cards. P cycles the studio look, the plain paper style for figures and the stylized diorama; Capture PNG saves at twice the viewport resolution.</p><p>In manual play, arrows move and turn, Q/E turn the cabin, Space works, N waits, R resets. In replay, Space plays and arrows step.</p><p>Soil piles have slope-limited display shapes to prevent single-cell spikes. Their exact soil units remain in the cell inspector and recording; the slider changes only the display. Large rocks and containers mark static obstacle regions. The diorama's surroundings outside the fence, every flying clod, puff or dust cloud, and all arm and bucket motion between recorded states are illustration only. Click terrain or a prop to inspect its underlying cell.</p></details>
     </aside>
     <section class="scene-panel" aria-label="Interactive 3D worksite">
@@ -65,7 +67,7 @@
       <div id="error" class="error-card" role="alert" hidden><strong>Could not open the scene</strong><p id="error-message"></p><button id="dismiss-error">Dismiss</button></div>
       <footer class="timeline">
         <div class="transport"><button id="previous" title="Previous snapshot" aria-label="Previous snapshot">|◀</button><button id="play" class="play" title="Play / pause" aria-label="Play replay">▶</button><button id="next" title="Next snapshot" aria-label="Next snapshot">▶|</button></div>
-        <div class="timeline-track"><div class="timeline-label"><span>STEP <strong id="step">0</strong><span id="action-label">Initial state</span></span><span id="frame-count">1 / 1</span></div><input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="Replay snapshot"></div>
+        <div class="timeline-track"><div class="timeline-label"><span><span id="step-label">STEP</span> <strong id="step">0</strong><span id="action-label">Initial state</span></span><span id="frame-count">1 / 1</span></div><input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="Replay snapshot"></div>
         <label class="speed-control"><span>SPEED</span><select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select></label>
       </footer>
     </section>

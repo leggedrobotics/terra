@@ -4,8 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { makeMachine } from './models.js';
-import { shortestAngle, transitionFacts } from './data.js';
+import { makeMachine, SLOT_COLORS } from './models.js';
+import { shortestAngle, transitionFacts, isJointFrame, workspaceVertexToWorld } from './data.js';
 import { SoilPiles } from './piles.js';
 import { createObstacleProps } from './obstacles.js';
 import { createEnvironment } from './environment.js';
@@ -72,7 +72,7 @@ export class TerraScene {
     this.sun.shadow.mapSize.set(2048, 2048); this.sun.shadow.bias = -.0004; this.sun.shadow.radius = 3; this.scene.add(this.sun); this.scene.add(this.sun.target);
     this.fill = new THREE.DirectionalLight(0xa9c9ff, .35); this.scene.add(this.fill);
     this.world = new THREE.Group(); this.scene.add(this.world); this.machines = new Map(); this.heightScale = 1;
-    this.visibility = { dig: true, dump: true, restricted: false, dumpability: false, interaction: true, grid: false, tags: true };
+    this.visibility = { dig: true, dump: true, restricted: false, dumpability: false, interaction: true, workspace: true, grid: false, tags: true };
     this.raycaster = new THREE.Raycaster(); this.pointer = new THREE.Vector2(); this.selected = null;
     this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.effects = new Effects({ groundHeight: (x, z) => this.groundAt(x, z) }); this.scene.add(this.effects);
@@ -222,7 +222,7 @@ export class TerraScene {
     this.clearMotion(); this.frame = frame; this.unitHeight = (frame.metric ? 1 : frame.grid.tile_size_m * .48) * this.heightScale; shared.uUnit.value = this.unitHeight;
     if (dimensionsChanged || reset) this.buildWorld(frame);
     const facts = transitionFacts(previous, frame);
-    const mayAnimate = animate && !reset && !dimensionsChanged && !this.reducedMotion && previous && !previous.done && frame.step === previous.step + 1;
+    const mayAnimate = !isJointFrame(frame) && animate && !reset && !dimensionsChanged && !this.reducedMotion && previous && !previous.done && frame.step === previous.step + 1;
     let lowest = 0;
     for (const row of frame.maps.action) for (const cell of row) lowest = Math.min(lowest, cell);
     this.finalFloor = lowest * this.unitHeight - frame.grid.tile_size_m * .85;
@@ -240,6 +240,8 @@ export class TerraScene {
       this.world.add(this.piles); this.piles.update(mayAnimate ? 0 : 1);
       this.populate(frame);
     }
+    this.populateReservations(frame);
+    if (isJointFrame(frame) && this.follow) this.setFollow(false);
     const liveIds = new Set(frame.agents.map(agent => agent.id));
     for (const [id, machine] of this.machines) if (!liveIds.has(id)) { this.scene.remove(machine.root); machine.dispose(); this.machines.delete(id); }
     for (const agent of frame.agents) {
@@ -309,6 +311,34 @@ export class TerraScene {
     }
   }
 
+  populateReservations(frame) {
+    if (!this.reservationOutlines && !frame.workspace_polygons?.length) return;
+    if (this.reservationOutlines) {
+      this.reservationOutlines.traverse(line => { if (line.material) this.lineMaterials.delete(line.material); });
+      disposeProps(this.reservationOutlines);
+    }
+    this.reservationOutlines = new THREE.Group();
+    this.reservationOutlines.name = 'recorded-stationary-reservations';
+    this.reservationOutlines.visible = this.visibility.workspace;
+    this.world.add(this.reservationOutlines);
+    for (const polygon of frame.workspace_polygons ?? []) {
+      const positions = [], tile = frame.grid.tile_size_m;
+      for (let i = 0; i < polygon.vertices.length; i++) {
+        positions.push(...workspaceVertexToWorld(frame.grid, polygon.vertices[i], tile * .06));
+        positions.push(...workspaceVertexToWorld(frame.grid, polygon.vertices[(i + 1) % polygon.vertices.length], tile * .06));
+      }
+      const body = polygon.component === 'body';
+      const material = new LineMaterial({ color: SLOT_COLORS[polygon.id], linewidth: body ? 1.7 : 2.8, dashed: body,
+        dashSize: tile * .32, gapSize: tile * .2, transparent: true, opacity: body ? .75 : 1, depthWrite: false, depthTest: false });
+      material.resolution.copy(this.renderer.getDrawingBufferSize(new THREE.Vector2())); this.lineMaterials.add(material);
+      const geometry = new LineSegmentsGeometry(); geometry.setPositions(positions);
+      const line = new LineSegments2(geometry, material); line.computeLineDistances();
+      line.name = `machine-${polygon.id}-${polygon.component}-reservation`;
+      line.renderOrder = 18; line.frustumCulled = false; line.userData.skipAO = true;
+      this.reservationOutlines.add(line);
+    }
+  }
+
   flatGridCell(row, col, height) {
     const tile = this.frame.grid.tile_size_m, point = this.point(row, col, height), y = point.y + tile * .022;
     // Positive cells use the soil mesh's draped grid instead of a floating quad.
@@ -365,7 +395,7 @@ export class TerraScene {
     const position = state.position.map((v, i) => mix(from.position[i], v, progress));
     const point = this.point(position[0], position[1]); point.y = mix(this.displayHeightAt(...from.position), this.displayHeightAt(...state.position), progress);
     machine.root.position.copy(point); machine.root.rotation.y = shortestAngle(from.base_yaw, state.base_yaw, turning);
-    machine.setPose({ ...state, previous_loaded: from.loaded, cabin_yaw: shortestAngle(from.cabin_yaw, state.cabin_yaw, turning), wheel_angle: mix(from.wheel_angle, state.wheel_angle, progress) }, state.id === frame.current_agent, progress, kind, plan);
+    machine.setPose({ ...state, previous_loaded: from.loaded, cabin_yaw: shortestAngle(from.cabin_yaw, state.cabin_yaw, turning), wheel_angle: mix(from.wheel_angle, state.wheel_angle, progress) }, !isJointFrame(frame) && state.id === frame.current_agent, progress, kind, plan);
     machine.drive?.(machine.root.position, machine.root.rotation.y);
   }
 
@@ -563,6 +593,7 @@ export class TerraScene {
   }
   setLayer(name, visible) {
     this.visibility[name] = visible;
+    if (name === 'workspace') { if (this.reservationOutlines) this.reservationOutlines.visible = visible; return; }
     if (name === 'tags') { for (const machine of this.machines.values()) machine.setTags(visible); return; }
     if (!this.frame) return; this.piles?.setLayer(name, visible); if (name === 'grid') { this.gridLines.visible = visible; this.populate(this.frame); } else if (this.layers[name]) this.layers[name].visible = visible && this.frame.maps[LAYERS[name].map] != null; if (this.boundaries[name]) this.boundaries[name].visible = visible; }
   setHeight(value) { this.heightScale = value; if (this.frame) this.setFrame(this.frame); }
@@ -582,6 +613,7 @@ export class TerraScene {
     this.onCameraChange?.({ view: 'top', follow: false });
   }
   setFollow(value) {
+    if (value && isJointFrame(this.frame)) return;
     this.follow = value; this.tween = null;
     if (value && this.frame) {
       const machine = this.machines.get(this.frame.current_agent);

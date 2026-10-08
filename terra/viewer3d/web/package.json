@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild app.js --bundle --minify --format=iife --target=es2020 --legal-comments=inline --outfile=../static/viewer.js",
+    "build": "esbuild app.js --bundle --minify --format=iife --target=es2020 --supported:template-literal=false --legal-comments=inline --outfile=../static/viewer.js && esbuild plan-view.js --bundle --minify --format=iife --target=es2020 --supported:template-literal=false --legal-comments=inline --outfile=../static/postprocessed.js",
     "check": "node --test *.test.js"
   },
   "dependencies": { "three": "0.185.1" },

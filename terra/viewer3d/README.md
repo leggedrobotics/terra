@@ -193,6 +193,20 @@ isolated matching Terra revision, preserving its 44 m map and 5 × 9 machine
 footprint. The baseline guide records this smoke test and its source pairing;
 it is not a policy benchmark.
 
+## Joint recordings and postprocessed plans
+
+Joint-round recordings can include `joint_actions`, `effective_joint_actions`,
+`workspace_blocked` and native `workspace_polygons`. The viewer shows requested
+and rejected actions for each stable machine slot. Solid work and dashed body
+outlines use cell-edge coordinates. Joint frames remain discrete endpoints,
+without inferred action attribution or interpolated work.
+
+Use `terra-postprocess render RECORDING --out replay.html` for either native
+recordings or metric processed timelines. Fleet cleanup, refined workspaces,
+comparison dashboards and galleries share this renderer; their workflow lives
+in the [postprocessing README](../postprocess/README.md). A native task outcome,
+a processed-plan verdict and physical execution evidence are separate results.
+
 ## Development
 
 ```bash
@@ -203,7 +217,7 @@ npm run build
 ```
 
 The lockfile pins Three.js and esbuild. The build regenerates
-`../static/viewer.js`; include this generated bundle when sharing/installing
+`../static/viewer.js` and `../static/postprocessed.js`; include both bundles when sharing/installing
 the Python package. Models are constructed in `web/models.js` from repository
 code, with no downloaded meshes, textures, or remote fonts. Three.js's MIT
 license is retained with the bundled assets. Existing Pygame rendering remains

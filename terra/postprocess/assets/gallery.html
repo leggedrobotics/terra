@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root { color-scheme: light; font-family: Inter, system-ui, sans-serif; color: #243731; background: #f5f4ed; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1360px; margin: auto; padding: 42px 28px; }
+.eyebrow { color: #567969; font-size: 12px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+h1 { font-size: clamp(30px, 5vw, 48px); letter-spacing: -.04em; margin: 10px 0 15px; }
+.intro { max-width: 920px; color: #50625b; line-height: 1.6; white-space: pre-line; }
+.summary { display: flex; flex-wrap: wrap; gap: 12px 25px; padding: 20px 0; color: #63736b; font-size: 13px; }
+.summary strong { color: #294c3d; font-size: 23px; padding-right: 3px; }
+.filters { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)) 1.4fr; gap: 12px; border: 1px solid #d6dfd1; background: #e8ede3; border-radius: 12px; padding: 18px; }
+label { display: flex; flex-direction: column; gap: 7px; color: #50685a; font-size: 12px; font-weight: 650; }
+select, input { width: 100%; min-height: 39px; font: inherit; font-size: 14px; color: #243731; background: #fff; border: 1px solid #c2cebe; border-radius: 6px; padding: 8px; }
+select:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #618fbd; outline-offset: 2px; }
+.result-line { display: flex; justify-content: space-between; gap: 15px; margin: 18px 0; color: #647269; font-size: 13px; line-height: 1.5; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
+.card { background: #fff; border: 1px solid #d9e1d4; border-radius: 13px; overflow: hidden; }
+.card[hidden] { display: none; }
+.card-body { padding: 23px; display: flex; flex-direction: column; height: 100%; }
+.thumbnail + .card-body { height: auto; }
+.thumbnail { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: #e4e8df; }
+.card-top { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 700; color: #5f7267; }
+.generation { font-weight: 500; text-align: right; }
+h2 { font-size: 21px; letter-spacing: -.025em; margin: 20px 0 5px; overflow-wrap: anywhere; }
+.checkpoint { margin: 0 0 16px; color: #697970; font-size: 13px; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { padding: 5px 8px; border-radius: 5px; font-size: 11px; font-weight: 650; background: #eef0ed; color: #667369; }
+.badge.success { background: #e5f1e5; color: #376142; }
+.badge.failed { background: #fae8d8; color: #92531e; }
+.badge.unverified { background: #e6edf6; color: #4b6388; }
+dl { display: flex; flex-wrap: wrap; gap: 18px; margin: 20px 0 8px; }
+dt { font-size: 10px; text-transform: uppercase; letter-spacing: .045em; color: #76877d; }
+dd { font-size: 19px; font-weight: 650; margin: 5px 0; }
+.note { font-size: 13px; line-height: 1.55; color: #607267; flex: 1; white-space: pre-line; }
+.unavailable { font-size: 13px; font-weight: 650; color: #8a6740; padding: 10px 0; margin: 4px 0; }
+.primary-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.open { padding: 11px 13px; border-radius: 7px; background: #29503f; color: white; text-decoration: none; font-size: 13px; font-weight: 650; }
+.open:hover { background: #3c6c55; }
+.open.secondary { background: #e5ece0; color: #345a43; }
+.evidence-links { font-size: 12px; line-height: 1.6; margin: 13px 0 0; }
+.evidence-links a, footer a { color: #315f49; text-underline-offset: 3px; }
+.empty { padding: 35px; text-align: center; color: #647269; }
+footer { font-size: 12px; line-height: 1.65; color: #68796d; margin-top: 28px; max-width: 1020px; }
+@media (max-width: 900px) { .filters { grid-template-columns: repeat(2, minmax(140px, 1fr)); } .search { grid-column: 1/-1; } }
+@media (max-width: 520px) { main { padding: 28px 16px; } .filters { gap: 10px; padding: 12px; } .result-line { flex-direction: column; } }
+</style>
+</head>
+<body><main>
+<div class="eyebrow">Terra · fleet plans and recordings</div>
+<h1>{{TITLE}}</h1>
+<p class="intro">{{DESCRIPTION}}</p>
+<div class="summary" aria-label="Gallery entry counts">{{SUMMARY}}</div>
+<form class="filters" id="filters" aria-label="Filter gallery" onsubmit="return false">
+<label>Fleet<select name="fleet"><option value="all">All fleets</option><option value="mixed">Excavator + skid</option><option value="two_excavators">Two excavators</option><option value="solo">One excavator</option></select></label>
+<label>Version<select name="generation"><option value="all">All versions</option><option value="current">Current</option><option value="legacy">Earlier</option><option value="synthetic">Synthetic</option></select></label>
+<label>Result stage<select name="stage"><option value="all">Native and postprocessed</option><option value="native">Native</option><option value="postprocessed">Postprocessed</option></select></label>
+<label>Outcome<select name="outcome"><option value="all">All outcomes</option><option value="success">Successful</option><option value="failed">Failed / unresolved</option><option value="unverified">Unverified / candidate</option></select></label>
+<label class="search">Find a case<input name="query" type="search" placeholder="Case, checkpoint or failure" autocomplete="off"></label>
+</form>
+<div class="result-line"><span id="result-count" role="status" aria-live="polite">All entries shown</span><span>Native completion and postprocessing validity are separate results.</span></div>
+<div class="grid" id="cases">{{CARDS}}</div>
+<p class="empty" id="empty" hidden>No entries match these filters.</p>
+<footer>Entries include selected recordings and full-panel failure outcomes. A case without a recording remains listed; no trajectory is inferred from its terminal counters. Earlier checkpoints and synthetic examples are labeled separately. A geometric candidate still needs native replay; playback is not physical-time or machine-execution validation. Counts describe gallery entries, not a benchmark success rate.</footer>
+</main>
+<script>
+function matchesCase(entry, filters) {
+  if (filters.fleet !== 'all' && entry.fleet !== filters.fleet) return false;
+  if (filters.generation !== 'all' && entry.generation !== filters.generation) return false;
+  const outcomes = filters.stage === 'all'
+    ? [entry.native, entry.postprocessed].filter(Boolean)
+    : [entry[filters.stage]].filter(Boolean);
+  if (!outcomes.length) return false;
+  if (filters.outcome !== 'all' && !outcomes.includes(filters.outcome)) return false;
+  return (entry.search || '').includes(filters.query.trim().toLowerCase());
+}
+if (typeof document !== 'undefined') {
+  const form = document.getElementById('filters');
+  const cards = [...document.querySelectorAll('.card')];
+  function update() {
+    const filters = Object.fromEntries(new FormData(form));
+    let shown = 0;
+    for (const card of cards) {
+      card.hidden = !matchesCase(card.dataset, filters);
+      if (!card.hidden) shown++;
+    }
+    document.getElementById('result-count').textContent = `${shown} of ${cards.length} entries`;
+    document.getElementById('empty').hidden = shown !== 0;
+  }
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+}
+</script>
+</body>
+</html>
