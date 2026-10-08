@@ -45,8 +45,9 @@ prepare(options) {
   title.textContent = this.title(data, metric);
   document.body.append(title, caption);
   scene.resize(); view.resize?.();
-  if (metric) view.view(options.camera === 'top' ? 'top' : 'map', { instant: true });
-  else if (options.camera === 'top') scene.top();
+  // The interactive metric worksite camera fits the initial work area only.
+  // A fixed export camera must also cover later machines and reservations.
+  if (options.camera === 'top') scene.top();
   else scene.home({ instant: true });
   const cameraPosition = scene.camera.position.clone(), cameraTarget = scene.controls.target.clone();
   const check = () => {
