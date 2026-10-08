@@ -7,6 +7,11 @@ The renderer and its browser assets are shipped with Terra. HTML export does
 not need Node.js, ROS, a browser installation or a running web server. Video
 export uses the same scene through headless Chromium and an encoder.
 
+For the agent-driven repair loop, see [LLM-assisted plan refinement](REFINEMENT.md):
+diagnose and edit, run deterministic checks, export a continuous-space artifact,
+then feed its metric timeline directly to the Terra 3D viewer. Native execution
+of a revised plan is a separate check.
+
 ## Choose a pipeline
 
 1. **Record the native episode** in its matching policy and environment runtime.
