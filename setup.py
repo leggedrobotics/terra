@@ -24,6 +24,7 @@ setup(
     keywords="memory, environment, agent, rl, jax, gym, grid, gridworld, excavator",
     description="Minimalistic grid map environment built with JAX",
     packages=find_packages(),
+    package_data={"terra.viewer3d": ["static/*"]},
     install_requires=requires,
     python_requires=">=3.12",
 )

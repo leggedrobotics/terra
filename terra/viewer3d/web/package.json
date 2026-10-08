@@ -1,0 +1,12 @@
+{
+  "name": "terra-viewer3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild app.js --bundle --minify --format=iife --target=es2020 --legal-comments=inline --outfile=../static/viewer.js",
+    "check": "node --test *.test.js"
+  },
+  "dependencies": { "three": "0.185.1" },
+  "devDependencies": { "esbuild": "0.28.2" }
+}

@@ -8,6 +8,7 @@ __pycache__/*
 *.egg*
 terra/map_utils/__pycache__/
 cache/
+/manual-recordings/
 /docs/*
 terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*

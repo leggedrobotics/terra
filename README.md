@@ -38,6 +38,10 @@ You can check out [terra-baselines](https://github.com/leggedrobotics/rl-excavat
 The JAX installation is hardware-dependent and therefore needs to be done separately. Follow [this link](https://jax.readthedocs.io/en/latest/installation.html) to install the right one for you.
 
 ## Usage
+
+For keyboard-controlled excavation with a 3D/top-down map, replay, and optional
+native precision-edge eligibility overlays, see the [Terra 3D viewer](terra/viewer3d/README.md).
+
 The standard workflow is made of the following steps:
 1. Generate the maps by following this [README](https://github.com/leggedrobotics/terra/blob/main/terra/env_generation/README.md) (you can check out a preview of the generated maps in the `data/` folder). As of the latest commits, **distance maps are produced automatically as part of map generation** — you no longer need to run a separate step. The `tools/generate_distance_maps.py` script is kept only for regenerating distance maps on pre-existing datasets.
 2. Set up the curriculum in `config.py`
