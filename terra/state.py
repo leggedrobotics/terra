@@ -1,3 +1,4 @@
+import contextlib
 from typing import Any
 from typing import NamedTuple
 
@@ -30,7 +31,7 @@ from terra.config import REWARD_V2_V21_SHAPING_GAMMA
 from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
-from terra.dig_direction import boundary_pull_details, pull_stroke_details
+from terra.dig_direction import boundary_pull_details, pull_cone_details, pull_stroke_details
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
@@ -90,6 +91,31 @@ def _as_axes_table(x: Array) -> Array:
 
 def _as_scalar_int(x: Array) -> Array:
     return jnp.ravel(jnp.asarray(x, dtype=jnp.int32))[0]
+
+
+# Trace-time switches for the optional October 8 rules. TerraEnvBatch vmaps
+# EnvConfig per lane, so lax.cond on its fields evaluates both branches; a
+# batch that never enables a rule should not pay for it. TerraEnv sets these
+# from its static options while tracing reset/step. None (direct State use)
+# keeps the per-lane lax.cond.
+_STATIC_RULES = {"pull_cone": None, "tracked_move_keeps_turn": None}
+
+
+@contextlib.contextmanager
+def static_rules(**options):
+    previous = dict(_STATIC_RULES)
+    _STATIC_RULES.update(options)
+    try:
+        yield
+    finally:
+        _STATIC_RULES.clear()
+        _STATIC_RULES.update(previous)
+
+
+def _rule_cond(name, predicate, enabled, disabled):
+    if _STATIC_RULES[name] is False:
+        return disabled()
+    return jax.lax.cond(predicate, enabled, disabled)
 
 
 class State(NamedTuple):
@@ -748,11 +774,48 @@ class State(NamedTuple):
                 clear = valid_position(candidate) & swept_bounds & ~jnp.any(swept & blocked)
                 return distance - 1, jnp.where(clear, candidate, position), clear
 
-            _, position, _ = jax.lax.while_loop(
-                still_searching, try_distance,
-                (jnp.asarray(self.env_cfg.agent.move_tiles, dtype=jnp.int32), cur.pos_base, jnp.bool_(False)),
+            def first_clear():
+                _, position, _ = jax.lax.while_loop(
+                    still_searching, try_distance,
+                    (jnp.asarray(self.env_cfg.agent.move_tiles, dtype=jnp.int32), cur.pos_base, jnp.bool_(False)),
+                )
+                return position
+
+            def turnable(position):
+                angles = self.env_cfg.agent.angles_base
+
+                def rotated_valid(delta):
+                    corners = self._get_agent_corners(
+                        position, (cur.angle_base + delta) % angles,
+                        self.env_cfg.agent.width, self.env_cfg.agent.height,
+                    )
+                    return self._is_valid_move(corners, allow_truck_neutral=True)
+
+                return rotated_valid(1) | rotated_valid(-1)
+
+            def first_clear_keeping_turn():
+                move_tiles = jnp.asarray(self.env_cfg.agent.move_tiles, dtype=jnp.int32)
+
+                def visit(index, carry):
+                    position, found, turn_position, turn_found = carry
+                    distance, candidate, clear = try_distance((move_tiles - index, cur.pos_base, jnp.bool_(False)))
+                    candidate = candidate.astype(position.dtype)
+                    keeps_turn = clear & turnable(candidate)
+                    position = jnp.where(clear & ~found, candidate, position)
+                    turn_position = jnp.where(keeps_turn & ~turn_found, candidate, turn_position)
+                    return position, found | clear, turn_position, turn_found | keeps_turn
+
+                position, _, turn_position, turn_found = jax.lax.fori_loop(
+                    0, move_tiles, visit,
+                    (cur.pos_base, jnp.bool_(False), cur.pos_base, jnp.bool_(False)),
+                )
+                return jnp.where(turn_found, turn_position, position)
+
+            return _rule_cond(
+                "tracked_move_keeps_turn",
+                jnp.bool_(self.env_cfg.tracked_move_keeps_turn),
+                first_clear_keeping_turn, first_clear,
             )
-            return position
 
         def nominal_endpoint():
             candidate = candidate_at(self.env_cfg.agent.move_tiles)
@@ -1359,21 +1422,52 @@ class State(NamedTuple):
         precision = jnp.bool_(self.env_cfg.enforce_foundation_border_alignment)
         return edge & precision, allowed | ~precision, jnp.where(precision, error, 0.0)
 
-    def _get_pull_dig_permission(self) -> Array:
-        """Bulk stroke room, plus parallel pulling at requested precision edges."""
+    def _get_pull_cone_details(self) -> tuple[Array, Array, Array]:
+        """Permission, best stroke and edge error over the pull-direction cone."""
         records = _as_axes_table(self.world.foundation_border_axes)
         count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
         min_radius, max_radius = self._dig_cone_radius_bounds()
-        allowed, _ = pull_stroke_details(
+        return pull_cone_details(
             _as_2d_map(self.world.target_map.map), records, count,
             self._get_current_agent_state().pos_base,
             self.env_cfg.tile_size, min_radius, max_radius,
-            self.env_cfg.dig_pull_min_length_m,
+            self.env_cfg.dig_pull_min_length_m, self.env_cfg.pull_half_angle_rad,
+            self.env_cfg.enforce_foundation_border_alignment,
+            self.env_cfg.edge_band_width_m, self.env_cfg.edge_pull_tolerance_rad,
         )
-        return jax.lax.cond(
-            jnp.bool_(self.env_cfg.enforce_foundation_border_alignment),
-            lambda: allowed & self._get_pull_boundary_details()[1],
-            lambda: allowed,
+
+    def _get_pull_dig_permission(self) -> Array:
+        """Bulk stroke room, plus parallel pulling at requested precision edges."""
+        def radial():
+            records = _as_axes_table(self.world.foundation_border_axes)
+            count = jnp.sum(jnp.any(records != -97.0, axis=-1), dtype=jnp.int32)
+            min_radius, max_radius = self._dig_cone_radius_bounds()
+            allowed, _ = pull_stroke_details(
+                _as_2d_map(self.world.target_map.map), records, count,
+                self._get_current_agent_state().pos_base,
+                self.env_cfg.tile_size, min_radius, max_radius,
+                self.env_cfg.dig_pull_min_length_m,
+            )
+            return jax.lax.cond(
+                jnp.bool_(self.env_cfg.enforce_foundation_border_alignment),
+                lambda: allowed & self._get_pull_boundary_details()[1],
+                lambda: allowed,
+            )
+
+        return _rule_cond(
+            "pull_cone",
+            jnp.asarray(self.env_cfg.pull_half_angle_rad) > 0,
+            lambda: self._get_pull_cone_details()[0],
+            radial,
+        )
+
+    def _get_pull_edge_error(self) -> Array:
+        """Edge-band tangent error the observation reports for this base."""
+        return _rule_cond(
+            "pull_cone",
+            jnp.asarray(self.env_cfg.pull_half_angle_rad) > 0,
+            lambda: self._get_pull_cone_details()[2],
+            lambda: self._get_pull_boundary_details()[2],
         )
 
     def _get_legacy_foundation_border_mask(self) -> Array:
@@ -2485,6 +2579,41 @@ class State(NamedTuple):
             lambda: jnp.zeros((angles,), dtype=IntMap),
         )
 
+    def _native_dump_counts(self) -> Array:
+        """What a loaded DO would do at each relative cabin heading.
+
+        +N: unloads into N accepted dump-zone cells; -N: stages the load on N
+        off-zone cells; 0: DO does nothing. Uses the native dump selection, so
+        dump reach, the last-dig exclusion, dumpability, traversability and the
+        dug-ground centroid rule all apply. An empty excavator is evaluated as
+        if it carried one unit. Other agent types report zeros.
+        """
+        current = self._get_current_agent_state()
+        angles = EnvConfig().agent.angles_cabin
+        hypothetical = current._replace(
+            loaded=jnp.maximum(current.loaded, 1).astype(current.loaded.dtype)
+        )
+
+        def _counts():
+            def _count(offset):
+                candidate = self._set_current_agent_state(
+                    hypothetical._replace(
+                        angle_cabin=((current.angle_cabin.astype(jnp.int32) + offset)
+                                     % angles).astype(current.angle_cabin.dtype)
+                    )
+                )
+                mask, _, legal = candidate._dump_selection()
+                cells = jnp.sum(mask, dtype=jnp.int32)
+                return jnp.where(legal, cells, -cells)
+
+            return jax.vmap(_count)(jnp.arange(angles, dtype=jnp.int32)).astype(IntMap)
+
+        return jax.lax.cond(
+            current.agent_type[0] == 0,
+            _counts,
+            lambda: jnp.zeros((angles,), dtype=IntMap),
+        )
+
     def _executable_fresh_dig_union(self) -> Array:
         """Unique fresh cells executable across cabin headings at this pose.
 
@@ -3295,11 +3424,16 @@ class State(NamedTuple):
 
         return jax.lax.cond(jnp.logical_and(is_excavator, is_loaded), _attempt_transfer, lambda: self)
 
-    def _handle_dump(self) -> "State":
-        """Deposit a complete load without using reward potential as an action veto."""
-        map_shape = self.world.action_map.map.shape[-2:]
+    def _dump_selection(self) -> tuple[Array, Array, Array]:
+        """Cells DO dumps into, its containment mask, and whether it is legal.
+
+        Shared by DO and the native dump observation. ``legal`` is True when
+        the cells lie in the accepted dump zone; otherwise an excavator stages
+        the load on reachable off-zone ground, and an empty mask means DO does
+        nothing. The commit can still fail afterwards if soil relaxation would
+        leave the containment mask or exceed storage.
+        """
         cur = self._get_current_agent_state()
-        is_excavator = cur.agent_type[0] == 0
         is_transport = jnp.logical_or(
             cur.agent_type[0] == 1,
             cur.agent_type[0] == 2,
@@ -3354,6 +3488,14 @@ class State(NamedTuple):
             lambda: accepted_mask,
             lambda: jnp.logical_not(accepted_mask),
         )
+        return dump_mask, containment_mask, has_legal_reachable
+
+    def _handle_dump(self) -> "State":
+        """Deposit a complete load without using reward potential as an action veto."""
+        map_shape = self.world.action_map.map.shape[-2:]
+        cur = self._get_current_agent_state()
+        is_excavator = cur.agent_type[0] == 0
+        dump_mask, containment_mask, _ = self._dump_selection()
 
         def _apply_dump():
             loaded_volume = cur.loaded[0].astype(jnp.int32)

@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from functools import partial
+from functools import wraps
 from typing import NamedTuple
 
 import jax
@@ -16,6 +17,7 @@ from terra.maps_buffer import init_maps_buffer
 from terra.maps_buffer import LEGACY_DISTANCE_PROTOCOL_ID
 from terra.state import STALL_AGE_CAP_STEPS
 from terra.state import State
+from terra.state import static_rules
 from terra.wrappers import LocalMapWrapper
 from terra.wrappers import TraversabilityMaskWrapper
 from terra.curriculum import CurriculumManager
@@ -33,11 +35,26 @@ class TimeStep(NamedTuple):
     env_cfg: EnvConfig
 
 
+def _with_static_rules(method):
+    """Trace a TerraEnv method with its static rule switches in effect."""
+    @wraps(method)
+    def traced(self, *args, **kwargs):
+        with static_rules(pull_cone=self.pull_cone,
+                          tracked_move_keeps_turn=self.tracked_move_keeps_turn):
+            return method(self, *args, **kwargs)
+    return traced
+
+
 class TerraEnv(NamedTuple):
     rendering_engine: Game | None = None
     movement_feasibility_observation: bool = False
     previous_outcome_observation: bool = False
     executable_dig_observation: bool = False
+    native_dump_observation: bool = False
+    # Static switches for rules that would otherwise cost a both-branch select
+    # under the per-lane vmap; see terra.state.static_rules.
+    pull_cone: bool = False
+    tracked_move_keeps_turn: bool = False
 
     @classmethod
     def new(
@@ -50,6 +67,9 @@ class TerraEnv(NamedTuple):
         movement_feasibility_observation: bool = False,
         previous_outcome_observation: bool = False,
         executable_dig_observation: bool = False,
+        native_dump_observation: bool = False,
+        pull_cone: bool = False,
+        tracked_move_keeps_turn: bool = False,
     ) -> "TerraEnv":
         re = None
         baseline_map_size = 64
@@ -90,9 +110,13 @@ class TerraEnv(NamedTuple):
             movement_feasibility_observation=movement_feasibility_observation,
             previous_outcome_observation=previous_outcome_observation,
             executable_dig_observation=executable_dig_observation,
+            native_dump_observation=native_dump_observation,
+            pull_cone=pull_cone,
+            tracked_move_keeps_turn=tracked_move_keeps_turn,
         )
 
     @partial(jax.jit, static_argnums=(0,))
+    @_with_static_rules
     def reset(
         self,
         key: jax.random.PRNGKey,
@@ -127,7 +151,8 @@ class TerraEnv(NamedTuple):
             initial_agent=initial_agent,
         )
         state = self.wrap_state(
-            state, executable_dig_observation=self.executable_dig_observation
+            state, executable_dig_observation=self.executable_dig_observation,
+            native_dump_observation=self.native_dump_observation,
         )
 
         observations = self._with_feedback_observations(
@@ -324,14 +349,17 @@ class TerraEnv(NamedTuple):
         update_reachability: jnp.bool_ = jnp.bool_(True),
         *,
         executable_dig_observation: bool | None = None,
+        native_dump_observation: bool | None = None,
     ) -> State:
         state = TraversabilityMaskWrapper.wrap(state, update_reachability=update_reachability)
         state = LocalMapWrapper.wrap(
-            state, executable_dig_observation=executable_dig_observation
+            state, executable_dig_observation=executable_dig_observation,
+            native_dump_observation=native_dump_observation,
         )
         return state
 
     @partial(jax.jit, static_argnums=(0,))
+    @_with_static_rules
     def _reset_existent(
         self,
         state: State,
@@ -362,7 +390,8 @@ class TerraEnv(NamedTuple):
             distance_map_override=distance_map,
         )
         state = self.wrap_state(
-            state, executable_dig_observation=self.executable_dig_observation
+            state, executable_dig_observation=self.executable_dig_observation,
+            native_dump_observation=self.native_dump_observation,
         )
         observations = self._with_feedback_observations(
             state,
@@ -428,6 +457,7 @@ class TerraEnv(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
+    @_with_static_rules
     def step(
         self,
         state: State,
@@ -472,6 +502,7 @@ class TerraEnv(NamedTuple):
         new_state = self.wrap_state(
             new_state, update_reachability=update_reachability,
             executable_dig_observation=self.executable_dig_observation,
+            native_dump_observation=self.native_dump_observation,
         )
         obs = self._with_feedback_observations(
             new_state,
@@ -560,6 +591,7 @@ class TerraEnv(NamedTuple):
         )
 
     @partial(jax.jit, static_argnums=(0,))
+    @_with_static_rules
     def step_no_reset(
         self,
         state: State,
@@ -591,6 +623,7 @@ class TerraEnv(NamedTuple):
         new_state = self.wrap_state(
             new_state, update_reachability=update_reachability,
             executable_dig_observation=self.executable_dig_observation,
+            native_dump_observation=self.native_dump_observation,
         )
         obs = self._with_feedback_observations(
             new_state,
@@ -799,8 +832,14 @@ class TerraEnvBatch:
         previous_outcome_observation: bool = False,
         executable_dig_observation: bool = False,
         pull_direction_alignment: bool = False,
+        native_dump_observation: bool = False,
+        pull_cone: bool = False,
+        tracked_move_keeps_turn: bool = False,
     ) -> None:
         self.executable_dig_observation = bool(executable_dig_observation)
+        self.native_dump_observation = bool(native_dump_observation)
+        self.pull_cone = bool(pull_cone)
+        self.tracked_move_keeps_turn = bool(tracked_move_keeps_turn)
         self.pull_direction_alignment = bool(pull_direction_alignment)
         self.maps_buffer, self.batch_cfg = init_maps_buffer(
             batch_cfg,
@@ -845,6 +884,9 @@ class TerraEnvBatch:
             movement_feasibility_observation=movement_feasibility_observation,
             previous_outcome_observation=previous_outcome_observation,
             executable_dig_observation=self.executable_dig_observation,
+            native_dump_observation=self.native_dump_observation,
+            pull_cone=self.pull_cone,
+            tracked_move_keeps_turn=self.tracked_move_keeps_turn,
         )
         max_curriculum_level = len(batch_cfg.curriculum_global.levels) - 1
         max_steps_in_episode_per_level = jnp.array(
@@ -940,6 +982,26 @@ class TerraEnvBatch:
         # to NumPy. Skip Python-side validation in traced contexts.
         if isinstance(env_cfgs.pull_direction_alignment, jax.core.Tracer):
             return
+        # The wrapper uses the static option, so a mismatch would silently
+        # feed the other dumpability semantics to the policy.
+        dump_mode = np.asarray(env_cfgs.native_dump_observation, dtype=bool)
+        if np.any(dump_mode != getattr(self, "native_dump_observation", False)):
+            raise RuntimeError(
+                "EnvConfig.native_dump_observation must match TerraEnvBatch's "
+                "native_dump_observation option."
+            )
+        # A rule a lane enables must be compiled in; the switch may stay on
+        # for batches that mix enabled and disabled lanes.
+        for field, option, enabled in (
+            ("pull_half_angle_rad", "pull_cone", np.asarray(env_cfgs.pull_half_angle_rad) > 0),
+            ("tracked_move_keeps_turn", "tracked_move_keeps_turn",
+             np.asarray(env_cfgs.tracked_move_keeps_turn, dtype=bool)),
+        ):
+            if np.any(enabled) and not getattr(self, option, False):
+                raise RuntimeError(
+                    f"EnvConfig.{field} enables a rule that TerraEnvBatch was "
+                    f"built without; pass {option}=True."
+                )
         pull_mode = np.asarray(env_cfgs.pull_direction_alignment, dtype=bool)
         prepared_pull = getattr(self, "pull_direction_alignment", False)
         if np.any(pull_mode != prepared_pull):
@@ -954,7 +1016,7 @@ class TerraEnvBatch:
             width = np.asarray(env_cfgs.edge_band_width_m)
             if not np.all(np.isfinite(width) & (width > 0)):
                 raise RuntimeError("edge_band_width_m must be positive and finite.")
-            for name in ("edge_pull_tolerance_rad", "trench_pull_tolerance_rad"):
+            for name in ("edge_pull_tolerance_rad", "trench_pull_tolerance_rad", "pull_half_angle_rad"):
                 tolerance = np.asarray(getattr(env_cfgs, name))
                 if not np.all(np.isfinite(tolerance) & (tolerance >= 0) & (tolerance < np.pi / 2)):
                     raise RuntimeError(f"{name} must lie in [0, pi/2).")

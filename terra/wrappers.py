@@ -477,7 +477,12 @@ class LocalMapWrapper:
     
     
     @staticmethod
-    def wrap(state: State, *, executable_dig_observation: bool | None = None) -> State:
+    def wrap(
+        state: State,
+        *,
+        executable_dig_observation: bool | None = None,
+        native_dump_observation: bool | None = None,
+    ) -> State:
         """Wrapper that calls all the single-map wrappers for the currently active agent"""
         # Debug prints removed for training performance
         
@@ -512,6 +517,15 @@ class LocalMapWrapper:
         local_map_dumpability = LocalMapWrapper._wrap_with_masks(
             state, _as_2d_map(state.world.dumpability_mask.map), local_cartesian_masks, current_arm_angle
         )
+        # Static option from the batch environment, as for executable digs.
+        if native_dump_observation is None:
+            local_map_dumpability = jax.lax.cond(
+                jnp.bool_(state.env_cfg.native_dump_observation),
+                lambda: state._native_dump_counts().astype(local_map_dumpability.dtype),
+                lambda: local_map_dumpability,
+            )
+        elif native_dump_observation:
+            local_map_dumpability = state._native_dump_counts().astype(local_map_dumpability.dtype)
         local_map_obstacles = LocalMapWrapper._wrap_with_masks(
             state, obstacle_obs_mask, local_cartesian_masks, current_arm_angle
         )
@@ -532,7 +546,7 @@ class LocalMapWrapper:
         edge_alignment_error_map = angle_diff * border_mask
         edge_alignment_error_map = jax.lax.cond(
             jnp.bool_(state.env_cfg.pull_direction_alignment),
-            lambda: state._get_pull_boundary_details()[2] * border_mask,
+            lambda: state._get_pull_edge_error() * border_mask,
             lambda: edge_alignment_error_map,
         )
         local_map_edge_alignment_error = LocalMapWrapper._wrap_with_masks(

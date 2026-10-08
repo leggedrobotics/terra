@@ -365,6 +365,19 @@ class EnvConfig(NamedTuple):
     edge_pull_tolerance_rad: float = 0.436332313  # 25 degrees
     trench_pull_tolerance_rad: float = 0.261799388  # Reserved strict-draft field; unused.
     dig_pull_min_length_m: float = 2.5  # 0.5 m entry + 1.5 m work + 0.5 m exit
+    # Pull directions within +-pull_half_angle_rad of the cell-to-base line
+    # may supply the stroke room (and the precision-edge tangent). 0 keeps the
+    # strictly radial pull; pi/6 matches the +-30 degree cabin workspace sector.
+    pull_half_angle_rad: float = 0.0
+    # Tracked moves stop at the longest clear distance from which the chassis
+    # can still turn, when the longest clear stop could not. Without it, a
+    # 5-tile move can shuttle between two stops that both forbid turning.
+    tracked_move_keeps_turn: bool = False
+    # local_map_dumpability reports, per cabin heading, what a loaded DO
+    # would do there (native dump selection): +cells into the accepted zone,
+    # -cells for off-zone staging, 0 for no dump. Otherwise it counts
+    # dumpable cells in the 4.0-6.5 m dig cone, beyond the 6.0 m dump reach.
+    native_dump_observation: bool = False
 
     @classmethod
     def new(cls):

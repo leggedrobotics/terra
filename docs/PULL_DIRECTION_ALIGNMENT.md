@@ -50,7 +50,8 @@ reducing the tolerance when necessary until every target cell center remains
 strictly inside and every other center remains strictly outside. This cannot
 recover continuous design geometry lost during rasterization. The 25-degree
 edge tolerance accounts approximately for discrete poses and contour error;
-the cabin's 60-degree workspace is not added to that tolerance.
+the cabin's 60-degree workspace is not added to that tolerance unless
+`pull_half_angle_rad` is set (see the October 8 options below).
 
 At corners, nearest edges within a quarter-cell distance tie allow either
 edge tangent. Pulls are continuous vectors even though base and cabin actions
@@ -96,6 +97,66 @@ Low-level `State.new` callers must supply records from
 record count; the original foundation metadata count is preserved for existing
 dump rules. Missing or malformed geometry fails closed for fresh excavation.
 Trench-axis metadata is not needed by the new rule.
+
+## October 8 options: pull cone, turn-keeping moves, native dump observation
+
+Three opt-in `EnvConfig` fields, all off by default. With them off, behavior
+is unchanged.
+
+**`pull_half_angle_rad`** (intended value pi/6, the cabin sector half-angle).
+The strictly radial rule leaves no slack: the 4.0-6.5 m reach is exactly the
+2.5 m stroke, so the target must cover the whole 4.0-6.5 m ray segment. A
+2-cell trench was admissible only from bases within a few degrees of its axis.
+With the cone, a fresh cell is admissible when any pull direction within
++-`pull_half_angle_rad` of the cell-to-base line has 2.5 m of continuous target
+room. The room is clipped exactly to the 4.0-6.5 m reach annulus along that
+tilted line, so only the part on the cell's side of the inner radius counts.
+With precision on, an edge-band cell needs one direction that has the room and
+also lies within `edge_pull_tolerance_rad` of the edge tangent.
+`pull_cone_details` samples 7 directions (10 degree steps at 30 degrees). It
+evaluates only a 27 x 27 window around the base; the reach fits inside it, and
+the windowed result equals the whole-map result. On the panel maps, 13
+directions admit at most 0.4% more (base, cell) pairs, with unchanged medians.
+DO, the admissible/executable dig observations and the edge-error channel
+share it. A 2-cell trench now accepts bases up to about 45 degrees off its
+axis, but cross pulls still fail.
+
+**`tracked_move_keeps_turn`.** A tracked move takes the longest clear
+translation of up to 5 tiles. Near new holes and the map edge, this can shuttle
+the machine between two stops where neither allows a base rotation. On the
+8 Oct oracle's 17413 state, only 2 poses were reachable. With the option on, a
+move stops at the longest clear distance from which the chassis can still
+rotate one step either way. It falls back to the longest clear stop when no
+such distance exists. On open ground the move is unchanged, and the edge stop
+stays reachable with a further move. On the same state, more than 3000 poses
+become reachable.
+
+**`native_dump_observation`** (also a static `TerraEnvBatch` option, which must
+match; the batch raises otherwise). `local_map_dumpability` normally counts
+dumpable cells inside each heading's 4.0-6.5 m dig cone. It ignores the 6.0 m
+dump reach, the accepted zone, the last-dig workspace exclusion and the
+dug-ground centroid rule. With the option on, each of the 12 entries reports
+what a loaded DO would do at that cabin heading. It uses the native dump
+selection that DO now shares (`State._dump_selection`): +N for N accepted
+cells, -N for off-zone staging on N cells, 0 for no dump. An empty excavator
+is evaluated as if it carried one unit. The input shape is unchanged. Only a
+commit-time failure of soil relaxation (containment or storage) is not
+represented. On all initial, final and last-productive states of the 8 Oct
+replay panel (2 policies x 40 lanes x 12 headings), the sign agreed with native
+DO in 2880/2880 cases. The old count showed dump room where DO did nothing in
+102 cases.
+
+`TerraEnvBatch(pull_cone=..., tracked_move_keeps_turn=...)` are static
+switches. `TerraEnvBatch` vmaps `EnvConfig` per lane, so a `lax.cond` on these
+fields would evaluate both branches on every step. `TerraEnv` sets the
+switches while tracing (`terra.state.static_rules`), and a disabled rule is
+not compiled in. The batch refuses a lane that enables a rule the switch
+omits. Direct `State` use keeps the per-lane `lax.cond`.
+
+Native finishability with all three options was checked with the greedy
+oracle dig-order planner, run through native transitions on the 8 Oct
+training panel. Its frozen-terrain motion graph matched native moves in
+256/256 samples per map. Results are listed under Validation.
 
 ## Validation and provenance
 
@@ -150,3 +211,28 @@ two-step PPO update hit its 900-second process limit while compiling (exit124,
 zero updates). Its convolution/backward preflight passed. The first-update
 training gate remains **UNVERIFIED**; this is not a training-ready promotion.
 No production training was launched and the source checkpoint is unchanged.
+
+### October 8 options: validation
+
+Greedy oracle dig order with the pull cone and turn-keeping moves, run through
+native transitions on the 8 Oct training panel (warm u16500 replay starts).
+Before planning, the oracle's frozen-terrain motion graph was checked against
+256 native moves per map, with 0 mismatches:
+
+| Map | Radial rule (best of 5 oracle heuristics) | Cone + turn-keeping |
+| --- | --- | --- |
+| 15360 T trench | finished, 377 actions | finished, 307 |
+| 10752 road trench | 128/139 at 701 | finished, 389 |
+| 17413 rectangle, precision | 569/570 at 623 | finished, 447 |
+| 17411 rectangle, bulk | finished, 702 | finished, 457 |
+| 17411 rectangle, precision | 477/480 at 434 | finished, 522 |
+| 13824 straight trench | 88/90 | 83/90 (stops: no legal dump among candidate cuts) |
+| 17413 rectangle, bulk | 541/570 | 416/570 (greedy took 5 unsafe cuts) |
+
+These are finishability witnesses from a greedy planner, not optima, and a
+failure is not an impossibility proof. Median legal base positions per trench
+cell: 229-260 with the old rules, 37-46 with the radial pull, 131-144 with the
+cone. Tests: `test_pull_cone_geometry` (whole-map and Shapely equivalence, zero
+angle equals the radial rule), `test_pull_cone_native`,
+`test_tracked_move_keeps_turn` and `test_native_dump_observation`. Artifacts:
+`.artifacts/terra_pull_scratch_teacher_20261007/cone_trap_dumpobs_20261008/`.

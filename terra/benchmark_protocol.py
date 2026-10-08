@@ -143,6 +143,14 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
         raise RuntimeError("The v1 benchmark requires pull_direction_alignment=False.")
     for name in ("edge_band_width_m", "edge_pull_tolerance_rad", "trench_pull_tolerance_rad", "dig_pull_min_length_m"):
         payload.pop(name)
+    # October 8 options; v1 holds only with all of them off.
+    for name, default in {
+        "pull_half_angle_rad": 0.0,
+        "tracked_move_keeps_turn": False,
+        "native_dump_observation": False,
+    }.items():
+        if payload.pop(name) != default:
+            raise RuntimeError(f"The v1 benchmark requires {name}={default}.")
     # Later foundation and retained-work behavior fields preserve v1 only at
     # their inert defaults. Exclude them from this base receipt, not from
     # EnvConfig or checkpoint/evaluation treatment metadata. A changed default

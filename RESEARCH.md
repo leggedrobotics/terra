@@ -25,6 +25,18 @@ operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 - `terra/config.py`: curriculum and reward/environment configuration
 - `terra/maps_buffer.py`: dataset and map metadata loading
 
+## October 8 pull cone, turn-keeping moves, native dump observation
+
+Three opt-in options on branch `pull-cone-trap-dumpobs`, described in the
+[cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) document. The 2.5 m room
+may come from any pull within +-30 degrees of the cell-to-base line, as
+intended; the radial-only rule had no slack. Tracked moves stop where the
+chassis can still turn. `local_map_dumpability` reports the native per-heading
+dump outcome. With the cone and turn-keeping moves, a native greedy oracle
+finishes the T and road trenches and 17413 precision within 450 actions, and
+both 17411 rectangles at 457 and 522. The radial rule finished 2 of 7 panel
+maps, both above 450.
+
 ## October 6 experimental cutting-space rule
 
 The opt-in [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) requires
