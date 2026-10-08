@@ -12,6 +12,16 @@ main { max-width: 1360px; margin: auto; padding: 42px 28px; }
 .eyebrow { color: #567969; font-size: 12px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
 h1 { font-size: clamp(30px, 5vw, 48px); letter-spacing: -.04em; margin: 10px 0 15px; }
 .intro { max-width: 920px; color: #50625b; line-height: 1.6; white-space: pre-line; }
+.evaluations { margin: 28px 0; }
+.evaluations h2, .entries-title { font-size: 17px; letter-spacing: 0; margin: 0 0 8px; }
+.evaluation-context { color: #63736b; font-size: 13px; margin: 0 0 14px; }
+.evaluation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.evaluation { padding: 18px; border: 1px solid #d6dfd1; border-radius: 10px; background: #eef1e8; }
+.evaluation h3 { font-size: 15px; line-height: 1.4; margin: 0 0 12px; }
+.evaluation-rate { font-size: 13px; color: #50685a; margin: 0; }
+.evaluation-rate strong { font-size: 24px; color: #294c3d; }
+.evaluation-rate span { white-space: nowrap; }
+.evaluation a { font-size: 12px; color: #315f49; text-underline-offset: 3px; }
 .summary { display: flex; flex-wrap: wrap; gap: 12px 25px; padding: 20px 0; color: #63736b; font-size: 13px; }
 .summary strong { color: #294c3d; font-size: 23px; padding-right: 3px; }
 .filters { display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr)) 1.4fr; gap: 12px; border: 1px solid #d6dfd1; background: #e8ede3; border-radius: 12px; padding: 18px; }
@@ -55,6 +65,8 @@ footer { font-size: 12px; line-height: 1.65; color: #68796d; margin-top: 28px; m
 <div class="eyebrow">Terra · fleet plans and recordings</div>
 <h1>{{TITLE}}</h1>
 <p class="intro">{{DESCRIPTION}}</p>
+{{EVALUATIONS}}
+<h2 class="entries-title">Gallery entries</h2>
 <div class="summary" aria-label="Gallery entry counts">{{SUMMARY}}</div>
 <form class="filters" id="filters" aria-label="Filter gallery" onsubmit="return false">
 <label>Fleet<select name="fleet"><option value="all">All fleets</option><option value="mixed">Excavator + skid</option><option value="two_excavators">Two excavators</option><option value="solo">One excavator</option></select></label>
@@ -66,7 +78,7 @@ footer { font-size: 12px; line-height: 1.65; color: #68796d; margin-top: 28px; m
 <div class="result-line"><span id="result-count" role="status" aria-live="polite">All entries shown</span><span>Native completion and postprocessing validity are separate results.</span></div>
 <div class="grid" id="cases">{{CARDS}}</div>
 <p class="empty" id="empty" hidden>No entries match these filters.</p>
-<footer>Entries include selected recordings and full-panel failure outcomes. A case without a recording remains listed; no trajectory is inferred from its terminal counters. Earlier checkpoints and synthetic examples are labeled separately. A geometric candidate still needs native replay; playback is not physical-time or machine-execution validation. Counts describe gallery entries, not a benchmark success rate.</footer>
+<footer>Entries include selected recordings and full-panel failure outcomes. A case without a recording remains listed; no trajectory is inferred from its terminal counters. Earlier checkpoints and synthetic examples are labeled separately. A geometric candidate still needs native replay; playback is not physical-time or machine-execution validation. Gallery counts describe entries; evaluation panels report their own completed/total rates.</footer>
 </main>
 <script>
 function matchesCase(entry, filters) {

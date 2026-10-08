@@ -58,6 +58,46 @@ def _link(label, value, base, destination, css=""):
     return f'<a class="{css}" href="{href}">{_text(label)}</a>'
 
 
+def _evaluations(evaluations, base, destination):
+    if not isinstance(evaluations, list):
+        raise ValueError("Gallery evaluations must be a list")
+    if not evaluations:
+        return ""
+    panels = []
+    for evaluation in evaluations:
+        if not isinstance(evaluation, dict):
+            raise ValueError("Gallery evaluations must be objects")
+        title = evaluation.get("title")
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError("Each gallery evaluation requires a nonempty title")
+        completed, total = evaluation.get("completed"), evaluation.get("total")
+        if (
+            type(completed) is not int
+            or type(total) is not int
+            or not 0 <= completed <= total
+            or total <= 0
+        ):
+            raise ValueError(
+                "Evaluation counts must be integers with 0 <= completed <= total and total > 0"
+            )
+        note = evaluation.get("note", "")
+        if not isinstance(note, str):
+            raise ValueError("Gallery evaluation notes must be strings")
+        source = _link("Panel results", evaluation.get("source_url"), base, destination)
+        panels.append(
+            f'<div class="evaluation"><h3>{_text(title)}</h3>'
+            f'<p class="evaluation-rate"><strong>{completed} / {total}</strong> complete'
+            f" <span>({100 * completed / total:.1f}%)</span></p>"
+            f'<p class="note">{_text(note)}</p>{source}</div>'
+        )
+    return (
+        '<section class="evaluations" aria-labelledby="evaluations-title">'
+        '<h2 id="evaluations-title">Evaluation panels</h2>'
+        '<p class="evaluation-context">Full-panel results; gallery filters do not change these rates.</p>'
+        f'<div class="evaluation-grid">{"".join(panels)}</div></section>'
+    )
+
+
 def _card(case, base, destination):
     identity, title = case["id"], case["title"]
     native_label, native_outcome = NATIVE[case["native_status"]]
@@ -89,7 +129,13 @@ def _card(case, base, destination):
     primary = []
     if case.get("native_url"):
         primary.append(
-            _link("Native replay", case["native_url"], base, destination, "open")
+            _link(
+                case.get("native_label", "Native replay"),
+                case["native_url"],
+                base,
+                destination,
+                "open",
+            )
         )
     if case.get("postprocessed_url"):
         primary.append(
@@ -124,7 +170,9 @@ def build(manifest, out):
     ``manifest`` is a JSON path or a mapping with ``title``, ``description`` and
     ``cases``. Each case declares id/title, fleet, generation, native_status and
     postprocessed_status. Optional replay URLs, thumbnail, metrics, note and
-    labeled links add evidence without changing its declared outcome. Relative
+    labeled links add evidence without changing its declared outcome. A case's
+    optional native_label changes only its replay button. Optional evaluations
+    list full-panel title/completed/total/source_url and an optional note. Relative
     local links resolve from the manifest directory (cwd for an in-memory dict).
     Cases without recordings stay visible. No simulator or replay is executed.
     """
@@ -165,6 +213,11 @@ def build(manifest, out):
             raise ValueError("Gallery links require label and href")
         if case.get("postprocessed_url") and case["postprocessed_status"] == "not_run":
             raise ValueError("A postprocessed replay requires its processing outcome")
+        if "native_label" in case and (
+            not isinstance(case["native_label"], str)
+            or not case["native_label"].strip()
+        ):
+            raise ValueError("Gallery native_label must be a nonempty string")
     cases = content["cases"]
     counts = (
         (len(cases), "entries"),
@@ -182,11 +235,12 @@ def build(manifest, out):
     replacements = {
         "TITLE": _text(content.get("title", "Terra fleet gallery")),
         "DESCRIPTION": _text(content.get("description", "")),
+        "EVALUATIONS": _evaluations(content.get("evaluations", []), base, destination),
         "SUMMARY": summary,
         "CARDS": "\n".join(_card(case, base, destination) for case in cases),
     }
     page = re.sub(
-        r"\{\{(TITLE|DESCRIPTION|SUMMARY|CARDS)\}\}",
+        r"\{\{(TITLE|DESCRIPTION|EVALUATIONS|SUMMARY|CARDS)\}\}",
         lambda match: replacements[match[1]],
         page,
     )

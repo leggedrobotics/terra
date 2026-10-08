@@ -156,11 +156,27 @@ without a trace is not an animated failure: retain the entry and its source
 metrics until an appropriate recording is available. Fresh CPU replays must be
 labelled separately from historical GPU episodes.
 
+Optional `evaluations` entries show full-panel rates separately from gallery
+entry counts. Each needs `title`, integer `completed` and `total` (with
+`0 <= completed <= total` and `total > 0`), and `source_url`; `note` is optional.
+Panel rates stay fixed when filtering gallery entries. A case's optional
+`native_label` changes its replay button text only. For a historical GPU failure
+with a fresh CPU recapture, keep `native_status: "failed"`, label the button
+`"CPU recapture (complete)"` or `"CPU recapture (incomplete)"`, and distinguish the
+two outcomes in its metrics and note.
+
 Example gallery entry:
 
 ```json
 {
   "title": "Fleet review",
+  "evaluations": [{
+    "title": "Mixed u16867 · capacity 52 · greedy",
+    "completed": 42,
+    "total": 44,
+    "note": "Saved full GPU panel; active fleet cases only.",
+    "source_url": "evaluation/results.json"
+  }],
   "cases": [{
     "id": "mixed-96",
     "title": "Unfinished foundation",
@@ -170,7 +186,9 @@ Example gallery entry:
     "native_status": "failed",
     "postprocessed_status": "not_run",
     "native_url": "replays/case_096.html",
-    "metrics": {"Native rounds": 450, "Soil delivered": "0 / 230"}
+    "native_label": "CPU recapture (incomplete)",
+    "metrics": {"GPU soil delivered": "0 / 230", "CPU soil delivered": "0 / 230"},
+    "note": "Historical GPU failure; this fresh CPU recapture also remains incomplete."
   }]
 }
 ```

@@ -120,12 +120,86 @@ class GalleryTest(unittest.TestCase):
         self.assertIn("Literal {{TITLE}}", page)
         self.assertEqual(len(Cards(page).rows), 1)
 
+    def test_panel_rates_and_recapture_labels_preserve_historical_outcomes(self):
+        source = self.root / "input"
+        source.mkdir()
+        (source / "results & notes.json").write_text("{}")
+        (source / "replay.html").write_text("recording")
+        manifest = {
+            "evaluations": [
+                {
+                    "title": title,
+                    "completed": completed,
+                    "total": total,
+                    "note": "GPU panel <historical> & fixed",
+                    "source_url": "results & notes.json",
+                }
+                for title, completed, total in (
+                    ("Mixed <u16867>", 42, 44),
+                    ("Two excavators · greedy", 478, 512),
+                    ("Two excavators · sampled", 496, 512),
+                )
+            ],
+            "cases": [
+                case(
+                    "gpu-failure",
+                    native_status="failed",
+                    native_url="replay.html",
+                    native_label="CPU recapture (complete) <new> & separate",
+                )
+            ],
+        }
+        path = source / "gallery.json"
+        path.write_text(json.dumps(manifest))
+        build(path, self.output)
+        page = self.output.read_text()
+        for completed, total, percentage in (
+            (42, 44, "95.5"),
+            (478, 512, "93.4"),
+            (496, 512, "96.9"),
+        ):
+            self.assertIn(f"<strong>{completed} / {total}</strong> complete", page)
+            self.assertIn(f"({percentage}%)", page)
+        self.assertIn("Mixed &lt;u16867&gt;", page)
+        self.assertIn("GPU panel &lt;historical&gt; &amp; fixed", page)
+        self.assertIn("../input/results%20%26%20notes.json", page)
+        self.assertIn("CPU recapture (complete) &lt;new&gt; &amp; separate</a>", page)
+        self.assertIn("<strong>1</strong> entries", page)
+        self.assertIn("<strong>0</strong> native complete", page)
+        self.assertEqual(Cards(page).rows[0]["data-native"], "failed")
+
+    def test_invalid_panel_counts_or_evidence_fail_before_writing(self):
+        evaluation = {
+            "title": "Panel",
+            "completed": 1,
+            "total": 2,
+            "source_url": "https://example.com/results",
+        }
+        bad = [
+            {**evaluation, **changes}
+            for changes in (
+                {"completed": -1},
+                {"completed": 3},
+                {"completed": True},
+                {"total": 0},
+                {"total": 2.5},
+                {"title": ""},
+                {"source_url": "javascript:alert(1)"},
+                {"source_url": "missing.json"},
+            )
+        ]
+        for row in bad:
+            with self.subTest(row=row), self.assertRaises(ValueError):
+                build({"cases": [], "evaluations": [row]}, self.output)
+        self.assertFalse(self.output.exists())
+
     def test_bad_outcomes_and_missing_or_unsafe_links_fail_before_writing(self):
         bad_cases = [
             case("bad", native_status="probably complete"),
             case("bad", postprocessed_status="maybe"),
             case("bad", native_url="missing.html"),
             case("bad", native_url="javascript:alert(1)"),
+            case("bad", native_label=""),
             case("bad", postprocessed_url="https://example.com/replay.html"),
         ]
         for row in bad_cases:
