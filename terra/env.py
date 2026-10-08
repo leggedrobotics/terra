@@ -232,6 +232,9 @@ class TerraEnv(NamedTuple):
             "reward_v2_valid": zero,
             "reward_v2_makespan": zero,
             "reward_v2_makespan_fraction": zero,
+            "reward_v2_elapsed_time": zero,
+            "reward_v2_time_finish_s": zero,
+            "reward_v2_time_busy_s": zero,
             "reward_v2_transport_phi": zero,
             "reward_v2_transport_phi_next": zero,
             "reward_v2_transport_shaping": zero,
@@ -761,17 +764,24 @@ class TerraEnv(NamedTuple):
 
         makespan_job_s = state._makespan_job_s()
         _, makespan_fair_share = state._makespan_terms()
+        # With the elapsed-time objective the same two inputs carry this
+        # machine's clock and the latest clock T, both over T_ref.
+        elapsed_time = jnp.asarray(state.env_cfg.elapsed_time_cost) > 0
+        time_reference = state._time_reference_s()
+        time_finish = state._time_finish_s() / time_reference
 
-        def _feat(a, active, work_s):
+        def _feat(a, active, work_s, clock_s):
             # Index 9: this machine's executed-plan time so far and index 10:
             # the team's fair share (all work done and left, split evenly),
             # both over the single-machine loading time of the job.
-            machine_work_normalized = jnp.where(
-                active,
+            own_time = jnp.where(
+                elapsed_time,
+                jnp.asarray(clock_s, dtype=jnp.float32) / time_reference,
                 jnp.asarray(work_s, dtype=jnp.float32) / makespan_job_s,
-                jnp.float32(0.0),
             )
-            fair_share = jnp.where(active, makespan_fair_share, jnp.float32(0.0))
+            team_time = jnp.where(elapsed_time, time_finish, makespan_fair_share)
+            machine_work_normalized = jnp.where(active, own_time, jnp.float32(0.0))
+            fair_share = jnp.where(active, team_time, jnp.float32(0.0))
             carry_work_normalized = jnp.where(
                 jnp.logical_and(active, material_volume > 0),
                 jnp.asarray(
@@ -803,6 +813,7 @@ class TerraEnv(NamedTuple):
                     state.agent.agent_states[i],
                     state.agent.agent_active[i],
                     state.machine_work_s[i],
+                    state.machine_clock_s[i],
                 )
                 for i in range(MAX_AGENTS)
             ],
