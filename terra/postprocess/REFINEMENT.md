@@ -15,6 +15,11 @@ replace the geometry, material, schedule or route checks. Postprocessing is
 optional when the task only needs a native rollout visualization. Command and
 installation details are in the [media workflow](README.md).
 
+The repository includes the
+[`terra-plan-postprocess` skill](../../.agents/skills/terra-plan-postprocess/SKILL.md).
+Invoke it with: "Use $terra-plan-postprocess to improve this plan, export the
+continuous-space artifact, and generate original/refined 3D views."
+
 ## Inputs and ownership
 
 | Input or stage | Maintained owner and current contract |
