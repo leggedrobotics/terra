@@ -73,6 +73,31 @@ class PullDirectionAlignmentTest(unittest.TestCase):
             pull_direction_alignment=False, enforce_trench_dig_alignment=True))
         self.assertFalse(bool(legacy._dig_eligibility(legacy._build_dig_dump_cone())[3]))
 
+    def test_narrow_trench_has_no_bucket_width_gate_even_in_old_saved_config(self):
+        target, axes = self.strip()
+        state = self.state(target, axes=axes)
+        state = state._replace(env_cfg=state.env_cfg._replace(
+            dig_pull_min_length_m=1.0, pull_half_angle_rad=float(np.pi / 6)))
+        legacy = state._replace(env_cfg=state.env_cfg._replace(
+            dig_working_strip_width_m=1.3))
+        pair = jax.tree.map(lambda a, b: jnp.stack([a, b]), state, legacy)
+
+        def execute(s):
+            after = s._handle_do()
+            return (after.world.action_map.map, after._get_current_agent_state().loaded,
+                    s._executable_fresh_dig_counts(), after.world.target_map.map,
+                    after.world.padding_mask.map)
+
+        action, loaded, counts, targets, obstacles = jax.jit(jax.vmap(execute))(pair)
+        self.assertGreater(int(loaded[0, 0]), 0)
+        for value in (action, loaded, counts):
+            np.testing.assert_array_equal(value[0], value[1])
+        self.assertEqual(int(loaded[0, 0]), int(counts[0, 0]))
+        self.assertEqual(int(action[0].sum()) + int(loaded[0, 0]), 0)
+        for i in range(2):
+            np.testing.assert_array_equal(targets[i], target)
+            np.testing.assert_array_equal(obstacles[i], state.world.padding_mask.map)
+
     def test_narrow_crosswise_cut_fails_but_junction_uses_connected_room(self):
         target = np.zeros(self.SHAPE, np.int8)
         target[24:26, 15:55] = -1

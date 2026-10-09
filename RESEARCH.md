@@ -32,15 +32,12 @@ postprocessed geometric validity and physical execution remain separate results.
 
 ## October 8 pull cone, turn-keeping moves, native dump observation
 
-The manual game's latest rule uses a 1 m working length and a 1.3 m bucket
-width. Connected eligible fresh soil and actually excavated space can support
-the working strip; a tiny remaining cut is allowed only when that room exists.
-This is an optional 2D workspace gate, with the original line-only rule retained
-when `dig_working_strip_width_m=0`; it does not model a bucket lift trajectory.
-The strip is not qualified for the existing training bank: a reported
-optimistic coverage audit leaves target cells permanently unreachable on most
-sampled maps. Keep it disabled for production training; see the
-[bank compatibility analysis](docs/PULL_DIRECTION_ALIGNMENT.md#bank-compatibility).
+The manual game uses a 1 m minimum pull length with no bucket-width constraint.
+Trenches are widened to bucket size during postprocessing, so the temporary
+rectangular working-strip gate has been removed. Reach, cone, precision-edge,
+obstacle and chassis checks remain. The old strip-width config field is ignored
+and retained only for saved-state loading. See
+[pull admission and the removed strip experiment](docs/PULL_DIRECTION_ALIGNMENT.md).
 
 The October 9 edge correction preserves exact raster contours by default and
 tests pull rays through boundary/reach-circle intersections. At manual step

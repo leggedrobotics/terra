@@ -387,9 +387,8 @@ class EnvConfig(NamedTuple):
     # closer to the machine). Cells are still dug only within the dig reach.
     pull_stroke_outer_extension_m: float = 0.0
     pull_stroke_inner_extension_m: float = 0.0
-    # Optional bucket-width working-room check for fresh excavation. Zero
-    # preserves the original line-only rule. Length uses dig_pull_min_length_m;
-    # room may contain this action's fresh cut and already-excavated cells.
+    # Ignored legacy field: retained only for positional saved-state pickles.
+    # Bucket width belongs to trench postprocessing, not native dig admission.
     dig_working_strip_width_m: float = 0.0
 
     @classmethod

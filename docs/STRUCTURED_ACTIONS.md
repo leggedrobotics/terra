@@ -4,11 +4,10 @@
 preserves the legacy `State`, config, saved-state pickle and eight-action API.
 It supports one tracked excavator with twelve chassis and cabin headings.
 
-Structured actions do not enable the optional working-strip rule. Saved states
-carry that rule independently, and its width defaults to zero (disabled).
-The manual game's 1 m by 1.3 m strip has a known training-bank compatibility
-problem; see [the reported coverage audit](PULL_DIRECTION_ALIGNMENT.md#bank-compatibility)
-before selecting an initial-state bank for training.
+Native digging has no bucket-width constraint; trench width is handled during
+postprocessing. The temporary rectangular working-strip gate has been removed.
+Saved states still carry their pull-length setting independently of the action
+space; the manual game uses 1 m. See [pull admission](PULL_DIRECTION_ALIGNMENT.md).
 
 | Type | Argument | Execution |
 | --- | --- | --- |

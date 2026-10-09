@@ -1,54 +1,32 @@
 # Bulk cutting room and optional precision edges
 
-## October 9 manual rule: 1 m working strips
+## October 9 manual rule: 1 m pull, no bucket-width constraint
 
-The current structured manual game uses `dig_pull_min_length_m=1.0` and
-`dig_working_strip_width_m=1.3`. A fresh cut must belong to a complete 1 m
-long, bucket-width strip supported by cells this DO can excavate plus
-already-excavated target cells inside its working sector. Unexcavated target
-outside this action cannot supply room. A remaining inner cell can use
-connected dug space; an isolated cell or narrow lane cannot.
+The structured manual game uses `dig_pull_min_length_m=1.0`. Native admission
+checks pull length, reach, cone, optional precision edges, obstacles and chassis
+clearance. It imposes no bucket-width or rectangular-strip requirement.
+Trenches are widened to the bucket size during postprocessing; their native
+grid width must not block excavation. A one-cell-wide lane is legal when its
+pull has enough length. Previously excavated target space still supplies room
+for small cleanup cuts through the existing line-based geometry.
 
-The strip check is a small raster opening at the cabin direction and its two
-cone limits. It includes every cell touched by the rectangular footprint and
-returns the union of valid footprints, so fresh soil borrowed as support is
-also included in the action. At 0.571 m tiles a 1.3 m bucket needs three cells
-across; one- and two-cell-wide lanes fail. Native reach, precision, obstacle,
-chassis, relift and unload rules remain in force.
+The 1 m value is the game's chosen minimum pull length. It is a 2D geometric
+approximation, not a simulated bucket lift or a change to the legacy default
+of 2.5 m. Initial banks and restored state histories retain their configured
+length. `dig_working_strip_width_m` is ignored, even if nonzero in an old saved
+state; the field remains only so positional state pickles can still load.
 
-The 1 m requirement is working room, not fresh-soil travel plus an entry/exit
-allowance. No separate in-target pull-up distance is imposed. This is a 2D
-workspace approximation, not a curl/lift trajectory or clearance certificate;
-strip room and existing line/precision permission are separate checks.
-`dig_working_strip_width_m=0` keeps the original line-only mode below. Saved
-initial banks and restored state histories must carry the chosen rule values.
+### Removed strip experiment
 
-### Bank compatibility
-
-This strip rule is an experimental manual-game setting, not a qualified rule
-for the existing training bank. An October 9 user-reported audit sampled every
-eighth map of the 20,480-map bank, supplied the entire target as support and
-tested all 30-degree strip orientations without reach constraints. It found
-uncovered target cells on 1,022/1,600 foundation maps (0.8% of target cells)
-and 809/960 trench maps (9.4%). These sample counts have not been independently
-reproduced here.
-
-For matching tile size, strip dimensions and orientation bins, this is an
-optimistic upper bound on the cells the rule can ever admit: actual fresh plus
-dug support is always a subset of the target. Already-dug room cannot rescue a
-cell that fails with the entire target available. Native success requires full
-excavation, so even one permanently uncovered cell prevents success from a
-fresh reset. The reported sample therefore caps success at 36.1% for
-foundations and 15.7% for trenches before reach, navigation and dumping checks.
-
-The full rectangular footprint and conservative raster coverage can reject
-narrow branches and corners. The audit alone does not separate intended
-bucket-width exclusions from grid artifacts. Keep the strip disabled for the
-existing production bank (`dig_working_strip_width_m=0`). Before enabling it
-for training, reconcile the geometry rule with the bank and check target
-coverage plus native finishability; PPO or reward tuning cannot repair an
-impossible target. The local manual-game and synthetic checks below do not
-establish bank-wide finishability.
+The temporary 1 m by 1.3 m rectangular gate was removed after the bucket-width
+postprocessing contract was clarified. It duplicated a downstream constraint
+and conservatively rejected narrow raster branches and corners. A user-reported
+audit of every eighth map in the 20,480-map bank found permanently uncovered
+cells on 1,022/1,600 foundation maps and 809/960 trench maps, even with full
+target support and no reach limit. Those counts were not independently
+reproduced here. Native success requires full excavation, so retaining that
+gate would prevent success on the affected maps. Removing it does not by itself
+prove full-bank finishability under the remaining rules.
 
 ## Original line-only rule
 
