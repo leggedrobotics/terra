@@ -64,6 +64,13 @@ it reports the failure; try another seed, fewer agents, or more free space.
 
 ## Pull-rule inspector
 
+For distance, turn amount and direct work-heading controls, add
+`--structured-actions --time-budget-seconds 14400 --decision-budget 450`.
+This opt-in mode uses estimated machine time and a decision cap; see the
+[structured-action contract](../../docs/STRUCTURED_ACTIONS.md). Its native
+masks include productive soil pickup and full-load unloading. Undo and export
+preserve the argument and time history.
+
 Control an excavator from an exact saved initial state, with native pull-rule
 eligibility and unload checks:
 

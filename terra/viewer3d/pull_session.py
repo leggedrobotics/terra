@@ -180,6 +180,7 @@ class PullSession:
             selected_case=self.selected_case, reset_seed=episode["reset_seed"], max_steps=450,
             source_id=episode["source_id"], height_units="abstract soil units, not physical depth",
             rules=dict(pull_direction_alignment=True, dig_pull_min_length_m=float(state.env_cfg.dig_pull_min_length_m),
+                       dig_working_strip_width_m=float(state.env_cfg.dig_working_strip_width_m),
                        edge_band_width_m=float(state.env_cfg.edge_band_width_m),
                        edge_pull_tolerance_rad=float(state.env_cfg.edge_pull_tolerance_rad),
                        dig_min_radius_m=float(state.env_cfg.agent.dig_min_radius_m),

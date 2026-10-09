@@ -22,7 +22,7 @@
  */
 import { TerraScene } from './scene.js';
 import { validateReplay, validateFrame, terrainFacts, transitionFacts, actionName, formatReward, TYPES, diggingView, DIGGING_LABELS, isJointFrame, jointRequests } from './data.js';
-import { manualControls, unloadGuidance } from './manual.js';
+import { manualControls, unloadGuidance, structuredMode, manualActionRequest, manualActionAvailable, moveDistanceControls, currentCabinHeading, cabinHeadingLabel, structuredBudget } from './manual.js';
 
 const $ = id => document.getElementById(id);
 const number = value => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
@@ -37,10 +37,40 @@ function notify(message, duration = 3100) { clearTimeout(eventTimer); text('even
 function frame() { return replay?.frames[index]; }
 function controlsState() { return manualControls({ replay, index, mode, imported, busy, playing, session: sessionInfo }); }
 function manualReady() { return controlsState().action; }
+function actionRequest(action) {
+  return manualActionRequest(action, replay?.metadata, { distance: Number($('move-distance').value), turn: Number($('turn-amount').value), heading: Number($('work-heading').value || -1) });
+}
+
+function updateStructuredControls(ready) {
+  const structured = structuredMode(replay?.metadata), snapshot = frame();
+  $('structured-controls').hidden = !structured;
+  $('structured-budget').hidden = !structured;
+  document.body.dataset.structured = String(structured);
+  if (!structured || !snapshot) return;
+  const distanceSelector = $('move-distance'), distance = moveDistanceControls(snapshot, Number(distanceSelector.value));
+  distanceSelector.querySelector('option[value="1"]').disabled = distance.oneCellDisabled;
+  distanceSelector.value = String(distance.distance);
+  text('move-distance-note', distance.hint); $('move-distance-note').hidden = !distance.hint;
+  const current = currentCabinHeading(snapshot), selector = $('work-heading'), selectedHeading = selector.value || '-1';
+  selector.replaceChildren();
+  for (const heading of [-1, ...Array.from({ length: 12 }, (_, i) => i)]) {
+    const option = document.createElement('option'), value = heading === -1 ? current : heading;
+    const available = manualActionAvailable({ action: 6, heading: value }, snapshot, replay.metadata);
+    option.value = String(heading);
+    option.textContent = `${heading === -1 ? `Current cabin (${cabinHeadingLabel(current, current).split(' · current')[0]})` : cabinHeadingLabel(value, current)}${available ? '' : ' · no work'} `;
+    option.disabled = !available;
+    selector.append(option);
+  }
+  selector.value = selectedHeading;
+  for (const id of ['move-distance', 'turn-amount', 'work-heading']) $(id).disabled = !ready;
+  const mask = snapshot.diagnostics?.structured_actions?.do_mask, count = Array.isArray(mask) ? mask.filter(Boolean).length : null;
+  text('heading-note', `${count === null ? 'Native work masks unavailable.' : `${count} / 12 headings can work (includes loose-soil pickup and off-target unloading).`} Space swings to the selection, then works. Overlays show the current cabin heading. Q/E still swing one step.`);
+}
 
 function updateControls() {
   const controls = controlsState(), ready = controls.action, current = frame();
-  document.querySelectorAll('[data-action]').forEach(button => { button.disabled = !ready; });
+  updateStructuredControls(ready);
+  document.querySelectorAll('[data-action]').forEach(button => { button.disabled = !ready || !manualActionAvailable(actionRequest(Number(button.dataset.action)), current, replay?.metadata); });
   $('reset').disabled = !controls.reset;
   $('undo').disabled = !controls.undo;
   for (const id of ['case-select', 'precision-select', 'start-select']) $(id).disabled = busy || mode !== 'manual' || imported;
@@ -109,12 +139,21 @@ function updateUI() {
   $('scene-legend').hidden = digging.available;
   if (diagnostics) {
     const budget = diagnostics.step_budget ?? 450, exploring = !!diagnostics.exploring || (!imported && index === replay.frames.length - 1 && !!sessionInfo.exploring);
-    text('step-budget', `${snapshot.step} / ${budget}`);
-    text('budget-note', exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? 'Budget reached · episode frozen' : `${Math.max(0, diagnostics.remaining_steps ?? budget - snapshot.step)} actions left`);
+    const structured = structuredMode(replay.metadata), timeBudget = structuredBudget(diagnostics, snapshot, exploring);
+    text('budget-label', structured ? 'Estimated time' : 'Action budget');
+    text('step-budget', structured ? timeBudget.time : `${snapshot.step} / ${budget}`);
+    text('budget-note', structured ? timeBudget.note : exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? 'Budget reached · episode frozen' : `${Math.max(0, diagnostics.remaining_steps ?? budget - snapshot.step)} actions left`);
+    text('decision-budget', timeBudget.decisions);
+    text('timing-model', typeof diagnostics.timing_model === 'string' ? `Time model: ${diagnostics.timing_model}` : 'Estimated machine time; animation speed is separate.');
+    text('continue', structured ? 'Continue beyond budget · exploration only' : 'Continue beyond 450 · exploration only');
     $('native-status').classList.toggle('exploring', exploring);
     text('native-action-message', diagnostics.message || 'Ready for a native simulator action.');
     text('do-status', digging.loaded ? (diagnostics.accepted_unload_now ? 'Unload allowed now' : diagnostics.accepted_unload_any ? 'Turn cabin to unload' : 'No accepted unload here') : digging.counts.current ? `Dig ${digging.counts.current} fresh cells now` : diagnostics.do_kind === 'relift' ? 'Work picks up loose soil' : 'No fresh dig at this heading');
     text('dump-status', unloadGuidance(diagnostics));
+    if (structured) {
+      text('do-status', digging.loaded ? 'Choose an unload heading' : 'Choose a dig / soil-pickup heading');
+      text('dump-status', digging.loaded ? 'Enabled headings can unload. Off-target unloading stays available and does not count as accepted disposal.' : 'Enabled headings can excavate or pick up loose soil. The base stays in place.');
+    }
   }
   if (digging.available) {
     text('dig-current-count', digging.counts.current); text('dig-swing-count', digging.counts.swing); text('dig-blocked-count', digging.counts.blocked);
@@ -141,7 +180,7 @@ function updateUI() {
   text('cut-units', metrics ? `${number(metrics.dug)} / ${number(metrics.required)} units` : `${number(facts.cut)} units`);
   text('fill-units', metrics ? `${number(metrics.disposed)} / ${number(metrics.required)} units` : `${number(facts.fill)} units`);
   text('scene-caption', `${number(snapshot.grid.cols * snapshot.grid.tile_size_m)} × ${number(snapshot.grid.rows * snapshot.grid.tile_size_m)} m worksite · ${joint ? 'native joint endpoints' : 'illustrative soil mounds'}`);
-  text('step-label', joint ? 'JOINT ROUND' : 'STEP');
+  text('step-label', joint ? 'JOINT ROUND' : structuredMode(replay.metadata) ? 'DECISION' : 'STEP');
   text('replay-note', joint ? 'Recorded macro endpoints only; no interpolated travel or physical-time claim.' : 'Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.');
   $('manual-heading').closest('section').hidden = joint;
   $('workspace-note').hidden = !snapshot.workspace_polygons?.length;
@@ -200,9 +239,11 @@ function loadSession(session, { local = false } = {}) {
 
 async function performAction(action) {
   if (!manualReady()) return;
+  const payload = actionRequest(action);
+  if (!manualActionAvailable(payload, frame(), replay.metadata)) { notify('No effect for this choice. Choose another amount or work heading.'); return; }
   busy = true; updateControls();
   try {
-    const result = await request('/api/action', { action }), next = result.frame; validateFrame(next);
+    const result = await request('/api/action', payload), next = result.frame; validateFrame(next);
     sessionInfo = { ...sessionInfo, can_undo: result.can_undo ?? sessionInfo.can_undo, exploring: result.exploring ?? sessionInfo.exploring };
     replay.frames.push(next); showFrame(replay.frames.length - 1, { animate: true, announce: true });
   } catch (error) { showError(error); }
@@ -273,9 +314,10 @@ async function exportReplay() {
 
 function bindControls() {
   document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', event => { performAction(Number(button.dataset.action)); if (event.detail > 0) $('viewport').focus({ preventScroll: true }); }));
+  for (const id of ['move-distance', 'turn-amount', 'work-heading']) $(id).addEventListener('change', updateControls);
   $('reset').addEventListener('click', event => { resetSession(); if (event.detail > 0) $('viewport').focus({ preventScroll: true }); });
   $('undo').addEventListener('click', () => sessionCommand('/api/undo', 'Undo · previous native state restored'));
-  $('continue').addEventListener('click', () => sessionCommand('/api/continue', 'Exploration enabled · actions are outside the 450-step episode'));
+  $('continue').addEventListener('click', () => sessionCommand('/api/continue', 'Exploration enabled · actions are outside the episode budget'));
   $('case-select').addEventListener('change', () => configureCaseChoices());
   $('precision-select').addEventListener('change', updatePendingCase); $('start-select').addEventListener('change', updatePendingCase);
   $('previous').addEventListener('click', () => { setPlaying(false); showFrame(index - 1); });

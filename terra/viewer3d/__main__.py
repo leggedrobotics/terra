@@ -29,6 +29,14 @@ def main(argv=None):
     parser.add_argument("--case", default="17411", help="Saved source slot for the pull inspector.")
     parser.add_argument("--precision-mode", choices=("bulk", "precision"), default="precision")
     parser.add_argument("--start", type=int, default=0, choices=(0, 1))
+    parser.add_argument("--structured-actions", action="store_true",
+                        help="Opt-in distance, turn amount and work heading controls for the pull inspector.")
+    parser.add_argument("--time-budget-seconds", type=float, default=14400.0,
+                        help="Estimated machine-time budget in structured mode (default: 14400 s).")
+    parser.add_argument("--decision-budget", type=int, default=450,
+                        help="Structured-mode decision cap, including waits (default: 450).")
+    parser.add_argument("--resume-recording", type=Path,
+                        help="Restore a trusted structured native export directory, including its time history.")
     parser.add_argument(
         "--export",
         type=Path,
@@ -67,6 +75,10 @@ def main(argv=None):
         parser.error("port must be between 0 and 65535.")
     if args.pull_inspector and (args.initial_states is None or not args.initial_states.is_file()):
         parser.error("--pull-inspector requires --initial-states /path/to/initial_states.pkl (an existing saved native state bank).")
+    if args.structured_actions and not args.pull_inspector:
+        parser.error("--structured-actions requires --pull-inspector.")
+    if args.resume_recording and not args.structured_actions:
+        parser.error("--resume-recording requires --structured-actions.")
     from .replay import ReplayRecorder, load_replay
     from .server import STATIC_DIR, make_server
 
@@ -93,12 +105,18 @@ def main(argv=None):
         )
         if args.pull_inspector:
             from .pull_session import PullSession
+            session_class = PullSession
             options = dict(case_id=args.case, precision=args.precision_mode == "precision", start=args.start)
+            if args.structured_actions:
+                from .structured_session import StructuredPullSession
+                session_class = StructuredPullSession
+                options.update(time_budget_s=args.time_budget_seconds, decision_budget=args.decision_budget,
+                               resume_recording=args.resume_recording)
             if args.initial_states:
                 options["initial_states"] = args.initial_states
             if args.manual_output:
                 options["output"] = args.manual_output
-            session = PullSession(**options)
+            session = session_class(**options)
         else:
             from .session import ManualSession
             session = ManualSession(

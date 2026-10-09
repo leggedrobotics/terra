@@ -61,6 +61,15 @@ h2{font-size:11px}
 .native-status #native-action-message{padding-top:9px;margin-top:10px;border-top:1px solid #ffffff13;color:#d0dfd5}
 .native-status.exploring .budget-note{color:#e9bd70}
 #continue{white-space:normal;font-size:12px;color:#e9c485;border-color:#d7b37555;line-height:1.5}
+.structured-controls{margin:0 0 13px}
+.structured-controls label{display:flex;flex-direction:column;gap:6px;color:#c2d2cb;font-size:11px;min-width:0}
+.structured-controls select{width:100%;min-width:0;padding:8px;border:1px solid #ffffff24;border-radius:5px;background:#213633;color:#e1ebe5;font-size:12px}
+.structured-controls option:disabled{color:#93a09a}
+.structured-controls select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.motion-arguments{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:11px}
+.structured-controls p{font-size:11px;color:#a8beb1;line-height:1.5;margin:7px 0 0}
+#structured-budget{margin-bottom:12px}
+#structured-budget .budget{font-size:11px;margin:4px 0}
 .layers{margin-top:22px;margin-bottom:18px;border-top:1px solid var(--line);padding-top:18px}
 .layer{font-size:12px;margin:13px 0}
 .text-button{font-size:11px}
@@ -94,3 +103,4 @@ h2{font-size:11px}
 @media(max-width:1100px){.workspace{grid-template-columns:280px minmax(0,1fr)}.sidebar{padding:19px}.scene-caption{max-width:42%}.camera-controls button span{display:none}.camera-controls #camera-home span,.camera-controls #camera-top span{display:inline}.dig-legend{top:99px;left:18px;right:18px;max-width:calc(100% - 36px);padding:10px 12px}.eligibility-keys{gap:7px 14px}.scene-top{left:18px;right:18px;gap:8px}.camera-controls button{padding:6px}.cell-inspector{max-width:260px}}
 @media(max-width:700px){.workspace{display:flex}.sidebar{padding:20px;gap:20px}.mission{grid-column:1/-1}.case-controls{max-width:560px}.case-options{max-width:420px}.manual{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.manual>.section-label{grid-column:1/-1}.manual>.controls-grid{grid-column:1;grid-row:2/4}.manual>.work-button{grid-column:2;grid-row:2;margin:0;align-self:start}.manual>.manual-bottom{grid-column:2;grid-row:3;align-self:end}.manual>.native-status{grid-column:1/-1}.manual>.full-width{grid-column:1/-1}.machine-card{margin:0}.layers{margin:0;padding-top:0;border:0}.scene-top{top:17px;left:14px;right:14px}.scene-caption{max-width:38%}.camera-controls button{padding:6px}.camera-controls button span{font-size:10px}.dig-legend{top:90px;left:14px;right:14px;max-width:calc(100% - 28px)}.eligibility-keys{font-size:11px;gap:6px 12px}.eligibility-detail{font-size:10px}.cell-data{font-size:10px}.cell-inspector{max-width:240px}.cell-inspector:has(.cell-hint){min-width:0}.event{max-width:calc(100% - 28px);left:14px;right:14px;bottom:88px}.timeline-label #action-label{display:none}}
 @media(max-width:420px){.sidebar{grid-template-columns:1fr}.manual{display:block}.manual>.work-button{margin-top:7px}.scene-caption{display:none}.scene-top{justify-content:flex-end}.dig-legend{top:73px}.eligibility-keys{gap:5px 10px}.eligibility-detail{gap:5px 9px}.dig-legend{padding:9px 11px}.camera-controls button span{font-size:11px}.cell-inspector{max-width:220px}}
+@media(min-width:421px) and (max-width:700px){body[data-structured=true] .manual>.structured-controls{grid-column:1/-1;grid-row:2}body[data-structured=true] .manual>.controls-grid{grid-row:3/5}body[data-structured=true] .manual>.work-button{grid-row:3}body[data-structured=true] .manual>.manual-bottom{grid-row:4}}

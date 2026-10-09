@@ -32,6 +32,7 @@ from terra.config import REWARD_V2_V21_STEP_COST_TOTAL
 from terra.map import compute_dynamic_dumpability
 from terra.map import GridWorld
 from terra.dig_direction import boundary_pull_details, pull_cone_details, pull_stroke_details
+from terra.working_strip import working_strip_mask
 from terra.utils import angle_idx_to_rad
 from terra.utils import apply_local_cartesian_to_cyl
 from terra.utils import apply_rot_transl
@@ -2521,6 +2522,31 @@ class State(NamedTuple):
         action = _flat_2d_map(self.world.action_map.map).astype(jnp.int32)
         selected_sum = action @ dig_mask.astype(jnp.int32)
         lifting_positive_soil = selected_sum > 0
+
+        def _working_room():
+            shape = self.world.action_map.map.shape[-2:]
+            outside = (~self._active_base_footprint_mask().reshape(-1)
+                       if outside_base_footprint is None else outside_base_footprint)
+            target = _flat_2d_map(self.world.target_map.map)
+            clear = outside & (_flat_2d_map(self.world.padding_mask.map) != 1)
+            fresh = (dig_mask & clear).reshape(shape)
+            dug = (dig_cone & clear & (target < 0) & (action < 0)).reshape(shape)
+            angle = jnp.ravel(self._get_arm_angle_rad())[0]
+            angles = angle + jnp.array([-1.0, 0.0, 1.0]) * self.env_cfg.pull_half_angle_rad
+            directions = jnp.stack([-jnp.sin(angles), jnp.cos(angles)], axis=-1)
+            return working_strip_mask(
+                fresh, dug, directions, self.env_cfg.tile_size,
+                self.env_cfg.dig_pull_min_length_m,
+                self.env_cfg.dig_working_strip_width_m,
+            ).reshape(dig_mask.shape)
+
+        dig_mask = jax.lax.cond(
+            jnp.bool_(self.env_cfg.pull_direction_alignment)
+            & (self.env_cfg.dig_working_strip_width_m != 0.0)
+            & (self._get_current_agent_state().agent_type[0] == 0)
+            & ~lifting_positive_soil,
+            _working_room, lambda: dig_mask,
+        )
         dig_volume = jnp.where(
             lifting_positive_soil,
             jnp.minimum(selected_sum, jnp.int32(INTLOWDIM_MAX)),

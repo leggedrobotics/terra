@@ -16,16 +16,18 @@ BOUNDARY_NEAREST_TIE_TILES = 0.25
 
 
 def boundary_records_from_mask(
-    target_or_mask, max_segments: int = MAX_BOUNDARY_SEGMENTS, simplification_tiles: float = 0.5
+    target_or_mask, max_segments: int = MAX_BOUNDARY_SEGMENTS, simplification_tiles: float = 0.0
 ) -> tuple[np.ndarray, int]:
     """Extract every external boundary and hole, without truncating geometry.
 
     Boolean input is a dig mask; numeric input is a Terra target map (negative
     cells are excavation). Marching squares puts a straight raster boundary
-    half a cell from its cell centres. Simplification removes sub-cell stairs;
-    its tolerance is reduced until target centres are strictly inside and
-    protected centres strictly outside. It does not recover design geometry
-    lost in rasterization.
+    half a cell from its cell centres. By default only collinear vertices are
+    removed, preserving the raster contour's edges and pull-stroke lengths.
+    Optional nonzero simplification removes sub-cell stairs; its tolerance is
+    reduced until target centres are strictly inside and protected centres
+    strictly outside. That check does not preserve edge positions or stroke
+    lengths. Neither mode recovers design geometry lost in rasterization.
     """
     from shapely import contains_xy, intersects_xy
     from shapely.geometry import MultiPolygon, Polygon
@@ -334,7 +336,10 @@ def pull_stroke_details(target_map, records, count, base_rc, tile_size,
 # Pull directions sampled across the cone, inclusive of both edges: 10 degree
 # steps for a +-30 degree cone. Each cell also tests its nearest edge's exact
 # tangent and normal (clamped into the cone): an edge cell's long stroke can
-# exist only within a few degrees of them, between two samples.
+# exist only within a few degrees of them, between two samples. Four further
+# candidates pass through the nearest finite boundary's intersections with the
+# inner/outer stroke circles: clipping can leave a narrow valid interval whose
+# peak lies exactly at one of these intersections.
 PULL_CONE_DIRECTIONS = 7
 # Cells are evaluated in a (2w+1)^2 window around the base. 13 tiles covers the
 # 6.5 m reach at the 0.571 m tile with a cell to spare; larger reaches fail closed.
@@ -355,8 +360,12 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
     pass inside the inner reach radius, and only the part on the cell's side
     counts. With ``precision`` on, an edge-band cell additionally needs that
     same direction within ``edge_tolerance_rad`` of its nearest boundary
-    tangent (or of its normal, with ``perpendicular_ok``). ``best_length`` is the longest stroke over the sampled
-    directions; ``edge_error`` is the smallest tangent error among directions
+    tangent (or of its normal, with ``perpendicular_ok``). In addition to the
+    fixed angular samples and exact nearest-edge tangent/normal, directions
+    through that finite edge's intersections with the stroke circles capture
+    narrow intervals at boundary/reach clipping changes. This bounded candidate
+    set is not an exhaustive continuous angular optimizer. ``best_length`` is
+    the longest candidate stroke; ``edge_error`` is the smallest error among directions
     with enough room (pi/2 if none), zero outside the precision band.
     Malformed geometry fails closed, as in ``pull_stroke_details``.
 
@@ -367,7 +376,7 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
 
     Only cells within ``window`` tiles of the base are evaluated (static;
     ``None`` evaluates the whole map). Every cell is independent, so results
-    inside the window are exact; outside it no cell is in reach, so target
+    inside the window match the full-map calculation; outside it no cell is in reach, so target
     cells are refused, lengths are zero and precision target cells report
     pi/2. A reach beyond the window fails closed.
     """
@@ -469,13 +478,39 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
             angle = jnp.where(angle <= -right_angle, angle + jnp.pi, angle)
             return jnp.clip(angle, -half_angle, half_angle)
 
+        # A stroke may peak where its clipping endpoint changes from this
+        # boundary to a reach circle. Uniform angle samples can miss even a
+        # perfectly legal interval around that peak. Solve the intersections
+        # once per nearest finite edge, then test their exact ray directions.
+        # Four candidates keep work independent of the boundary table size.
+        segment_start = starts[nearest_index]
+        segment_m = tangent * tile
+        start_m = (segment_start - base) * tile
+        quadratic = jnp.sum(segment_m * segment_m, axis=-1)
+        linear = jnp.sum(start_m * segment_m, axis=-1)
+        safe_quadratic = jnp.maximum(quadratic, jnp.float32(1e-12))
+        circle_angles = []
+        for radius in (stroke_min_radius, stroke_max_radius):
+            constant = jnp.sum(start_m * start_m, axis=-1) - radius * radius
+            discriminant = linear * linear - quadratic * constant
+            root = jnp.sqrt(jnp.maximum(discriminant, jnp.float32(0.0)))
+            for sign in (-1.0, 1.0):
+                fraction = (-linear + sign * root) / safe_quadratic
+                point = segment_start + fraction[..., None] * tangent
+                direction = point - points
+                exists = ((discriminant >= 0.0) & (fraction >= 0.0)
+                          & (fraction <= 1.0)
+                          & (jnp.sum(direction * direction, axis=-1) > 1e-12))
+                circle_angles.append(jnp.where(exists, offset_to(direction), 0.0))
+
         sampled = half_angle * jnp.linspace(-1.0, 1.0, PULL_CONE_DIRECTIONS, dtype=jnp.float32)
         angles = jnp.concatenate([
             jnp.broadcast_to(sampled[:, None, None], (PULL_CONE_DIRECTIONS,) + local_target.shape),
-            offset_to(tangent)[None], offset_to(normal)[None]], axis=0)
+            offset_to(tangent)[None], offset_to(normal)[None],
+            jnp.stack(circle_angles)], axis=0)
         cos, sin = jnp.cos(angles), jnp.sin(angles)
         unit = jnp.stack([radial[..., 0] * cos - radial[..., 1] * sin,
-                          radial[..., 0] * sin + radial[..., 1] * cos], axis=-1)  # [K+2,H,W,2]
+                          radial[..., 0] * sin + radial[..., 1] * cos], axis=-1)  # [K+6,H,W,2]
 
         def intersect(i, carry):
             lower, upper, forward_count, collinear = carry

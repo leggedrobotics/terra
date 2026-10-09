@@ -38,6 +38,15 @@ test('action labels use the preceding actor, not the next active machine', () =>
   assert.equal(actionName(after, before), 'Steer left');
   before.agents[0].action_type = 0; assert.equal(actionName(after, before), 'Turn clockwise');
 });
+test('structured replay labels preserve requested argument and estimated duration', () => {
+  const snapshot = fixture().frames[0]; snapshot.action = 0; snapshot.actor_id = 2;
+  snapshot.diagnostics = { structured_action: { action: 0, amount: 2, heading: -1 }, duration_s: 4.56 };
+  assert.equal(actionName(snapshot), 'Forward · up to 2 cells · 4.6 s estimated');
+  snapshot.action = 3; snapshot.diagnostics.structured_action = { action: 3, amount: 4 };
+  assert.equal(actionName(snapshot), 'Turn anticlockwise · up to 120° · 4.6 s estimated');
+  snapshot.action = 6; snapshot.diagnostics.structured_action = { action: 6, heading: 11 };
+  assert.equal(actionName(snapshot), 'Dig · heading 330° CCW from chassis · 4.6 s estimated');
+});
 test('rotation crosses the angle seam by the short path', () => {
   const halfway = shortestAngle(Math.PI * 1.9, Math.PI * .1, .5); assert.ok(Math.abs(halfway - Math.PI * 2) < 1e-10);
 });

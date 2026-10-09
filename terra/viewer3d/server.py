@@ -133,6 +133,8 @@ def make_server(*, session=None, replay=None, port=8765):
                     pull_session = hasattr(session, "continue_exploring")
                     if route == "/api/action":
                         allowed = {"action", "continue_after_timeout"} if pull_session else {"action"}
+                        if getattr(session, "action_mode", None) == "structured_v1":
+                            allowed |= {"amount", "heading"}
                         if "action" not in data or set(data) - allowed:
                             raise ValueError("Send an action and optional continue_after_timeout.")
                         options = {key: value for key, value in data.items() if key != "action"}

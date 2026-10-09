@@ -174,10 +174,56 @@ class PullConeTests(unittest.TestCase):
         self.assertGreaterEqual(float(best[21, 36]), 2.5)
         self.assertLessEqual(float(error[21, 36]), np.deg2rad(5.0))
 
+    @staticmethod
+    def _saved_simplified_rectangle():
+        # Preserve the actual step-114 continuous geometry independently of
+        # changes to offline contour extraction/simplification defaults.
+        target = np.zeros((64, 64), bool)
+        target[21:45, 20:40] = True
+        vertices = np.array([[44.5, 39.], [44., 19.5], [20.5, 20.], [21., 39.5]], np.float64)
+        records = np.full((256, 7), -97., np.float32)
+        for index, start in enumerate(vertices):
+            end = vertices[(index + 1) % len(vertices)]
+            dr, dc = end - start
+            a, b = dr / np.hypot(dr, dc), -dc / np.hypot(dr, dc)
+            records[index] = [a, b, -(a * start[1] + b * start[0]), *start, *end]
+        return target, records, 4
+
+    def test_reach_boundary_intersection_captures_narrow_valid_direction(self):
+        # Saved step114 cell(21,23): seven angular samples miss a valid pull
+        # peaking at26.181 degrees, where the top boundary meets inner reach.
+        target, records, count = self._saved_simplified_rectangle()
+        allowed, best, error = cone(target, records, count, [22, 31], .5714286,
+                                    4., 6.5, 2.5, THIRTY, True, .6, TOL25,
+                                    perpendicular_ok=True)
+        self.assertTrue(bool(allowed[21, 23]))
+        self.assertAlmostEqual(float(best[21, 23]), 2.522885, delta=2e-4)
+        self.assertLessEqual(float(error[21, 23]), TOL25 + 1e-6)
+        # The neighboring cell truly has too little room in this saved polygon.
+        self.assertFalse(bool(allowed[21, 22]))
+        self.assertLess(float(best[21, 22]), 2.5)
+        # Raising the required length leaves an interval much narrower than a
+        # one-degree grid; the geometric intersection remains a valid witness.
+        narrow, _, _ = cone(target, records, count, [22, 31], .5714286,
+                             4., 6.5, 2.522, THIRTY, True, .6, TOL25,
+                             perpendicular_ok=True)
+        self.assertTrue(bool(narrow[21, 23]))
+
+    def test_known_narrow_interval_stays_admissible_when_cone_widens(self):
+        target, records, count = self._saved_simplified_rectangle()
+        previous_length = 0.
+        for degrees in (25., 26.181, 27., 30., 35.):
+            allowed, best, _ = cone(target, records, count, [22, 31], .5714286,
+                                    4., 6.5, 2.5, np.deg2rad(degrees), True, .6, TOL25,
+                                    perpendicular_ok=True)
+            self.assertTrue(bool(allowed[21, 23]), degrees)
+            self.assertGreaterEqual(float(best[21, 23]) + 1e-5, previous_length)
+            previous_length = float(best[21, 23])
+
     def test_stroke_window_extension_only_widens_the_stroke(self):
-        # Manual game, slot 17411: from (42, 46) several cells miss 2.5 m
-        # because the stroke stops at the 6.5 m reach; a stroke that may start
-        # 1.0 m further out admits them. Cells are still only dug in 4.0-6.5 m.
+        # Manual game, slot 17411: from (42, 46), right-edge cells cannot
+        # fit an edge-aligned 2.5 m stroke inside the ordinary reach. Wider
+        # stroke room admits them; cells are still only dug in 4.0-6.5 m.
         target = np.zeros((64, 64), bool)
         target[21:45, 20:40] = True
         records, count = boundary_records_from_mask(target)
@@ -187,7 +233,7 @@ class PullConeTests(unittest.TestCase):
         for a, b in zip(plain, zero):
             np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
         wide = cone(*args, perpendicular_ok=True, stroke_inner_extension_m=.5, stroke_outer_extension_m=1.)
-        for cell in ((38, 39), (39, 39), (35, 38)):
+        for cell in ((36, 39), (37, 39), (38, 39)):
             self.assertFalse(bool(plain[0][cell]), cell)
             self.assertTrue(bool(wide[0][cell]), cell)
         self.assertTrue(np.all(np.asarray(wide[0])[np.asarray(plain[0])]))

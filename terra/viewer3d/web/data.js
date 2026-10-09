@@ -92,7 +92,7 @@ export function workspaceVertexToWorld(grid, [row, col], height = 0) {
   return [(col - grid.cols / 2) * grid.tile_size_m, height, (row - grid.rows / 2) * grid.tile_size_m];
 }
 
-export function actionName(frame, previous) {
+function nativeActionName(frame, previous) {
   if (isJointFrame(frame)) return frame.joint_actions === null ? 'Initial joint state' : 'Requested: ' + jointRequests(frame).map(r => `${r.id + 1} ${r.name}${r.blocked ? ' [blocked]' : ''}`).join(' · ');
   if (frame.action === null) return 'Initial state';
   const actor = (previous || frame).agents.find(a => a.id === frame.actor_id) || frame.agents[0];
@@ -102,6 +102,17 @@ export function actionName(frame, previous) {
     return actor.loaded > 0 ? 'Dump / transfer' : (actor.type === 1 ? 'Dump' : 'Dig');
   }
   return ACTIONS[frame.action];
+}
+
+export function actionName(frame, previous) {
+  const name = nativeActionName(frame, previous), request = frame.diagnostics?.structured_action;
+  if (frame.action === null || !request) return name;
+  let argument = '';
+  if ((frame.action === 0 || frame.action === 1) && Number.isInteger(request.amount)) argument = ` · up to ${request.amount} cell${request.amount === 1 ? '' : 's'}`;
+  if ((frame.action === 2 || frame.action === 3) && Number.isInteger(request.amount)) argument = ` · up to ${request.amount * 30}°`;
+  if (frame.action === 6 && Number.isInteger(request.heading) && request.heading >= 0) argument = ` · heading ${request.heading * 30}° CCW from chassis`;
+  const duration = frame.diagnostics.duration_s;
+  return `${name}${argument}${Number.isFinite(duration) ? ` · ${Number(duration.toFixed(1))} s estimated` : ''}`;
 }
 
 /** Classify backend masks for display; never infer a native action's legality. */

@@ -1,5 +1,57 @@
 # Bulk cutting room and optional precision edges
 
+## October 9 manual rule: 1 m working strips
+
+The current structured manual game uses `dig_pull_min_length_m=1.0` and
+`dig_working_strip_width_m=1.3`. A fresh cut must belong to a complete 1 m
+long, bucket-width strip supported by cells this DO can excavate plus
+already-excavated target cells inside its working sector. Unexcavated target
+outside this action cannot supply room. A remaining inner cell can use
+connected dug space; an isolated cell or narrow lane cannot.
+
+The strip check is a small raster opening at the cabin direction and its two
+cone limits. It includes every cell touched by the rectangular footprint and
+returns the union of valid footprints, so fresh soil borrowed as support is
+also included in the action. At 0.571 m tiles a 1.3 m bucket needs three cells
+across; one- and two-cell-wide lanes fail. Native reach, precision, obstacle,
+chassis, relift and unload rules remain in force.
+
+The 1 m requirement is working room, not fresh-soil travel plus an entry/exit
+allowance. No separate in-target pull-up distance is imposed. This is a 2D
+workspace approximation, not a curl/lift trajectory or clearance certificate;
+strip room and existing line/precision permission are separate checks.
+`dig_working_strip_width_m=0` keeps the original line-only mode below. Saved
+initial banks and restored state histories must carry the chosen rule values.
+
+### Bank compatibility
+
+This strip rule is an experimental manual-game setting, not a qualified rule
+for the existing training bank. An October 9 user-reported audit sampled every
+eighth map of the 20,480-map bank, supplied the entire target as support and
+tested all 30-degree strip orientations without reach constraints. It found
+uncovered target cells on 1,022/1,600 foundation maps (0.8% of target cells)
+and 809/960 trench maps (9.4%). These sample counts have not been independently
+reproduced here.
+
+For matching tile size, strip dimensions and orientation bins, this is an
+optimistic upper bound on the cells the rule can ever admit: actual fresh plus
+dug support is always a subset of the target. Already-dug room cannot rescue a
+cell that fails with the entire target available. Native success requires full
+excavation, so even one permanently uncovered cell prevents success from a
+fresh reset. The reported sample therefore caps success at 36.1% for
+foundations and 15.7% for trenches before reach, navigation and dumping checks.
+
+The full rectangular footprint and conservative raster coverage can reject
+narrow branches and corners. The audit alone does not separate intended
+bucket-width exclusions from grid artifacts. Keep the strip disabled for the
+existing production bank (`dig_working_strip_width_m=0`). Before enabling it
+for training, reconcile the geometry rule with the bank and check target
+coverage plus native finishability; PPO or reward tuning cannot repair an
+impossible target. The local manual-game and synthetic checks below do not
+establish bank-wide finishability.
+
+## Original line-only rule
+
 `pull_direction_alignment=True` enables the experimental 2.5 m cutting-room
 rule. It replaces the legacy chassis-aligned trench gate. The default remains
 off, preserving GRU u110000's original environment.
@@ -45,10 +97,11 @@ primitive would be needed for cases the current action cannot finish.
 ## Geometry, discretization and observations
 
 The batch constructor prepares finite contours from the immutable target,
-including holes and disconnected components. It simplifies sub-cell stairs,
-reducing the tolerance when necessary until every target cell center remains
-strictly inside and every other center remains strictly outside. This cannot
-recover continuous design geometry lost during rasterization. The 25-degree
+including holes and disconnected components. By default it removes only
+collinear vertices, preserving the raster contour's edge positions and
+tangents. Nonzero `simplification_tiles` is an explicit offline approximation:
+preserving cell-center classifications does not preserve continuous stroke
+lengths. Neither mode recovers design geometry lost during rasterization. The 25-degree
 edge tolerance accounts approximately for discrete poses and contour error;
 the cabin's 60-degree workspace is not added to that tolerance unless
 `pull_half_angle_rad` is set (see the October 8 options below).
@@ -113,13 +166,28 @@ room. The room is clipped exactly to the 4.0-6.5 m reach annulus along that
 tilted line, so only the part on the cell's side of the inner radius counts.
 With precision on, an edge-band cell needs one direction that has the room and
 also lies within `edge_pull_tolerance_rad` of the edge tangent.
-`pull_cone_details` samples 7 directions (10 degree steps at 30 degrees). It
+`pull_cone_details` samples 7 directions (10 degree steps at 30 degrees), plus
+the nearest finite edge's tangent and normal and four directions through its
+intersections with the inner/outer stroke circles. The latter capture narrow
+admissible intervals where boundary and reach clipping meet. Each candidate
+passes the same stroke and precision checks; the bounded candidate set is
+not an exhaustive continuous angular search. It
 evaluates only a 27 x 27 window around the base; the reach fits inside it, and
-the windowed result equals the whole-map result. On the panel maps, 13
-directions admit at most 0.4% more (base, cell) pairs, with unchanged medians.
+the windowed result equals the whole-map result. An earlier panel comparison
+of 7 versus 13 uniformly spaced samples admitted at most 0.4% more (base,
+cell) pairs; it did not rule out isolated missed directions at precision edges.
 DO, the admissible/executable dig observations and the edge-error channel
 share it. A 2-cell trench now accepts bases up to about 45 degrees off its
 axis, but cross pulls still fail.
+
+The October 9 manual step-114 regression exposed both approximation errors:
+rectangle simplification tilted its sides, and uniform angles missed a legal
+2.523 m pull. Exact raster contours and the added geometric directions admit
+both disputed edge cells without changing reach, the 2.5 m minimum stroke or
+edge tolerance. Saved state banks embed their boundary tables: rebuild those
+tables from the same target rasters before using the corrected geometry.
+Historical recordings retain their original actions and material states;
+rebuilding metadata does not replay them under the new rules.
 
 **`tracked_move_keeps_turn`.** A tracked move takes the longest clear
 translation of up to 5 tiles. Near new holes and the map edge, this can shuttle

@@ -32,6 +32,32 @@ postprocessed geometric validity and physical execution remain separate results.
 
 ## October 8 pull cone, turn-keeping moves, native dump observation
 
+The manual game's latest rule uses a 1 m working length and a 1.3 m bucket
+width. Connected eligible fresh soil and actually excavated space can support
+the working strip; a tiny remaining cut is allowed only when that room exists.
+This is an optional 2D workspace gate, with the original line-only rule retained
+when `dig_working_strip_width_m=0`; it does not model a bucket lift trajectory.
+The strip is not qualified for the existing training bank: a reported
+optimistic coverage audit leaves target cells permanently unreachable on most
+sampled maps. Keep it disabled for production training; see the
+[bank compatibility analysis](docs/PULL_DIRECTION_ALIGNMENT.md#bank-compatibility).
+
+The October 9 edge correction preserves exact raster contours by default and
+tests pull rays through boundary/reach-circle intersections. At manual step
+114 on slot 17411 this removes two false rejections without relaxing reach,
+stroke length or precision tolerance. Saved banks require boundary-table
+regeneration; current game history is preserved rather than replayed.
+
+The opt-in [structured-action prototype](docs/STRUCTURED_ACTIONS.md) adds move
+distance, base-turn amount and heading-selected dig/unload to this runtime,
+with exact native effect masks and modeled machine-time accounting. One-cell
+moves are available only at cardinal headings because oblique one-cell grid
+rounding can erase the lateral displacement. The paired baselines checkout's
+`train_structured.py` provides a separate saved-state-bank PPO path with
+conditional heads, recurrent argument history and duration-aware GAE. These
+are implementation/runtime checks; learned finishability and time savings
+remain unevaluated.
+
 Three opt-in options on branch `pull-cone-trap-dumpobs`, described in the
 [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) document. The 2.5 m room
 may come from any pull within +-30 degrees of the cell-to-base line, as

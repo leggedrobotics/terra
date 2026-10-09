@@ -24,6 +24,37 @@ def finite_records(segments, capacity=64):
 
 
 class DigDirectionGeometryTests(unittest.TestCase):
+    def test_rectangle_keeps_straight_edges_and_chamfer_corners(self):
+        # Manual slot 17411: half-cell simplification joined alternating
+        # chamfer vertices, tilting all four sides and cutting pull room.
+        target = np.zeros((64, 64), dtype=bool)
+        target[21:45, 20:40] = True
+        for mask in (target, target.T, target[::-1], target[:, ::-1]):
+            records, count = boundary_records_from_mask(mask)
+            exact, exact_count = boundary_records_from_mask(mask, simplification_tiles=0)
+            self.assertEqual(count, 8)
+            self.assertEqual(count, exact_count)
+            np.testing.assert_array_equal(records, exact)
+            vectors = records[:count, 5:7] - records[:count, 3:5]
+            long = np.linalg.norm(vectors, axis=1) > 1
+            self.assertEqual(int(long.sum()), 4)
+            self.assertTrue(np.all(np.any(vectors[long] == 0, axis=1)))
+
+    def test_straight_rectangle_edge_keeps_available_pull_room(self):
+        from terra.dig_direction import pull_cone_details
+
+        target = np.zeros((64, 64), dtype=bool)
+        target[21:45, 20:40] = True
+        records, count = boundary_records_from_mask(target)
+        allowed, length, _ = jax.jit(pull_cone_details)(
+            target, records, count, jnp.array([22, 31]), 4 / 7,
+            4.0, 6.5, 2.5, np.deg2rad(30), True, 0.6,
+            np.deg2rad(25), perpendicular_ok=True,
+        )
+        for cell in ((21, 22), (21, 23)):
+            self.assertTrue(bool(allowed[cell]))
+            self.assertGreaterEqual(float(length[cell]), 2.5)
+
     def test_simplification_preserves_target_and_protected_cell_centres(self):
         from shapely.geometry import MultiPolygon, Point, Polygon
 
@@ -38,7 +69,7 @@ class DigDirectionGeometryTests(unittest.TestCase):
         ])
         for target in (mask, ~mask, np.rot90(mask), mask[:, ::-1]):
             with self.subTest(target=target.tolist()):
-                records, count = boundary_records_from_mask(target)
+                records, count = boundary_records_from_mask(target, simplification_tiles=0.5)
                 rings, start = [], 0
                 for i in range(count):
                     if np.array_equal(records[i, 5:7], records[start, 3:5]):

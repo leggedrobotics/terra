@@ -36,6 +36,18 @@ illustrates its sign using a bounded display angle. Soil heights are abstract
 units scaled vertically by the display slider. Work particles and articulated
 arm motion illustrate recorded load/terrain changes and are not soil physics.
 
+Manual sessions with metadata `action_mode: "structured_v1"` show move distance
+(1–5 cells), base turn amount (30–180 degrees), and a chassis-relative work
+heading (12 directions or the current cabin heading). Arrow/WASD and Space
+use the selected arguments; Q/E retain individual cabin swings. Native masks
+in `diagnostics.structured_actions` disable ineffective requests for buttons
+and keyboard equally. The DO mask includes loose-soil pickup and off-target
+unloading; it is not inferred from fresh-dig or accepted-disposal counts.
+Scene overlays describe the current cabin, before the selected work swing.
+Estimated seconds and decisions are shown separately; animation
+speed does not represent machine time. Legacy sessions send the original
+`{action}` payload and retain their existing controls.
+
 Snapshots support grids up to 128 × 128 and 1–4 stable agent slots. Replay data
 is held in browser memory; JSON imports are bounded to 256 MB and 100,000 frames.
 Larger recordings can be selected with Python `--replay`, subject to the same

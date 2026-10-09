@@ -34,6 +34,15 @@
       </section>
       <section class="manual" aria-labelledby="manual-heading">
         <div class="section-label"><h2 id="manual-heading">Drive the excavator</h2><span id="manual-status">Live</span></div>
+        <div id="structured-controls" class="structured-controls" hidden>
+          <div class="motion-arguments">
+            <label for="move-distance">Move up to<select id="move-distance" aria-describedby="move-distance-note"><option value="1">1 cell</option><option value="2">2 cells</option><option value="3">3 cells</option><option value="4">4 cells</option><option value="5" selected>5 cells</option></select></label>
+            <label for="turn-amount">Turn up to<select id="turn-amount"><option value="1">30°</option><option value="2">60°</option><option value="3">90°</option><option value="4">120°</option><option value="5">150°</option><option value="6">180°</option></select></label>
+          </div>
+          <p id="move-distance-note" hidden></p>
+          <label for="work-heading">Work heading relative to chassis<select id="work-heading" aria-describedby="heading-note"></select></label>
+          <p id="heading-note">Choose the cabin heading for digging or unloading.</p>
+        </div>
         <div class="controls-grid">
           <button data-action="5" title="Cabin anticlockwise · Q"><span>↶</span>Cabin<kbd>Q</kbd></button>
           <button data-action="0" title="Move forward · Up or W"><span>↑</span>Forward<kbd>↑</kbd></button>
@@ -45,8 +54,9 @@
         <button data-action="6" class="work-button"><span id="work-label">Dig / dump</span><kbd>SPACE</kbd></button>
         <div class="manual-bottom"><button data-action="7" class="quiet">Wait <kbd>N</kbd></button><button id="undo" class="quiet" title="Restore the previous simulator state">Undo</button><button id="reset" class="quiet" title="Apply the selected map and rule, restoring its initial state">Reset <kbd>R</kbd></button></div>
         <div id="native-status" class="native-status" hidden>
-          <div class="budget"><span>Action budget</span><strong id="step-budget">0 / 450</strong></div>
+          <div class="budget"><span id="budget-label">Action budget</span><strong id="step-budget">0 / 450</strong></div>
           <p id="budget-note" class="budget-note">450 actions left</p>
+          <div id="structured-budget" hidden><div class="budget"><span>Decisions</span><strong id="decision-budget">—</strong></div><p id="timing-model" class="budget-note">Estimated machine time</p></div>
           <strong id="do-status">Ready to dig</strong><p id="dump-status"></p>
           <p id="native-action-message" role="status" aria-live="polite">Ready for an action.</p>
         </div>
