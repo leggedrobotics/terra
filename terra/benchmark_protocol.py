@@ -148,6 +148,7 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
         "pull_half_angle_rad": 0.0,
         "tracked_move_keeps_turn": False,
         "native_dump_observation": False,
+        "edge_pull_perpendicular_ok": False,
     }.items():
         if payload.pop(name) != default:
             raise RuntimeError(f"The v1 benchmark requires {name}={default}.")

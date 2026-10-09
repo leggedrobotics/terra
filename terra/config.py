@@ -378,6 +378,10 @@ class EnvConfig(NamedTuple):
     # -cells for off-zone staging, 0 for no dump. Otherwise it counts
     # dumpable cells in the 4.0-6.5 m dig cone, beyond the 6.0 m dump reach.
     native_dump_observation: bool = False
+    # Precision edges also accept a pull along the edge normal (within the same
+    # edge_pull_tolerance_rad): reach to the edge line and pull straight back,
+    # or pull straight in from outside. Diagonal pulls stay refused.
+    edge_pull_perpendicular_ok: bool = False
 
     @classmethod
     def new(cls):

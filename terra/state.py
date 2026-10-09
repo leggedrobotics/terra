@@ -1418,6 +1418,7 @@ class State(NamedTuple):
             self.env_cfg.tile_size,
             self.env_cfg.edge_band_width_m,
             self.env_cfg.edge_pull_tolerance_rad,
+            perpendicular_ok=self.env_cfg.edge_pull_perpendicular_ok,
         )
         precision = jnp.bool_(self.env_cfg.enforce_foundation_border_alignment)
         return edge & precision, allowed | ~precision, jnp.where(precision, error, 0.0)
@@ -1434,6 +1435,7 @@ class State(NamedTuple):
             self.env_cfg.dig_pull_min_length_m, self.env_cfg.pull_half_angle_rad,
             self.env_cfg.enforce_foundation_border_alignment,
             self.env_cfg.edge_band_width_m, self.env_cfg.edge_pull_tolerance_rad,
+            perpendicular_ok=self.env_cfg.edge_pull_perpendicular_ok,
         )
 
     def _get_pull_dig_permission(self) -> Array:

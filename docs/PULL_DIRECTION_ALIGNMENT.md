@@ -146,6 +146,17 @@ replay panel (2 policies x 40 lanes x 12 headings), the sign agreed with native
 DO in 2880/2880 cases. The old count showed dump room where DO did nothing in
 102 cases.
 
+**`edge_pull_perpendicular_ok`** (October 9, off by default; not used by the
+October 9 training run). A precision-edge cell also accepts a pull within
+`edge_pull_tolerance_rad` of the edge normal. That covers reaching to the edge
+line and pulling straight back, or pulling straight in from outside. The angle
+is checked per owning segment, so corners behave correctly. With the +-30
+degree cone this leaves no blocking approach angle: the tangent is reachable
+from approaches up to 55 degrees, the normal from 35 degrees. Only the 2.5 m
+room along a compliant direction remains. In the manual game on slot 17411, a
+perpendicular dig from outside the top edge took 6 of the 9 edge cells in its
+workspace, where the parallel-only rule took none.
+
 `TerraEnvBatch(pull_cone=..., tracked_move_keeps_turn=...)` are static
 switches. `TerraEnvBatch` vmaps `EnvConfig` per lane, so a `lax.cond` on these
 fields would evaluate both branches on every step. `TerraEnv` sets the

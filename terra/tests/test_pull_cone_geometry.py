@@ -124,6 +124,37 @@ class PullConeTests(unittest.TestCase):
                 if cone_ok:
                     self.assertLessEqual(float(error[tuple(cell)]), TOL25 + 1e-6)
 
+    def test_perpendicular_option_admits_normal_pulls(self):
+        target = np.zeros((48, 48), bool)
+        target[14:34, 10:40] = True
+        records, count = boundary_records_from_mask(target)
+        tile = .5714286
+        cell = (14, 22)  # top edge; tangent runs along columns, normal along rows
+
+        def base_at(degrees, metres):  # approach angle from the edge tangent, base outside
+            angle = np.deg2rad(degrees)
+            return np.round(np.array(cell) + metres / tile * np.array([-np.sin(angle), -np.cos(angle)])).astype(int)
+
+        # Radial pull: only the exact approach direction counts.
+        for base, perpendicular, expected in ((base_at(90, 4.0), False, False), (base_at(90, 4.0), True, True),
+                                              (base_at(45, 4.3), False, False), (base_at(45, 4.3), True, False)):
+            with self.subTest(rule='radial', base=base.tolist(), perpendicular=perpendicular):
+                _, aligned, error = edges(target, records, count, base, tile, .6, TOL25, perpendicular_ok=perpendicular)
+                self.assertEqual(bool(aligned[cell]), expected)
+                if perpendicular:
+                    self.assertLessEqual(float(error[cell]), np.pi / 4 + 1e-6)
+        # +-30 degree cone: tangent reachable from approaches up to 55 degrees,
+        # normal (with the option) from 35 degrees, so no approach angle blocks.
+        for degrees in (45, 70, 90):
+            for perpendicular in (False, True):
+                base = base_at(degrees, 4.1)
+                with self.subTest(rule='cone', degrees=degrees, perpendicular=perpendicular):
+                    allowed, _, error = cone(target, records, count, base, tile, 4., 6.5, 2.5,
+                                             THIRTY, True, .6, TOL25, perpendicular_ok=perpendicular)
+                    self.assertEqual(bool(allowed[cell]), degrees <= 55 or perpendicular)
+                    if bool(allowed[cell]):
+                        self.assertLessEqual(float(error[cell]), TOL25 + 1e-6)
+
     def test_window_matches_the_whole_map_and_refuses_reach_beyond_it(self):
         rows, cols = np.indices((64, 64))
         target = ((rows - 30) ** 2 / 20 ** 2 + (cols - 34) ** 2 / 12 ** 2 <= 1) & ~((rows > 33) & (cols < 30))

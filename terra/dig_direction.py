@@ -110,15 +110,19 @@ def boundary_records_from_mask(
 
 
 def boundary_pull_details(
-    target_map, records, count, base_rc, tile_size, width_m, tolerance_rad
+    target_map, records, count, base_rc, tile_size, width_m, tolerance_rad,
+    perpendicular_ok=False,
 ):
     """Return ``(edge_mask, allowed, angular_error)`` as 2D JAX arrays.
 
     Only dig cells within the metric band are constrained. Among their nearest
     finite segments, ties within a quarter-cell accept either tangent at a
-    corner. Errors are radians in [0, pi/2], zero outside the edge band. Missing
-    or malformed metadata fails closed on all dig cells; empty targets are
-    neutral. Two scans avoid a persistent segments-by-height-by-width tensor.
+    corner. Errors are radians in [0, pi/2], zero outside the edge band. With
+    ``perpendicular_ok`` a pull along a segment's normal is accepted as well:
+    the error is then the angle to the nearer of tangent and normal, in
+    [0, pi/4]. Missing or malformed metadata fails closed on all dig cells;
+    empty targets are neutral. Two scans avoid a persistent
+    segments-by-height-by-width tensor.
     """
     source = jnp.asarray(target_map)
     if source.ndim != 2:
@@ -145,6 +149,7 @@ def boundary_pull_details(
     tile_size = jnp.asarray(tile_size, dtype=jnp.float32)
     width_m = jnp.asarray(width_m, dtype=jnp.float32)
     tolerance_rad = jnp.asarray(tolerance_rad, dtype=jnp.float32)
+    perpendicular = jnp.asarray(perpendicular_ok, dtype=jnp.bool_)
     starts, ends = records[:, 3:5], records[:, 5:7]
     vectors = ends - starts
     lengths_sq = jnp.sum(vectors * vectors, axis=1)
@@ -212,6 +217,7 @@ def boundary_pull_details(
             # atan2 retains exactly parallel fp32 pulls at zero tolerance;
             # acos(normalized_dot) can manufacture a small positive error.
             angle = jnp.arctan2(jnp.abs(cross), jnp.abs(dot))
+            angle = jnp.where(perpendicular, jnp.minimum(angle, right_angle - angle), angle)
             return jnp.minimum(error, jnp.where(owns, angle, right_angle))
 
         error = jax.lax.fori_loop(
@@ -336,7 +342,7 @@ PULL_CONE_WINDOW_TILES = 13
 def pull_cone_details(target_map, records, count, base_rc, tile_size,
                       min_radius_m, max_radius_m, min_length_m, half_angle_rad,
                       precision, edge_width_m, edge_tolerance_rad,
-                      window=PULL_CONE_WINDOW_TILES):
+                      window=PULL_CONE_WINDOW_TILES, perpendicular_ok=False):
     """Return ``(allowed, best_length, edge_error)`` for a cone of pull directions.
 
     A fresh target cell is admissible when some pull direction within
@@ -346,7 +352,7 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
     pass inside the inner reach radius, and only the part on the cell's side
     counts. With ``precision`` on, an edge-band cell additionally needs that
     same direction within ``edge_tolerance_rad`` of its nearest boundary
-    tangent. ``best_length`` is the longest stroke over the sampled
+    tangent (or of its normal, with ``perpendicular_ok``). ``best_length`` is the longest stroke over the sampled
     directions; ``edge_error`` is the smallest tangent error among directions
     with enough room (pi/2 if none), zero outside the precision band.
     Malformed geometry fails closed, as in ``pull_stroke_details``.
@@ -391,6 +397,7 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
     precision = jnp.asarray(precision, jnp.bool_)
     edge_width = jnp.asarray(edge_width_m, jnp.float32)
     edge_tolerance = jnp.asarray(edge_tolerance_rad, jnp.float32)
+    perpendicular = jnp.asarray(perpendicular_ok, jnp.bool_)
     valid = ((raw_count == count) & (count > 0) & (count <= records.shape[0])
              & jnp.all(~declared | valid_rows) & jnp.all(jnp.isfinite(base))
              & jnp.isfinite(tile) & (tile > 0)
@@ -481,6 +488,7 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
             owns = segment_distance(index) <= nearest + BOUNDARY_NEAREST_TIE_TILES + 1e-5
             dot = jnp.sum(unit * vectors[index], axis=-1)
             angle = jnp.arctan2(jnp.abs(cross(unit, vectors[index])), jnp.abs(dot))
+            angle = jnp.where(perpendicular, jnp.minimum(angle, right_angle - angle), angle)
             return jnp.minimum(error, jnp.where(owns, angle, right_angle))
 
         error = jax.lax.fori_loop(0, scan_count, tangent_error,
