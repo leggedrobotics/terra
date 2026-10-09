@@ -90,17 +90,23 @@ class PullConeTests(unittest.TestCase):
                 if not near + .05 < radius < far - .05:
                     continue
                 radial = (base - cell) / radius
-                expected = 0.0
-                for angle in angles:
+
+                def room(angle):
                     c, s = np.cos(angle), np.sin(angle)
                     unit = np.array([radial[0] * c - radial[1] * s, radial[0] * s + radial[1] * c])
                     line = LineString([tuple((cell - 80 * unit)[::-1]), tuple((cell + 80 * unit)[::-1])])
                     cut = polygon.intersection(ring).intersection(line)
                     parts = [cut] if cut.geom_type == 'LineString' else list(getattr(cut, 'geoms', []))
                     own = [part for part in parts if part.distance(Point(cell[1], cell[0])) < 1e-6]
-                    if own:
-                        expected = max(expected, own[0].length)
-                self.assertAlmostEqual(float(best[tuple(cell)]), expected, delta=2e-2, msg=f'{base} {cell}')
+                    return own[0].length if own else 0.0
+
+                # The sampled directions are a lower bound; the exact edge
+                # candidates lie inside the cone, so a fine scan bounds above.
+                sampled = max(room(angle) for angle in angles)
+                scanned = max(room(angle) for angle in np.linspace(-half, half, 161))
+                value = float(best[tuple(cell)])
+                self.assertGreaterEqual(value, sampled - 2e-2, msg=f'{base} {cell}')
+                self.assertLessEqual(value, scanned + 2e-2, msg=f'{base} {cell}')
                 checked += 1
         self.assertGreater(checked, 20)
 
@@ -154,6 +160,19 @@ class PullConeTests(unittest.TestCase):
                     self.assertEqual(bool(allowed[cell]), degrees <= 55 or perpendicular)
                     if bool(allowed[cell]):
                         self.assertLessEqual(float(error[cell]), TOL25 + 1e-6)
+
+    def test_edge_cell_between_samples_uses_its_exact_edge_direction(self):
+        # Manual game, slot 17411: from base (24, 45) the edge cell (21, 36)
+        # has 2.5 m of room only for pulls within about 2 degrees of parallel
+        # to the top edge, between the +10 and +20 degree samples.
+        target = np.zeros((64, 64), bool)
+        target[21:45, 20:40] = True
+        records, count = boundary_records_from_mask(target)
+        allowed, best, error = cone(target, records, count, [24, 45], .5714286, 4., 6.5, 2.5,
+                                    THIRTY, True, .6, TOL25)
+        self.assertTrue(bool(allowed[21, 36]))
+        self.assertGreaterEqual(float(best[21, 36]), 2.5)
+        self.assertLessEqual(float(error[21, 36]), np.deg2rad(5.0))
 
     def test_window_matches_the_whole_map_and_refuses_reach_beyond_it(self):
         rows, cols = np.indices((64, 64))

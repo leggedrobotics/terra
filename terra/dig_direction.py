@@ -332,7 +332,9 @@ def pull_stroke_details(target_map, records, count, base_rc, tile_size,
 
 
 # Pull directions sampled across the cone, inclusive of both edges: 10 degree
-# steps for a +-30 degree cone. Static, so the cone costs a fixed factor.
+# steps for a +-30 degree cone. Each cell also tests its nearest edge's exact
+# tangent and normal (clamped into the cone): an edge cell's long stroke can
+# exist only within a few degrees of them, between two samples.
 PULL_CONE_DIRECTIONS = 7
 # Cells are evaluated in a (2w+1)^2 window around the base. 13 tiles covers the
 # 6.5 m reach at the 0.571 m tile with a cell to spare; larger reaches fail closed.
@@ -428,10 +430,41 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
         pull = base - points
         radius_tiles = jnp.linalg.norm(pull, axis=-1)
         radial = pull / jnp.maximum(radius_tiles[..., None], 1e-6)
-        angles = half_angle * jnp.linspace(-1.0, 1.0, PULL_CONE_DIRECTIONS, dtype=jnp.float32)
-        cos, sin = jnp.cos(angles)[:, None, None], jnp.sin(angles)[:, None, None]
+
+        def segment_distance(index):
+            delta = points - starts[index]
+            projection = jnp.clip(
+                jnp.sum(delta * vectors[index], axis=-1)
+                / jnp.maximum(lengths_sq[index], 1e-12), 0.0, 1.0)
+            return jnp.linalg.norm(delta - projection[..., None] * vectors[index], axis=-1)
+
+        def nearest_segment(index, carry):
+            best, best_index = carry
+            distance = segment_distance(index)
+            closer = distance < best
+            return jnp.where(closer, distance, best), jnp.where(closer, index, best_index)
+
+        nearest, nearest_index = jax.lax.fori_loop(
+            0, scan_count, nearest_segment,
+            (jnp.full(local_target.shape, jnp.inf), jnp.zeros(local_target.shape, jnp.int32)))
+        tangent = vectors[nearest_index]
+        normal = jnp.stack([-tangent[..., 1], tangent[..., 0]], axis=-1)
+
+        def offset_to(direction):
+            # Signed angle from the radial pull to the line, folded to (-pi/2, pi/2]
+            # and clamped into the cone; rotation convention as for the samples.
+            angle = jnp.arctan2(cross(radial, direction), jnp.sum(radial * direction, axis=-1))
+            angle = jnp.where(angle > right_angle, angle - jnp.pi, angle)
+            angle = jnp.where(angle <= -right_angle, angle + jnp.pi, angle)
+            return jnp.clip(angle, -half_angle, half_angle)
+
+        sampled = half_angle * jnp.linspace(-1.0, 1.0, PULL_CONE_DIRECTIONS, dtype=jnp.float32)
+        angles = jnp.concatenate([
+            jnp.broadcast_to(sampled[:, None, None], (PULL_CONE_DIRECTIONS,) + local_target.shape),
+            offset_to(tangent)[None], offset_to(normal)[None]], axis=0)
+        cos, sin = jnp.cos(angles), jnp.sin(angles)
         unit = jnp.stack([radial[..., 0] * cos - radial[..., 1] * sin,
-                          radial[..., 0] * sin + radial[..., 1] * cos], axis=-1)  # [K,H,W,2]
+                          radial[..., 0] * sin + radial[..., 1] * cos], axis=-1)  # [K+2,H,W,2]
 
         def intersect(i, carry):
             lower, upper, forward_count, collinear = carry
@@ -471,18 +504,6 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
         in_reach = (radius >= min_radius - 1e-5) & (radius <= max_radius + 1e-5)
         length = jnp.where(local_target & inside & in_reach, jnp.maximum(upper - lower, 0.0), 0.0)
         room = length >= min_length - 1e-5
-
-        def segment_distance(index):
-            delta = points - starts[index]
-            projection = jnp.clip(
-                jnp.sum(delta * vectors[index], axis=-1)
-                / jnp.maximum(lengths_sq[index], 1e-12), 0.0, 1.0)
-            return jnp.linalg.norm(delta - projection[..., None] * vectors[index], axis=-1)
-
-        nearest = jax.lax.fori_loop(
-            0, scan_count,
-            lambda index, best: jnp.minimum(best, segment_distance(index)),
-            jnp.full(local_target.shape, jnp.inf))
 
         def tangent_error(index, error):
             owns = segment_distance(index) <= nearest + BOUNDARY_NEAREST_TIE_TILES + 1e-5
