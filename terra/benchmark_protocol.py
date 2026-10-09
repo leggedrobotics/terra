@@ -151,6 +151,8 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
         "edge_pull_perpendicular_ok": False,
         "pull_stroke_outer_extension_m": 0.0,
         "pull_stroke_inner_extension_m": 0.0,
+        # Ignored by Terra; kept only for positional saved-state pickles.
+        "dig_working_strip_width_m": 0.0,
     }.items():
         if payload.pop(name) != default:
             raise RuntimeError(f"The v1 benchmark requires {name}={default}.")
