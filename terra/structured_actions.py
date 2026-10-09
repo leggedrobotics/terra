@@ -155,8 +155,9 @@ def structured_action_masks(state: State) -> dict[str, Array]:
             _move(state, direction, amount)._get_current_agent_state().pos_base
             != cur.pos_base))(jnp.arange(1, 6, dtype=jnp.int32))
     def turn_direction(direction):
-        return jax.vmap(lambda amount: _turn(state, direction, amount)[1] > 0)(
-            jnp.arange(1, 7, dtype=jnp.int32))
+        # A turn stops at its first blocked step, so a request of any amount
+        # makes progress exactly when its first 30-degree step does.
+        return jnp.broadcast_to(_turn(state, direction, 1)[1] > 0, (6,))
     move = jax.vmap(move_direction)(jnp.arange(2))
     turn = jax.vmap(turn_direction)(jnp.arange(2))
     do = jax.vmap(lambda heading: _work(state, heading)[2])(jnp.arange(12))

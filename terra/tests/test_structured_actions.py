@@ -175,6 +175,26 @@ class StructuredActionTest(unittest.TestCase):
         self.assertEqual(int(result.info['executed_turn_steps']), 1)
         self.assertAlmostEqual(float(result.duration_s), np.pi / 6 * self.timing.base_turn_s_per_rad, places=5)
 
+    def test_turn_mask_matches_every_requested_amount(self):
+        from terra.structured_actions import _turn
+        shape = lambda angle: np.asarray(footprint(
+            self.pose(self.state, base=angle)._replace(env_cfg=None), self.cfg))
+        states = [self.state]
+        # Block the first clockwise step (orientation 11), then only a later one (10).
+        for possible in (shape(11) & ~shape(0), shape(10) & ~shape(0) & ~shape(11) & ~shape(6)):
+            blocked = self.state.world.static_traversability_base.map.at[tuple(np.argwhere(possible)[0])].set(1)
+            states.append(self.state._replace(world=self.state.world._replace(
+                static_traversability_base=self.state.world.static_traversability_base._replace(map=blocked))))
+        steps = jax.jit(lambda state, direction, amount: _turn(
+            state._replace(env_cfg=self.cfg), direction, amount)[1])
+        rows = []
+        for state in states:
+            expected = [[int(steps(state._replace(env_cfg=None), jnp.int32(d), jnp.int32(a))) > 0
+                         for a in range(1, 7)] for d in (0, 1)]
+            np.testing.assert_array_equal(self.mask(state)['turn_mask'], expected)
+            rows.append(expected[0][0])
+        self.assertEqual(rows, [True, False, True])
+
     def test_heading_do_matches_native_and_uses_shortest_cabin_swing(self):
         state = self.pose(self.state, cabin=11)
         result = self.step(state, 6, heading=0)
