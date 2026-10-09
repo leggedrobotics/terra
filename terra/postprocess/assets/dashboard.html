@@ -1,0 +1,1708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --line: #e4e1da; --line-strong: #cfcac0;
+  --text: #1c1917; --muted: #6b645c; --faint: #a39e96; --accent: #2563eb; --accent-soft: #e8efff;
+  --pass: #15803d; --pass-bg: #dcfce7; --fail: #b91c1c; --fail-bg: #fee4e2; --warn: #a16207; --warn-bg: #fdf2c7;
+  --none: #6b645c; --none-bg: #eeece8; --temp: #3a998e; --shadow: 0 1px 2px rgba(28,25,23,.06), 0 4px 16px rgba(28,25,23,.05);
+  --radius: 10px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416; --panel: #1c1c1f; --line: #2c2c31; --line-strong: #3b3b42;
+    --text: #ecebe8; --muted: #a29f99; --faint: #6d6a65; --accent: #6b9bff; --accent-soft: #1f2a44;
+    --pass: #4ade80; --pass-bg: #123320; --fail: #f87171; --fail-bg: #3a1717; --warn: #facc15; --warn-bg: #3a3112;
+    --none: #a29f99; --none-bg: #26262a; --temp: #35978c; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button { font: inherit; color: inherit; }
+small { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.muted { color: var(--muted); }
+.app { display: grid; grid-template-columns: 250px minmax(0, 1fr) 380px; height: 100vh; }
+.app.ov { grid-template-columns: 250px minmax(0, 1fr); }
+.app.ov .main, .app.ov .panel { display: none; }
+.app:not(.ov) .overview { display: none; }
+
+/* Sidebar */
+.side { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.brand { padding: 16px 16px 10px; }
+.brand h1 { font-size: 15px; margin: 0; letter-spacing: -.01em; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.search { margin: 0 12px 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: calc(100% - 24px); }
+.cases { overflow: auto; padding: 4px 8px 16px; }
+.case { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.case:hover { background: var(--bg); }
+.case.on { background: var(--accent-soft); }
+.case .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.case .name span { font-weight: 400; color: var(--muted); }
+.case .sub { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.case.all .name { display: flex; justify-content: space-between; }
+.dots { display: inline-flex; gap: 3px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--none); flex: none; }
+.dot.invalid { background: var(--fail); } .dot.valid { background: var(--pass); } .dot.unverified { background: var(--warn); }
+
+/* Overview */
+.overview { overflow: auto; min-height: 0; }
+.ov-wrap { max-width: 1240px; padding: 26px 32px 40px; }
+.ov-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ov-head h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.ov-head p { margin: 4px 0 0; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 2px; }
+.seg button { border: 0; background: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.tally { display: flex; gap: 18px; margin: 16px 0 12px; color: var(--muted); }
+.tally b { color: var(--text); font-variant-numeric: tabular-nums; }
+.tally span { display: inline-flex; align-items: center; gap: 6px; }
+table.ov-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.ov-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; }
+.ov-table th:hover { color: var(--text); }
+.ov-table th.sorted { color: var(--text); }
+.ov-table th.sorted::after { content: " ↓"; }
+.ov-table td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+.ov-table tbody tr { cursor: pointer; }
+.ov-table tbody tr:hover { background: var(--bg); }
+.ov-table tbody tr:first-child td { border-top: 0; }
+.ov-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ov-table .pname { font-weight: 600; }
+.ov-table .pkind { color: var(--muted); font-size: 12px; }
+.vd { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.vd .dots { margin-right: 2px; }
+.why div { display: flex; gap: 6px; align-items: baseline; }
+.why div + div { margin-top: 2px; }
+.why .open { color: var(--muted); }
+.mark { font-weight: 700; font-size: 11px; width: 12px; flex: none; text-align: center; }
+.mark.fail { color: var(--fail); } .mark.unverified { color: var(--warn); } .mark.not_checked { color: var(--none); }
+.ov-foot { margin-top: 14px; color: var(--faint); font-size: 12px; }
+.ov-ctl { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.overview:not(.table) .ov-wrap { max-width: 1680px; }
+.overview.table .ov-grid, .overview.table .ov-key, .overview:not(.table) .ov-table { display: none; }
+.ov-key { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.ov-key span { display: inline-flex; align-items: center; gap: 5px; }
+.ov-key i { width: 11px; height: 9px; border-radius: 2px; display: inline-block; }
+.ov-key i.line { height: 2px; border-radius: 1px; width: 14px; }
+.ov-key i.dot { width: 5px; height: 5px; border-radius: 50%; }
+.ov-key i.ring { width: 9px; height: 9px; border-radius: 50%; background: none !important; border: 1.5px solid; }
+.ov-sec { margin: 24px 0 10px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.ov-sec:first-child { margin-top: 2px; }
+.ov-sec small { font-weight: 400; margin-left: 4px; }
+.ov-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.ov-card { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+.ov-card .flip { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 1px 9px; font-size: 11.5px; cursor: pointer; box-shadow: var(--shadow); color: var(--muted); }
+.ov-card .flip.on { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+.side .grp { padding: 14px 10px 3px; color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
+.versions:empty { display: none; }
+.toggles .seg { box-shadow: var(--shadow); }
+.ov-card:hover, .ov-card:focus-visible { border-color: var(--line-strong); box-shadow: var(--shadow); outline: none; }
+.ov-card canvas { display: block; width: 100%; aspect-ratio: 4 / 3; background: var(--bg); border-bottom: 1px solid var(--line); }
+.ov-card.none canvas { opacity: .35; }
+.ov-card .meta { padding: 8px 11px 10px; display: flex; flex-direction: column; gap: 2px; }
+.ov-card .pname { font-weight: 600; }
+.ov-card .pname span { font-weight: 400; color: var(--muted); }
+.ov-card .line { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ov-card .vd { margin: 2px 0; white-space: normal; }
+.ov-card .why { font-size: 12px; margin-top: 2px; }
+
+/* Main */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.head { padding: 14px 20px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.title-row h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.versions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.vtab { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.vtab:hover { border-color: var(--line-strong); }
+.vtab.on { border-color: var(--accent); background: var(--accent-soft); }
+.vtab small { color: var(--muted); }
+.stats { display: flex; gap: 22px; margin-top: 12px; flex-wrap: wrap; }
+.stat b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+.stat span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+.sw.temp { background: var(--temp); } .sw.warn { background: var(--warn); } .sw.fail { background: var(--fail); }
+.stage { position: relative; flex: 1; min-height: 0; }
+canvas.map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; display: block; }
+canvas.map.drag { cursor: grabbing; } canvas.map.hot { cursor: pointer; }
+.overlay { position: absolute; display: flex; gap: 6px; }
+.toggles { top: 12px; left: 12px; flex-wrap: wrap; max-width: 72%; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 10px; cursor: pointer; font-size: 12px; box-shadow: var(--shadow); display: inline-flex; align-items: center; gap: 6px; }
+.chip.off { opacity: .45; }
+.chip i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.zoom { top: 12px; right: 12px; }
+.zoom button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; box-shadow: var(--shadow); }
+.legend { left: 12px; bottom: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: var(--shadow); font-size: 11px; color: var(--muted); display: grid; grid-template-columns: auto auto; gap: 3px 12px; }
+.legend div { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend .key { grid-column: 1 / -1; justify-self: start; border: 0; background: none; padding: 0; color: var(--muted); font-size: 11px; cursor: pointer; }
+.legend .key:hover { color: var(--text); }
+.scale { right: 12px; bottom: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 11px; color: var(--muted); box-shadow: var(--shadow); flex-direction: column; gap: 3px; }
+.scale .bar { height: 6px; border: 1.5px solid var(--text); border-top: 0; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: var(--shadow); display: none; white-space: nowrap; }
+.timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 20px 12px; }
+.tl-row { display: flex; align-items: center; gap: 12px; }
+.play { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); cursor: pointer; flex: none; }
+.track { position: relative; flex: 1; height: 30px; cursor: pointer; }
+.track canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.event-label { font-weight: 600; min-width: 190px; text-align: right; font-variant-numeric: tabular-nums; }
+.facts { margin-top: 6px; color: var(--muted); font-size: 12.5px; min-height: 18px; }
+.facts b { color: var(--text); font-weight: 600; }
+.facts .bad { color: var(--fail); font-weight: 600; }
+.facts .warnt { color: var(--warn); font-weight: 600; }
+
+/* The Terra plan in 3D, next to the machine plan */
+.views { flex: 1; min-height: 0; display: flex; }
+.view2d { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.view3d { flex: 1 1 0; min-width: 0; display: none; flex-direction: column; border-left: 1px solid var(--line); background: var(--panel); }
+.app.t3d .view3d { display: flex; }
+.t3d-open[hidden] { display: none; }
+.title-row .t3d-open { margin-left: auto; align-self: center; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.t3d-head { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.t3d-title { margin-right: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t3d-title b { font-weight: 600; }
+.t3d-head .chip { box-shadow: none; }
+.t3d-stage { position: relative; flex: 1; min-height: 0; background: #e6e9ea; }
+#t3d-viewport { position: absolute; inset: 0; }
+#t3d-viewport canvas { display: block; width: 100%; height: 100%; }
+.t3d-key { left: 10px; bottom: 10px; background: rgba(255,255,255,.88); color: #4a4540; border: 1px solid rgba(28,25,23,.12); border-radius: 8px; padding: 5px 8px; font-size: 10.5px; display: grid; gap: 2px; }
+.t3d-key .key { justify-self: start; border: 0; background: none; padding: 0; color: #6b645c; font-size: 10.5px; cursor: pointer; }
+.t3d-key div { display: flex; align-items: center; gap: 6px; }
+.t3d-key i { display: inline-block; flex: none; }
+.t3d-key i.pill { width: 16px; height: 11px; border-radius: 6px; border: 1.5px solid #1c1917; background: #fff; }
+.t3d-key i.pill.temp { background: #0f766e; border-color: #0f766e; }
+.t3d-key i.pill.now { background: #2563eb; border-color: #2563eb; }
+.t3d-key i.pill.gone { background: #fff; border-color: #0f766e; }
+.t3d-key i.arc { width: 16px; height: 0; border-top: 2.5px solid #3f3a36; border-radius: 2px; }
+.t3d-cell { right: 10px; bottom: 10px; background: rgba(255,255,255,.88); color: #4a4540; border: 1px solid rgba(28,25,23,.12); border-radius: 8px; padding: 5px 9px; font-size: 11.5px; pointer-events: none; }
+.t3d-cell:empty { display: none; }
+.t3d-note { position: absolute; inset: 0; display: grid; place-items: center; color: #6b645c; padding: 20px; text-align: center; }
+.t3d-note[hidden] { display: none; }
+.t3d-pairs { display: flex; flex-wrap: wrap; gap: 3px; padding: 7px 12px 1px; border-top: 1px solid var(--line); align-items: center; }
+.t3d-pairs .lbl { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
+.pchip { min-width: 22px; height: 19px; padding: 0 5px; border-radius: 999px; border: 1.5px solid var(--text); background: var(--panel); color: var(--text); font: 600 10.5px/1 system-ui, sans-serif; cursor: pointer; font-variant-numeric: tabular-nums; }
+.pchip.temp { background: #0f766e; border-color: #0f766e; color: #fff; }
+.pchip.collect { border-style: dashed; }
+.pchip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pchip.dropped { opacity: .4; }
+.view3d .timeline { padding: 8px 12px 10px; }
+.view3d .tl-row { gap: 8px; }
+.stepb { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; flex: none; font-size: 11px; }
+.speed { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 4px 6px; font: inherit; font-size: 12px; flex: none; }
+.t3d-at { min-width: 104px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.facts a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.facts a:hover { text-decoration: underline; }
+
+/* Panel */
+.panel { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; min-height: 0; }
+.verdict { padding: 18px 18px 12px; }
+.badge { display: inline-block; font-weight: 700; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 6px; }
+.badge.invalid { color: var(--fail); background: var(--fail-bg); } .badge.valid { color: var(--pass); background: var(--pass-bg); } .badge.unverified { color: var(--warn); background: var(--warn-bg); }
+.verdict p { margin: 10px 0 0; font-size: 14px; }
+.verdict .rules { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.summary { margin: 0; padding: 12px 18px 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 7px 10px; }
+.summary dt { color: var(--muted); font-size: 11.5px; padding-top: 1px; }
+.summary dd { margin: 0; }
+.summary dd .pills { margin-top: 4px; }
+.pills { display: flex; flex-wrap: wrap; gap: 4px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 1px 8px; font-size: 11.5px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.pill:hover { border-color: var(--line-strong); }
+.pill.on { border-color: var(--accent); background: var(--accent-soft); }
+.section { padding: 12px 18px 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.check { border-top: 1px solid var(--line); }
+.check:first-of-type { border-top: 0; }
+.check-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 18px; background: none; border: 0; cursor: pointer; text-align: left; }
+.check-head:hover { background: var(--bg); }
+.icon { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+.icon.pass { color: var(--pass); background: var(--pass-bg); } .icon.fail { color: var(--fail); background: var(--fail-bg); }
+.icon.unverified { color: var(--warn); background: var(--warn-bg); } .icon.not_checked { color: var(--none); background: var(--none-bg); }
+.check-head .cname { font-weight: 600; }
+.check-head .count { margin-left: auto; color: var(--muted); font-size: 12px; text-align: right; }
+.check-body { padding: 0 18px 12px 48px; display: none; }
+.check.open .check-body { display: block; }
+.rule { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; cursor: pointer; }
+.item:hover { border-color: var(--line-strong); }
+.item.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.item .where { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.item .what { margin-top: 3px; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chips span { font-size: 11.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.item .note { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.item details { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+.item details summary { cursor: pointer; }
+.item.fail { border-left: 3px solid var(--fail); } .item.unverified { border-left: 3px solid var(--warn); }
+.item.note { border-left: 3px solid var(--line-strong); } .item.note .what { font-weight: 500; }
+.fix { margin-top: 7px; display: flex; gap: 6px; align-items: center; }
+.fix code { font-family: var(--mono); font-size: 11px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; direction: rtl; text-align: left; }
+.fix button { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 11px; flex: none; }
+.foot { padding: 14px 18px 20px; color: var(--faint); font-size: 11.5px; border-top: 1px solid var(--line); margin-top: 8px; }
+.foot summary { cursor: pointer; color: var(--muted); }
+kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<div class="app ov" id="app">
+  <aside class="side">
+    <div class="brand"><h1 id="title">Terra plans</h1><p>Machine plans converted from Terra plans</p></div>
+    <input class="search" id="search" placeholder="Filter plans" autocomplete="off">
+    <nav class="cases" id="cases"></nav>
+  </aside>
+  <section class="overview" id="overview">
+    <div class="ov-wrap">
+      <div class="ov-head">
+        <div><h2>All plans</h2><p id="ov-sub"></p></div>
+        <div class="ov-ctl"><div class="seg" id="ov-mode"><button data-mode="maps">Maps</button><button data-mode="table">Table</button></div><div class="seg" id="ov-versions"></div></div>
+      </div>
+      <div class="tally" id="ov-tally"></div>
+      <div class="ov-key" id="ov-key"></div>
+      <div class="ov-grid" id="ov-grid"></div>
+      <table class="ov-table">
+        <thead><tr id="ov-cols"><th data-sort="plan">Plan</th><th data-sort="verdict">Verdict</th><th class="num" data-sort="dug">Dug</th><th class="num" data-sort="stations">Stations</th><th class="num" data-sort="driving">Driving</th><th class="num" data-sort="rearrange">Outside final zones</th><th data-sort="fails">What fails</th></tr></thead>
+        <tbody id="ov-rows"></tbody>
+      </table>
+      <div class="ov-foot">Each map shows the plan's end state; "Terra" on a map shows the Terra plan it was converted from. Click a plan to open it. <kbd>↑</kbd> <kbd>↓</kbd> plans · <kbd>←</kbd> <kbd>→</kbd> dig and dump · <kbd>n</kbd> <kbd>p</kbd> next and previous issue · <kbd>t</kbd> machine or Terra plan · <kbd>3</kbd> Terra plan in 3D · <kbd>,</kbd> <kbd>.</kbd> its digs and dumps · <kbd>m</kbd> play it · <kbd>o</kbd> this overview</div>
+    </div>
+  </section>
+  <section class="main">
+    <header class="head">
+      <div class="title-row"><h2 id="case-name"></h2><span id="case-kind" style="color:var(--muted)"></span><button class="chip t3d-open" id="t3d-open" title="View the plan in 3D (3)" hidden>Plan 3D</button></div>
+      <div class="versions" id="versions"></div>
+      <div class="stats" id="stats"></div>
+    </header>
+    <div class="views">
+      <div class="view2d">
+        <div class="stage" id="stage">
+          <canvas class="map" id="map"></canvas>
+          <div class="overlay toggles" id="toggles"></div>
+          <div class="overlay zoom"><button id="zoom-in" title="Zoom in">+</button><button id="zoom-out" title="Zoom out">&minus;</button><button id="fit" title="Fit (F)">&#x2922;</button></div>
+          <div class="overlay legend" id="legend"></div>
+          <div class="overlay scale" id="scale"><span id="scale-label"></span><div class="bar" id="scale-bar"></div><span>map frame &middot; x&rarr; y&uarr;</span></div>
+          <div class="tip" id="tip"></div>
+        </div>
+        <div class="timeline">
+          <div class="tl-row">
+            <button class="play" id="play" title="Play (space)">&#9654;</button>
+            <div class="track" id="track"><canvas id="track-canvas"></canvas></div>
+            <div class="event-label" id="event-label"></div>
+          </div>
+          <div class="facts" id="facts"></div>
+        </div>
+      </div>
+      <div class="view3d" id="view3d">
+        <div class="t3d-head">
+          <div class="t3d-title" id="t3d-title"></div>
+          <div class="seg" id="t3d-source"><button data-source="postprocessed">Postprocessed</button><button data-source="original">Original Terra</button></div>
+          <div class="seg" id="t3d-camera"><button data-view="map" title="Oblique, turned like the 2D map: x to the right, y away">Map</button><button data-view="top" title="From above, turned like the 2D map">Top</button><button data-view="step" title="The current Terra step: its dig, its dump and the machine">Step</button><button data-view="follow" title="Follow the machine">Follow</button></div>
+          <button class="chip" id="t3d-all" title="Also show the dumps still to come, in grey">All dumps</button>
+          <button class="chip" id="t3d-reach" title="The machine's dig and dump workspace (Terra's interaction map)">Workspace</button>
+          <button class="chip" id="t3d-link" title="Stepping through the machine plan shows the Terra step each workspace came from">Linked</button>
+          <button class="chip" id="t3d-close" title="Close the 3D view (3)">&times;</button>
+        </div>
+        <div class="t3d-stage">
+          <div id="t3d-viewport"></div>
+          <div class="overlay t3d-key" id="t3d-key"></div>
+          <div class="overlay t3d-cell" id="t3d-cell"></div>
+          <div class="t3d-note" id="t3d-note" hidden></div>
+        </div>
+        <div class="t3d-pairs" id="t3d-pairs"></div>
+        <div class="timeline">
+          <div class="tl-row">
+            <button class="play" id="t3d-play" title="Play the Terra plan (m)">&#9654;</button>
+            <button class="stepb" id="t3d-back" title="Previous dig or dump (,)">&#9664;&#9664;</button>
+            <button class="stepb" id="t3d-fwd" title="Next dig or dump (.)">&#9654;&#9654;</button>
+            <div class="track" id="t3d-track"><canvas id="t3d-track-canvas"></canvas></div>
+            <select class="speed" id="t3d-speed" title="Playback speed"><option value="1">1&times;</option><option value="2">2&times;</option><option value="4" selected>4&times;</option><option value="8">8&times;</option><option value="16">16&times;</option></select>
+            <div class="t3d-at" id="t3d-at"></div>
+          </div>
+          <div class="facts" id="t3d-facts"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <aside class="panel" id="panel"></aside>
+</div>
+<!--TERRA3D-->
+<script type="application/json" id="data">__DATA__</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const $ = (id) => document.getElementById(id);
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+// Spoil on temporary ground (outside the final dump zones; left there at the end it fails) is teal, matched in lightness to the
+// brown pile ramp at each height and outlined, so it separates from final-zone spoil without colour alone.
+const C = dark ? {
+  ground: [42, 42, 46], zone: [52, 46, 72], zoneGrown: [47, 44, 59], obstacle: [150, 150, 158], unknown: [26, 26, 29],
+  required: [204, 143, 30], optional: [120, 96, 45], partial: [58, 104, 150], finished: [37, 99, 235],
+  band: [236, 72, 153], fell: [219, 39, 119], pile: [[214, 180, 130], [176, 122, 59], [140, 70, 22], [90, 40, 10]],
+  temp: [[72, 165, 150], [53, 151, 140], [31, 125, 118], [21, 110, 102]], tempEdge: [170, 232, 221],
+  ink: "#ecebe8", faint: "rgba(236,235,232,0.35)", halo: "rgba(20,20,22,0.85)", route: "#6b9bff", load: "#c084fc", fail: "#f87171", warn: "#facc15",
+} : {
+  ground: [235, 232, 226], zone: [231, 224, 243], zoneGrown: [240, 236, 249], obstacle: [68, 64, 60], unknown: [214, 211, 205],
+  required: [244, 183, 64], optional: [248, 223, 160], partial: [142, 197, 238], finished: [59, 130, 196],
+  band: [236, 72, 153], fell: [219, 39, 119], pile: [[226, 199, 156], [196, 150, 90], [160, 96, 40], [96, 50, 16]],
+  temp: [[88, 181, 166], [58, 153, 142], [31, 124, 116], [11, 102, 96]], tempEdge: [8, 66, 62],
+  ink: "#1c1917", faint: "rgba(28,25,23,0.28)", halo: "rgba(255,255,255,0.9)", route: "#2563eb", load: "#7c3aed", fail: "#dc2626", warn: "#ca8a04",
+};
+const TEMP_BIT = 32;
+const FAILED_LEG = new Set(["blocked", "not found", "check failed"]);
+const STATUS_ICON = { pass: "✓", fail: "✕", unverified: "!", not_checked: "–" };
+const VERDICT_CLASS = (v) => v === "invalid" ? "invalid" : v === "valid under the modeled rules" ? "valid" : "unverified";
+const RULES = {
+  final_or_collected: "Final zones, or staging a later collection clears",
+  temporary_allowed: "Temporary ground allowed, collected to final zones before the end",
+};
+const layers = { piles: true, temporary: true, regions: true, seams: true, stations: true, routes: true, issues: true };
+let mapMode = "machine";  // or "terra": the Terra plan the machine plan was converted from
+let legendOpen = null;  // the key's fold; null: open unless the 3D view shares the width
+
+let caseIndex = -1, versionIndex = 0, V = null, frame = 0, view = null, selected = null, leg = null, playing = null, overviewLabel = null;
+let overviewSort = "plan", morePills = "", overviewMode = "maps", overviewRows = [], thumbRun = 0;
+try { if (localStorage.getItem("tmm-overview-mode") === "table") overviewMode = "table"; } catch (e) { /* no storage */ }
+
+async function unpack(b64, Type) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Type(await new Response(stream).arrayBuffer());
+}
+
+// One decode per version: the overview's maps and an opened plan may ask for the same version at once.
+function load(version) {
+  version._loading = version._loading || (async () => {
+    const [base, state0, pile0, offsets, index, state, pile, terra] = await Promise.all([
+      unpack(version.base, Uint8Array), unpack(version.state0, Uint8Array), unpack(version.pile0, Uint8Array),
+      unpack(version.delta.offsets, Uint32Array), unpack(version.delta.index, Uint32Array),
+      unpack(version.delta.state, Uint8Array), unpack(version.delta.pile, Uint8Array),
+      version.terra ? unpack(version.terra.action, Int8Array) : null,
+    ]);
+    Object.assign(version, { _base: base, _state0: state0, _pile0: pile0, _off: offsets, _idx: index, _st: state, _pl: pile, _terra: terra });
+    version._cur = { frame: 0, state: state0.slice(), pile: pile0.slice() };
+    version._image = new ImageData(version.grid.w, version.grid.h);
+    version._canvas = document.createElement("canvas");
+    version._canvas.width = version.grid.w; version._canvas.height = version.grid.h;
+    version._items = version.checks.flatMap((c) => c.items.filter((it) => it.kind !== "note"));
+    // Each station's regions as packed bits: the ground it may dig, must finish, and may dump on.
+    await Promise.all(version.workspaces.filter((s) => s.regions).map(async (s) => {
+      const [dig, finish, dump, deposit, lip] = await Promise.all([s.regions.dig, s.regions.finish, s.regions.dump, s.regions.deposit, s.regions.lip].map((b) => b ? unpack(b, Uint8Array) : null));
+      s._regions = { dig, finish, dump, deposit, lip };
+    }));
+    version._ready = true;
+    return version;
+  })();
+  return version._loading;
+}
+
+function goFrame(version, target) {
+  const cur = version._cur;
+  if (target < cur.frame) { cur.frame = 0; cur.state.set(version._state0); cur.pile.set(version._pile0); }
+  for (let f = cur.frame + 1; f <= target; f++) {
+    for (let i = version._off[f - 1]; i < version._off[f]; i++) {
+      const cell = version._idx[i]; cur.state[cell] = version._st[i]; cur.pile[cell] = version._pl[i];
+    }
+  }
+  cur.frame = target;
+  paintRaster(version);
+}
+
+function css(color) { return Array.isArray(color) ? `rgb(${color.map(Math.round).join(",")})` : color; }
+function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function ramp(p, h) {
+  if (h < 0.25) return mix(p[0], p[1], h / 0.25);
+  if (h < 0.5) return mix(p[1], p[2], (h - 0.25) / 0.25);
+  if (h < 1.0) return mix(p[2], p[3], (h - 0.5) / 0.5);
+  return p[3];
+}
+
+function paintRaster(version) {
+  const { state, pile } = version._cur;
+  paintCells(version, state, pile, version._image.data, layers);
+  version._canvas.getContext("2d").putImageData(version._image, 0, 0);
+}
+
+// The terrain colours of one state into img (RGBA), with the piles and temporary layers of opt.
+function paintCells(version, state, pile, img, opt) {
+  const { w, h } = version.grid, base = version._base;
+  const isTemp = (cell) => opt.temporary && (state[cell] & TEMP_BIT) && pile[cell] > 0;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const cell = r * w + c, px = ((h - 1 - r) * w + c) * 4;
+      const b = base[cell], s = state[cell], dig = s & 7;
+      let col = b === 1 ? C.zone : b === 4 ? C.zoneGrown : b === 2 ? C.obstacle : b === 3 ? C.unknown : C.ground;
+      if (dig === 1) col = C.required; else if (dig === 2) col = C.optional;
+      else if (dig === 3) col = C.partial; else if (dig === 4) col = C.finished;
+      const height = pile[cell] * 0.02;
+      if (opt.piles && height > 0) {
+        const temp = isTemp(cell);
+        col = ramp(temp ? C.temp : C.pile, height);
+        // Mark the 0.5 m drivable limit as a contour.
+        const up = r + 1 < h ? pile[cell + w] * 0.02 : 0, right = c + 1 < w ? pile[cell + 1] * 0.02 : 0;
+        if ((height >= 0.5) !== (up >= 0.5) || (height >= 0.5) !== (right >= 0.5)) col = mix(col, [0, 0, 0], 0.45);
+        // Outline temporary spoil where it meets other ground.
+        else if (temp && !((r + 1 >= h || isTemp(cell + w)) && (r === 0 || isTemp(cell - w)) && (c + 1 >= w || isTemp(cell + 1)) && (c === 0 || isTemp(cell - 1)))) col = mix(col, C.tempEdge, 0.55);
+      }
+      if (s & 16) col = C.fell;
+      img[px] = col[0]; img[px + 1] = col[1]; img[px + 2] = col[2]; img[px + 3] = 255;
+    }
+  }
+}
+
+/* ---------- view ---------- */
+const map = $("map"), ctx = map.getContext("2d");
+function resize() {
+  const rect = map.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  map.width = Math.round(rect.width * dpr); map.height = Math.round(rect.height * dpr);
+  const track = $("track-canvas"), tr = track.getBoundingClientRect();
+  track.width = Math.round(tr.width * dpr); track.height = Math.round(tr.height * dpr);
+  draw(); drawTrack();
+}
+function fitBox(x0, y0, x1, y1, pad = 40, maxScale = 400) {
+  const rect = map.getBoundingClientRect();
+  const scale = Math.min((rect.width - 2 * pad) / Math.max(x1 - x0, 1e-6), (rect.height - 2 * pad - 30) / Math.max(y1 - y0, 1e-6), maxScale);
+  view = { scale, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+}
+function fit() {
+  if (!V) return;
+  const g = V.grid;
+  fitBox(g.x0 - g.res / 2, g.y0 - g.res / 2, g.x0 - g.res / 2 + g.w * g.res, g.y0 - g.res / 2 + g.h * g.res);
+  draw();
+}
+function focus(x, y, scale = 28) { view.cx = x; view.cy = y; view.scale = Math.max(view.scale, scale); }
+function toScreen(x, y) {
+  const rect = map.getBoundingClientRect();
+  return [rect.width / 2 + (x - view.cx) * view.scale, rect.height / 2 - (y - view.cy) * view.scale];
+}
+function toWorld(sx, sy) {
+  const rect = map.getBoundingClientRect();
+  return [view.cx + (sx - rect.width / 2) / view.scale, view.cy - (sy - rect.height / 2) / view.scale];
+}
+
+function currentEvent() { return frame > 0 ? V.events[frame - 1] : null; }
+function wsOf(event) { return event ? V.workspaces[event.ws - 1] : null; }
+function atEnd() { return V && frame === V.events.length; }
+function legPoints(s) { const a = V.workspaces[s.n - 2]; return s.route || [[a.pose[0], a.pose[1]], [s.pose[0], s.pose[1]]]; }
+function drawnLegs() { const e = currentEvent(); return e && layers.routes ? V.workspaces.slice(1, e.ws) : []; }
+function visibleItems() {
+  if (!layers.issues || !V) return [];
+  return V._items.filter((it) => it.x != null && (snapStep(it.step) === frame || atEnd() || (selected && selected.item === it)));
+}
+function bodyAt([x, y, yaw]) {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return V.footprint.map(([fx, fy]) => [x + c * fx - s * fy, y + s * fx + c * fy]);
+}
+
+function polyline(points, close) {
+  ctx.beginPath();
+  points.forEach(([x, y], i) => { const [sx, sy] = toScreen(x, y); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); });
+  if (close) ctx.closePath();
+}
+function circle(x, y, radius) { const [sx, sy] = toScreen(x, y); ctx.beginPath(); ctx.arc(sx, sy, radius * view.scale, 0, 2 * Math.PI); }
+function ring(x, y, px) { const [sx, sy] = toScreen(x, y); ctx.beginPath(); ctx.arc(sx, sy, px, 0, 2 * Math.PI); }
+
+function drawLegs(event) {
+  V.workspaces.slice(1, event.ws).forEach((s) => {
+    const points = legPoints(s), isSelected = leg === s.n, isCurrent = s.n === event.ws;
+    const failed = FAILED_LEG.has(s.route_state);
+    if (isSelected) { ctx.strokeStyle = C.halo; ctx.lineWidth = 8; ctx.lineJoin = "round"; polyline(points); ctx.stroke(); }
+    ctx.setLineDash(s.route ? [] : [5, 5]);
+    ctx.strokeStyle = failed ? C.fail : s.route ? C.route : C.faint;
+    ctx.lineWidth = isSelected ? 3 : isCurrent ? 2.5 : 1.3;
+    polyline(points); ctx.stroke(); ctx.setLineDash([]);
+    if (s.route && s.route_high_spoil.length) {
+      // Poses over spoil of 0.5-1.0 m, drivable with chassis balancing: amber.
+      const at = new Set(s.route_high_spoil);
+      ctx.strokeStyle = C.warn; ctx.fillStyle = C.warn; ctx.lineWidth = isSelected ? 5 : 3.5; ctx.lineCap = "round";
+      s.route_high_spoil.forEach((i) => {
+        const [sx, sy] = toScreen(points[i][0], points[i][1]);
+        if (at.has(i + 1)) { const [tx, ty] = toScreen(points[i + 1][0], points[i + 1][1]); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.stroke(); }
+        else if (!at.has(i - 1)) { ctx.beginPath(); ctx.arc(sx, sy, ctx.lineWidth * 0.75, 0, 2 * Math.PI); ctx.fill(); }
+      });
+      ctx.lineCap = "butt";
+    }
+    if (isSelected && s.route) {
+      // The body where the leg first crosses high spoil or blocking ground.
+      const index = s.route_blocked_at ?? s.route_high_spoil[0];
+      if (index != null) {
+        ctx.setLineDash([4, 3]); ctx.strokeStyle = s.route_blocked_at != null ? C.fail : C.warn; ctx.lineWidth = 1.6;
+        polyline(bodyAt(s.route[index]), true); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+  });
+  ctx.lineJoin = "miter";
+}
+
+/* ---------- the Terra plan ---------- */
+// Terra's end state in the machine map's colours: dug ground, design it left, and its soil by loads per cell (teal
+// outside the final zones). The design and zones are the machine plan's, sampled from the same Terra map.
+function terraCanvas(version) {
+  if (version._terraCanvas) return version._terraCanvas;
+  const { w, h } = version.grid, base = version._base, state0 = version._state0, action = version._terra;
+  const image = new ImageData(w, h), img = image.data;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const cell = r * w + c, px = ((h - 1 - r) * w + c) * 4, b = base[cell], a = action[cell], dig = state0[cell] & 7;
+      let col = b === 1 ? C.zone : b === 4 ? C.zoneGrown : b === 2 ? C.obstacle : b === 3 ? C.unknown : C.ground;
+      if (a < 0) col = C.finished; else if (dig === 1) col = C.required; else if (dig === 2) col = C.optional;
+      if (a > 0) col = ramp(b === 1 || b === 4 ? C.pile : C.temp, Math.min(a, 4) * 0.25);
+      img[px] = col[0]; img[px + 1] = col[1]; img[px + 2] = col[2]; img[px + 3] = 255;
+    }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  version._terraCanvas = canvas;
+  return canvas;
+}
+// Terra's stations in its order (Terra drives abstractly: dashed straight lines), numbered like the workspaces'
+// "Terra step"; a dashed ring is a collection. The step the current workspace came from is blue, with its body.
+function drawTerraPlan(ws) {
+  const stations = V.terra.stations, current = ws && ws.source != null && ws.source >= 0 ? ws.source : null;
+  ctx.strokeStyle = C.faint; ctx.lineWidth = 1.2; ctx.setLineDash([5, 4]);
+  polyline(stations.map(([x, y]) => [x, y])); ctx.stroke(); ctx.setLineDash([]);
+  if (current != null) {
+    ctx.fillStyle = dark ? "rgba(236,235,232,0.08)" : "rgba(28,25,23,0.07)"; ctx.strokeStyle = C.route; ctx.lineWidth = 1.8;
+    polyline(bodyAt(stations[current]), true); ctx.fill(); ctx.stroke();
+  }
+  ctx.font = "600 10px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  stations.forEach(([x, y, yaw, collect], p) => {
+    const [sx, sy] = toScreen(x, y), [hx, hy] = toScreen(x + 1.6 * Math.cos(yaw), y + 1.6 * Math.sin(yaw)), on = p === current;
+    ctx.strokeStyle = on ? C.route : C.ink; ctx.lineWidth = on ? 2 : 1.2;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx, sy, 8, 0, 2 * Math.PI);
+    ctx.fillStyle = on ? C.route : dark ? "#1c1c1f" : "#ffffff"; ctx.fill();
+    ctx.setLineDash(collect ? [2, 2] : []); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = on ? "#ffffff" : C.ink; ctx.fillText(String(p), sx, sy + 0.5);
+  });
+}
+
+/* ---------- a station's regions ---------- */
+// What the plan gives the station: the ground it may dig (orange outline), the part it must finish (orange), the
+// centres its bucket loads may be dumped on (purple) and the ground that soil may cover (light purple outline). The
+// workspace planner picks each cut and each load's centre inside them.
+const DIG_RGB = [249, 115, 22], DUMP_RGB = dark ? [192, 132, 252] : [124, 58, 237];
+// Seam lips: the ground a station's overlap pulls dig past its planned ring (pink), and the real seams
+// into it, green where the later workspace re-digs at least 0.3 m of the earlier one's ground, red where less.
+const LIP_RGB = [219, 39, 119], SEAM_OK = dark ? [74, 222, 128] : [22, 163, 74], SEAM_SHORT = dark ? [248, 113, 113] : [220, 38, 38];
+function lipCanvas(version, s) {
+  if (s._lipCanvas !== undefined) return s._lipCanvas;
+  const lip = s._regions && s._regions.lip;
+  if (!lip) return (s._lipCanvas = null);
+  const { w, h } = version.grid, image = new ImageData(w, h), img = image.data;
+  let any = false;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const i = r * w + c;
+      if (!((lip[i >> 3] >> (7 - (i & 7))) & 1)) continue;
+      const px = ((h - 1 - r) * w + c) * 4;
+      img[px] = LIP_RGB[0]; img[px + 1] = LIP_RGB[1]; img[px + 2] = LIP_RGB[2]; img[px + 3] = 200; any = true;
+    }
+  }
+  if (!any) return (s._lipCanvas = null);
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  return (s._lipCanvas = canvas);
+}
+// Lips and seams of every station up to the current one (all of them at the end state); the current one strongest.
+function drawSeams(ws, x0, y1, g) {
+  const upto = atEnd() ? Infinity : ws ? ws.n : 0;
+  V.workspaces.forEach((s) => {
+    if (s.n > upto) return;
+    const lip = lipCanvas(V, s);
+    if (!lip) return;
+    ctx.globalAlpha = s === ws ? 1 : 0.6;
+    ctx.drawImage(lip, x0, y1, g.w * g.res * view.scale, g.h * g.res * view.scale);
+  });
+  ctx.globalAlpha = 1;
+  V.workspaces.forEach((s) => {
+    if (s.n > upto || !s.seams || !s.seams.length) return;
+    const radius = s === ws ? 3 : 2;
+    s.seams.forEach(([x, y, ok]) => {
+      const [sx, sy] = toScreen(x, y);
+      ctx.fillStyle = css(ok ? SEAM_OK : SEAM_SHORT);
+      ctx.beginPath(); ctx.arc(sx, sy, radius, 0, 2 * Math.PI); ctx.fill();
+    });
+  });
+}
+function regionCanvas(version, s) {
+  if (s._regionCanvas) return s._regionCanvas;
+  const { w, h } = version.grid, image = new ImageData(w, h), img = image.data, R = s._regions;
+  const has = (bytes, r, c) => r >= 0 && c >= 0 && r < h && c < w && ((bytes[(r * w + c) >> 3] >> (7 - ((r * w + c) & 7))) & 1) === 1;
+  const edge = (bytes, r, c) => has(bytes, r, c) && !(has(bytes, r + 1, c) && has(bytes, r - 1, c) && has(bytes, r, c + 1) && has(bytes, r, c - 1));
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      let rgb = null, alpha = 0;
+      if (has(R.deposit, r, c)) { rgb = DUMP_RGB; alpha = edge(R.deposit, r, c) ? 170 : 28; }
+      if (has(R.dump, r, c)) { rgb = DUMP_RGB; alpha = 215; }
+      if (has(R.finish, r, c)) { rgb = DIG_RGB; alpha = Math.max(alpha, 95); }
+      if (edge(R.dig, r, c)) { rgb = DIG_RGB; alpha = 240; } else if (has(R.dig, r, c) && !rgb) { rgb = DIG_RGB; alpha = 30; }
+      if (!rgb) continue;
+      const px = ((h - 1 - r) * w + c) * 4;
+      img[px] = rgb[0]; img[px + 1] = rgb[1]; img[px + 2] = rgb[2]; img[px + 3] = alpha;
+    }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  s._regionCanvas = canvas;
+  return canvas;
+}
+
+function draw() {
+  const dpr = devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const rect = map.getBoundingClientRect();
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  if (!V || !V._ready || !view) return;
+  const g = V.grid;
+  const [x0, y1] = toScreen(g.x0 - g.res / 2, g.y0 - g.res / 2 + g.h * g.res);
+  ctx.imageSmoothingEnabled = false;
+  const terraView = mapMode === "terra" && V._terra;
+  ctx.drawImage(terraView ? terraCanvas(V) : V._canvas, x0, y1, g.w * g.res * view.scale, g.h * g.res * view.scale);
+  const event = currentEvent(), ws = wsOf(event);
+  if (terraView) { drawTerraPlan(ws); drawScale(); return; }
+  if (ws && layers.regions && ws._regions) ctx.drawImage(regionCanvas(V, ws), x0, y1, g.w * g.res * view.scale, g.h * g.res * view.scale);
+  if (layers.seams) drawSeams(ws, x0, y1, g);
+  // Drives so far: saved Nav2 routes solid, straight connectors dashed.
+  if (layers.routes && event) drawLegs(event);
+  // Every station as a numbered dot.
+  if (layers.stations) {
+    ctx.font = "600 10px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    V.workspaces.forEach((s) => {
+      const [sx, sy] = toScreen(s.pose[0], s.pose[1]);
+      const done = event && s.n < event.ws;
+      ctx.fillStyle = done ? C.faint : "rgba(0,0,0,0)"; ctx.strokeStyle = C.faint; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.ink; ctx.fillText(String(s.n), sx, sy + 0.5);
+    });
+  }
+  // The current station: body and heading (and, without region data, its completion band while cutting).
+  if (ws) {
+    ctx.fillStyle = dark ? "rgba(236,235,232,0.08)" : "rgba(28,25,23,0.07)"; ctx.strokeStyle = C.ink; ctx.lineWidth = 1.8;
+    polyline(ws.body, true); ctx.fill(); ctx.stroke();
+    const [px, py, yaw] = ws.pose;
+    ctx.beginPath(); const [ax, ay] = toScreen(px, py), [bx, by] = toScreen(px + 1.6 * Math.cos(yaw), py + 1.6 * Math.sin(yaw));
+    ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    if (!ws._regions && event.phase === "cut") {
+      ctx.setLineDash([6, 5]); ctx.lineWidth = 1.2; ctx.strokeStyle = "#f97316";
+      [V.rules.completion[0], V.rules.completion[1]].forEach((r) => { circle(px, py, r); ctx.stroke(); });
+      ctx.setLineDash([]);
+    }
+  }
+  // Loads so far; the current one with its pile toe. Loads released outside the final zones are teal.
+  // Issues: rings where they happen, all of them at the end state; the selected one always.
+  visibleItems().forEach((item) => {
+    const isSelected = selected && selected.item === item, now = snapStep(item.step) === frame;
+    ctx.strokeStyle = item.kind === "fail" ? C.fail : C.warn; ctx.lineWidth = isSelected ? 3 : now ? 2 : 1.5;
+    ctx.globalAlpha = isSelected || now ? 1 : 0.7;
+    ring(item.x, item.y, isSelected ? 16 : now ? 11 : 9); ctx.stroke(); ctx.globalAlpha = 1;
+  });
+  if (selected && selected.item && selected.item.kind === "note" && selected.item.x != null) {
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ring(selected.item.x, selected.item.y, 14); ctx.stroke();
+  }
+  if (selected && selected.piece) {
+    ctx.strokeStyle = css(C.temp[3]); ctx.lineWidth = 2.5; ring(selected.piece.x, selected.piece.y, 18); ctx.stroke();
+  }
+  drawScale();
+}
+
+function drawScale() {
+  const target = 110 / view.scale, nice = [0.5, 1, 2, 5, 10, 20, 50].find((v) => v >= target * 0.6) || 50;
+  $("scale-bar").style.width = `${nice * view.scale}px`;
+  $("scale-label").textContent = `${nice} m`;
+}
+
+/* ---------- timeline ---------- */
+function drawTrack() {
+  const canvas = $("track-canvas"), c = canvas.getContext("2d"), dpr = devicePixelRatio || 1;
+  const width = canvas.width / dpr, height = canvas.height / dpr;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, width, height);
+  if (!V) return;
+  const n = V.events.length, x = (f) => 6 + (width - 12) * (n ? f / n : 0);
+  c.fillStyle = dark ? "#2c2c31" : "#e4e1da"; c.fillRect(6, height / 2 - 2, width - 12, 4);
+  c.fillStyle = C.route; c.fillRect(6, height / 2 - 2, x(frame) - 6, 4);
+  V.events.forEach((e, i) => {
+    if (e.phase !== "cut") return;
+    const s = V.workspaces[e.ws - 1];
+    c.fillStyle = leg === s.n ? C.route : dark ? "#6d6a65" : "#a39e96";
+    c.fillRect(x(i + 1) - (leg === s.n ? 1 : 0.5), height / 2 - 7, leg === s.n ? 2 : 1, 14);
+  });
+  // Loads released outside the final zones.
+  c.fillStyle = css(C.temp[2]);
+  // Workspaces whose dump releases soil outside the final zones, at their dump step.
+  V.workspaces.forEach((s) => { const off = s.loads.find((l) => !l.zone); if (off) c.fillRect(x(snapStep(off.step)) - 1, height - 7, 2, 6); });
+  // Failures on top of unverified items at the same event.
+  [...V._items].sort((a, b) => (a.kind === "fail") - (b.kind === "fail")).forEach((item) => {
+    c.fillStyle = item.kind === "fail" ? C.fail : C.warn;
+    c.beginPath(); c.arc(x(item.step), 5, selected && selected.item === item ? 4 : 3, 0, 2 * Math.PI); c.fill();
+  });
+  c.fillStyle = C.ink; c.beginPath(); c.arc(x(frame), height / 2, 6, 0, 2 * Math.PI); c.fill();
+}
+function trackFrame(event) {
+  const rect = $("track").getBoundingClientRect();
+  return Math.round(Math.min(Math.max((event.clientX - rect.left - 6) / (rect.width - 12), 0), 1) * V.events.length);
+}
+
+function fmt(v, digits = 2) { return v == null ? "–" : Number(v).toFixed(digits); }
+function plural(n, word) { return `${n} ${word}${n === 1 ? "" : "s"}`; }
+function eventName(step) {
+  if (!step) return "start";
+  const e = V.events[step - 1];
+  return e.phase === "cut" ? `dig · ws ${e.ws}` : `dump · ws ${e.ws}`;
+}
+// The frames the arrow keys and play visit: each workspace's arrival and cut, then its dump (after its last load).
+function stepFrames() {
+  if (!V._steps) {
+    V._steps = [0];
+    V.events.forEach((e, i) => { if (e.phase === "cut" || (e.phase === "load" && e.load === e.loads)) V._steps.push(i + 1); });
+  }
+  return V._steps;
+}
+// The page works at workspace level (Lorenzo, 2 October): every frame is a workspace's dig or its whole dump.
+function snapStep(f) {
+  const steps = stepFrames();
+  return steps.find((s) => s >= f) ?? steps[steps.length - 1];
+}
+function setFrame(f) {
+  if (!V) return;
+  frame = snapStep(Math.max(0, Math.min(V.events.length, f)));
+  goFrame(V, frame);
+  const event = currentEvent(), ws = wsOf(event);
+  let label = "Start", facts = `Required ground <b>${fmt(V.totals.required_m2, 1)} m²</b> · ${V.workspaces.length} stations · press <kbd>→</kbd> to step`;
+  if (event && event.phase === "cut") {
+    label = `Workspace ${ws.n} · arrive and dig`;
+    const source = ws.source == null ? "added by the converter" : `Terra step ${ws.source}`;
+    const high = ws.route_high_spoil.length;
+    const route = ws.route_state === "clear" || ws.route_state === "blocked"
+      ? `Nav2 <b class="${ws.route_state !== "clear" ? "bad" : ""}">${fmt(ws.route_m, 1)} m${ws.route_state === "blocked" ? ", blocked" : ""}</b>` + (high ? ` <span class="warnt">${high} poses over spoil 0.5–1.0 m</span>` : "")
+      : ws.route_state ? `saved route <b class="bad">${ws.route_state}</b>${ws.route_reason ? `: ${ws.route_reason}` : ""}` : ws.n > 1 ? `route not checked, ${fmt(ws.straight_m, 1)} m straight` : "";
+    facts = [`<b>${source}</b>`, `arrival <b class="${ws.arrival === "blocked" ? "bad" : ""}">${ws.arrival}</b>`, route,
+      `finished <b>${fmt(ws.finished_m2)} m²</b>`, `cut <b>${fmt(ws.cut_m3)} m³</b>` + (ws.rehandled_m3 > 0 ? ` + ${fmt(ws.rehandled_m3)} m³ spoil` : ""),
+      ws.radius ? `completion ${fmt(ws.radius[0])}–${fmt(ws.radius[1])} m from BASE` : "",
+      ws.seam_m > 0 ? `seams <b>${fmt(ws.seam_m, 1)} m</b>, lip ≥ 0.3 m on <b class="${ws.seam_share < 0.9 ? "bad" : ""}">${fmt(100 * ws.seam_share, 0)} %</b>` : ""].filter(Boolean).join(" · ");
+  } else if (event && event.phase === "load" && event.load === event.loads) {
+    // The workspace's dump as one operation: its bucket loads together.
+    const loads = ws.loads, m3 = loads.reduce((sum, l) => sum + l.m3, 0), off = loads.filter((l) => !l.zone).length;
+    const gaps = loads.map((l) => l.gap).filter((g) => g != null), spills = loads.filter((l) => l.band === "spills").length;
+    const refused = loads.filter((l) => l.choice !== "ros").length;
+    label = `Workspace ${ws.n} · dump`;
+    const spilled = loads.filter((l) => l.band === "spills").reduce((sum, l) => sum + l.spill, 0);
+    facts = [`<b>${fmt(m3)} m³</b> dumped`, off ? `<b>part released on temporary ground</b>` : "on final zones",
+      `pile top <b>${fmt(Math.max(...loads.map((l) => l.top)))} m</b>`, gaps.length ? `closest toe ${fmt(Math.min(...gaps))} m from the pit` : "no excavation near",
+      spills ? `<span class="bad">${fmt(spilled, 2)} m³ spills into the pit</span>` : "", refused ? `<span class="bad">ROS admits no dump centre</span>` : ""].filter(Boolean).join(" · ");
+  }
+  if (event) facts += ` · required left <b>${fmt(event.left)} m²</b> · top pile <b>${fmt(event.pile)} m</b>`;
+  $("event-label").textContent = label; $("facts").innerHTML = facts;
+  draw(); drawTrack(); t3Link();
+}
+
+/* ---------- selection ---------- */
+function markOn(selector, match) {
+  document.querySelectorAll(".item.on, .pill.on").forEach((n) => n.classList.remove("on"));
+  if (selector) document.querySelectorAll(selector).forEach((n) => { if (!match || match(n)) n.classList.add("on"); });
+}
+function selectItem(item, scroll) {
+  markOn(null);
+  if (item._card) { item._card.classList.add("on"); item._card.closest(".check").classList.add("open"); if (scroll) item._card.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  if (item.leg && item.leg > 1) { selectLeg(item.leg, item); return; }
+  selected = { item }; leg = null;
+  setFrame(item.step);
+  if (item.x != null) { focus(item.x, item.y); draw(); }
+}
+function stepItem(delta) {
+  const items = V && V._items;
+  if (!items || !items.length) return;
+  const at = selected && selected.item ? items.indexOf(selected.item) : -1;
+  selectItem(items[(at + delta + items.length) % items.length], true);
+}
+function selectLeg(n, item) {
+  const s = V.workspaces[n - 1];
+  selected = item ? { item } : null; leg = n;
+  if (!item) markOn(".pill[data-leg]", (el) => Number(el.dataset.leg) === n);
+  setFrame(s.cut);
+  const points = legPoints(s), xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  fitBox(Math.min(...xs) - 3, Math.min(...ys) - 3, Math.max(...xs) + 3, Math.max(...ys) + 3, 60, 60);
+  draw();
+}
+function selectPiece(i) {
+  const piece = V.dump.pieces[i], box = piece.box;
+  selected = { piece }; leg = null;
+  markOn(".pill[data-piece]", (el) => Number(el.dataset.piece) === i);
+  setFrame(V.events.length);
+  if (box) fitBox(box[0] - 1.5, box[1] - 1.5, box[2] + 1.5, box[3] + 1.5, 60, 60); else focus(piece.x, piece.y, 32);
+  draw();
+}
+function selectDumps(n) {
+  const s = V.workspaces[n - 1], l = [...s.loads].sort((a, b) => b.kept - a.kept)[0];
+  selected = null; leg = null;
+  markOn(".pill[data-ws]", (el) => Number(el.dataset.ws) === n);
+  setFrame(l.step);
+  focus(l.x, l.y, 32); draw();
+}
+
+/* ---------- panels ---------- */
+function openItems(c) { return c.items.filter((i) => i.kind === "unverified").length; }
+function verdictSentence(v) {
+  const fails = v.checks.filter((c) => c.status === "fail");
+  if (fails.length) return `${fails.length} of ${v.checks.length} checks fail: ${fails.map((c) => `${c.name.toLowerCase()} <span class="muted">(${failPhrase(c, v)})</span>`).join(", ")}.`;
+  const open = v.checks.filter((c) => c.status === "unverified" || c.status === "not checked")
+    .map((c) => `${c.name.toLowerCase()} ${c.status === "unverified" ? `unverified (${openItems(c)})` : "not checked"}`);
+  if (open.length) return `No check fails; ${open.join(", ")}.`;
+  return `All ${v.checks.length} checks pass under the modeled rules.`;
+}
+function failPhrase(c, v) {
+  const n = c.items.filter((i) => i.kind === "fail").length;
+  if (c.id === "converter_plan") {
+    if (c.items.some((i) => i.issue === "runtime_refused")) return "the runtime refuses the plan";
+    const rejected = c.items.filter((i) => i.issue === "converter_step_rejected").length;
+    return c.items.some((i) => i.issue === "no_plan") ? `no plan${rejected ? `, ${plural(rejected, "Terra step")} rejected` : ""}` : plural(n, "issue");
+  }
+  if (c.id === "coverage") return `${fmt(v.totals.left_m2)} m² left`;
+  if (c.id === "pile_clearance") return `${plural(n, "workspace")} put soil in the excavation`;
+  if (c.id === "arrival") return `${plural(n, "station")} on blocked ground`;
+  if (c.id === "routes") {
+    const legs = c.items.filter((i) => i.kind === "fail" && i.leg).map((i) => `${i.leg - 1} → ${i.leg}`);
+    return legs.length === 1 ? `leg ${legs[0]} fails` : `${plural(n, "leg")} fail`;
+  }
+  if (c.id === "dump_admission") return `${plural(n, "workspace")}`;
+  if (c.id === "spoil_at_end") {
+    const outside = c.items.some((i) => i.issue === "temporary_spoil_left"), pit = c.items.some((i) => i.issue === "loose_in_finished_excavation");
+    return [outside ? `${fmt(v.totals.spoil_left_m3)} m³ outside the final zones` : "", pit ? "soil in finished excavation" : ""].filter(Boolean).join(", ");
+  }
+  return plural(n, "item");
+}
+function openPhrase(c) {
+  if (c.status === "not checked") return c.id === "routes" ? "no saved Nav2 routes" : "not checked";
+  const n = openItems(c);
+  if (c.id === "arrival") return `${plural(n, "station")} on spoil ≥ 0.5 m`;
+  if (c.id === "pile_clearance") return `${plural(n, "workspace")} touch the excavation`;
+  return `${n} unverified`;
+}
+function whyHtml(v) {
+  const rows = v.checks.filter((c) => c.status === "fail").map((c) => `<div><span class="mark fail">✕</span><span>${c.name} <span class="muted">· ${failPhrase(c, v)}</span></span></div>`);
+  // Without an executable plan there is nothing to route: leave "routes not checked" out.
+  const noPlan = v.checks.some((c) => c.id === "converter_plan" && c.items.some((i) => i.issue === "no_plan"));
+  v.checks.filter((c) => c.status === "unverified" || (c.status === "not checked" && !(noPlan && c.id === "routes"))).forEach((c) => {
+    const cls = c.status.replace(" ", "_");
+    rows.push(`<div class="open"><span class="mark ${cls}">${STATUS_ICON[cls]}</span><span>${c.name} · ${openPhrase(c)}</span></div>`);
+  });
+  return rows.join("") || `<span class="muted">–</span>`;
+}
+function splitName(name) { const [head, ...rest] = name.split(" · "); return [head, rest.join(" · ")]; }
+
+function renderSidebar() {
+  const q = $("search").value.trim().toLowerCase(), nav = $("cases");
+  nav.innerHTML = "";
+  const all = document.createElement("button");
+  all.className = "case all" + (caseIndex < 0 ? " on" : "");
+  all.innerHTML = `<div class="name">All plans <span>${DATA.cases.length}</span></div>`;
+  all.onclick = showOverview;
+  nav.appendChild(all);
+  let group = "";
+  DATA.cases.forEach((cs, i) => {
+    if (q && !cs.name.toLowerCase().includes(q)) return;
+    if (cs.group && cs.group !== group) {
+      const heading = document.createElement("div");
+      heading.className = "grp"; heading.textContent = cs.group;
+      nav.appendChild(heading);
+    }
+    group = cs.group || "";
+    const latest = cs.versions[cs.versions.length - 1], [head, rest] = splitName(cs.name);
+    const b = document.createElement("button");
+    b.className = "case" + (i === caseIndex ? " on" : "");
+    b.title = cs.name;
+    b.innerHTML = `<div class="name">${head}${rest ? ` <span>${rest}</span>` : ""}</div><div class="sub"><span class="dots">${cs.versions.map((v) => `<span class="dot ${VERDICT_CLASS(v.verdict)}" title="${v.label}: ${v.verdict}"></span>`).join("")}</span>${latest.verdict}</div>`;
+    b.onclick = () => selectCase(i, cs.versions.length - 1);
+    nav.appendChild(b);
+  });
+}
+
+// The manifest's label order when it gives one, then any other label in order of first appearance.
+function versionLabels() {
+  const seen = [];
+  DATA.cases.forEach((cs) => cs.versions.forEach((v) => { if (!seen.includes(v.label)) seen.push(v.label); }));
+  const order = (DATA.labels || []).filter((l) => seen.includes(l));
+  return [...order, ...seen.filter((l) => !order.includes(l))];
+}
+// The overview opens on the manifest's headline version, else on the label most jobs end with.
+function defaultLabel(labels) {
+  if (DATA.headline && labels.includes(DATA.headline)) return DATA.headline;
+  const ends = {};
+  DATA.cases.forEach((cs) => { const l = cs.versions[cs.versions.length - 1].label; ends[l] = (ends[l] || 0) + 1; });
+  return labels.reduce((best, l) => ((ends[l] || 0) > (ends[best] || 0) ? l : best), labels[labels.length - 1]);
+}
+
+/* ---------- overview maps ---------- */
+// A version's end state as a raster of its own grid.
+async function endRaster(version) {
+  if (version._end) return version._end;
+  await load(version);
+  const state = version._state0.slice(), pile = version._pile0.slice(), last = version._off[version._off.length - 1];
+  for (let i = 0; i < last; i++) { const cell = version._idx[i]; state[cell] = version._st[i]; pile[cell] = version._pl[i]; }
+  const image = new ImageData(version.grid.w, version.grid.h), canvas = document.createElement("canvas");
+  paintCells(version, state, pile, image.data, { piles: true, temporary: true });
+  canvas.width = version.grid.w; canvas.height = version.grid.h;
+  canvas.getContext("2d").putImageData(image, 0, 0);
+  version._end = canvas;
+  return canvas;
+}
+// A card's map: the machine plan's end state with every Nav2 leg, the stations and the failures that have a place;
+// or, with terra, the Terra plan's end state with its stations in order.
+function drawThumb(canvas, version, raster, terra) {
+  const rect = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  if (!rect.width) return;
+  canvas.width = Math.round(rect.width * dpr); canvas.height = Math.round(rect.height * dpr);
+  const c = canvas.getContext("2d"), g = version.grid, pad = 8;
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const mw = g.w * g.res, mh = g.h * g.res, scale = Math.min((rect.width - 2 * pad) / mw, (rect.height - 2 * pad) / mh);
+  const left = (rect.width - mw * scale) / 2, top = (rect.height - mh * scale) / 2, xa = g.x0 - g.res / 2, yb = g.y0 - g.res / 2 + mh;
+  const X = (x) => left + (x - xa) * scale, Y = (y) => top + (yb - y) * scale;
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high";
+  c.drawImage(raster, left, top, mw * scale, mh * scale);
+  c.lineJoin = "round"; c.lineCap = "round";
+  const path = (points) => { c.beginPath(); points.forEach(([x, y], k) => (k ? c.lineTo(X(x), Y(y)) : c.moveTo(X(x), Y(y)))); };
+  if (terra) {
+    const stations = version.terra.stations;
+    c.strokeStyle = C.ink; c.globalAlpha = 0.55; c.lineWidth = 1; c.setLineDash([3, 3]);
+    path(stations); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+    stations.forEach(([x, y, , collect]) => {
+      c.beginPath(); c.arc(X(x), Y(y), 2.6, 0, 2 * Math.PI);
+      if (collect) { c.strokeStyle = C.ink; c.lineWidth = 1.2; c.stroke(); } else { c.fillStyle = C.ink; c.fill(); }
+    });
+    return;
+  }
+  version.workspaces.slice(1).forEach((s) => {
+    const a = version.workspaces[s.n - 2], points = s.route || [[a.pose[0], a.pose[1]], [s.pose[0], s.pose[1]]];
+    const failed = FAILED_LEG.has(s.route_state);
+    c.strokeStyle = failed ? C.fail : s.route ? C.route : C.faint; c.lineWidth = failed ? 2 : 1.1;
+    c.globalAlpha = failed ? 1 : 0.8; c.setLineDash(s.route ? [] : [3, 3]);
+    path(points); c.stroke();
+    c.setLineDash([]); c.globalAlpha = 1;
+    // Poses over spoil of 0.5-1.0 m, as on the plan's map.
+    if (s.route && s.route_high_spoil.length) {
+      const at = new Set(s.route_high_spoil);
+      c.strokeStyle = C.warn; c.lineWidth = 2.2;
+      s.route_high_spoil.forEach((i) => { if (at.has(i + 1)) { path([points[i], points[i + 1]]); c.stroke(); } });
+    }
+  });
+  c.fillStyle = C.ink;
+  version.workspaces.forEach((s) => { c.beginPath(); c.arc(X(s.pose[0]), Y(s.pose[1]), 2.1, 0, 2 * Math.PI); c.fill(); });
+  c.strokeStyle = C.fail; c.lineWidth = 1.6;
+  version._items.filter((it) => it.kind === "fail" && it.x != null).forEach((it) => { c.beginPath(); c.arc(X(it.x), Y(it.y), 6, 0, 2 * Math.PI); c.stroke(); });
+}
+function cardVersion(card) {
+  const cs = DATA.cases[Number(card.dataset.case)], j = card.dataset.version;
+  return cs.versions[j === undefined ? cs.versions.length - 1 : Number(j)];
+}
+async function drawCard(card) {
+  const v = cardVersion(card), terra = card.dataset.view === "terra";
+  const raster = await endRaster(v);
+  drawThumb(card.querySelector("canvas"), v, terra && v._terra ? terraCanvas(v) : raster, terra && v._terra);
+}
+// Draw the cards' maps one after another, so the page stays responsive; a newer overview or an opened plan stops it.
+async function drawThumbs() {
+  const run = ++thumbRun;
+  for (const card of $("ov-grid").querySelectorAll(".ov-card")) {
+    if (run !== thumbRun || caseIndex >= 0 || overviewMode !== "maps") return;
+    await drawCard(card);
+    await new Promise((done) => setTimeout(done, 0));
+  }
+}
+function mapKey() {
+  const swatch = (color, label, cls = "") => `<span><i class="${cls}" style="background:${css(color)};border-color:${css(color)}"></i>${label}</span>`;
+  return [swatch(C.finished, "Finished excavation"), swatch(C.required, "Required, not finished"), swatch(C.zone, "Final dump zone"),
+    swatch(C.pile[1], "Spoil"), swatch(C.temp[1], "Spoil outside final zones"), swatch(C.obstacle, "Obstacle"),
+    swatch(C.route, "Nav2 route", "line"), swatch(C.warn, "Over spoil 0.5–1.0 m", "line"), swatch(C.ink, "Station", "dot"),
+    swatch(C.fail, "Failure", "ring")].join("");
+}
+function factsLine(v) {
+  const t = v.totals, fails = v.checks.some((c) => c.id === "spoil_at_end" && c.status === "fail");
+  // Soil outside the final zones stands out only when it fails the end state (pieces under its threshold do not).
+  const outside = `${fmt(t.spoil_left_m3)} m³ outside final zones`;
+  const dug = `dug ${fmt(t.required_m2 - t.left_m2, 1)} of ${fmt(t.required_m2, 1)} m²`;
+  return [`${plural(t.stations, "station")}${t.added ? ` (${t.added} added)` : ""}`, dug,
+    t.routes ? `${fmt(t.route_m, 0)} m Nav2` : `${fmt(t.straight_m, 0)} m straight`,
+    fails ? `<span style="color:var(--temp);font-weight:600">${outside}</span>` : t.spoil_left_m3 >= 0.005 ? `${outside}, in small pieces` : "all soil on final zones"].join(" · ");
+}
+function cardHtml({ cs, i, j, v }) {
+  const [head, rest] = splitName(cs.name), name = `<div class="pname">${head}${rest ? ` <span>${rest}</span>` : ""}</div>`;
+  const kind = cs.kind ? `<div class="line">${cs.kind}</div>` : "";
+  const shown = v || cs.versions[cs.versions.length - 1], flip = shown.terra ? `<button class="flip" title="Show the Terra plan this was converted from">Terra</button>` : "";
+  if (!v) return `<div class="ov-card none" data-case="${i}" tabindex="0" title="${cs.name}"><canvas></canvas>${flip}<div class="meta">${name}${kind}<div class="line">no ${overviewLabel} version; the map shows ${shown.label}</div></div></div>`;
+  const dots = cs.versions.length > 1 ? `<span class="dots">${cs.versions.map((x) => `<span class="dot ${VERDICT_CLASS(x.verdict)}" title="${x.label}: ${x.verdict}"${x === v ? "" : ' style="opacity:.45"'}></span>`).join("")}</span>` : `<span class="dot ${VERDICT_CLASS(v.verdict)}"></span>`;
+  const fails = v.checks.filter((c) => c.status === "fail");
+  const why = fails.length ? `<div class="why">${fails.map((c) => `<div><span class="mark fail">✕</span><span>${c.name} <span class="muted">· ${failPhrase(c, v)}</span></span></div>`).join("")}</div>` : "";
+  return `<div class="ov-card" data-case="${i}" data-version="${j}" tabindex="0" title="${cs.name}"><canvas></canvas>${flip}<div class="meta">${name}${kind}
+    <div class="vd">${dots}${v.verdict}</div><div class="line">${factsLine(v)}</div>${why}</div></div>`;
+}
+function renderMaps() {
+  $("ov-key").innerHTML = mapKey();
+  // Under their group's heading in plan order; one grid when sorted by a column.
+  const sections = [];
+  overviewRows.forEach((r) => {
+    const group = overviewSort === "plan" ? r.cs.group || "" : "";
+    if (!sections.length || sections[sections.length - 1].group !== group) sections.push({ group, rows: [] });
+    sections[sections.length - 1].rows.push(r);
+  });
+  $("ov-grid").innerHTML = sections.map((s) => (s.group ? `<h3 class="ov-sec">${s.group}<small>${s.rows.length}</small></h3>` : "") +
+    `<div class="ov-cards">${s.rows.map(cardHtml).join("")}</div>`).join("");
+  $("ov-grid").querySelectorAll(".ov-card").forEach((card) => {
+    const open = () => { const i = Number(card.dataset.case), j = card.dataset.version; selectCase(i, j === undefined ? undefined : Number(j)); };
+    card.onclick = open;
+    card.onkeydown = (e) => { if (e.key === "Enter") open(); };
+    const flip = card.querySelector(".flip");
+    if (flip) flip.onclick = (e) => {
+      e.stopPropagation();
+      card.dataset.view = card.dataset.view === "terra" ? "machine" : "terra";
+      flip.classList.toggle("on", card.dataset.view === "terra");
+      drawCard(card);
+    };
+  });
+  drawThumbs();
+}
+
+function renderOverview() {
+  const labels = versionLabels();
+  if (!labels.includes(overviewLabel)) overviewLabel = defaultLabel(labels);
+  $("overview").classList.toggle("table", overviewMode === "table");
+  $("ov-mode").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.mode === overviewMode);
+    b.onclick = () => {
+      overviewMode = b.dataset.mode;
+      try { localStorage.setItem("tmm-overview-mode", overviewMode); } catch (e) { /* no storage */ }
+      renderOverview();
+    };
+  });
+  $("ov-versions").innerHTML = labels.length > 1 ? labels.map((l) => `<button class="${l === overviewLabel ? "on" : ""}">${l}</button>`).join("") : "";
+  $("ov-versions").querySelectorAll("button").forEach((b) => { b.onclick = () => { overviewLabel = b.textContent; renderOverview(); }; });
+  const rows = DATA.cases.map((cs, i) => { const j = cs.versions.findIndex((v) => v.label === overviewLabel); return { cs, i, j, v: cs.versions[j] }; });
+  // Sort: worst verdict, most stations, longest driving, most spoil, most failing checks first; plans in bank order.
+  const rank = { invalid: 0, unverified: 1, valid: 2 };
+  const key = {
+    plan: (r) => r.i,
+    verdict: (r) => (r.v ? rank[VERDICT_CLASS(r.v.verdict)] : 3) * 1000 + r.i,
+    dug: (r) => (r.v ? (r.v.totals.required_m2 - r.v.totals.left_m2) / Math.max(r.v.totals.required_m2, 1e-9) : 2),
+    stations: (r) => (r.v ? -r.v.totals.stations : 0),
+    driving: (r) => (r.v ? -(r.v.totals.routes ? r.v.totals.route_m : r.v.totals.straight_m) : 0),
+    rearrange: (r) => (r.v ? -r.v.totals.spoil_left_m3 : 0),
+    fails: (r) => (r.v ? -r.v.checks.filter((c) => c.status === "fail").length * 100 - r.v.checks.filter((c) => c.status !== "pass").length : 0),
+  }[overviewSort];
+  rows.sort((a, b) => key(a) - key(b) || a.i - b.i);
+  document.querySelectorAll("#ov-cols th").forEach((th) => {
+    th.classList.toggle("sorted", th.dataset.sort === overviewSort && overviewSort !== "plan");
+    th.onclick = () => { overviewSort = overviewSort === th.dataset.sort ? "plan" : th.dataset.sort; renderOverview(); };
+  });
+  const counts = { valid: 0, unverified: 0, invalid: 0 };
+  rows.forEach((r) => { if (r.v) counts[VERDICT_CLASS(r.v.verdict)] += 1; });
+  $("ov-sub").textContent = plural(DATA.cases.length, "plan") + (labels.length > 1 ? ` · ${overviewLabel}` : "");
+  $("ov-tally").innerHTML = [["valid", "valid under the modeled rules"], ["unverified", "valid with unverified items"], ["invalid", "invalid"]]
+    .map(([k, label]) => `<span><span class="dot ${k}"></span><b>${counts[k]}</b> ${label}</span>`).join("");
+  overviewRows = rows;
+  if (overviewMode === "maps") { renderMaps(); return; }
+  $("ov-rows").innerHTML = rows.map(({ cs, i, j, v }) => {
+    const [head, rest] = splitName(cs.name), kind = [cs.group, rest, cs.kind].filter(Boolean).join(" · ");
+    if (!v) return `<tr data-case="${i}"><td><div class="pname">${head}</div><div class="pkind">${kind}</div></td><td colspan="6" class="muted">no ${overviewLabel} version</td></tr>`;
+    const t = v.totals;
+    return `<tr data-case="${i}" data-version="${j}"><td><div class="pname">${head}</div><div class="pkind">${kind}</div></td>
+      <td><span class="vd"><span class="dots">${cs.versions.map((x) => `<span class="dot ${VERDICT_CLASS(x.verdict)}" title="${x.label}: ${x.verdict}"${x === v ? "" : ' style="opacity:.45"'}></span>`).join("")}</span>${v.verdict}</span></td>
+      <td class="num">${fmt(t.required_m2 - t.left_m2, 2)} <small>of ${fmt(t.required_m2, 1)} m²</small></td>
+      <td class="num">${t.stations}${t.added ? ` <small>· ${t.added} added</small>` : ""}</td>
+      <td class="num">${t.routes ? `${fmt(t.route_m, 1)} m <small>Nav2</small>` : `${fmt(t.straight_m, 1)} m <small>straight</small>`}</td>
+      <td class="num">${t.spoil_left_m3 >= 0.005 ? `${fmt(t.spoil_left_m3)} m³` : `<span class="muted">none</span>`}</td>
+      <td class="why">${whyHtml(v)}</td></tr>`;
+  }).join("");
+  $("ov-rows").querySelectorAll("tr").forEach((tr) => {
+    tr.onclick = () => { const i = Number(tr.dataset.case), j = tr.dataset.version; selectCase(i, j === undefined ? undefined : Number(j)); };
+  });
+}
+
+function renderHeader() {
+  const cs = DATA.cases[caseIndex];
+  $("case-name").textContent = cs.name; $("case-kind").textContent = [cs.group, cs.kind].filter(Boolean).join(" · ");
+  $("versions").innerHTML = "";
+  // Version tabs only when the job has several versions.
+  if (cs.versions.length > 1) cs.versions.forEach((v, j) => {
+    const b = document.createElement("button");
+    b.className = "vtab" + (j === versionIndex ? " on" : "");
+    b.innerHTML = `<span class="dot ${VERDICT_CLASS(v.verdict)}"></span>${v.label}${v.note ? ` <small>${v.note}</small>` : ""}`;
+    b.onclick = () => selectCase(caseIndex, j);
+    $("versions").appendChild(b);
+  });
+  const t = V.totals;
+  const within = t.within_m2 > 0 ? ` <small>within ${fmt(t.tolerance_m2)} m² tolerance</small>` : "";
+  const stats = [["Stations", `${t.stations}${t.added ? ` <small>(${t.added} added)</small>` : ""}`],
+    ["Dug", `${fmt(t.required_m2 - t.left_m2, 2)} <small>of ${fmt(t.required_m2, 2)} m² (${fmt(100 * (t.required_m2 - t.left_m2) / Math.max(t.required_m2, 1e-9), 2)} %)</small>`],
+    ["Required left", `${fmt(t.left_m2)} m²${within}`], ["Soil moved", `${fmt(t.cut_m3 + t.rehandled_m3, 1)} m³`], ["Top pile", `${fmt(t.top_pile_m)} m`],
+    [`<i class="sw temp"></i>Outside final zones`, `${fmt(t.spoil_left_m3)} m³`],
+    ["Driving", t.routes ? `${fmt(t.route_m, 1)} m <small>Nav2</small>` : `${fmt(t.straight_m, 1)} m <small>straight</small>`]];
+  if (t.seam_m > 0) stats.push([`<i class="sw" style="background:${css(LIP_RGB)}"></i>Seam lip ≥ 0.3 m`, `${fmt(100 * t.seam_share, 1)} % <small>of ${fmt(t.seam_m, 1)} m</small>`]);
+  $("stats").innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
+}
+
+function ruleText(d) {
+  if (d.rule) {
+    let text = RULES[d.rule] || d.rule.replace(/_/g, " ");
+    const alt = d.alternative;
+    if (alt) {
+      const other = alt.rule === "final_or_collected" ? "The final-zones plan" : "The temporary-ground plan";
+      text += `<div class="muted">${other} ${alt.complete ? "was complete but left more" : `was incomplete${alt.residual_m2 != null ? `, ${fmt(alt.residual_m2)} m² left` : ""}`}</div>`;
+    }
+    return text;
+  }
+  return d.height_model ? `<span class="muted">Not recorded by this converter run</span>` : `${RULES.final_or_collected} <span class="muted">(binary spoil)</span>`;
+}
+function summaryHtml(v) {
+  const d = v.dump, rows = [["Dump rule", ruleText(d)]];
+  if (d.left_m3 >= 0.005) {
+    const parts = [d.released_m3 >= 0.005 ? `${fmt(d.released_m3)} m³ from loads released there` : ""].filter(Boolean);
+    rows.push([`<span style="display:inline-flex;align-items:center;gap:5px"><i class="sw temp"></i>Outside final zones</span>`,
+      `<b>${fmt(d.left_m3)} m³</b> outside the final zones${d.converter_m3 != null ? ` <span class="muted" title="the converter's own forecast">(converter ${fmt(d.converter_m3)})</span>` : ""}` +
+      (parts.length ? `<div class="muted">${parts.join("; ")}</div>` : "") +
+      (d.pieces.length ? `<div class="pills">${d.pieces.map((p, i) => `<button class="pill" data-piece="${i}" title="near (${fmt(p.x, 1)}, ${fmt(p.y, 1)})">${fmt(p.m3)} m³</button>`).join("")}</div>` : "")]);
+  } else rows.push(["Outside final zones", `<span class="muted">nothing</span>`]);
+  const sources = v.workspaces.map((s) => ({ s, kept: s.loads.reduce((m, l) => m + l.kept, 0), released: s.loads.filter((l) => !l.zone).length }))
+    .filter((w) => w.kept >= 0.02).sort((a, b) => b.kept - a.kept);
+  if (sources.length) {
+    const pill = (w) => `<button class="pill" data-ws="${w.s.n}" title="workspace ${w.s.n}: ${fmt(w.kept)} m³ of its piles stays outside the final zones; ${w.released} of ${w.s.loads.length} loads released there"><i class="sw temp"></i>${w.s.n} · ${fmt(w.kept)}</button>`;
+    const shown = sources.slice(0, 6), more = sources.length - shown.length;
+    rows.push(["From workspaces", `<div class="pills" id="ws-pills">${shown.map(pill).join("")}${more ? `<button class="pill" id="ws-more">+${more} more</button>` : ""}</div>`]);
+    morePills = sources.map(pill).join("");
+  }
+  const legs = v.workspaces.slice(1), saved = legs.filter((s) => s.route_m != null);
+  if (!legs.some((s) => s.route_state)) {
+    rows.push(["Driving", `${fmt(v.totals.straight_m, 1)} m of straight connectors <span class="muted">· no saved Nav2 routes</span>`]);
+  } else {
+    const legPill = (s, text, cls) => `<button class="pill" data-leg="${s.n}" title="${s.n - 1} → ${s.n}: ${s.route_m != null ? `${fmt(s.route_m, 1)} m Nav2, ` : ""}${fmt(s.straight_m, 1)} m straight">${cls ? `<i class="sw ${cls}"></i>` : ""}${text}</button>`;
+    const straight = `${fmt(v.totals.straight_m, 1)} m straight`;
+    rows.push(["Driving", saved.length < legs.length
+      ? `<b>${fmt(v.totals.route_m, 1)} m</b> Nav2 over ${saved.length} of ${plural(legs.length, "leg")}<div class="muted">all legs ${straight}</div>`
+      : `<b>${fmt(v.totals.route_m, 1)} m</b> Nav2 · ${plural(legs.length, "leg")} <span class="muted">· ${straight}</span>`]);
+    // The longest legs, when notably long: at least 5 m and a fifth of the longest.
+    const top = Math.max(0, ...saved.map((s) => s.route_m));
+    const longest = [...saved].filter((s) => s.route_m >= Math.max(5, 0.2 * top)).sort((a, b) => b.route_m - a.route_m).slice(0, 3);
+    if (longest.length) rows.push(["Longest legs", `<div class="pills">${longest.map((s) => legPill(s, `${s.n - 1} → ${s.n} · ${fmt(s.route_m, 1)} m <span class="muted">· ${fmt(s.straight_m, 1)} m apart</span>`)).join("")}</div>`]);
+    const high = legs.filter((s) => s.route_high_spoil.length);
+    if (high.length) rows.push(["Spoil 0.5–1.0 m", `<div class="pills">${high.map((s) => legPill(s, `${s.n - 1} → ${s.n} · ${s.route_high_spoil.length} poses`, "warn")).join("")}</div>`]);
+    const failed = legs.filter((s) => FAILED_LEG.has(s.route_state));
+    if (failed.length) rows.push(["Failed legs", `<div class="pills">${failed.map((s) => legPill(s, `${s.n - 1} → ${s.n} · ${s.route_state}`, "fail")).join("")}</div>` +
+      failed.filter((s) => s.route_reason).map((s) => `<div class="muted">${failed.length > 1 ? `${s.n - 1} → ${s.n}: ` : ""}${s.route_reason[0].toUpperCase()}${s.route_reason.slice(1)}</div>`).join("")]);
+    const unchecked = v.route_check ? v.route_check.unchecked.length : 0;
+    if (unchecked) rows.push(["Not checked", `${plural(unchecked, "later drive")} <span class="muted">· the offline check stops at the first failing leg</span>`]);
+  }
+  return `<dl class="summary">${rows.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("")}</dl>`;
+}
+
+function renderPanel() {
+  const v = V, cls = VERDICT_CLASS(v.verdict);
+  const panel = $("panel");
+  panel.scrollTop = 0;
+  panel.innerHTML = `<div class="verdict"><span class="badge ${cls}">${v.verdict}</span><p>${verdictSentence(v)}</p>
+    <div class="rules">${fmt(v.rules.repose_deg, 0)}° piles · no soil in the excavation · final zones grow where their piles spread · spoil under ${fmt(v.rules.pass_height_m, 1)} m drivable · completion ${v.rules.completion[0]}–${v.rules.completion[1]} m</div></div>
+    ${summaryHtml(v)}
+    <div class="section">Checks</div><div id="checks"></div>
+    <details class="foot"><summary>Not modeled</summary><ul>${v.not_modeled.map((t) => `<li>${t}</li>`).join("")}</ul>
+    <div>Conversion: <code>${v.source.conversion}</code></div></details>`;
+  panel.querySelectorAll(".pill[data-piece]").forEach((b) => { b.onclick = () => selectPiece(Number(b.dataset.piece)); });
+  const wsPills = () => panel.querySelectorAll(".pill[data-ws]").forEach((b) => { b.onclick = () => selectDumps(Number(b.dataset.ws)); });
+  wsPills();
+  if ($("ws-more")) $("ws-more").onclick = () => { $("ws-pills").innerHTML = morePills; wsPills(); };
+  panel.querySelectorAll(".pill[data-leg]").forEach((b) => { b.onclick = () => selectLeg(Number(b.dataset.leg)); });
+  const list = $("checks");
+  v.checks.forEach((check) => {
+    const box = document.createElement("div");
+    const status = check.status.replace(" ", "_");
+    const fails = check.items.filter((it) => it.kind === "fail").length, open = openItems(check);
+    const notes = check.items.filter((it) => it.kind === "note");
+    box.className = "check" + ((fails || open) && status !== "pass" ? " open" : "");
+    // Notes: required ground left within the done tolerance (coverage), legs over 0.5-1.0 m of spoil (routes).
+    const quiet = !notes.length || fails || open ? ""
+      : check.id === "routes" ? `${plural(notes.length, "leg")} over spoil 0.5–1.0 m`
+      : `${fmt(v.totals.within_m2)} m² left, within tolerance`;
+    const count = [fails ? `${fails} failing` : "", open ? `${open} unverified` : "", !check.items.length && status === "not_checked" ? "not checked" : "", quiet].filter(Boolean).join(" · ");
+    box.innerHTML = `<button class="check-head"><span class="icon ${status}">${STATUS_ICON[status]}</span><span class="cname">${check.name}</span><span class="count">${count}</span></button>
+      <div class="check-body"><p class="rule">${check.rule}${check.detail ? `. ${check.detail}` : ""}</p></div>`;
+    box.querySelector(".check-head").onclick = () => box.classList.toggle("open");
+    const body = box.querySelector(".check-body");
+    check.items.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = `item ${item.kind}`;
+      const s = item.ws ? v.workspaces[item.ws - 1] : null;
+      const step = s ? (s.source == null ? "added by the converter" : `Terra step ${s.source}`) : item.fix && item.fix.terra_step != null ? `Terra step ${item.fix.terra_step}` : "";
+      const where = (item.ws ? `Workspace ${item.ws}` : "End state") + (step ? ` · ${step}` : "");
+      card.innerHTML = `<div class="where"><span>${where}</span><span>${item.ws ? eventName(item.step) : ""}</span></div>` +
+        `<div class="what">${item.title}</div>` +
+        (item.chips.length ? `<div class="chips">${item.chips.map((c) => `<span>${c}</span>`).join("")}</div>` : "") +
+        (item.note ? `<div class="note">${item.note}</div>` : "") +
+        (item.command ? `<div class="fix"><code title="${item.command}">${item.command}</code><button>Copy</button></div>` : "") +
+        `<details><summary>Details</summary>${item.text}</details>`;
+      card.onclick = (e) => {
+        if (e.target.tagName === "BUTTON") {
+          navigator.clipboard.writeText(item.command).then(() => { e.target.textContent = "Copied"; }, () => { e.target.textContent = "Copy failed"; });
+          return;
+        }
+        if (e.target.tagName === "SUMMARY" || e.target.tagName === "CODE") return;
+        selectItem(item, false);
+      };
+      item._card = card;
+      body.appendChild(card);
+    });
+    list.appendChild(box);
+  });
+}
+
+function setMapMode(mode) {
+  mapMode = mode;
+  renderToggles(); draw();
+}
+function renderToggles() {
+  const bar = $("toggles"), terra = mapMode === "terra";
+  bar.innerHTML = "";
+  // Machine plan or the Terra plan it was converted from, when the page has that plan.
+  const seg = document.createElement("div");
+  if (!V || !V.terra) seg.style.display = "none";
+  seg.className = "seg";
+  [["machine", "Machine plan"], ["terra", "Terra plan"]].forEach(([mode, label]) => {
+    const b = document.createElement("button");
+    b.className = mapMode === mode ? "on" : ""; b.textContent = label;
+    b.onclick = () => setMapMode(mode);
+    seg.appendChild(b);
+  });
+  bar.appendChild(seg);
+  const names = [["piles", "Piles", C.pile[2]], ["temporary", "Outside final zones", C.temp[1]], ["regions", "Station regions", DIG_RGB], ["seams", "Seam lips", LIP_RGB],
+    ["stations", "Stations", null], ["routes", "Routes", null], ["issues", "Issues", null]];
+  if (!terra) names.forEach(([key, label, color]) => {
+    const b = document.createElement("button");
+    b.className = "chip" + (layers[key] ? "" : " off");
+    b.innerHTML = (color ? `<i style="background:${css(color)}"></i>` : "") + label;
+    b.onclick = () => { layers[key] = !layers[key]; renderToggles(); if (V) { paintRaster(V); draw(); } };
+    bar.appendChild(b);
+  });
+  const entries = terra
+    ? [["Dug by Terra", C.finished], ["Design Terra left", C.required], ["Optional edge", C.optional], ["Final dump zone", C.zone],
+      ["Terra's soil, darker with more loads", C.pile[2]], ["Terra's soil outside final zones", C.temp[2]],
+      ["Station n: Terra step n; dashed ring: collection", null], ["Blue: the current workspace's step", C.route]]
+    : [["Required, not finished", C.required], ["Optional edge", C.optional], ["Cut, not at design", C.partial],
+      ["Finished", C.finished], ["Final dump zone", C.zone],
+      ["Final zone grown for pile spread", C.zoneGrown], ["Spoil < 0.5 m", C.pile[1]], ["Spoil ≥ 0.5 m", C.pile[2]],
+      ["Spoil outside final zones", C.temp[1]], ["Soil back in pit", C.fell], ["Route over spoil 0.5–1.0 m", C.warn],
+      ["This station may dig (outline), must finish (fill)", DIG_RGB], ["Its dump centres (fill) and where that soil may land (outline)", DUMP_RGB],
+      ["Lip dug past the planned ring", LIP_RGB], ["Seam, lip ≥ 0.3 m", SEAM_OK], ["Seam, lip < 0.3 m", SEAM_SHORT]];
+  // The key folds to one button next to the 3D view, where it would cover much of the narrower map.
+  const open = legendOpen ?? !$("app").classList.contains("t3d");
+  $("legend").innerHTML = `<button class="key" title="${open ? "Hide" : "Show"} the key">Key ${open ? "▾" : "▸"}</button>` +
+    (open ? entries.map(([label, color]) => `<div>${color ? `<i style="background:${css(color)}"></i>` : ""}${label}</div>`).join("") : "");
+  $("legend").querySelector(".key").onclick = () => { legendOpen = !open; renderToggles(); };
+}
+
+function showOverview() {
+  if (playing) togglePlay();
+  $("app").classList.add("ov");
+  caseIndex = -1; V = null; selected = null; leg = null;
+  t3Refresh();
+  renderSidebar(); renderOverview();
+  history.replaceState(null, "", "#overview");
+}
+
+async function selectCase(i, j) {
+  const fromOverview = $("app").classList.contains("ov");
+  const keepView = view && caseIndex === i && V && !fromOverview;
+  $("app").classList.remove("ov");
+  caseIndex = i; versionIndex = j ?? DATA.cases[i].versions.length - 1;
+  V = await load(DATA.cases[caseIndex].versions[versionIndex]);
+  selected = null; leg = null; T3.linkKey = null;
+  if (!V.terra) mapMode = "machine";
+  renderSidebar(); renderHeader(); renderPanel();
+  const split = $("app").classList.contains("t3d");
+  await t3Refresh();
+  renderToggles(); t3Buttons(); t3Pairs();
+  if (fromOverview || !view || split !== $("app").classList.contains("t3d")) resize();
+  if (!keepView || split !== $("app").classList.contains("t3d")) fit();
+  setFrame(keepView ? Math.min(frame, V.events.length) : V.events.length);
+  history.replaceState(null, "", `#${encodeURIComponent(DATA.cases[i].name)}/${versionIndex}`);
+}
+
+/* ---------- the Terra plan in 3D ---------- */
+// The Terra episode a job's versions were converted from, in the Terra viewer's own scene (window.TerraPlan3D: the
+// packaged Terra player bundle), with its own timeline over Terra's actions. When a version's Terra
+// plan is that episode (terra.linked), stepping through the machine plan shows the Terra step each workspace came
+// from (its "source"), and the 3D captions name the workspaces a Terra step became.
+const T3 = { view: null, cs: null, data: null, source: "postprocessed", open: true, link: true, linkKey: null, scrubbing: false, error: null, pick: null };
+try {
+  T3.open = localStorage.getItem("tmm-terra3d") !== "off";
+  T3.link = localStorage.getItem("tmm-terra3d-link") !== "off";
+} catch (e) { /* no storage */ }
+const T3_ACTIONS = ["Forward", "Backward", "Turn clockwise", "Turn anticlockwise", "Cabin clockwise", "Cabin anticlockwise", "Work", "Wait"];
+const T3_TEAL = "#0f766e";
+
+function t3Available() { return caseIndex >= 0 && !!(DATA.cases[caseIndex].terra3d || V?.postprocessed3d); }
+function t3Shown() { return T3.open && t3Available() && !$("app").classList.contains("ov"); }
+async function t3Decode(cs) {
+  if (cs._t3) return cs._t3;
+  const e = cs.terra3d;
+  const layer = async (l, Type) => l && {
+    init: await unpack(l.init, Type), off: await unpack(l.off, Uint32Array), idx: await unpack(l.idx, Uint16Array), val: await unpack(l.val, Type),
+  };
+  const [target, padding, dumpStatic, action, dumpability, interaction] = await Promise.all([
+    unpack(e.target, Int8Array), unpack(e.padding, Uint8Array), e.dump_static ? unpack(e.dump_static, Uint8Array) : null,
+    layer(e.layers.action, Int8Array), layer(e.layers.dumpability, Uint8Array), layer(e.layers.interaction, Uint8Array),
+  ]);
+  cs._t3 = { ...e, target, padding, dump_static: dumpStatic, layers: { action, dumpability, interaction } };
+  cs._t3.eventAt = new Map(e.events.map((event, k) => [event.frame, k]));
+  return cs._t3;
+}
+// Show or hide the pane for the open job, and load its episode into the one scene of the page.
+async function t3Refresh() {
+  const available = t3Available(), shown = t3Shown();
+  $("t3d-open").hidden = !available || shown;
+  $("app").classList.toggle("t3d", shown);
+  if (!shown) { if (T3.view) T3.view.setActive(false); return; }
+  if (!window.TerraPlan3D) { t3Note("This page was built without the Terra 3D view."); return; }
+  const cs = DATA.cases[caseIndex], version = V;
+  if (T3.source === "postprocessed" && !version?.postprocessed3d) T3.source = "original";
+  if (T3.source === "original" && !cs.terra3d) T3.source = "postprocessed";
+  const source = T3.source;
+  $("t3d-source").querySelectorAll("button").forEach(b => { b.disabled = b.dataset.source === "postprocessed" ? !version?.postprocessed3d : !cs.terra3d; b.classList.toggle("on", b.dataset.source === source); });
+  // Decode while the scene does not render: a slow render loop (software WebGL) starves the page's gzip streams.
+  if (T3.view) T3.view.setActive(false);
+  const data = source === "postprocessed" ? version.postprocessed3d : await t3Decode(cs);
+  if (caseIndex < 0 || DATA.cases[caseIndex] !== cs || V !== version || T3.source !== source || !t3Shown()) return;
+  if (!T3.view && !T3.error) {
+    try {
+      T3.view = window.TerraPlan3D.create($("t3d-viewport"), { onFrame: t3Frame, onPick: t3Pick, onError: (error) => t3Note(`The 3D view stopped: ${error.message || error}`) });
+      T3.view.setSpeed(Number($("t3d-speed").value));
+    } catch (error) { T3.error = error; }
+  }
+  if (T3.error) { t3Note(`The 3D view needs WebGL2: ${T3.error.message || T3.error}`); return; }
+  T3.view.setActive(true);
+  if (T3.cs !== cs || T3.data !== data) {
+    T3.cs = cs; T3.data = data; T3.linkKey = null; T3.pick = null;
+    if (source === "postprocessed") $("t3d-title").textContent = `Postprocessed · ${data.workspaces.length} workspaces · modeled soil`;
+    else if (data.joint) $("t3d-title").textContent = `Native fleet · ${data.count - 1} joint rounds`;
+    else $("t3d-title").innerHTML = `<b>Terra plan</b> <span class="muted">· ${plural(data.pairs.length, "Terra step")} · ${data.count - 1} actions</span>`;
+    $("t3d-title").title = source === "postprocessed" ? "Refined workspaces and saved routes. Soil and arm motion are illustrative forecasts." : `${data.title}\n${data.source}\n${data.file}`;
+    try { T3.view.load(data); } catch (error) { T3.cs = null; t3Note(`The 3D view could not show this episode: ${error.message || error}`); return; }
+  }
+  $("t3d-all").disabled = !!data.joint;
+  $("t3d-all").textContent = source === "postprocessed" ? "Routes" : "All dumps";
+  $("t3d-all").title = source === "postprocessed" ? "Saved route: blue checked, red failed, amber missing or unverified" : "Also show the dumps still to come, in grey";
+  $("t3d-reach").textContent = source === "postprocessed" ? "Workspaces" : "Workspace";
+  $("t3d-reach").title = source === "postprocessed" ? "Refined dig, finish, dump-centre and deposit regions" : data.joint ? "Recorded body and work reservations" : "Terra's interaction workspace";
+  t3Buttons(); t3Key();
+  t3Note(null);
+}
+function t3Note(text) { $("t3d-note").hidden = !text; $("t3d-note").textContent = text || ""; }
+function t3Toggle(open = !T3.open) {
+  T3.open = open;
+  try { localStorage.setItem("tmm-terra3d", open ? "on" : "off"); } catch (e) { /* no storage */ }
+  t3Refresh().then(() => { renderToggles(); resize(); fit(); t3Link(); });
+}
+// Link the machine plan's material event to the postprocessed timeline. Original Terra
+// uses the source step where one exists; added workspaces are shown by the metric mode.
+function t3Link() {
+  if (T3.view?.postprocessed) {
+    if (!T3.link || !t3Shown() || T3.data !== V?.postprocessed3d) return;
+    if (T3.linkKey === frame) return;
+    T3.linkKey = frame;
+    let index = 0;
+    if (frame > 0) T3.data.frames.forEach((event, k) => { if (event.replay_step != null && event.replay_step <= frame && !["drive", "relocate", "arrive"].includes(event.phase)) index = k + 1; });
+    if (atEnd()) index = T3.view.count - 1;
+    T3.view.pause(); T3.view.show(index);
+    return;
+  }
+  if (!T3.view || !T3.data || !T3.link || !t3Shown() || !V || !V.terra || !V.terra.linked || T3.cs !== DATA.cases[caseIndex]) return;
+  const event = currentEvent(), ws = wsOf(event);
+  const key = !event ? "start" : atEnd() ? "end" : ws.source == null || ws.source < 0 ? null : `${ws.source}:${event.phase === "cut" ? "dig" : "dump"}`;
+  if (key == null || key === T3.linkKey) return;
+  T3.linkKey = key;
+  if (key === "start") T3.view.show(0);
+  else if (key === "end") T3.view.show(T3.view.count - 1);
+  else T3.view.showPair(ws.source, event.phase === "cut" ? "dig" : "dump", { scale: playing ? 0.45 : 1 });
+}
+// Workspaces of the open version converted from Terra step p.
+function t3Workspaces(p) { return V && V.terra && V.terra.linked ? V.workspaces.filter((s) => s.source === p) : null; }
+function t3Pairs() {
+  const d = T3.data;
+  if (!d || !T3.view || T3.cs !== DATA.cases[caseIndex]) return;
+  if (T3.view.postprocessed) {
+    $("t3d-pairs").replaceChildren();
+    const label = document.createElement("span"); label.className = "lbl"; label.textContent = "Workspaces"; $("t3d-pairs").append(label);
+    d.workspaces.forEach((workspace, p) => {
+      const button = document.createElement("button"); button.className = "pchip"; button.dataset.p = p; button.textContent = String(workspace.id);
+      button.title = `Machine ${workspace.agent_id + 1} · ${workspace.kind} · workspace ${workspace.id}`;
+      button.onclick = () => T3.view.showWorkspace(workspace.id); $("t3d-pairs").append(button);
+    });
+    t3Frame(T3.view.index); return;
+  }
+  $("t3d-pairs").innerHTML = `<span class="lbl">Terra steps</span>` + d.pairs.map((pair, p) => {
+    const dig = d.events[pair.dig], dump = d.events[pair.dump], wss = t3Workspaces(p);
+    const cls = [dump.zone >= 0.5 ? "" : "temp", dig.collect ? "collect" : "", wss && !wss.length ? "dropped" : ""].filter(Boolean).join(" ");
+    const title = `Terra step ${p}: ${dig.collect ? "collects" : "digs"} ${dig.units} units, dumps them ${dump.zone >= 0.5 ? "on the final dump zone" : "on temporary ground"}` +
+      (dump.collected_by != null ? `, collected by Terra step ${dump.collected_by}` : "") +
+      (wss ? (wss.length ? ` · workspace${wss.length > 1 ? "s" : ""} ${wss.map((s) => s.n).join(", ")}` : " · not in this machine plan") : "");
+    return `<button class="pchip ${cls}" data-p="${p}" title="${title}">${p}</button>`;
+  }).join("");
+  $("t3d-pairs").querySelectorAll(".pchip").forEach((b) => { b.onclick = () => T3.view.showPair(Number(b.dataset.p), "dig"); });
+  t3Frame(T3.view.index);
+}
+// Captions, step chips, track and play button for frame `index` of the episode (the view's onFrame).
+function t3Frame(index) {
+  const d = T3.data, view = T3.view;
+  if (!d || !view) return;
+  if (view.postprocessed) {
+    const event = view.episode.event(index), p = view.pairAt(index);
+    $("t3d-at").textContent = `frame ${index} / ${view.count - 1}`;
+    const route = ["drive", "relocate"].includes(event.phase) ? ` · route ${event.route_status ?? "unverified"}${event.phase === "relocate" ? " (pose change only)" : ""}` : "";
+    $("t3d-facts").textContent = `${event.phase}${event.workspace_id == null ? "" : ` · workspace ${event.workspace_id}`}${event.agent_id == null ? "" : ` · machine ${event.agent_id + 1}`}${route} · modeled soil; illustrative motion`;
+    $("t3d-pairs").querySelectorAll(".pchip").forEach(b => b.classList.toggle("on", Number(b.dataset.p) === p));
+    $("t3d-play").innerHTML = view.playing ? "&#10074;&#10074;" : "&#9654;";
+    t3Cell(); t3Track(); return;
+  }
+  if (d.joint) {
+    $("t3d-at").textContent = `round ${index} / ${d.count - 1}`;
+    $("t3d-facts").textContent = `${view.description(index)} · native endpoint`;
+    $("t3d-play").innerHTML = view.playing ? "&#10074;&#10074;" : "&#9654;";
+    t3Cell(); t3Track(); return;
+  }
+  const p = view.pairAt(index), k = d.eventAt.get(index), event = k == null ? null : d.events[k];
+  $("t3d-at").innerHTML = `action <b>${index}</b> / ${d.count - 1}`;
+  const parts = [];
+  if (index === 0) parts.push(`<b>Start</b> · <kbd>.</kbd> next dig or dump, <kbd>m</kbd> play`);
+  else {
+    const a = d.action[index];
+    parts.push(`<b>${a === 6 ? (event ? (event.kind === "dig" ? "Dig" : event.kind === "dump" ? "Dump" : "Work") : "Work, no effect") : T3_ACTIONS[a] || "Act"}</b>`);
+  }
+  if (p >= 0) {
+    const pair = d.pairs[p], dig = d.events[pair.dig], dump = d.events[pair.dump];
+    const where = dump.zone >= 0.5 ? "on the final dump zone" : `on temporary ground${dump.collected_by != null ? `, collected by Terra step ${dump.collected_by}` : ""}`;
+    let what = index < dump.frame ? `carries ${dig.units} units to its dump` : `${index === dump.frame ? "dumps" : "dumped"} ${dump.units} units ${where}`;
+    if (index === dig.frame) what = `${dig.collect ? "collects" : "digs"} ${dig.units} units` + (dig.collects && dig.collects.length ? ` dumped by Terra step ${dig.collects.join(", ")}` : "");
+    parts.push(`Terra step <b>${p}</b> ${what}`);
+    const wss = t3Workspaces(p);
+    if (wss) parts.push(wss.length ? `machine plan: ${wss.map((s) => `<a href="#" data-ws="${s.n}">workspace ${s.n}</a>`).join(", ")}` : `<span class="muted">not in this machine plan</span>`);
+  }
+  if (index === d.count - 1) parts.push(d.task_done ? "Terra's task done" : "episode ended");
+  $("t3d-facts").innerHTML = parts.join(" · ");
+  $("t3d-facts").querySelectorAll("a[data-ws]").forEach((a) => {
+    a.onclick = (e) => { e.preventDefault(); const s = V.workspaces[Number(a.dataset.ws) - 1]; selected = null; leg = null; setFrame(s.cut); focus(s.pose[0], s.pose[1], 22); draw(); };
+  });
+  $("t3d-pairs").querySelectorAll(".pchip").forEach((b) => b.classList.toggle("on", Number(b.dataset.p) === p));
+  $("t3d-play").innerHTML = view.playing ? "&#10074;&#10074;" : "&#9654;";
+  t3Cell(); t3Track();
+}
+// A clicked cell of the 3D view, read again at every frame: Terra row and column, soil units and target.
+function t3Pick(cell) { T3.pick = { row: cell.row, col: cell.col }; t3Cell(); }
+function t3Cell() {
+  const frame = T3.view && T3.view.scene.frame;
+  if (!T3.pick || !frame) { $("t3d-cell").textContent = ""; return; }
+  const { row, col } = T3.pick, soil = frame.maps.action[row][col], target = frame.maps.target[row][col];
+  if (frame.metric) {
+    const g = T3.data.grid, yaw = g.yaw_rad ?? 0, c = Math.cos(yaw), s = Math.sin(yaw);
+    $("t3d-cell").textContent = `map ${(g.origin_xy_m[0] + (col * c - row * s) * g.resolution_m).toFixed(2)}, ${(g.origin_xy_m[1] + (col * s + row * c) * g.resolution_m).toFixed(2)} m · native ${frame.metric.native[row][col].toFixed(3)} m · loose ${frame.metric.loose[row][col].toFixed(3)} m`;
+    return;
+  }
+  $("t3d-cell").textContent = `row ${row}, col ${col} · soil ${soil > 0 ? "+" : ""}${soil} units · ${target < 0 ? `dig target ${-target}` : target > 0 ? "final dump zone" : "no target"}`;
+}
+// The episode's timeline: digs as grey ticks, dumps dark (final dump zone) or teal (temporary ground) below,
+// the current Terra step's dig and dump blue.
+function t3Track() {
+  const canvas = $("t3d-track-canvas"), d = T3.data;
+  if (!d || !t3Shown()) return;
+  const rect = canvas.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr); canvas.height = Math.round(rect.height * dpr);
+  const c = canvas.getContext("2d"), width = rect.width, height = rect.height, n = T3.view.count - 1;
+  const x = (f) => 6 + (width - 12) * (n ? f / n : 0), index = T3.view.index, current = T3.view.pairAt(index);
+  c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, width, height);
+  c.fillStyle = dark ? "#2c2c31" : "#e4e1da"; c.fillRect(6, height / 2 - 2, width - 12, 4);
+  c.fillStyle = C.route; c.fillRect(6, height / 2 - 2, x(index) - 6, 4);
+  if (T3.view.postprocessed) d.frames.forEach((event, k) => {
+    if (!["cut", "dig", "collect", "dump", "transfer"].includes(event.phase)) return;
+    c.fillStyle = event.phase === "dump" ? "#8b5cf6" : event.phase === "transfer" ? T3_TEAL : "#e69f00";
+    c.fillRect(x(k + 1) - .75, height / 2 + (event.phase === "dump" ? 2 : -9), 1.5, 7);
+  });
+  else d.pairs.forEach((pair, p) => {
+    const dig = d.events[pair.dig], dump = d.events[pair.dump], on = p === current;
+    c.fillStyle = on ? C.route : dark ? "#6d6a65" : "#a39e96";
+    c.fillRect(x(dig.frame) - 0.75, height / 2 - 9, 1.5, 7);
+    c.fillStyle = on ? C.route : dump.zone >= 0.5 ? C.ink : T3_TEAL;
+    c.fillRect(x(dump.frame) - 1, height / 2 + 2, 2, 8);
+  });
+  c.fillStyle = C.ink; c.beginPath(); c.arc(x(index), height / 2, 6, 0, 2 * Math.PI); c.fill();
+}
+function t3TrackFrame(event) {
+  const rect = $("t3d-track").getBoundingClientRect();
+  return Math.round(Math.min(Math.max((event.clientX - rect.left - 6) / (rect.width - 12), 0), 1) * (T3.view.count - 1));
+}
+function t3Play() { if (!T3.view || !T3.data) return; if (T3.view.playing) T3.view.pause(); else T3.view.play(); }
+function t3Buttons() {
+  $("t3d-all").classList.toggle("on", !!(T3.view && (T3.view.postprocessed ? T3.view.routesVisible : T3.view.allDumps)));
+  $("t3d-reach").classList.toggle("on", !!(T3.view && (T3.view.postprocessed ? T3.view.workspacesVisible : T3.view.scene.visibility[T3.data?.joint ? "workspace" : "interaction"])));
+  $("t3d-link").classList.toggle("on", T3.link);
+}
+// The key of the dump labels; a click folds it (remembered in the browser).
+let t3KeyOpen = true;
+try { t3KeyOpen = localStorage.getItem("tmm-terra3d-key") !== "off"; } catch (e) { /* no storage */ }
+function t3Key() {
+  const items = T3.view?.postprocessed ? [
+    '<div><i style="width:12px;height:8px;background:#e69f00"></i>Dig support</div>',
+    '<div><i style="width:12px;height:8px;background:#009e73"></i>Required finish</div>',
+    '<div><i style="width:12px;height:8px;background:#8b5cf6"></i>Dump centres</div>',
+    '<div><i style="width:12px;height:8px;background:#c084fc"></i>Possible deposit support</div>',
+    '<div>Routes: blue checked · red failed · amber unverified</div>',
+  ] : [
+    `<div><i class="pill"></i>Terra step n dumped on the final dump zone</div>`,
+    `<div><i class="pill temp"></i>on temporary ground</div>`,
+    `<div><i class="pill gone"></i>there, but collected since</div>`,
+    `<div><i class="arc"></i>its dig to its dump</div>`,
+    `<div><i class="pill now"></i>the current Terra step</div>`,
+  ];
+  $("t3d-key").innerHTML = `<button class="key">Key ${t3KeyOpen ? "▾" : "▸"}</button>` + (t3KeyOpen ? items.join("") : "");
+  $("t3d-key").querySelector(".key").onclick = () => {
+    t3KeyOpen = !t3KeyOpen;
+    try { localStorage.setItem("tmm-terra3d-key", t3KeyOpen ? "on" : "off"); } catch (e) { /* no storage */ }
+    t3Key();
+  };
+}
+$("t3d-open").onclick = () => t3Toggle(true);
+$("t3d-close").onclick = () => t3Toggle(false);
+$("t3d-play").onclick = t3Play;
+$("t3d-back").onclick = () => T3.view && T3.view.jump(-1);
+$("t3d-fwd").onclick = () => T3.view && T3.view.jump(1);
+$("t3d-speed").onchange = () => T3.view && T3.view.setSpeed(Number($("t3d-speed").value));
+$("t3d-all").onclick = () => { if (T3.view) { if (T3.view.postprocessed) T3.view.setRoutes(!T3.view.routesVisible); else T3.view.setAllDumps(!T3.view.allDumps); t3Buttons(); } };
+$("t3d-reach").onclick = () => { if (T3.view) { if (T3.view.postprocessed) T3.view.setWorkspaces(!T3.view.workspacesVisible); else { const layer = T3.data?.joint ? "workspace" : "interaction"; T3.view.scene.setLayer(layer, !T3.view.scene.visibility[layer]); } t3Buttons(); } };
+$("t3d-source").querySelectorAll("button").forEach(b => { b.onclick = async () => { T3.source = b.dataset.source; T3.linkKey = null; await t3Refresh(); t3Pairs(); t3Link(); }; });
+$("t3d-link").onclick = () => {
+  T3.link = !T3.link; T3.linkKey = null;
+  try { localStorage.setItem("tmm-terra3d-link", T3.link ? "on" : "off"); } catch (e) { /* no storage */ }
+  t3Buttons(); t3Link();
+};
+$("t3d-camera").querySelectorAll("button").forEach((b) => { b.onclick = () => T3.view && T3.view.view(b.dataset.view); });
+$("t3d-track").addEventListener("mousedown", (e) => { if (!T3.view || !T3.data) return; T3.scrubbing = true; T3.view.pause(); T3.view.show(t3TrackFrame(e)); });
+addEventListener("mousemove", (e) => { if (T3.scrubbing) T3.view.show(t3TrackFrame(e)); });
+addEventListener("mouseup", () => { T3.scrubbing = false; });
+t3Key();
+
+/* ---------- interaction ---------- */
+function hitTest(sx, sy) {
+  if (mapMode === "terra") return null;
+  for (const item of visibleItems()) {
+    const [ix, iy] = toScreen(item.x, item.y);
+    if (Math.hypot(sx - ix, sy - iy) <= 13) return { item, text: `<b>${item.title}</b> · ${item.ws ? `workspace ${item.ws}` : "end state"}` };
+  }
+  let best = null;
+  drawnLegs().forEach((s) => {
+    const points = legPoints(s).map(([x, y]) => toScreen(x, y));
+    for (let i = 1; i < points.length; i++) {
+      const [ax, ay] = points[i - 1], [bx, by] = points[i], dx = bx - ax, dy = by - ay;
+      const t = Math.max(0, Math.min(1, ((sx - ax) * dx + (sy - ay) * dy) / (dx * dx + dy * dy || 1)));
+      const d = Math.hypot(sx - ax - t * dx, sy - ay - t * dy);
+      if (d <= 6 && (!best || d < best.d)) best = { d, s };
+    }
+  });
+  if (!best) return null;
+  const s = best.s, high = s.route_high_spoil.length;
+  const what = s.route_m != null && s.route_m > 0 ? `${fmt(s.route_m, 1)} m Nav2` : s.route_state ? "no saved path" : `${fmt(s.straight_m, 1)} m straight, not a route`;
+  const state = s.route_state && s.route_state !== "clear" ? ` · <span style="color:var(--fail)">${s.route_state}</span>${s.route_reason ? `: ${s.route_reason}` : ""}` : "";
+  return { leg: s.n, text: `<b>Leg ${s.n - 1} → ${s.n}</b> · ${what}${high ? ` · ${high} poses over spoil 0.5–1.0 m` : ""}${state}` };
+}
+let dragging = null;
+map.addEventListener("mousedown", (e) => { if (!view) return; dragging = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy, moved: false }; map.classList.add("drag"); });
+addEventListener("mouseup", (e) => {
+  if (dragging && !dragging.moved && e.target === map && V) {
+    const rect = map.getBoundingClientRect(), hit = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    if (hit && hit.item) selectItem(hit.item, true); else if (hit && hit.leg) selectLeg(hit.leg);
+  }
+  dragging = null; map.classList.remove("drag");
+});
+map.addEventListener("mousemove", (e) => {
+  const rect = map.getBoundingClientRect();
+  if (dragging) {
+    if (Math.hypot(e.clientX - dragging.x, e.clientY - dragging.y) > 3) dragging.moved = true;
+    view.cx = dragging.cx - (e.clientX - dragging.x) / view.scale; view.cy = dragging.cy + (e.clientY - dragging.y) / view.scale; draw(); return;
+  }
+  if (!V || !V._ready) return;
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top, tip = $("tip"), hit = hitTest(sx, sy);
+  map.classList.toggle("hot", !!hit);
+  const place = () => { tip.style.display = "block"; tip.style.left = `${sx + 14}px`; tip.style.top = `${sy + 14}px`; };
+  if (hit) { tip.innerHTML = hit.text; place(); return; }
+  const [x, y] = toWorld(sx, sy), g = V.grid;
+  const c = Math.round((x - g.x0) / g.res), r = Math.round((y - g.y0) / g.res);
+  if (c < 0 || r < 0 || c >= g.w || r >= g.h) { tip.style.display = "none"; return; }
+  const cell = r * g.w + c, s = V._cur.state[cell], dig = s & 7, pile = V._cur.pile[cell] * 0.02, b = V._base[cell];
+  if (mapMode === "terra" && V._terra) {
+    const a = V._terra[cell], d0 = V._state0[cell] & 7, zone = b === 1 || b === 4;
+    const ground = a < 0 ? "dug by Terra" : d0 === 1 ? "design Terra left" : d0 === 2 ? "optional edge" : zone ? "final dump zone" : "ground";
+    tip.innerHTML = `(${fmt(x)}, ${fmt(y)}) · ${ground}${a > 0 ? ` · <b>${plural(a, "Terra load")}</b> of soil${zone ? "" : ", outside the final zones"}` : ""}`;
+    place(); return;
+  }
+  const what = ["ground", "required, not finished", "optional edge", "cut, not at design", "finished"][dig] + (b === 1 ? " · final dump zone" : b === 4 ? " · final zone grown for pile spread" : b === 2 ? " · obstacle" : "");
+  tip.innerHTML = `(${fmt(x)}, ${fmt(y)}) · ${what}${pile > 0 ? ` · spoil <b>${fmt(pile)} m</b>${pile >= V.rules.pass_height_m ? " (no station here; drivable on a route with chassis balancing)" : ""}${s & TEMP_BIT ? " · outside the final zones" : ""}` : ""}${s & 8 ? " · in no-dump band" : ""}${s & 16 ? " · soil in finished pit" : ""}`;
+  place();
+});
+map.addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
+map.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  if (!view) return;
+  const rect = map.getBoundingClientRect(), [wx, wy] = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const factor = Math.exp(-e.deltaY * 0.0015);
+  view.scale = Math.min(Math.max(view.scale * factor, 2), 400);
+  const [nx, ny] = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  view.cx += wx - nx; view.cy += wy - ny; draw();
+}, { passive: false });
+$("zoom-in").onclick = () => { view.scale *= 1.4; draw(); };
+$("zoom-out").onclick = () => { view.scale /= 1.4; draw(); };
+$("fit").onclick = fit;
+let scrubbing = false;
+$("track").addEventListener("mousedown", (e) => { if (!V) return; scrubbing = true; setFrame(trackFrame(e)); });
+addEventListener("mousemove", (e) => { if (scrubbing) setFrame(trackFrame(e)); });
+addEventListener("mouseup", () => { scrubbing = false; });
+$("play").onclick = () => togglePlay();
+function togglePlay() {
+  if (playing) { clearInterval(playing); playing = null; $("play").innerHTML = "&#9654;"; return; }
+  if (!V) return;
+  if (frame >= V.events.length) setFrame(0);
+  $("play").innerHTML = "&#10074;&#10074;";
+  playing = setInterval(() => { const next = stepFrames().find((f) => f > frame); if (next == null) return togglePlay(); setFrame(next); }, 500);
+}
+$("search").addEventListener("input", renderSidebar);
+addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = DATA.cases.length;
+  if (e.key === "ArrowDown" || e.key === "j") selectCase((caseIndex + 1) % n);
+  else if (e.key === "ArrowUp" || e.key === "k") selectCase(caseIndex < 0 ? n - 1 : (caseIndex - 1 + n) % n);
+  else if (e.key === "o") showOverview();
+  else if (e.key === "t" && V) setMapMode(mapMode === "terra" ? "machine" : "terra");
+  else if (!V) return;
+  else if (e.key === "3" && t3Available()) t3Toggle();
+  else if ((e.key === "," || e.key === ".") && t3Shown() && T3.view) T3.view.jump(e.key === "." ? 1 : -1);
+  else if (e.key === "m" && t3Shown()) t3Play();
+  else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    const cuts = V.events.map((ev, i) => (ev.phase === "cut" ? i + 1 : null)).filter((v) => v != null);
+    // Arrows step by dig and dump; Shift jumps by workspace.
+    const steps = stepFrames();
+    if (e.key === "ArrowRight") setFrame(e.shiftKey ? (cuts.find((f) => f > frame) ?? V.events.length) : (steps.find((f) => f > frame) ?? V.events.length));
+    else setFrame(e.shiftKey ? ([...cuts].reverse().find((f) => f < frame) ?? 0) : ([...steps].reverse().find((f) => f < frame) ?? 0));
+  }
+  else if (e.key === "n") stepItem(1);
+  else if (e.key === "p") stepItem(-1);
+  else if (e.key === "Escape") { selected = null; leg = null; markOn(null); draw(); drawTrack(); }
+  else if (e.key === " ") togglePlay();
+  else if (e.key === "f") fit();
+  else if (e.key === "Home") setFrame(0); else if (e.key === "End") setFrame(V.events.length);
+  else return;
+  e.preventDefault();
+});
+addEventListener("resize", () => { if (caseIndex >= 0) { resize(); t3Track(); } else if (overviewMode === "maps") drawThumbs(); });
+
+$("title").textContent = DATA.title;
+renderToggles();
+const [hashCase, hashVersion] = decodeURIComponent(location.hash.slice(1)).split("/");
+const start = DATA.cases.findIndex((c) => c.name === hashCase);
+if (start >= 0) selectCase(start, hashVersion !== undefined && hashVersion !== "" ? Number(hashVersion) : undefined);
+else showOverview();
+</script>
+</body>
+</html>

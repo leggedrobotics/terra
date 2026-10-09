@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terra Plan Refinement"
+  short_description: "Refine Terra plans and export continuous plans and 3D"
+  default_prompt: "Use $terra-plan-postprocess to improve this Terra plan, export its continuous-space artifact, and render original/refined 3D views with validation results."

@@ -158,7 +158,11 @@ oracle dig-order planner, run through native transitions on the 8 Oct
 training panel. Its frozen-terrain motion graph matched native moves in
 256/256 samples per map. Results are listed under Validation.
 
-## Validation and provenance
+## Validation and provenance (October 6 snapshot)
+
+The following records the pre-training validation on October 6. Later manual
+inspection and its incomplete native foundation attempt are described in the
+[manual viewer documentation](../terra/viewer3d/README.md#pull-rule-inspector).
 
 This isolated Terra worktree starts at `d1d128bb`, descended from the u110000
 machine-rule runtime `ef406998`; its paired baselines starts at `5d52f9f`.

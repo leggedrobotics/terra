@@ -12,6 +12,11 @@ Terra is the abstract JAX environment. The sibling `terra-baselines` repository
 owns PPO training, evaluation, checkpoints, inference, and experiment
 operations. `moleworks_ros` owns plan execution on the simulated or real robot.
 
+Terra also owns portable saved-plan postprocessing and rendering through
+[`terra.postprocess`](terra/postprocess/README.md). ROS owns robot-specific
+conversion, profiles, Nav2 validation and execution. Native rollout success,
+postprocessed geometric validity and physical execution remain separate results.
+
 ## Canonical environment sources
 
 - [Audited dataset reference and terrain figures](docs/DATASET.md)
@@ -41,11 +46,18 @@ maps, both above 450.
 
 The opt-in [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) requires
 2.5 m of continuous radial target space and optionally parallel pulls at
-precision edges. Manual native straight and L-shaped trenches complete with
+precision edges. Chosen synthetic straight and L-shaped trenches complete with
 legal disposal and egress. Frozen GRU u110000 transfers poorly: 0/32 matched
 road-network starts versus 32/32 with its original rules. The experiment stays
 default off; bulk completion accepts implicit ramped margins, without modeling
 physical ramp height or bucket volume.
+
+The [manual pull-rule inspector](terra/viewer3d/README.md#pull-rule-inspector)
+adds native eligibility overlays, controls, undo and replay. On October 8, an
+assisted precision-foundation attempt on slot 17411 excavated and legally disposed
+419/480 cells in 445 actions; 61 cells remained, including 30 precision-edge cells.
+An independent native replay reproduced the result. This is an incomplete
+planning/disposal sequence, not proof of full-map finishability or policy quality.
 
 ## September 21 metadata precision and endpoint clearance
 

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#182a2b">
+  <title>Terra · Earthwork studio</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Terra home view" id="brand-home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m3 10 13-7 13 7-13 7z" fill="#e7b966"/><path d="m3 16 13 7 13-7M3 22l13 7 13-7" fill="none" stroke="currentColor" stroke-width="2.6"/></svg><span>TERRA<small>EARTHWORK STUDIO</small></span></a>
+    <div class="session-label"><span class="status-dot"></span><span id="session-mode">Connecting</span><span class="local-label">LOCAL VIEWER</span></div>
+    <div class="header-actions"><button id="open-file" class="quiet" title="Open a Terra replay JSON file">Open replay</button><button id="export" class="quiet" disabled title="Download the recorded episode">Export JSON</button><button id="screenshot" class="quiet" disabled title="Save a PNG of the scene at twice the on-screen resolution">Capture PNG</button></div>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar" aria-label="Scene and machine controls">
+      <section class="mission">
+        <p class="eyebrow">The worksite</p><h1 id="title">Loading the scene</h1><p id="source" class="muted">Connecting to Terra…</p>
+        <span id="rule-badge" class="rule-badge" hidden></span>
+        <div id="case-controls" class="case-controls" hidden>
+          <label for="case-select">Map<select id="case-select" aria-describedby="case-note"></select></label>
+          <div class="case-options"><label for="precision-select">Excavation rule<select id="precision-select"></select></label><label id="start-label" for="start-select">Initial pose<select id="start-select"></select></label></div>
+          <p id="case-note">Reset restores the saved initial state.</p>
+        </div>
+        <div class="map-spec"><span id="grid-spec">—</span><span id="agent-count">—</span></div>
+      </section>
+      <section class="machine-card" aria-labelledby="machine-heading">
+        <div class="section-label"><h2 id="machine-heading">ACTIVE MACHINE</h2><span id="agent-id" class="machine-number">01</span></div>
+        <div class="machine-title"><span id="machine-name">Excavator</span><span id="embodiment">Tracked</span></div>
+        <div class="metrics"><div><span class="metric-label">CARRYING</span><strong id="load">0<small> units</small></strong></div><div><span class="metric-label">REWARD</span><strong id="reward">0.00</strong></div></div>
+        <div class="agent-list" id="agent-list" aria-label="All machines"></div>
+        <div class="outcome" id="outcome">Waiting for state</div>
+      </section>
+      <section class="manual" aria-labelledby="manual-heading">
+        <div class="section-label"><h2 id="manual-heading">Drive the excavator</h2><span id="manual-status">Live</span></div>
+        <div class="controls-grid">
+          <button data-action="5" title="Cabin anticlockwise · Q"><span>↶</span>Cabin<kbd>Q</kbd></button>
+          <button data-action="0" title="Move forward · Up or W"><span>↑</span>Forward<kbd>↑</kbd></button>
+          <button data-action="4" title="Cabin clockwise · E"><span>↷</span>Cabin<kbd>E</kbd></button>
+          <button data-action="3" id="left-action" title="Turn anticlockwise · Left or A"><span>↶</span><span class="turn-label">Turn left</span><kbd>←</kbd></button>
+          <button data-action="1" title="Move backward · Down or S"><span>↓</span>Reverse<kbd>↓</kbd></button>
+          <button data-action="2" id="right-action" title="Turn clockwise · Right or D"><span>↷</span><span class="turn-label">Turn right</span><kbd>→</kbd></button>
+        </div>
+        <button data-action="6" class="work-button"><span id="work-label">Dig / dump</span><kbd>SPACE</kbd></button>
+        <div class="manual-bottom"><button data-action="7" class="quiet">Wait <kbd>N</kbd></button><button id="undo" class="quiet" title="Restore the previous simulator state">Undo</button><button id="reset" class="quiet" title="Apply the selected map and rule, restoring its initial state">Reset <kbd>R</kbd></button></div>
+        <div id="native-status" class="native-status" hidden>
+          <div class="budget"><span>Action budget</span><strong id="step-budget">0 / 450</strong></div>
+          <p id="budget-note" class="budget-note">450 actions left</p>
+          <strong id="do-status">Ready to dig</strong><p id="dump-status"></p>
+          <p id="native-action-message" role="status" aria-live="polite">Ready for an action.</p>
+        </div>
+        <button id="continue" class="quiet full-width" hidden>Continue beyond 450 · exploration only</button>
+        <button id="resume-live" class="quiet full-width" hidden>Return to live session</button>
+      </section>
+      <section class="layers" aria-labelledby="layers-heading">
+        <div class="section-label"><h2 id="layers-heading">Map overlays</h2><button class="text-button" id="layers-toggle">Hide all</button></div>
+        <label class="layer"><span><i class="swatch fresh"></i>Dig eligibility</span><input type="checkbox" data-layer="eligibility" checked><span class="switch"></span></label>
+        <label class="layer"><span><i class="swatch precision"></i>Precise edge outline</span><input type="checkbox" data-layer="precision" checked><span class="switch"></span></label>
+        <label class="layer"><span><i class="swatch reach"></i>Reserved workspaces</span><input type="checkbox" data-layer="workspace" checked><span class="switch"></span></label>
+        <p id="workspace-note" class="workspace-note" hidden>Machine-colour outlines: solid work bounds, dashed body bounds. Exact stationary endpoints, projected on the ground plane; motion sweeps and stand-off margin are not drawn.</p>
+        <details class="extra-layers"><summary>Other layers &amp; appearance</summary>
+          <label class="layer"><span><i class="swatch cut"></i>Dig targets</span><input type="checkbox" data-layer="dig" checked><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch fill"></i>Dump targets</span><input type="checkbox" data-layer="dump" checked><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch reach"></i>Workspace preview</span><input type="checkbox" data-layer="interaction" checked><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch footprint"></i>Native footprint</span><input type="checkbox" data-layer="footprint" checked><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch restricted"></i>No dumping · static</span><input type="checkbox" data-layer="restricted"><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch allowed"></i>Dumpable cells · preview</span><input type="checkbox" data-layer="dumpability"><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch grid"></i>Cell grid</span><input type="checkbox" data-layer="grid"><span class="switch"></span></label>
+          <label class="layer"><span><i class="swatch tags"></i>Machine tags</span><input type="checkbox" data-layer="tags" checked><span class="switch"></span></label>
+          <label class="height-control" for="height-scale"><span>Height exaggeration <output id="height-value">1×</output></span><input id="height-scale" type="range" min="0.25" max="2.5" step="0.05" value="1"></label>
+        </details>
+      </section>
+      <section class="soil-summary"><div><span id="cut-label">Excavated</span><strong id="cut-units">—</strong></div><div><span id="fill-label">Placed soil</span><strong id="fill-units">—</strong></div><p id="replay-note">Counts are soil units. Arm motion illustrates discrete grid actions, not physical trajectories.</p></section>
+      <details class="help"><summary>Controls &amp; scene notes</summary><p>Drag to orbit. Right-drag or two fingers to pan. Scroll or pinch to zoom. H returns home, T looks down, F follows the active machine. P cycles studio, paper and diorama styles. G toggles rich lighting. Capture PNG saves the visible overlays.</p><p>Arrows or WASD move and turn; Q/E swing the cabin. Space digs or unloads, N waits, R resets. Undo restores the previous native state. In replay, Space plays and arrows step.</p><p>Green cells will be freshly excavated by Work at this heading. Amber cells are available after a cabin swing. Red cells are unavailable from this base in the current state; this does not prove they are permanently unreachable. Loaded machines must unload first. The purple outline marks the fixed precision band, including already dug edges.</p><p>Workspace and dumping layers are geometric previews. The native unload status includes the actual action checks. Soil mounds and arm motion illustrate discrete Terra actions; they are not physical trajectories or a bucket simulation.</p></details>
+    </aside>
+    <section class="scene-panel" aria-label="Interactive 3D worksite">
+      <div id="viewport" tabindex="0" aria-label="3D scene. Drag to orbit, scroll to zoom, click a tile to inspect."></div>
+      <div class="scene-top"><div class="scene-caption"><span class="eyebrow">Terra simulator</span><span id="scene-caption">Preparing the worksite</span></div><div class="camera-controls" role="group" aria-label="Camera"><button id="camera-home" class="selected" title="Isometric view · H">◇ <span>3D</span></button><button id="camera-top" title="Top view · T">⊞ <span>Top view</span></button><button id="camera-follow" aria-pressed="false" title="Follow active machine · F">⌖ <span>Follow</span></button><button id="presentation" title="Style: studio, plain paper or stylized diorama · P">◧ <span>Studio</span></button><button id="quality" aria-pressed="true" title="Rich lighting: ambient occlusion and ink outlines · G">✦ <span>Rich</span></button></div></div>
+      <div id="scene-legend" class="scene-legend"><span><i class="swatch cut"></i>Dig</span><span><i class="swatch fill"></i>Dump</span><span><i class="swatch reach"></i>Workspace</span><span><i class="swatch obstacle"></i>Obstacle</span></div>
+      <div id="dig-legend" class="dig-legend" aria-label="Native digging eligibility" hidden>
+        <div id="eligibility-keys" class="eligibility-keys"><span><i class="swatch fresh" aria-hidden="true"></i>Dig now <strong id="dig-current-count">0</strong></span><span><i class="swatch swing" aria-hidden="true"></i>Swing cabin <strong id="dig-swing-count">0</strong></span><span><i class="swatch blocked" aria-hidden="true"></i>Unavailable from this base <strong id="dig-blocked-count">0</strong></span></div>
+        <strong id="unload-first" class="unload-first" hidden><i class="swatch neutral" aria-hidden="true"></i>Unload first · dig colors paused</strong>
+        <div class="eligibility-detail"><span id="precision-key"><i class="swatch precision" aria-hidden="true"></i>Precise edge</span><span id="eligibility-note"></span></div>
+      </div>
+      <div id="cell-inspector" class="cell-inspector"><span class="eyebrow">CELL INSPECTOR</span><span class="cell-hint">Click the terrain to inspect a cell</span></div>
+      <div class="scene-footer-note">DISCRETE SOIL · ARTICULATED MACHINES<span>Drag to orbit · scroll to zoom</span></div>
+      <div id="event" class="event" role="status" aria-live="polite"></div>
+      <div id="loading" class="loading"><div class="loader-mark"></div><strong>Preparing your worksite</strong><span>Loading the recorded Terra state</span></div>
+      <div id="error" class="error-card" role="alert" hidden><strong>Could not open the scene</strong><p id="error-message"></p><button id="dismiss-error">Dismiss</button></div>
+      <footer class="timeline">
+        <div class="transport"><button id="previous" title="Previous snapshot" aria-label="Previous snapshot">|◀</button><button id="play" class="play" title="Play / pause" aria-label="Play replay">▶</button><button id="next" title="Next snapshot" aria-label="Next snapshot">▶|</button></div>
+        <div class="timeline-track"><div class="timeline-label"><span><span id="step-label">STEP</span> <strong id="step">0</strong><span id="action-label">Initial state</span></span><span id="frame-count">1 / 1</span></div><input id="seek" type="range" min="0" max="0" value="0" step="1" aria-label="Replay snapshot"></div>
+        <label class="speed-control"><span>SPEED</span><select id="speed" aria-label="Playback speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select></label>
+      </footer>
+    </section>
+  </main>
+  <input type="file" id="replay-file" accept=".json,application/json" hidden>
+  <script src="/static/viewer.js"></script>
+</body>
+</html>

@@ -24,6 +24,17 @@ setup(
     keywords="memory, environment, agent, rl, jax, gym, grid, gridworld, excavator",
     description="Minimalistic grid map environment built with JAX",
     packages=find_packages(),
+    package_data={
+        "terra.viewer3d": ["static/*"],
+        "terra.postprocess": ["assets/*", "examples/*"],
+    },
+    extras_require={
+        "postprocess": ["numpy", "scipy", "shapely>=2.0", "PyYAML", "Pillow"],
+        "video": ["playwright>=1.40"],
+    },
+    entry_points={
+        "console_scripts": ["terra-postprocess=terra.postprocess.cli:main"],
+    },
     install_requires=requires,
     python_requires=">=3.12",
 )

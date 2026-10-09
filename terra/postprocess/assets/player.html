@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f5f2;color:#26241f;font:14px system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{padding:16px 22px;background:white;border-bottom:1px solid #ddd;display:flex;gap:18px;align-items:center;flex:none}
+h1{font-size:19px;margin:0}#subtitle{margin:5px 0 0;color:#68625a;font-size:12px}
+main{display:grid;grid-template-columns:1fr 285px;flex:1;min-height:380px}
+#scene{min-width:0;min-height:0;position:relative;overflow:hidden}#scene canvas{position:absolute;inset:0;display:block}aside{padding:18px;background:white;border-left:1px solid #ddd;overflow:auto}
+aside p{line-height:1.5}#status{font-weight:650;color:#8b4e0e}button,select{background:white;border:1px solid #ccc;border-radius:7px;padding:7px 12px;color:inherit;cursor:pointer}
+button:hover{background:#eeeae3}button.active{background:#e8eef7;border-color:#6596d2}nav{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+footer{height:96px;padding:12px 22px;background:white;border-top:1px solid #ddd;flex:none}#seek{width:100%;margin:0 0 10px}
+.controls{display:flex;align-items:center;gap:9px}#caption{flex:1;margin:0 12px}#at{font-variant-numeric:tabular-nums;color:#666}
+.legend{font-size:12px;color:#68625a}.error{color:#a62323}details{font-size:12px;margin-top:16px}summary{cursor:pointer}
+@media(max-width:750px){main{grid-template-columns:1fr 205px}header{padding:12px}aside{padding:12px}#caption{font-size:12px}}
+</style>
+<header><div><h1>__TITLE__</h1><p id="subtitle"></p><p id="verdict" style="margin:5px 0 0;font-weight:650"></p></div></header>
+<main><div id="scene"></div><aside>
+<nav id="camera"><button data-view="map" class="active">Map</button><button data-view="top">Top</button><button data-view="step">Work</button><button data-view="follow">Follow</button></nav>
+<nav><button id="workspaces" class="active">Workspaces</button><button id="routes" class="active">Routes</button></nav>
+<p id="status"></p><p id="machine"></p><p id="workspace"></p>
+<p class="legend">Workspace regions show planned cut, completion and dump areas. Soil and arm motion use the recorded planning model.</p>
+<p class="legend">Blue routes: checked in the stated model. Amber: unverified or missing. Red: failed. Missing connections jump between stations.</p>
+<details><summary>Model and source</summary><p id="model"></p></details>
+<p id="error" class="error" hidden></p>
+</aside></main>
+<footer><input id="seek" type="range" min="0" step="1" value="0"><div class="controls">
+<button id="previous" aria-label="Previous work event">◀</button><button id="play">Play</button><button id="next" aria-label="Next work event">▶</button>
+<select id="speed" aria-label="Playback speed"><option value=".5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+<span id="caption"></span><span id="at"></span></div></footer>
+<script>const DATA=__DATA__;</script>
+__BUNDLE__
+<script>
+const $=id=>document.getElementById(id), N=DATA.frames.length+1;
+let workspaceVisible=true, routesVisible=true;
+const view=window.TerraPostprocessedView.create($('scene'),{onFrame:render,onError:message=>{$('error').hidden=false;$('error').textContent=String(message)}});
+window.timelineView=view;
+function render(index){
+ const f=index?DATA.frames[index-1]:null;
+ $('seek').value=index;$('at').textContent=`${index} / ${N-1}`;
+ $('caption').textContent=f?`${f.workspace_id!=null?'Workspace '+f.workspace_id+' · ':''}${f.phase}`:'Initial state';
+ $('status').textContent=f?.route_status?`Route: ${f.route_status}`:'';
+ $('status').style.color=f?.route_status==='failed'?'#a62323':f?.route_status==='checked'?'#267149':'#8b4e0e';
+ const machines=f?.agents??DATA.initial.agents;
+ $('machine').textContent=machines.map(a=>`Machine ${a.id}: load ${Number(a.load).toFixed(2)} ${DATA.metadata.load_unit??''}`).join(' · ');
+ const ws=DATA.workspaces.find(w=>w.id===f?.workspace_id);
+ $('workspace').textContent=ws?`${ws.kind} · machine ${ws.agent_id}`:'';
+}
+$('subtitle').textContent=`${DATA.agents.length} machine${DATA.agents.length===1?'':'s'} · ${DATA.workspaces.length} workspaces · ${DATA.metadata.variant==='original'?'original source':'postprocessed plan'}`;
+const verdict=DATA.metadata.plan_status;
+const soloVerdict=DATA.metadata.validation?.verdict??'';
+$('verdict').textContent=verdict?`${verdict.replaceAll('_',' ')} · ${(DATA.metadata.schedule_status??'').replaceAll('_',' ')} · native replay required`:soloVerdict;
+$('verdict').style.color=verdict?(verdict==='GEOMETRIC_CANDIDATE'?'#8b4e0e':'#a62323'):(soloVerdict==='valid under the modeled rules'?'#267149':soloVerdict==='invalid'?'#a62323':'#8b4e0e');
+$('model').textContent=Object.entries(DATA.metadata).map(([k,v])=>`${k}: ${typeof v==='string'?v:JSON.stringify(v)}`).join('\n');
+$('model').style.whiteSpace='pre-wrap';$('seek').max=N-1;
+view.load(DATA);
+$('seek').addEventListener('input',()=>{view.pause();view.show(Number($('seek').value));$('play').textContent='Play'});
+$('play').addEventListener('click',()=>{if(view.playing){view.pause();$('play').textContent='Play'}else{view.play();$('play').textContent='Pause'}});
+function jump(direction){view.pause();const current=view.index;const work=DATA.frames.map((f,i)=>({f,i:i+1})).filter(x=>['cut','dump','collect','excavate','deliver','stage','redistribute'].includes(x.f.phase));const next=direction>0?work.find(x=>x.i>current):work.reverse().find(x=>x.i<current);view.show(next?.i??(direction>0?N-1:0));$('play').textContent='Play'}
+$('previous').onclick=()=>jump(-1);$('next').onclick=()=>jump(1);
+$('speed').onchange=()=>view.setSpeed(Number($('speed').value));
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view.view(b.dataset.view);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b))});
+$('workspaces').onclick=()=>{workspaceVisible=!workspaceVisible;view.setWorkspaces(workspaceVisible);$('workspaces').classList.toggle('active',workspaceVisible)};
+$('routes').onclick=()=>{routesVisible=!routesVisible;view.setRoutes(routesVisible);$('routes').classList.toggle('active',routesVisible)};
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.code==='Space'){e.preventDefault();$('play').click()}else if(e.key==='ArrowRight')jump(1);else if(e.key==='ArrowLeft')jump(-1)});
+</script></html>

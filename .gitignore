@@ -1,4 +1,6 @@
 */__pycache__/*
+__pycache__/
+*.py[cod]
 tests/unit/__pycache__/*
 .ipynb_checkpoints/*
 .vscode/*
@@ -8,6 +10,7 @@ __pycache__/*
 *.egg*
 terra/map_utils/__pycache__/
 cache/
+/manual-recordings/
 /docs/*
 terra/viz/game/__pycache__/*
 terra/viz/__pycache__/*
