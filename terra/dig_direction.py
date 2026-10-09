@@ -344,7 +344,8 @@ PULL_CONE_WINDOW_TILES = 13
 def pull_cone_details(target_map, records, count, base_rc, tile_size,
                       min_radius_m, max_radius_m, min_length_m, half_angle_rad,
                       precision, edge_width_m, edge_tolerance_rad,
-                      window=PULL_CONE_WINDOW_TILES, perpendicular_ok=False):
+                      window=PULL_CONE_WINDOW_TILES, perpendicular_ok=False,
+                      stroke_inner_extension_m=0.0, stroke_outer_extension_m=0.0):
     """Return ``(allowed, best_length, edge_error)`` for a cone of pull directions.
 
     A fresh target cell is admissible when some pull direction within
@@ -358,6 +359,11 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
     directions; ``edge_error`` is the smallest tangent error among directions
     with enough room (pi/2 if none), zero outside the precision band.
     Malformed geometry fails closed, as in ``pull_stroke_details``.
+
+    The stroke may extend ``stroke_outer_extension_m`` beyond the outer reach
+    (the bucket enters a little further out) and ``stroke_inner_extension_m``
+    inside the inner reach (it curls up closer to the machine). Only cells in
+    the dig reach itself can be admitted; both extensions default to 0.
 
     Only cells within ``window`` tiles of the base are evaluated (static;
     ``None`` evaluates the whole map). Every cell is independent, so results
@@ -400,6 +406,10 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
     edge_width = jnp.asarray(edge_width_m, jnp.float32)
     edge_tolerance = jnp.asarray(edge_tolerance_rad, jnp.float32)
     perpendicular = jnp.asarray(perpendicular_ok, jnp.bool_)
+    inner_extension = jnp.asarray(stroke_inner_extension_m, jnp.float32)
+    outer_extension = jnp.asarray(stroke_outer_extension_m, jnp.float32)
+    stroke_min_radius = jnp.maximum(min_radius - jnp.maximum(inner_extension, 0.0), 0.0)
+    stroke_max_radius = max_radius + jnp.maximum(outer_extension, 0.0)
     valid = ((raw_count == count) & (count > 0) & (count <= records.shape[0])
              & jnp.all(~declared | valid_rows) & jnp.all(jnp.isfinite(base))
              & jnp.isfinite(tile) & (tile > 0)
@@ -407,6 +417,7 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
              & (min_radius >= 0) & (max_radius > min_radius)
              & jnp.isfinite(min_length) & (min_length > 0)
              & jnp.isfinite(half_angle) & (half_angle >= 0) & (half_angle < right_angle)
+             & jnp.isfinite(inner_extension) & jnp.isfinite(outer_extension)
              & (True if window is None else max_radius <= (window - 0.5) * tile)
              & (~precision | (jnp.isfinite(edge_width) & (edge_width > 0)
                               & jnp.isfinite(edge_tolerance) & (edge_tolerance >= 0)
@@ -495,10 +506,10 @@ def pull_cone_details(target_map, records, count, base_rc, tile_size,
         offset_m = pull * tile
         s0 = jnp.sum(offset_m * unit, axis=-1)
         d = jnp.abs(cross(offset_m, unit))
-        far = jnp.sqrt(jnp.maximum(max_radius ** 2 - d ** 2, 0.0))
-        near = jnp.sqrt(jnp.maximum(min_radius ** 2 - d ** 2, 0.0))
+        far = jnp.sqrt(jnp.maximum(stroke_max_radius ** 2 - d ** 2, 0.0))
+        near = jnp.sqrt(jnp.maximum(stroke_min_radius ** 2 - d ** 2, 0.0))
         lower = jnp.maximum(lower * tile, s0 - far)
-        upper = jnp.minimum(upper * tile, jnp.where(d < min_radius, s0 - near, s0 + far))
+        upper = jnp.minimum(upper * tile, jnp.where(d < stroke_min_radius, s0 - near, s0 + far))
         radius = radius_tiles * tile
         inside = (forward_count % 2 == 1) & (radius_tiles > 1e-6) & ~collinear
         in_reach = (radius >= min_radius - 1e-5) & (radius <= max_radius + 1e-5)

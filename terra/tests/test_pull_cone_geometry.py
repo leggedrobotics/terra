@@ -174,6 +174,28 @@ class PullConeTests(unittest.TestCase):
         self.assertGreaterEqual(float(best[21, 36]), 2.5)
         self.assertLessEqual(float(error[21, 36]), np.deg2rad(5.0))
 
+    def test_stroke_window_extension_only_widens_the_stroke(self):
+        # Manual game, slot 17411: from (42, 46) several cells miss 2.5 m
+        # because the stroke stops at the 6.5 m reach; a stroke that may start
+        # 1.0 m further out admits them. Cells are still only dug in 4.0-6.5 m.
+        target = np.zeros((64, 64), bool)
+        target[21:45, 20:40] = True
+        records, count = boundary_records_from_mask(target)
+        args = (target, records, count, [42, 46], .5714286, 4., 6.5, 2.5, THIRTY, True, .6, TOL25)
+        plain = cone(*args, perpendicular_ok=True)
+        zero = cone(*args, perpendicular_ok=True, stroke_inner_extension_m=0., stroke_outer_extension_m=0.)
+        for a, b in zip(plain, zero):
+            np.testing.assert_array_equal(np.asarray(a), np.asarray(b))
+        wide = cone(*args, perpendicular_ok=True, stroke_inner_extension_m=.5, stroke_outer_extension_m=1.)
+        for cell in ((38, 39), (39, 39), (35, 38)):
+            self.assertFalse(bool(plain[0][cell]), cell)
+            self.assertTrue(bool(wide[0][cell]), cell)
+        self.assertTrue(np.all(np.asarray(wide[0])[np.asarray(plain[0])]))
+        rows, cols = np.indices(target.shape)
+        radius = np.hypot(rows - 42, cols - 46) * .5714286
+        beyond = target & ((radius < 4.0 - 1e-3) | (radius > 6.5 + 1e-3))
+        self.assertFalse(np.any(np.asarray(wide[0])[beyond]))
+
     def test_window_matches_the_whole_map_and_refuses_reach_beyond_it(self):
         rows, cols = np.indices((64, 64))
         target = ((rows - 30) ** 2 / 20 ** 2 + (cols - 34) ** 2 / 12 ** 2 <= 1) & ~((rows > 33) & (cols < 30))

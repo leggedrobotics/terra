@@ -382,6 +382,11 @@ class EnvConfig(NamedTuple):
     # edge_pull_tolerance_rad): reach to the edge line and pull straight back,
     # or pull straight in from outside. Diagonal pulls stay refused.
     edge_pull_perpendicular_ok: bool = False
+    # The pull stroke may run this far beyond the outer dig reach (the bucket
+    # enters a little further out) and inside the inner reach (it curls up
+    # closer to the machine). Cells are still dug only within the dig reach.
+    pull_stroke_outer_extension_m: float = 0.0
+    pull_stroke_inner_extension_m: float = 0.0
 
     @classmethod
     def new(cls):

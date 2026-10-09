@@ -1436,6 +1436,8 @@ class State(NamedTuple):
             self.env_cfg.enforce_foundation_border_alignment,
             self.env_cfg.edge_band_width_m, self.env_cfg.edge_pull_tolerance_rad,
             perpendicular_ok=self.env_cfg.edge_pull_perpendicular_ok,
+            stroke_inner_extension_m=self.env_cfg.pull_stroke_inner_extension_m,
+            stroke_outer_extension_m=self.env_cfg.pull_stroke_outer_extension_m,
         )
 
     def _get_pull_dig_permission(self) -> Array:
