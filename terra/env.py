@@ -52,9 +52,10 @@ class TerraEnv(NamedTuple):
     executable_dig_observation: bool = False
     native_dump_observation: bool = False
     # Static switches for rules that would otherwise cost a both-branch select
-    # under the per-lane vmap; see terra.state.static_rules.
-    pull_cone: bool = False
-    tracked_move_keeps_turn: bool = False
+    # under the per-lane vmap; see terra.state.static_rules. None follows each
+    # EnvConfig (direct use); TerraEnvBatch passes explicit, validated values.
+    pull_cone: bool | None = None
+    tracked_move_keeps_turn: bool | None = None
 
     @classmethod
     def new(
@@ -68,8 +69,8 @@ class TerraEnv(NamedTuple):
         previous_outcome_observation: bool = False,
         executable_dig_observation: bool = False,
         native_dump_observation: bool = False,
-        pull_cone: bool = False,
-        tracked_move_keeps_turn: bool = False,
+        pull_cone: bool | None = None,
+        tracked_move_keeps_turn: bool | None = None,
     ) -> "TerraEnv":
         re = None
         baseline_map_size = 64

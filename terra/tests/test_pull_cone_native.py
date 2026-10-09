@@ -56,6 +56,22 @@ class PullConeNativeTest(unittest.TestCase):
                 b = np.asarray(cone._get_pull_dig_permission())
                 self.assertTrue(np.all(b[a]), (precision, position))
 
+    def test_static_switch_none_follows_config_and_false_compiles_radial(self):
+        from terra.env import TerraEnv
+        from terra.state import static_rules
+
+        self.assertIsNone(TerraEnv().pull_cone)
+        self.assertIsNone(TerraEnv().tracked_move_keeps_turn)
+        target = self.trench()
+        cone = self.state(target, THIRTY, position=(29, 25), cabin=0)
+        radial = np.asarray(self.state(target, 0.0, position=(29, 25), cabin=0)._get_pull_dig_permission())
+        with static_rules(pull_cone=None):
+            follows = np.asarray(cone._get_pull_dig_permission())
+        with static_rules(pull_cone=False):
+            compiled_out = np.asarray(cone._get_pull_dig_permission())
+        self.assertGreater(int(follows.sum()), int(radial.sum()))
+        np.testing.assert_array_equal(compiled_out, radial)
+
     def test_jit_vmap_and_observation_share_cone_admission(self):
         target = self.trench()
         state = self.state(target, THIRTY, position=(29, 25), cabin=0)
