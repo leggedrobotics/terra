@@ -10,7 +10,7 @@ import pytest
 from terra.actions import TrackedAction
 from terra.config import (
     RewardStage, TIME_CABIN_TURN_S_PER_RAD, TIME_DIG_S_PER_M3, TIME_NAV_SPEED_MPS,
-    TIME_RELOCATION_S, TIME_SETUP_S,
+    TIME_RELIFT_S_PER_M3, TIME_RELIFT_SETUP_S, TIME_RELOCATION_S, TIME_SETUP_S,
 )
 from terra.env import TerraEnv
 from terra.tests.test_foundation_behavior import _pose, foundation  # noqa: F401
@@ -162,3 +162,87 @@ def test_observation_carries_clocks_only_with_the_objective(far_team):
     # Acting slot 0 first, then slot 1.
     np.testing.assert_allclose(obs[:2, 9], [1000.0 / reference, 400.0 / reference], rtol=1e-6)
     np.testing.assert_allclose(obs[:2, 10], [1000.0 / reference] * 2, rtol=1e-6)
+
+
+def test_setup_per_dug_workspace_and_relift_rates(foundation):  # noqa: F811
+    state = foundation
+    unit = _unit_s(state)
+    dug = _step(state, _act(DO))
+    first = _load(dug) * unit + TIME_SETUP_S
+    np.testing.assert_allclose(float(dug.machine_clock_s[0]), first, rtol=1e-5)
+    dumped = _step(_pose(dug, cabin=6), _act(DO))
+    assert _load(dumped) == 0
+    # A new cabin sector of the same visit is a new dug workspace.
+    side = _step(_pose(dumped, cabin=3), _act(DO))
+    assert _load(side) > 0
+    np.testing.assert_allclose(float(side.machine_clock_s[0]),
+                               first + _load(side) * unit + TIME_SETUP_S, rtol=1e-5)
+    # Picking the dumped soil back up is a relift: collect setup and rate.
+    relift = _step(_pose(dumped, cabin=6), _act(DO))
+    assert _load(relift) > 0
+    tile = float(state.env_cfg.tile_size)
+    np.testing.assert_allclose(
+        float(relift.machine_clock_s[0]),
+        first + _load(relift) * tile ** 3 * TIME_RELIFT_S_PER_M3 + TIME_RELIFT_SETUP_S,
+        rtol=1e-5)
+    # A one-sector Terra dig takes the whole cone, so continue a sector with
+    # capped relifts: the second pickup from the same sector pays no setup.
+    capped = dumped._replace(env_cfg=dumped.env_cfg._replace(excavator_relift_capacity=20))
+    part = _step(_pose(capped, cabin=6), _act(DO))
+    assert _load(part) == 20
+    away = _step(_pose(part, cabin=9), _act(DO))
+    assert _load(away) == 0
+    rest = _step(_pose(away, cabin=6), _act(DO))
+    assert _load(rest) == 20
+    np.testing.assert_allclose(
+        float(rest.machine_clock_s[0]),
+        float(away.machine_clock_s[0]) + 20 * tile ** 3 * TIME_RELIFT_S_PER_M3, rtol=1e-5)
+
+
+def _set_slot(state, slot, **fields):
+    agent = state.agent.agent_states[slot]
+    updates = {name: jnp.asarray([value], dtype=getattr(agent, name).dtype)
+               for name, value in fields.items()}
+    return state._set_agent_state_at(slot, agent._replace(**updates))
+
+
+def test_dump_closes_its_dig_interval(far_team):
+    dug = _step(far_team, _act(DO, WAIT))
+    dig_s = float(dug.machine_clock_s[0])
+    assert _load(dug, 0) > 0 and dig_s > 0
+    swung = _set_slot(dug, 0, angle_cabin=6)
+    # Unobstructed: the dump adds no time.
+    free = _step(swung, _act(DO, WAIT))
+    assert _load(free, 0) < _load(dug, 0)
+    np.testing.assert_allclose(float(free.machine_clock_s[0]), dig_s, rtol=1e-6)
+    # The partner used this machine's surroundings until 3000 s after the dig
+    # had started: the dig, which contains the dump, cannot have started earlier.
+    release = np.asarray(swung.machine_release_s).copy()
+    release[1, :32, :32] = np.maximum(release[1, :32, :32], 3000.0)
+    late = _step(swung._replace(machine_release_s=jnp.asarray(release)), _act(DO, WAIT))
+    np.testing.assert_allclose(float(late.machine_clock_s[0]), 3000.0 + dig_s, rtol=1e-6)
+    own = np.asarray(late.machine_release_s[0])
+    # The dig envelope and the dump envelope are both held until the dump.
+    assert own.max() == pytest.approx(3000.0 + dig_s, rel=1e-6)
+    assert own[16, 16] == pytest.approx(3000.0 + dig_s, rel=1e-6)
+
+
+def test_stall_round_is_charged(far_team):
+    stalled = far_team._replace(env_cfg=far_team.env_cfg._replace(stall_cost=0.01))
+    waited = _step(stalled, _act(WAIT, WAIT))
+    assert int(waited.stall_age_steps) > 0
+    np.testing.assert_allclose(float(_reward(stalled, waited)[1]["reward_v2_stall"]), -0.01)
+    worked = _step(stalled, _act(DO, WAIT))
+    assert float(_reward(stalled, worked)[1]["reward_v2_stall"]) == 0.0
+    # Disabled by default.
+    plain = _step(far_team, _act(WAIT, WAIT))
+    assert float(_reward(far_team, plain)[1]["reward_v2_stall"]) == 0.0
+
+
+def test_lockstep_sums_each_rounds_slowest_action(far_team):
+    both = _step(far_team, _act(DO, DO))
+    durations = np.asarray(both.machine_busy_s[:2])
+    np.testing.assert_allclose(float(both.lockstep_s), durations.max(), rtol=1e-6)
+    waited = _step(both, _act(WAIT, CABIN_CLOCK))
+    swing = float(waited.machine_busy_s[1] - both.machine_busy_s[1])
+    np.testing.assert_allclose(float(waited.lockstep_s), durations.max() + swing, rtol=1e-6)

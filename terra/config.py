@@ -69,9 +69,12 @@ MAKESPAN_NAV_SPEED_MPS = 0.5
 # Excavator values: M445 field run of 2026-10-07 (bank 0338): 415 s +
 # 226 s/m^3 per dug workspace; relocation overhead and turn rates are
 # assumptions (the field navigation was unusually slow).
-TIME_DIG_S_PER_M3 = 226.0  # dig or relift, per loaded m^3 (includes dumping)
-TIME_SETUP_S = 415.0  # once per workspace visit
-TIME_RELOCATION_S = 15.0  # per new visit preceded by base motion
+TIME_DIG_S_PER_M3 = 226.0  # fresh dig, per loaded m^3 (includes dumping)
+TIME_SETUP_S = 415.0  # per dug workspace: first dig of a visit or of a new cabin sector
+# Same field run, collect workspaces (relift of loose soil): 211 s + 212 s/m^3.
+TIME_RELIFT_S_PER_M3 = 212.0
+TIME_RELIFT_SETUP_S = 211.0
+TIME_RELOCATION_S = 15.0  # per work event preceded by base motion
 TIME_NAV_SPEED_MPS = 0.5  # executed base translation
 TIME_BASE_TURN_S_PER_RAD = 5.0
 TIME_CABIN_TURN_S_PER_RAD = 1.0 / 0.28  # measured cabin rate
@@ -387,6 +390,10 @@ class EnvConfig(NamedTuple):
     # also switches agent-state features 9-10 to own clock and T over T_ref.
     elapsed_time_cost: float = 0.0
     busy_time_cost: float = 0.0
+    # Charge per joint round in which no machine executes a timed action and no
+    # material changes (both machines WAIT or blocked). Independent of the clock,
+    # where such rounds cost no time.
+    stall_cost: float = 0.0
 
     @classmethod
     def new(cls):
