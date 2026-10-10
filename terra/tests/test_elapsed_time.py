@@ -246,3 +246,21 @@ def test_lockstep_sums_each_rounds_slowest_action(far_team):
     waited = _step(both, _act(WAIT, CABIN_CLOCK))
     swing = float(waited.machine_busy_s[1] - both.machine_busy_s[1])
     np.testing.assert_allclose(float(waited.lockstep_s), durations.max() + swing, rtol=1e-6)
+
+
+def test_time_and_stall_rewards_are_reconstructed_by_logged_components(far_team):
+    # Episode aggregates check reward = agent rewards + terminal + existence
+    # (+ trench); team terms are shared among the agents.
+    timed = far_team._replace(env_cfg=far_team.env_cfg._replace(
+        elapsed_time_cost=2.0, busy_time_cost=0.2, stall_cost=0.01))
+    joint = jax.jit(lambda s, a: s._step_joint(a, jnp.arange(2)))
+    reward_fn = jax.jit(lambda s, n, a, t: s._get_reward(n, a, t))
+    for action in (_act(WAIT, WAIT), _act(DO, WAIT)):
+        after, terms = joint(timed, action)
+        reward, components = reward_fn(timed, after, action, terms)
+        reconstructed = (
+            np.asarray(components["agent_rewards"]).sum() + float(components["terminal"])
+            + float(components["existence"]) + float(np.nan_to_num(components["trench"]))
+        )
+        np.testing.assert_allclose(float(reward), reconstructed, rtol=1e-5, atol=1e-6)
+    assert float(components["reward_v2_elapsed_time"]) < 0
