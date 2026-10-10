@@ -53,6 +53,9 @@ class StructuredTimeConfig(NamedTuple):
     base_turn_s_per_rad: float = 5.0
     cabin_turn_s_per_rad: float = 1.0 / 0.28
     time_cost_total: float = 3.6
+    # Charge setup_s on every dig (each dig is a machine workspace) instead of
+    # once per visit; dumps never pay it.
+    setup_per_dig: bool = False
 
 
 class StructuredTransition(NamedTuple):
@@ -232,7 +235,7 @@ def structured_transition(
     loaded_m3 = jnp.maximum(nxt.loaded[0].astype(jnp.float32) - cur.loaded[0].astype(jnp.float32), 0) * tile**3
     moved = (travel_m > 0) | (base_rad > 0)
     event = after.retained_work_events[state.agent.current_agent] > state.retained_work_events[state.agent.current_agent]
-    setup = event & ~jnp.asarray(clock.visit_open)
+    setup = (loaded_m3 > 0) if timing.setup_per_dig else event & ~jnp.asarray(clock.visit_open)
     relocation = setup & jnp.asarray(clock.moved)
     duration = (travel_m / timing.nav_speed_mps + base_rad * timing.base_turn_s_per_rad
                 + cabin_rad * timing.cabin_turn_s_per_rad + loaded_m3 * timing.dig_s_per_m3

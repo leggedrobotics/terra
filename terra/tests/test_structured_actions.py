@@ -263,6 +263,27 @@ class StructuredActionTest(unittest.TestCase):
         self.assertTrue(bool(next_visit.info['time_relocation']))
         self.assertAlmostEqual(float(next_visit.duration_s - dig.duration_s), 15., places=3)
 
+    def test_setup_per_dig_charges_every_dig_but_no_dump(self):
+        per_dig = StructuredTimeConfig(setup_per_dig=True)
+        advance_per_dig = jax.jit(lambda state, action, clock: structured_transition(
+            state._replace(env_cfg=self.cfg), action, clock=clock, timing=per_dig, time_budget_s=14400.))
+        def step(state, action, heading, clock, per_dig_setup):
+            request = StructuredAction(jnp.int32(action), jnp.int32(1), jnp.int32(heading))
+            if per_dig_setup:
+                return advance_per_dig(state._replace(env_cfg=None), request, clock)
+            return self.step(state, action, heading=heading, clock=clock)
+        for per_dig_setup, expected in ((False, [True, False, False]), (True, [True, False, True])):
+            first = step(self.state, 6, 0, StructuredClock(), per_dig_setup)
+            clock = StructuredClock(first.info['time_visit_open'], first.info['time_moved'])
+            options = np.flatnonzero(np.asarray(self.mask(first.state)['do_mask']))
+            dump = step(first.state, 6, int(options[0]), clock, per_dig_setup)
+            clock = StructuredClock(dump.info['time_visit_open'], dump.info['time_moved'])
+            heading = int(np.flatnonzero(np.asarray(self.mask(dump.state)['do_mask']))[0])
+            second = step(dump.state, 6, heading, clock, per_dig_setup)
+            self.assertGreater(float(second.info['work_loaded_m3']), 0.)
+            self.assertEqual([bool(r.info['time_new_setup']) for r in (first, dump, second)], expected)
+        self.assertGreaterEqual(float(second.duration_s), per_dig.setup_s)
+
     def test_time_budget_and_decision_cap_replace_native_450_termination(self):
         before = self.state._replace(env_steps=jnp.int32(449))
         waiting = self.step(before, 7)
