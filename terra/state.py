@@ -4302,6 +4302,7 @@ class State(NamedTuple):
             reward_v2_components["reward_v2_shaping"] / slots.shape[0]
             + reward_v2_components["reward_v2_makespan"] / slots.shape[0]
             + reward_v2_components["reward_v2_elapsed_time"] / slots.shape[0]
+            + reward_v2_components["reward_v2_stall"] / slots.shape[0]
             + agent_terms["reward_v2_lateral_dig"]
             + agent_terms["reward_v2_base_travel"]
             + agent_terms["reward_v2_base_turn"]
