@@ -233,6 +233,8 @@ class TerraEnv(NamedTuple):
             "reward_v2_makespan": zero,
             "reward_v2_makespan_fraction": zero,
             "reward_v2_elapsed_time": zero,
+            "reward_v2_stall": zero,
+            "reward_v2_time_lockstep_s": zero,
             "reward_v2_time_finish_s": zero,
             "reward_v2_time_busy_s": zero,
             "reward_v2_transport_phi": zero,

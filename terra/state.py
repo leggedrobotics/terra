@@ -38,6 +38,8 @@ from terra.config import TIME_CABIN_TURN_S_PER_RAD
 from terra.config import TIME_DIG_S_PER_M3
 from terra.config import TIME_NAV_SPEED_MPS
 from terra.config import TIME_RELEASE_GRID
+from terra.config import TIME_RELIFT_S_PER_M3
+from terra.config import TIME_RELIFT_SETUP_S
 from terra.config import TIME_RELOCATION_S
 from terra.config import TIME_SETUP_S
 from terra.config import TIME_SKID_LOAD_S_PER_M3
@@ -187,6 +189,16 @@ class State(NamedTuple):
         (4, TIME_RELEASE_GRID, TIME_RELEASE_GRID), dtype=jnp.float32)
     machine_visit_open: Array = jnp.zeros((4,), dtype=jnp.bool_)
     machine_moved: Array = jnp.zeros((4,), dtype=jnp.bool_)
+    # Cabin bin of the open visit's last dig or relift (-1: none); a dig in a
+    # new cabin sector of the same visit is a new workspace.
+    machine_work_cabin: Array = jnp.full((4,), -1, dtype=jnp.int32)
+    # Start of the slot's latest dig or relift and its busy seconds then: the
+    # dig, its swings and its dump form one interval (dumping is inside the dig
+    # duration), so the dump area must be free from the dig's start.
+    machine_dig_start_s: Array = jnp.zeros((4,), dtype=jnp.float32)
+    machine_dig_busy_s: Array = jnp.zeros((4,), dtype=jnp.float32)
+    # Elapsed time if every joint round lasted its slowest executed action.
+    lockstep_s: Array = jnp.float32(0.0)
 
 
     @classmethod
@@ -425,6 +437,7 @@ class State(NamedTuple):
         state = state._replace(
             env_steps=state.env_steps + 1,
             stall_age_steps=self._next_stall_age_steps(state),
+            lockstep_s=self.lockstep_s + jnp.max(state.machine_busy_s - self.machine_busy_s),
         )
         if not with_reward_terms:
             return state, None
@@ -4254,6 +4267,8 @@ class State(NamedTuple):
                     "reward_v2_makespan": zero,
                     "reward_v2_makespan_fraction": zero,
                     "reward_v2_elapsed_time": zero,
+                    "reward_v2_stall": zero,
+                    "reward_v2_time_lockstep_s": zero,
                     "reward_v2_time_finish_s": zero,
                     "reward_v2_time_busy_s": zero,
                     "reward_v2_transport_phi": zero,
@@ -5046,10 +5061,13 @@ class State(NamedTuple):
 
         ``self`` is the state before the action and ``after`` the accepted
         state (``self`` again when blocked). Excavators pay travel, turns,
-        TIME_DIG_S_PER_M3 per loaded m^3 (dig or relift; dumping is inside that
-        rate), TIME_SETUP_S once per workspace visit and TIME_RELOCATION_S when
-        the visit follows base motion. Skid steers pay travel, turns, loading
-        and one unload. Returns (duration, visit_open, moved) for the slot.
+        TIME_DIG_S_PER_M3 per freshly dug m^3 or TIME_RELIFT_S_PER_M3 per
+        relifted m^3 (dumping is inside these rates), a setup per dug workspace
+        (TIME_SETUP_S, or TIME_RELIFT_SETUP_S for a relift) when the load opens
+        a visit or a new cabin sector of it, and TIME_RELOCATION_S when the
+        visit follows base motion. Skid steers pay travel, turns, loading and
+        one unload. Returns (duration, visit_open, moved, work_cabin, loads,
+        dump) for the slot; loads is a dig or relift, dump an excavator unload.
         """
         slot = self.agent.current_agent
         cur = self._get_current_agent_state()
@@ -5073,13 +5091,21 @@ class State(NamedTuple):
         # Effective tracked-excavator DO (dig, relift or dump), as counted by
         # the retained-work accounting in _handle_do.
         work_event = after.retained_work_events[slot] > self.retained_work_events[slot]
+        loads = work_event & (load_after > load_before)
+        fresh_cells = self._get_fresh_target_excavation_map(
+            self.world.action_map.map, after.world.action_map.map, self.world.target_map.map,
+        ).sum(dtype=jnp.float32)
+        fresh = loads & (fresh_cells > 0)
+        cabin = jnp.ravel(nxt.angle_cabin)[0].astype(jnp.int32)
         new_visit = work_event & ~self.machine_visit_open[slot]
+        new_workspace = loads & (new_visit | (cabin != self.machine_work_cabin[slot]))
         relocation = new_visit & self.machine_moved[slot]
         turns_s = base_rad * TIME_BASE_TURN_S_PER_RAD
         excavator_s = (
             travel_m / TIME_NAV_SPEED_MPS + turns_s + cabin_rad * TIME_CABIN_TURN_S_PER_RAD
-            + loaded_m3 * TIME_DIG_S_PER_M3
-            + new_visit.astype(jnp.float32) * TIME_SETUP_S
+            + loaded_m3 * jnp.where(fresh, TIME_DIG_S_PER_M3, TIME_RELIFT_S_PER_M3)
+            + jnp.where(new_workspace,
+                        jnp.where(fresh, TIME_SETUP_S, TIME_RELIFT_SETUP_S), 0.0)
             + relocation.astype(jnp.float32) * TIME_RELOCATION_S
         )
         skid_s = (
@@ -5090,7 +5116,12 @@ class State(NamedTuple):
         visit_open = jnp.where(
             base_moved, False, work_event | self.machine_visit_open[slot])
         moved = jnp.where(work_event, False, self.machine_moved[slot] | base_moved)
-        return duration.astype(jnp.float32), visit_open, moved
+        work_cabin = jnp.where(
+            base_moved, -1, jnp.where(loads, cabin, self.machine_work_cabin[slot]))
+        is_excavator = cur.agent_type[0] == 0
+        dump = is_excavator & work_event & (load_after < load_before)
+        return (duration.astype(jnp.float32), visit_open, moved, work_cabin,
+                is_excavator & loads, dump)
 
     def _time_reservation_cells(self, reservation, pad_m) -> Array:
         """Release-raster cells whose centre lies in a body/work envelope grown
@@ -5119,32 +5150,52 @@ class State(NamedTuple):
         then the slot's own release time becomes its finish over its envelope
         grown by the guard's one-tile stand-off. Without a reservation (single
         machine) there are no dependencies.
+
+        An excavator dump takes no time of its own (dumping is inside the dig
+        rate) but closes the dig that loaded the bucket: dig, swings and dump
+        are one interval. The dump finishes no earlier than the latest peer
+        release over its envelope plus the slot's own busy time since the dig
+        started, and every cell the slot published since then, plus the dump
+        envelope, stays reserved until the dump.
         """
         slot = self.agent.current_agent
-        duration, visit_open, moved = self._time_action_duration_s(after)
+        duration, visit_open, moved, work_cabin, loads, dump = (
+            self._time_action_duration_s(after))
         executed = duration > 0
         start = self.machine_clock_s[slot]
         release = self.machine_release_s
+        dig_start = self.machine_dig_start_s[slot]
+        blocking = jnp.float32(0.0)
         if reservation is not None:
             covered = self._time_reservation_cells(reservation, 0.0)
             peers = (self.agent.agent_active.astype(jnp.bool_)
                      & (jnp.arange(self.machine_clock_s.shape[0]) != slot))
-            blocking = jnp.where(covered[None] & peers[:, None, None], release, 0.0)
-            start = jnp.maximum(start, jnp.max(blocking))
+            blocking = jnp.max(jnp.where(covered[None] & peers[:, None, None], release, 0.0))
+            start = jnp.maximum(start, blocking)
             grown = self._time_reservation_cells(
                 reservation, jnp.float32(self.env_cfg.tile_size))
         finish = start + duration
-        clock = jnp.where(
-            executed, self.machine_clock_s.at[slot].set(finish), self.machine_clock_s)
+        since_dig = self.machine_busy_s[slot] - self.machine_dig_busy_s[slot]
+        dump_clock = jnp.maximum(self.machine_clock_s[slot], blocking + since_dig)
+        clock_slot = jnp.where(
+            executed, finish, jnp.where(dump, dump_clock, self.machine_clock_s[slot]))
+        clock = self.machine_clock_s.at[slot].set(clock_slot)
         if reservation is not None:
-            own = jnp.where(grown, jnp.maximum(release[slot], finish), release[slot])
-            release = jnp.where(executed, release.at[slot].set(own), release)
+            own = release[slot]
+            own = jnp.where(dump & (own > dig_start), jnp.maximum(own, clock_slot), own)
+            own = jnp.where(grown & (executed | dump), jnp.maximum(own, clock_slot), own)
+            release = release.at[slot].set(own)
         return after._replace(
             machine_clock_s=clock,
             machine_busy_s=self.machine_busy_s.at[slot].add(duration),
             machine_release_s=release,
             machine_visit_open=self.machine_visit_open.at[slot].set(visit_open),
             machine_moved=self.machine_moved.at[slot].set(moved),
+            machine_work_cabin=self.machine_work_cabin.at[slot].set(work_cabin),
+            machine_dig_start_s=self.machine_dig_start_s.at[slot].set(
+                jnp.where(loads, start, dig_start)),
+            machine_dig_busy_s=self.machine_dig_busy_s.at[slot].set(
+                jnp.where(loads, self.machine_busy_s[slot], self.machine_dig_busy_s[slot])),
         )
 
     def _time_finish_s(self) -> Float:
@@ -5430,6 +5481,12 @@ class State(NamedTuple):
         busy_s = jnp.sum(new_state.machine_busy_s - self.machine_busy_s)
         elapsed_time = -(elapsed_cost * elapsed_s + busy_cost * busy_s) / time_reference
         reward = jnp.where((elapsed_cost != 0) | (busy_cost != 0), reward + elapsed_time, reward)
+        # Deadlock breaker independent of the clock: a joint round with no timed
+        # action and no material change (all machines WAIT or blocked).
+        stall_cost = jnp.asarray(new_state.env_cfg.stall_cost, dtype=jnp.float32)
+        idle_round = (busy_s == 0) & (jnp.asarray(new_state.stall_age_steps) > 0)
+        stall = -stall_cost * idle_round.astype(jnp.float32)
+        reward = jnp.where(stall_cost != 0, reward + stall, reward)
         transport_coef = jnp.asarray(new_state.env_cfg.transport_credit_coef, dtype=jnp.float32)
         # Physical endpoints, before auto-reset. True success AND horizon
         # failure zero only this additional potential, never the baseline Phi.
@@ -5453,6 +5510,7 @@ class State(NamedTuple):
         valid_transition &= jnp.isfinite(elapsed_cost) & (elapsed_cost >= 0)
         valid_transition &= jnp.isfinite(busy_cost) & (busy_cost >= 0)
         valid_transition &= jnp.isfinite(transport_coef) & (transport_coef >= 0)
+        valid_transition &= jnp.isfinite(stall_cost) & (stall_cost >= 0)
         valid_transition &= (transport_coef == 0) | (
             (new_state.env_cfg.reward_v2_timing_variant == 0)
             & jnp.isfinite(transport_phi) & jnp.isfinite(transport_phi_next)
@@ -5478,8 +5536,10 @@ class State(NamedTuple):
             "reward_v2_makespan": makespan,
             "reward_v2_makespan_fraction": makespan_fraction_next,
             "reward_v2_elapsed_time": elapsed_time,
+            "reward_v2_stall": stall,
             "reward_v2_time_finish_s": new_state._time_finish_s(),
             "reward_v2_time_busy_s": jnp.sum(new_state.machine_busy_s),
+            "reward_v2_time_lockstep_s": new_state.lockstep_s,
             "reward_v2_transport_phi": transport_phi,
             "reward_v2_transport_phi_next": transport_phi_next,
             "reward_v2_transport_shaping": transport_shaping,
