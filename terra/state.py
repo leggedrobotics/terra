@@ -623,24 +623,28 @@ class State(NamedTuple):
 
         The squared gap is a separable min-plus dilation of the dug mask over
         a fixed window (13 shifted minima per axis), so the clearance may be a
-        traced per-environment value. Only moves and turns use this mask; DO
-        never does, so the agent can always dig its own workspace, which starts
-        0.86 m past the chassis front at a 4 m inner radius. 0 disables it;
-        only excavators (agent type 0) are affected.
+        traced per-environment value. The opt-in precision_safety rule applies
+        this same cell-gap metric in reverse, keeping fresh excavation clear
+        of the current chassis. 0 disables it; only excavators are affected.
         """
         dug = _as_2d_map(self.world.action_map.map) < 0
+        is_excavator = self._get_current_agent_state().agent_type[0] == 0
+        return self._cell_clearance_mask(dug) & is_excavator
+
+    def _cell_clearance_mask(self, occupied: Array) -> Array:
+        """Cells closer than dug_clearance_m to occupied cell squares."""
         window = DUG_CLEARANCE_WINDOW_TILES
         offsets = range(-window, window + 1)
         cost = [float(max(abs(k) - 1, 0) ** 2) for k in offsets]
         inf = jnp.float32(jnp.inf)
-        n_x, n_y = dug.shape
-        padded = jnp.pad(dug, ((window, window), (0, 0)))
-        along_x = jnp.full(dug.shape, inf)
+        n_x, n_y = occupied.shape
+        padded = jnp.pad(occupied, ((window, window), (0, 0)))
+        along_x = jnp.full(occupied.shape, inf)
         for k, c in zip(offsets, cost):
             shifted = padded[window + k:window + k + n_x, :]
             along_x = jnp.minimum(along_x, jnp.where(shifted, jnp.float32(c), inf))
         padded = jnp.pad(along_x, ((0, 0), (window, window)), constant_values=inf)
-        gap_tiles_sq = jnp.full(dug.shape, inf)
+        gap_tiles_sq = jnp.full(occupied.shape, inf)
         for k, c in zip(offsets, cost):
             gap_tiles_sq = jnp.minimum(
                 gap_tiles_sq, padded[:, window + k:window + k + n_y] + jnp.float32(c)
@@ -649,8 +653,7 @@ class State(NamedTuple):
         tile = jnp.asarray(self.env_cfg.tile_size, dtype=jnp.float32)
         # A gap equal to the clearance is allowed; the tolerance absorbs fp32.
         too_close = gap_tiles_sq < jnp.square(clearance / tile) - jnp.float32(1e-4)
-        is_excavator = self._get_current_agent_state().agent_type[0] == 0
-        return too_close & (clearance > 0.0) & is_excavator
+        return too_close & (clearance > 0.0)
 
     def _is_valid_move(self, agent_corners: Array, allow_truck_neutral: bool = False) -> Array:
         """
@@ -726,7 +729,72 @@ class State(NamedTuple):
             )
         )
 
-    def _move_on_orientation(self, orientation_vector: Array) -> "State":
+    def _base_cell_radii(self) -> Array:
+        """Cell-centre distance from the acting base, independent of cabin yaw."""
+        rows, cols = jnp.indices(self.world.action_map.map.shape[-2:], dtype=jnp.float32)
+        pos = self._get_current_agent_state().pos_base.astype(jnp.float32)
+        return jnp.hypot(rows - pos[0], cols - pos[1]) * self.env_cfg.tile_size
+
+    def _unloaded_dead_end(self) -> Array:
+        """Conservative certificate for a solo structured excavator dead end.
+
+        Remove every possibly recoverable pile, including piles beyond outer
+        reach. The remaining inner-radius soil cannot be picked up without a
+        base move; relaxation cannot remove its final positive height unit.
+        Holes are permanent. Test all 1--5-cell translation endpoints directly,
+        without the turn-preference selector, and both first base turns.
+
+        A remaining target or misplaced soil anywhere in the radial workspace
+        keeps the episode alive, even if heading constraints currently refuse
+        it. This intentionally misses some dead ends rather than truncating
+        recoverable soil relocation or fresh digging. History masks do not enter
+        this test.
+        """
+        cur = self._get_current_agent_state()
+        supported = ((self.agent.num_agents == 1) & (cur.agent_type[0] == 0)
+                     & (cur.action_type[0] == 0) & (cur.loaded[0] == 0)
+                     & (self.env_cfg.agent.angles_base == 12)
+                     & (self.env_cfg.agent.angles_cabin == 12))
+        radius = self._base_cell_radii()
+        r_min, r_max = self._dig_cone_radius_bounds()
+        # Deliberately wider than the native 1e-5 reach tolerance: numerical
+        # boundary cells are treated as recoverable, never certified blocked.
+        unreachable_inner = radius < r_min - 1e-4
+        action = _as_2d_map(self.world.action_map.map)
+        optimistic_map = jnp.where((action > 0) & ~unreachable_inner, 0, action)
+        cfg = self.env_cfg._replace(
+            tracked_move_keeps_turn=False,
+            agent=self.env_cfg.agent._replace(move_tiles=5),
+        )
+        optimistic = self._replace(env_cfg=cfg, world=self.world._replace(
+            action_map=self.world.action_map._replace(map=optimistic_map.reshape(
+                self.world.action_map.map.shape)),
+        ))
+        minimum = jnp.where((cur.angle_base[0] % 3) == 0, 1, 2)
+        forward = optimistic._move_on_orientation(
+            optimistic._base_orientation_to_one_hot_forward(cur.angle_base),
+            minimum_move_tiles=minimum,
+        )._get_current_agent_state()
+        backward = optimistic._move_on_orientation(
+            optimistic._base_orientation_to_one_hot_backwards(cur.angle_base),
+            minimum_move_tiles=minimum,
+        )._get_current_agent_state()
+        clockwise = optimistic._handle_clock()._get_current_agent_state()
+        anticlockwise = optimistic._handle_anticlock()._get_current_agent_state()
+        mobile = (jnp.any(forward.pos_base != cur.pos_base)
+                  | jnp.any(backward.pos_base != cur.pos_base)
+                  | jnp.any(clockwise.angle_base != cur.angle_base)
+                  | jnp.any(anticlockwise.angle_base != cur.angle_base))
+        target = _as_2d_map(self.world.target_map.map)
+        workspace = (radius >= r_min - 1e-4) & (radius <= r_max + 1e-4)
+        workspace &= ~self._current_base_footprint_mask()
+        fresh_possible = jnp.any(workspace & (target < 0) & (optimistic_map == 0))
+        disposal_repair = jnp.any(workspace & (action > 0) & ~self._accepted_dump_mask())
+        return supported & ~mobile & ~fresh_possible & ~disposal_repair
+
+    def _move_on_orientation(
+        self, orientation_vector: Array, *, minimum_move_tiles=1,
+    ) -> "State":
         """Tracked excavation takes the longest clear straight translation."""
         angles = jnp.linspace(0, 2 * jnp.pi, AgentConfig().angles_base, endpoint=False)
         angles = (angles + (jnp.pi / 2)) % (2 * jnp.pi)
@@ -759,7 +827,7 @@ class State(NamedTuple):
 
             def still_searching(carry):
                 distance, _, found = carry
-                return (distance > 0) & ~found
+                return (distance >= minimum_move_tiles) & ~found
 
             def try_distance(carry):
                 distance, position, _ = carry
@@ -771,7 +839,8 @@ class State(NamedTuple):
                 translated_corners = start_corners + displacement
                 swept_bounds = jnp.all((start_corners >= 0) & (start_corners <= bounds))
                 swept_bounds &= jnp.all((translated_corners >= 0) & (translated_corners <= bounds))
-                clear = valid_position(candidate) & swept_bounds & ~jnp.any(swept & blocked)
+                clear = (distance >= minimum_move_tiles) & valid_position(candidate)
+                clear &= swept_bounds & ~jnp.any(swept & blocked)
                 return distance - 1, jnp.where(clear, candidate, position), clear
 
             def first_clear():
@@ -1940,6 +2009,10 @@ class State(NamedTuple):
         # Both sources and destinations of relaxation must remain outside every
         # active chassis. Existing invalid historical soil is left untouched.
         validity_mask &= ~self._active_base_footprint_mask()
+        inner_radius, _ = self._dig_cone_radius_bounds()
+        protect_inner = (jnp.bool_(self.env_cfg.precision_safety)
+                         & (self._get_current_agent_state().agent_type[0] == 0))
+        validity_mask &= ~protect_inner | (self._base_cell_radii() >= inner_radius - 1e-5)
 
         # Use rank-safe dilation helper (supports 2D and [B,H,W]).
         expanded = self._dilate_mask(mask.astype(jnp.bool_), kernel_size=3)
@@ -2483,6 +2556,12 @@ class State(NamedTuple):
             & (target_map_2d.reshape(-1) < 0)
             & (flat_action_map == 0)
             & border_alignment_mask
+        )
+        fresh &= jax.lax.cond(
+            jnp.bool_(self.env_cfg.precision_safety)
+            & (self._get_current_agent_state().agent_type[0] == 0),
+            lambda: ~self._cell_clearance_mask(self._current_base_footprint_mask()).reshape(-1),
+            lambda: jnp.ones_like(fresh, dtype=jnp.bool_),
         )
         # Choose material only after eligibility. Soil under a chassis or in
         # an excluded last workspace must not suppress otherwise legal digging.

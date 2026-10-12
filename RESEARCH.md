@@ -56,6 +56,13 @@ conditional heads, recurrent argument history and duration-aware GAE. These
 are implementation/runtime checks; learned finishability and time savings
 remain unevaluated.
 
+October 12 precision corrections add fresh-dig chassis clearance, protected
+inner reach during soil settling, conservative unloaded-trap termination and
+current edge observations aligned with structured DO headings. The paired
+trainer adds edge-weighted excavation and per-mode actor normalization. Local
+GPU update/resume and saved-checkpoint evaluation pass; complete precision
+witnesses remain open. See the [fix checklist](docs/ENVIRONMENT_FIXES_20261010.md).
+
 Three opt-in options on branch `pull-cone-trap-dumpobs`, described in the
 [cutting-space rule](docs/PULL_DIRECTION_ALIGNMENT.md) document. The 2.5 m room
 may come from any pull within +-30 degrees of the cell-to-base line, as

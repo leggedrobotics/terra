@@ -161,6 +161,7 @@ def frozen_benchmark_protocol() -> tuple[EnvConfig, dict[str, Any]]:
     # EnvConfig or checkpoint/evaluation treatment metadata. A changed default
     # must fail.
     for name, default in {
+        "precision_safety": False,
         "lateral_dig_cost": 0.0,
         "base_travel_cost": 0.0,
         "base_turn_cost": 0.0,

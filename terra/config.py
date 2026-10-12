@@ -390,6 +390,9 @@ class EnvConfig(NamedTuple):
     # Ignored legacy field: retained only for positional saved-state pickles.
     # Bucket width belongs to trench postprocessing, not native dig admission.
     dig_working_strip_width_m: float = 0.0
+    # Protect fresh excavation clearance and keep relaxed soil outside the
+    # acting excavator's unreachable inner radius. Existing soil is preserved.
+    precision_safety: bool = False
 
     @classmethod
     def new(cls):

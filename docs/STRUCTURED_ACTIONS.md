@@ -9,6 +9,36 @@ postprocessing. The temporary rectangular working-strip gate has been removed.
 Saved states still carry their pull-length setting independently of the action
 space; the manual game uses 1 m. See [pull admission](PULL_DIRECTION_ALIGNMENT.md).
 
+## Precision safety and observations (October 12)
+
+`EnvConfig.precision_safety` defaults off for historical states. New structured
+training enables it explicitly. Soil relaxation cannot spread into the acting
+excavator's unreachable inner radius, and fresh excavation cannot violate the
+current chassis's dug-clearance distance. Existing soil is conserved; loose-soil
+recovery remains available. Oblique move endpoint selection ignores one-cell
+candidates before applying turn preference. None of these rules proves egress.
+
+`LocalMapWrapper.wrap(..., precision_observation_v2=True)` builds remaining-edge
+and executable fresh-edge inputs without changing target boundary geometry.
+Edge errors remain float32, and all local heading arrays are indexed by the
+chassis-relative DO heading. The wrapped state is an observation copy, not the
+native rollout state. Historical preprocessing remains available for old weights.
+
+`StructuredEpisodeConfig` additionally records `precision_safety`,
+`precision_edge_weight` (`-1` means legacy volume weighting), and
+`terminate_unloaded_dead_ends`. The viewer reads them from trainer protocol JSON,
+preserves them on reset/export/restore, and reports `unloaded_dead_end` separately
+from `loaded_no_unload`. Missing fields in historical recordings retain their
+legacy values. The shared episode helper charges the existing failure penalty
+once; it does not subtract lost potential again.
+
+The unloaded certificate retains any possible radial fresh work or misplaced
+soil repair, even if current heading constraints reject it. It terminates only
+when holes/unreachable inner soil block all geometric move/turn exits and no
+such work remains. It deliberately misses uncertain traps rather than stopping
+recoverable episodes. Complete precision excavation/disposal and learned policy
+quality remain separate qualification results.
+
 | Type | Argument | Execution |
 | --- | --- | --- |
 | 0 / 1 forward / backward | `amount=1..5` cells | Existing swept translation and turn-keeping rule; angled headings require at least 2 cells. |

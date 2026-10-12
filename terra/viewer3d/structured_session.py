@@ -7,6 +7,17 @@ import numpy as np
 from .pull_session import ACTION_NAMES, PullSession
 
 
+_LEGACY_PRECISION_SETTINGS = dict(
+    terminate_unloaded_dead_ends=False, precision_safety=False, precision_edge_weight=-1.,
+)
+
+
+def _protocol_with_precision_defaults(protocol):
+    if protocol is None:
+        return None
+    return dict(protocol, episode={**_LEGACY_PRECISION_SETTINGS, **protocol["episode"]})
+
+
 def load_structured_protocol(path):
     """Read explicit episode settings from a trainer config or a flat JSON file."""
     import json
@@ -33,13 +44,15 @@ def load_structured_protocol(path):
               or not math.isfinite(value) or value < 0
               or (name == "nav_speed_mps" and value == 0)):
             raise ValueError(f"Invalid timing value: {name}.")
-    required = set(StructuredEpisodeConfig._fields) - {"time_limit", "terminate_loaded_dead_ends"}
+    required = (set(StructuredEpisodeConfig._fields)
+                - {"time_limit", "terminate_loaded_dead_ends", *_LEGACY_PRECISION_SETTINGS})
     if required - values.keys():
         raise ValueError("Structured protocol is missing episode values: " + ", ".join(sorted(required - values.keys())))
     episode = {name: values[name] for name in required}
     if "time_limit" not in values and "no_time_limit" not in values:
         raise ValueError("Structured protocol requires time_limit or no_time_limit.")
-    for name in ("time_limit", "no_time_limit", "terminate_loaded_dead_ends"):
+    for name in ("time_limit", "no_time_limit", "terminate_loaded_dead_ends",
+                 "terminate_unloaded_dead_ends", "precision_safety"):
         if name in values and not isinstance(values[name], bool):
             raise ValueError(f"{name} must be boolean.")
     if ("time_limit" in values and "no_time_limit" in values
@@ -48,6 +61,11 @@ def load_structured_protocol(path):
     episode["time_limit"] = values.get("time_limit", not values.get("no_time_limit", False))
     # Old trainer configs predate this opt-in behavior. Never reinterpret them.
     episode["terminate_loaded_dead_ends"] = values.get("terminate_loaded_dead_ends", False)
+    episode.update({name: values.get(name, default) for name, default in _LEGACY_PRECISION_SETTINGS.items()})
+    weight = episode["precision_edge_weight"]
+    if (isinstance(weight, bool) or not isinstance(weight, (int, float))
+            or not math.isfinite(weight) or not (weight == -1. or 0. <= weight <= 1.)):
+        raise ValueError("precision_edge_weight must be -1 (legacy) or between 0 and 1.")
     for name in required:
         value = episode[name]
         if (isinstance(value, bool) or not isinstance(value, (int, float))
@@ -93,7 +111,8 @@ class StructuredPullSession(PullSession):
         warmup = kwargs.pop("warmup", True)
         super().__init__(warmup=False, **kwargs)
         config = jax.tree_util.tree_map(
-            lambda x: np.asarray(x).item() if np.ndim(x) == 0 else x, self.state.env_cfg)
+            lambda x: np.asarray(x).item() if np.ndim(x) == 0 else x,
+            self.state.env_cfg._replace(precision_safety=self.episode_config.precision_safety))
 
         def native(state):
             return state._replace(env_cfg=config._replace(
@@ -103,14 +122,17 @@ class StructuredPullSession(PullSession):
         def advance(state, action, clock):
             budget, _ = structured_episode_limits(native(state), timing=self.timing, config=self.episode_config)
             result = structured_transition(native(state), action, clock=clock,
-                                           timing=self.timing, time_budget_s=budget)
+                                           timing=self.timing, time_budget_s=budget,
+                                           precision_edge_weight=self.episode_config.precision_edge_weight)
             return result._replace(state=result.state._replace(env_cfg=state.env_cfg))
 
         self._structured_advance = advance
         self._structured_masks = jax.jit(lambda state: structured_action_masks(native(state)))
         self._structured_termination = jax.jit(lambda state, elapsed, do_mask: structured_episode_termination(
             native(state), elapsed, timing=self.timing, config=self.episode_config,
-            dead_end=structured_loaded_dead_end(native(state), do_mask)))
+            dead_end=structured_loaded_dead_end(native(state), do_mask),
+            unloaded_dead_end=(native(state)._unloaded_dead_end()
+                               if self.episode_config.terminate_unloaded_dead_ends else jnp.bool_(False))))
         self._structured_limits = jax.jit(lambda state: structured_episode_limits(
             native(state), timing=self.timing, config=self.episode_config))
         self._initial_clock = StructuredClock()
@@ -123,6 +145,11 @@ class StructuredPullSession(PullSession):
                 self.clocks[-1]))
         if resume_recording is not None:
             self.restore_recording(resume_recording)
+
+    def _with_protocol_rules(self, state):
+        import jax.numpy as jnp
+        return state._replace(env_cfg=state.env_cfg._replace(
+            precision_safety=jnp.asarray(self.episode_config.precision_safety, dtype=jnp.bool_)))
 
     def reset(self, **kwargs):
         if not self._structured_ready:
@@ -148,7 +175,12 @@ class StructuredPullSession(PullSession):
                 self.actions = []
             self.elapsed_times = [0.0]
             self.clocks = [self._initial_clock]
-            budget, limit = self._structured_limits(self.initials[(case_id, precision, start)][1])
+            key = (case_id, precision, start)
+            episode, initial = self.initials[key]
+            # Parent reset derives its diagnostic frame and export state from
+            # this bank entry; both must carry the same rules as the transition.
+            self.initials = {**self.initials, key: (episode, self._with_protocol_rules(initial))}
+            budget, limit = self._structured_limits(self.initials[key][1])
             self.time_budget_s, self.decision_budget = float(budget), int(limit)
             super().reset(**kwargs)
         except Exception:
@@ -178,7 +210,11 @@ class StructuredPullSession(PullSession):
         physical_success = bool(frame["task_done"])
         terminal = jax.device_get(self._structured_termination(self.state, elapsed, masks["do_mask"]))
         success = bool(terminal.task_done)
-        reason = ("success" if success else "loaded_no_unload" if terminal.dead_end
+        loaded = bool(self.state._get_current_agent_state().loaded[0] > 0)
+        loaded_dead_end = bool(terminal.dead_end) and loaded
+        unloaded_dead_end = bool(terminal.dead_end) and not loaded
+        reason = ("success" if success else "loaded_no_unload" if loaded_dead_end
+                  else "unloaded_dead_end" if unloaded_dead_end
                   else "time_budget" if self.episode_config.time_limit and elapsed >= self.time_budget_s
                   else "decision_budget" if decisions >= self.decision_budget else None)
         frame["done"] = bool(terminal.done)
@@ -192,7 +228,8 @@ class StructuredPullSession(PullSession):
             time_limit=self.episode_config.time_limit,
             decision_budget=self.decision_budget, termination_reason=reason,
             timing_model="material_time_v1", physical_task_complete=physical_success,
-            terminal_reward=float(terminal.reward), loaded_dead_end=bool(terminal.dead_end),
+            terminal_reward=float(terminal.reward), loaded_dead_end=loaded_dead_end,
+            unloaded_dead_end=unloaded_dead_end,
         )
         diag["structured_actions"]["current_heading"] = int(self.state._get_current_agent_state().angle_cabin[0])
         diag.pop("step_budget", None)
@@ -312,9 +349,10 @@ class StructuredPullSession(PullSession):
         replay = load_replay(folder / "replay.json.gz")
         if saved["metadata"].get("action_mode") != self.action_mode:
             raise ValueError("Resume requires a structured-action native export.")
-        exported_protocol = clock.get("structured_protocol")
-        metadata_protocol = saved["metadata"].get("structured_protocol")
-        if exported_protocol != metadata_protocol or exported_protocol != replay["metadata"].get("structured_protocol"):
+        exported_protocol = _protocol_with_precision_defaults(clock.get("structured_protocol"))
+        metadata_protocol = _protocol_with_precision_defaults(saved["metadata"].get("structured_protocol"))
+        replay_protocol = _protocol_with_precision_defaults(replay["metadata"].get("structured_protocol"))
+        if exported_protocol != metadata_protocol or exported_protocol != replay_protocol:
             raise ValueError("Recording protocol metadata is inconsistent.")
         if exported_protocol is None:
             from terra.structured_actions import StructuredTimeConfig
@@ -346,7 +384,8 @@ class StructuredPullSession(PullSession):
         if not np.all(np.isfinite(times)) or np.any(times < 0) or np.any(np.diff(times) < 0):
             raise ValueError("Recording elapsed time must be finite, nonnegative and monotonic.")
         self.reset(**saved["metadata"]["selected_case"])
-        self.states = jax.tree_util.tree_map(jnp.asarray, saved["states"])
+        self.states = [self._with_protocol_rules(state)
+                       for state in jax.tree_util.tree_map(jnp.asarray, saved["states"])]
         self.actions = saved["actions"]
         self.elapsed_times = times.tolist()
         self.clocks = [StructuredClock(bool(value["visit_open"]), bool(value["moved"]))

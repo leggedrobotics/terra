@@ -61,6 +61,7 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
         first_receipt["env_config_sha256"]
     )
     defaults = {
+        "precision_safety": False,
         "lateral_dig_cost": 0.0,
         "base_travel_cost": 0.0,
         "base_turn_cost": 0.0,
@@ -75,6 +76,7 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
     # Compatibility is local to the frozen base receipt. Serializing an
     # actual treatment must retain every non-default field.
     treatment = {
+        "precision_safety": True,
         "lateral_dig_cost": 0.6,
         "base_travel_cost": 0.07,
         "base_turn_cost": 0.11,
@@ -88,6 +90,7 @@ def test_protocol_hash_is_deterministic_and_matches_the_existing_probe_contract(
 
 
 @pytest.mark.parametrize("name,value", [
+    ("precision_safety", True),
     ("lateral_dig_cost", 0.6),
     ("base_travel_cost", 0.07),
     ("base_turn_cost", 0.11),

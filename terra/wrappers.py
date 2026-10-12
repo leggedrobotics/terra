@@ -377,7 +377,10 @@ class LocalMapWrapper:
         return local_cartesian_masks, current_arm_angle
 
     @staticmethod
-    def _wrap_with_masks(state: State, map_to_wrap: Array, local_cartesian_masks: Array, current_arm_angle: Array) -> Array:
+    def _wrap_with_masks(
+        state: State, map_to_wrap: Array, local_cartesian_masks: Array,
+        current_arm_angle: Array, *, dtype=IntMap,
+    ) -> Array:
         """
         Encodes the local map using precomputed per-angle workspace masks.
         """
@@ -391,7 +394,7 @@ class LocalMapWrapper:
             local_cyl_height_map, -current_arm_angle, axis=0
         )
 
-        return local_cyl_height_map.astype(IntMap)
+        return local_cyl_height_map.astype(dtype)
 
     @staticmethod
     def _wrap(state: State, map_to_wrap: Array, agent_idx: int = 0) -> Array:
@@ -477,13 +480,61 @@ class LocalMapWrapper:
     
     
     @staticmethod
+    def _precision_dig_counts(state: State, fresh_context, remaining_border: Array):
+        """Summarize native fresh volume and edge cells in one heading pass.
+
+        Reuse DO eligibility, including loose-soil precedence, without running
+        transitions or soil relaxation. Results start in the current cabin frame.
+        """
+        current = state._get_current_agent_state()
+        angles = EnvConfig().agent.angles_cabin
+        outside_base = ~state._active_base_footprint_mask().reshape(-1)
+        target = _as_2d_map(state.world.target_map.map).reshape(-1).astype(jnp.int32)
+        fresh_depth = jnp.where(
+            fresh_context[0].reshape(-1),
+            jnp.minimum(-target, state.env_cfg.agent.dig_depth), 0,
+        )
+        border = remaining_border.reshape(-1).astype(jnp.bool_)
+
+        def counts():
+            def count(offset):
+                candidate = state._set_current_agent_state(current._replace(
+                    angle_cabin=((current.angle_cabin.astype(jnp.int32) + offset)
+                                 % angles).astype(current.angle_cabin.dtype)))
+                selected, _, relift, admitted = candidate._dig_eligibility(
+                    candidate._build_dig_dump_cone(),
+                    fresh_trench_context=fresh_context,
+                    outside_base_footprint=outside_base,
+                )
+                executable = admitted & ~relift
+                volume = jnp.sum(jnp.where(selected, fresh_depth, 0), dtype=jnp.int32)
+                edges = jnp.sum(selected & border, dtype=jnp.int32)
+                return jnp.where(executable, jnp.stack((volume, edges)), 0)
+
+            return jax.vmap(count)(jnp.arange(angles, dtype=jnp.int32)).astype(IntMap)
+
+        result = jax.lax.cond(
+            (current.agent_type[0] == 0) & (current.loaded[0] == 0), counts,
+            lambda: jnp.zeros((angles, 2), dtype=IntMap),
+        )
+        return result[:, 0], result[:, 1]
+
+    @staticmethod
     def wrap(
         state: State,
         *,
         executable_dig_observation: bool | None = None,
         native_dump_observation: bool | None = None,
+        precision_observation_v2: bool = False,
     ) -> State:
-        """Wrapper that calls all the single-map wrappers for the currently active agent"""
+        """Build the active agent's local observations.
+
+        V2 reports remaining fixed-target edges, exact executable edge counts,
+        float angular errors, and chassis-relative headings matching structured
+        DO. The returned state is an observation view: V2's float local error
+        must not replace the native rollout state with its integer map leaves.
+        The default preserves historical observation and checkpoint semantics.
+        """
         # Debug prints removed for training performance
         
         # Create local maps for the currently active agent
@@ -530,6 +581,10 @@ class LocalMapWrapper:
             state, obstacle_obs_mask, local_cartesian_masks, current_arm_angle
         )
         border_mask = state._get_foundation_border_mask().astype(jnp.float32)
+        if precision_observation_v2:
+            # Geometry stays fixed. Excavation removes work from the original
+            # band; it never creates new precision edges around interior holes.
+            border_mask *= (target_map < 0) & (action_map == 0)
         local_map_border_workspace = LocalMapWrapper._wrap_with_masks(
             state, border_mask, local_cartesian_masks, current_arm_angle
         )
@@ -550,21 +605,23 @@ class LocalMapWrapper:
             lambda: edge_alignment_error_map,
         )
         local_map_edge_alignment_error = LocalMapWrapper._wrap_with_masks(
-            state, edge_alignment_error_map, local_cartesian_masks, current_arm_angle
+            state, edge_alignment_error_map, local_cartesian_masks, current_arm_angle,
+            dtype=jnp.float32 if precision_observation_v2 else IntMap,
         )
 
-        workspace_mask = local_cartesian_masks[current_arm_angle].reshape(
-            state.world.height, state.world.width
-        )
-        border_allowed_mask = state._get_foundation_border_alignment_mask(
-            workspace_mask.reshape(-1)
-        ).reshape(state.world.height, state.world.width)
-        border_diggable_map = jnp.logical_and(border_mask > 0, border_allowed_mask).astype(
-            jnp.float32
-        )
-        local_map_border_diggable = LocalMapWrapper._wrap_with_masks(
-            state, border_diggable_map, local_cartesian_masks, current_arm_angle
-        )
+        if not precision_observation_v2:
+            workspace_mask = local_cartesian_masks[current_arm_angle].reshape(
+                state.world.height, state.world.width
+            )
+            border_allowed_mask = state._get_foundation_border_alignment_mask(
+                workspace_mask.reshape(-1)
+            ).reshape(state.world.height, state.world.width)
+            border_diggable_map = jnp.logical_and(border_mask > 0, border_allowed_mask).astype(
+                jnp.float32
+            )
+            local_map_border_diggable = LocalMapWrapper._wrap_with_masks(
+                state, border_diggable_map, local_cartesian_masks, current_arm_angle
+            )
 
         # Fresh target cells admitted by the trench gate per cabin angle.
         # A shared junction cell can be admitted by any owning section;
@@ -573,37 +630,44 @@ class LocalMapWrapper:
         fresh_target, fresh_trench_target, pose_valid = (
             state._fresh_trench_pose_valid_cells()
         )
-        admissible_fresh_flat = state._admit_fresh_trench_cells(
-            fresh_target, fresh_trench_target, pose_valid
-        ).reshape(-1)
-
-        def _admissible_count(cone_mask: Array) -> Array:
-            cone_mask = cone_mask.reshape(-1)
-            return jnp.sum(
-                jnp.logical_and(cone_mask, admissible_fresh_flat), dtype=jnp.int32
+        if precision_observation_v2:
+            local_map_admissible_dig, local_map_border_diggable = (
+                LocalMapWrapper._precision_dig_counts(
+                    state, (fresh_target, fresh_trench_target, pose_valid), border_mask,
+                )
             )
+        else:
+            admissible_fresh_flat = state._admit_fresh_trench_cells(
+                fresh_target, fresh_trench_target, pose_valid
+            ).reshape(-1)
 
-        local_map_admissible_dig = jnp.roll(
-            jax.vmap(_admissible_count)(local_cartesian_masks),
-            -current_arm_angle,
-            axis=0,
-        ).astype(IntMap)
-        def _executable_counts():
-            return state._executable_fresh_dig_counts(
-                (fresh_target, fresh_trench_target, pose_valid)
-            )
+            def _admissible_count(cone_mask: Array) -> Array:
+                cone_mask = cone_mask.reshape(-1)
+                return jnp.sum(
+                    jnp.logical_and(cone_mask, admissible_fresh_flat), dtype=jnp.int32
+                )
 
-        # The batch environment supplies a static option: a vmapped per-lane
-        # lax.cond would evaluate both branches even for all-false legacy runs.
-        # Direct standalone wrapping can still use the saved EnvConfig flag.
-        if executable_dig_observation is None:
-            local_map_admissible_dig = jax.lax.cond(
-                jnp.bool_(state.env_cfg.executable_dig_observation),
-                _executable_counts,
-                lambda: local_map_admissible_dig,
-            )
-        elif executable_dig_observation:
-            local_map_admissible_dig = _executable_counts()
+            local_map_admissible_dig = jnp.roll(
+                jax.vmap(_admissible_count)(local_cartesian_masks),
+                -current_arm_angle,
+                axis=0,
+            ).astype(IntMap)
+
+            def _executable_counts():
+                return state._executable_fresh_dig_counts(
+                    (fresh_target, fresh_trench_target, pose_valid)
+                )
+
+            # Static options avoid both vmapped conditional branches for a
+            # homogeneous batch; standalone wrapping follows its saved config.
+            if executable_dig_observation is None:
+                local_map_admissible_dig = jax.lax.cond(
+                    jnp.bool_(state.env_cfg.executable_dig_observation),
+                    _executable_counts,
+                    lambda: local_map_admissible_dig,
+                )
+            elif executable_dig_observation:
+                local_map_admissible_dig = _executable_counts()
 
         state = state._replace(
             world=state.world._replace(
@@ -639,6 +703,22 @@ class LocalMapWrapper:
                 ),
             )
         )
+        if precision_observation_v2:
+            # Local index r aims at current_cabin+r. Structured DO h sets the
+            # cabin angle relative to the chassis, so out[h] = in[h-cabin].
+            cabin = _as_scalar_index(state._get_current_agent_state().angle_cabin)
+            local_fields = (
+                "local_map_target_pos", "local_map_target_neg",
+                "local_map_action_pos", "local_map_action_neg",
+                "local_map_dumpability", "local_map_obstacles",
+                "local_map_border_workspace", "local_map_edge_alignment_error",
+                "local_map_border_diggable", "local_map_admissible_dig",
+            )
+            state = state._replace(world=state.world._replace(**{
+                name: getattr(state.world, name)._replace(
+                    map=jnp.roll(getattr(state.world, name).map, cabin, axis=0))
+                for name in local_fields
+            }))
         
         # Debug prints removed for training performance
         

@@ -19,6 +19,9 @@ class StructuredEpisodeConfig(NamedTuple):
     success_time_bonus: float = 0.
     success_decision_bonus: float = 0.
     terminate_loaded_dead_ends: bool = True
+    terminate_unloaded_dead_ends: bool = False
+    precision_safety: bool = False
+    precision_edge_weight: float = -1.
 
 
 def structured_episode_limits(
@@ -44,20 +47,22 @@ def structured_episode_limits(
 
 def structured_episode_termination(
     state, elapsed_s, *, timing=StructuredTimeConfig(),
-    config=StructuredEpisodeConfig(), dead_end=False,
+    config=StructuredEpisodeConfig(), dead_end=False, unloaded_dead_end=False,
 ) -> StructuredTermination:
     """Check the episode boundary and include bonuses only on valid success.
 
     Completion exactly at either limit succeeds; completion beyond an enabled
     limit fails. Callers must stop or reset after ``done`` and add ``reward``
-    once. ``dead_end`` must come from an exact full-load unload check.
+    once. ``dead_end`` must come from an exact full-load unload check;
+    ``unloaded_dead_end`` must come from the conservative immutable-blocker check.
     """
     budget, decisions = structured_episode_limits(state, timing=timing, config=config)
     terminal = structured_termination(
         state, elapsed_s,
         time_budget_s=budget if config.time_limit else jnp.float32(jnp.inf),
         decision_limit=decisions,
-        dead_end=jnp.asarray(dead_end) & config.terminate_loaded_dead_ends,
+        dead_end=((jnp.asarray(dead_end) & config.terminate_loaded_dead_ends)
+                  | (jnp.asarray(unloaded_dead_end) & config.terminate_unloaded_dead_ends)),
     )
     bonus = terminal.task_done.astype(jnp.float32) * (
         config.success_time_bonus * jnp.clip(1. - elapsed_s / budget, 0., 1.)

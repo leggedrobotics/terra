@@ -39,14 +39,23 @@ class StructuredProtocolTests(unittest.TestCase):
 
     def test_missing_old_trainer_dead_end_option_keeps_legacy_behavior(self):
         values = self.protocol()
-        del values["terminate_loaded_dead_ends"]
-        self.assertFalse(self.load(values)[1].terminate_loaded_dead_ends)
+        for name in ("terminate_loaded_dead_ends", "terminate_unloaded_dead_ends",
+                     "precision_safety", "precision_edge_weight"):
+            del values[name]
+        episode = self.load(values)[1]
+        self.assertFalse(episode.terminate_loaded_dead_ends)
+        self.assertFalse(episode.terminate_unloaded_dead_ends)
+        self.assertFalse(episode.precision_safety)
+        self.assertEqual(episode.precision_edge_weight, -1.)
 
     def test_invalid_protocol_values_are_rejected(self):
         for name, value in [("decision_limit", 1.5), ("decision_limit", True),
                             ("time_budget_s", 0), ("time_budget_factor", float("inf")),
                             ("decisions_per_dig_unit", -1), ("time_limit", "false"),
-                            ("success_time_bonus", float("nan"))]:
+                            ("success_time_bonus", float("nan")), ("precision_safety", 1),
+                            ("terminate_unloaded_dead_ends", "false"),
+                            ("precision_edge_weight", -.5), ("precision_edge_weight", 1.1),
+                            ("precision_edge_weight", True), ("precision_edge_weight", float("nan"))]:
             with self.subTest(name=name, value=value), self.assertRaises(ValueError):
                 self.load(dict(self.protocol(), **{name: value}))
         for name, value in [("nav_speed_mps", 0), ("setup_s", -1), ("setup_per_dig", 1),
@@ -175,7 +184,7 @@ class StructuredSessionLifecycleTests(PullSessionLifecycleTests):
         session = self.session()
         config = StructuredEpisodeConfig(time_budget_s=3600, time_budget_factor=3,
             time_budget_offset_s=7960, decision_limit=300, decisions_per_dig_unit=1.2,
-            time_limit=False, success_time_bonus=2, success_decision_bonus=1)
+            time_limit=False, success_time_bonus=2, success_decision_bonus=1, precision_safety=True)
         session.episode_config = config
         session.structured_protocol = dict(episode=config._asdict(), timing=session.timing._asdict())
         session._structured_limits = lambda state: structured_episode_limits(state, timing=session.timing, config=config)
@@ -199,6 +208,26 @@ class StructuredSessionLifecycleTests(PullSessionLifecycleTests):
         self.assertEqual(session.decision_budget, 2 * original_limit)
         self.assertEqual(session.elapsed_times, [0.0])
         self.assertEqual(session.recorder.metadata["structured_protocol"], session.structured_protocol)
+        self.assertTrue(bool(session.state.env_cfg.precision_safety))
+
+    def test_unloaded_certificate_has_separate_reason_and_pays_failure_once(self):
+        session = self.session()
+        session.episode_config = session.episode_config._replace(
+            time_limit=False, terminate_unloaded_dead_ends=True)
+        session._structured_termination = lambda state, elapsed, do_mask: structured_episode_termination(
+            state, elapsed, timing=session.timing, config=session.episode_config,
+            unloaded_dead_end=bool(state.env_steps >= 1))
+        terminal = session.step(7)
+        self.assertEqual(terminal["diagnostics"]["termination_reason"], "unloaded_dead_end")
+        self.assertTrue(terminal["diagnostics"]["unloaded_dead_end"])
+        self.assertFalse(terminal["diagnostics"]["loaded_dead_end"])
+        self.assertAlmostEqual(terminal["reward"], -1.2)
+        with self.assertRaisesRegex(RuntimeError, "Episode ended"):
+            session.step(7)
+        self.assertAlmostEqual(session.step(7, continue_after_timeout=True)["reward"], -.2)
+        session.undo()
+        session.undo()
+        self.assertFalse(session.recorder.frames[-1]["done"])
 
     def test_arguments_and_masks_reject_without_history_mutation(self):
         session = self.session()
@@ -289,6 +318,8 @@ class StructuredSessionLifecycleTests(PullSessionLifecycleTests):
                 self.assertIs(session.__dict__[key], value, key)
 
     def test_native_recording_restore_preserves_actions_state_and_clock(self):
+        import gzip
+        import pickle
         session = self.session()
         session.step(0, amount=3)
         with TemporaryDirectory() as output:
@@ -297,8 +328,27 @@ class StructuredSessionLifecycleTests(PullSessionLifecycleTests):
             exported = session.export()
             expected_state = session.state
             expected_actions = list(session.actions)
+            folder = Path(exported["paths"]["native_states"]).parent
+            # A historical protocol predates all three precision options.
+            # Normalizing missing keys must preserve legacy semantics.
+            def legacy_protocol(protocol):
+                for name in ("terminate_unloaded_dead_ends", "precision_safety", "precision_edge_weight"):
+                    del protocol["episode"][name]
+            with (folder / "states.pkl").open("rb") as stream:
+                saved = pickle.load(stream)
+            legacy_protocol(saved["metadata"]["structured_protocol"])
+            with (folder / "states.pkl").open("wb") as stream:
+                pickle.dump(saved, stream)
+            with gzip.open(folder / "replay.json.gz", "rt") as stream:
+                replay = json.load(stream)
+            legacy_protocol(replay["metadata"]["structured_protocol"])
+            with gzip.open(folder / "replay.json.gz", "wt") as stream:
+                json.dump(replay, stream)
+            clock = json.loads((folder / "structured_clock.json").read_text())
+            legacy_protocol(clock["structured_protocol"])
+            (folder / "structured_clock.json").write_text(json.dumps(clock))
             with patch.object(session, "reset", return_value=None):
-                session.restore_recording(Path(exported["paths"]["native_states"]).parent)
+                session.restore_recording(folder)
             self.assert_state_equal(session.state, expected_state)
             self.assertEqual(session.actions, expected_actions)
             self.assertEqual(session.elapsed_times, [0.0, 6.0])

@@ -81,7 +81,7 @@ export function cabinHeadingLabel(heading, current = 0) {
 
 export function structuredBudget(diagnostics = {}, snapshot = {}, exploring = false) {
   const format = value => Number.isFinite(value) ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value) : '—';
-  const reason = { time_budget: 'Time budget reached', decision_budget: 'Decision budget reached', loaded_no_unload: 'Loaded with no possible unload — undo or reset', completed: 'Task complete', task_done: 'Task complete' }[diagnostics.termination_reason] || 'Episode ended';
+  const reason = { time_budget: 'Time budget reached', decision_budget: 'Decision budget reached', loaded_no_unload: 'Loaded with no possible unload — undo or reset', unloaded_dead_end: 'Unloaded machine is trapped — undo or reset', completed: 'Task complete', task_done: 'Task complete' }[diagnostics.termination_reason] || 'Episode ended';
   const remaining = diagnostics.remaining_time_s ?? Math.max(0, diagnostics.time_budget_s - diagnostics.elapsed_time_s);
   const limited = diagnostics.time_limit !== false;
   return {

@@ -103,7 +103,8 @@ def _move(state, direction, amount):
     oblique = (jnp.ravel(cur.angle_base)[0] % 3) != 0
     result = jax.lax.cond(
         (cur.loaded[0] == 0) & (~oblique | (jnp.asarray(amount) >= 2)),
-        lambda: request._move_on_orientation(orientation),
+        lambda: request._move_on_orientation(
+            orientation, minimum_move_tiles=jnp.where(oblique & cfg.precision_safety, 2, 1)),
         lambda: request,
     )
     result = _cast_like(result._replace(env_cfg=cfg), state)
@@ -193,11 +194,42 @@ def _angle_distance(before, after, bins):
     return jnp.abs((delta + bins / 2) % bins - bins / 2) * (2 * jnp.pi / bins)
 
 
+def structured_progress(state):
+    """Physical excavation fractions, independent of bucket and dump state."""
+    target = state.world.target_map.map.astype(jnp.float32)
+    required = jnp.maximum(-target, 0.)
+    dug = jnp.minimum(jnp.maximum(-state.world.action_map.map.astype(jnp.float32), 0.), required)
+    edge = state._get_foundation_border_mask().reshape(target.shape) & (target < 0)
+    def fraction(mask):
+        total = jnp.sum(jnp.where(mask, required, 0.))
+        return jnp.where(total > 0, jnp.sum(jnp.where(mask, dug, 0.)) / jnp.maximum(total, 1.), 1.)
+    return dict(total=fraction(target < 0), edge=fraction(edge), inner=fraction((target < 0) & ~edge))
+
+
+def structured_excavation_potential(state, edge_weight=-1.):
+    """Weight fixed target edges; differences remain relative to the episode start.
+
+    -1 retains the historical volume potential. Missing edge/interior groups
+    fall back to total excavation, so completing a one-group task still pays 1.
+    The separate haul-distance potential is unchanged.
+    """
+    if edge_weight < 0:
+        return state._reward_v2_progress()[0]
+    progress = structured_progress(state)
+    target = state.world.target_map.map
+    edge = state._get_foundation_border_mask().reshape(target.shape) & (target < 0)
+    applicable = (state.env_cfg.enforce_foundation_border_alignment
+                  & jnp.any(edge) & jnp.any((target < 0) & ~edge))
+    weighted = edge_weight * progress["edge"] + (1. - edge_weight) * progress["inner"]
+    return jnp.where(applicable, weighted, progress["total"])
+
+
 def structured_transition(
     state: State, action: StructuredAction, *,
     clock: StructuredClock = StructuredClock(),
     timing: StructuredTimeConfig = StructuredTimeConfig(),
     time_budget_s: float = 14400.0,
+    precision_edge_weight: float = -1.,
 ) -> StructuredTransition:
     """One argument-bearing decision; no legacy horizon or terminal rewards.
 
@@ -264,6 +296,9 @@ def structured_transition(
     reward_before = jax.lax.cond((kind == 6) & valid, lambda: _at_heading(state, heading), lambda: state)
     q, _, p = state._reward_v2_progress()
     q_next, _, p_next = after._reward_v2_progress()
+    if precision_edge_weight >= 0:
+        q = structured_excavation_potential(state, precision_edge_weight)
+        q_next = structured_excavation_potential(after, precision_edge_weight)
     material = REWARD_V2_SHAPING_WEIGHT * (REWARD_V2_ALPHA * (q_next - q) + REWARD_V2_BETA * (p_next - p))
     behavior = reward_before._reward_v2_behavior_costs(after)
     behavior_reward = sum(behavior[name] for name in (

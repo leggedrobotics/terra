@@ -67,7 +67,8 @@ class PullSession:
         def native(state):
             # Capture scalar settings so unrelated reward/agent branches fold away.
             return state._replace(env_cfg=static_cfg._replace(
-                enforce_foundation_border_alignment=state.env_cfg.enforce_foundation_border_alignment))
+                enforce_foundation_border_alignment=state.env_cfg.enforce_foundation_border_alignment,
+                precision_safety=state.env_cfg.precision_safety))
 
         @jax.jit
         def advance(state, action):

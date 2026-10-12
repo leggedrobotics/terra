@@ -1,7 +1,7 @@
 # Environment correctness and finishability checklist
 
 Owner: Terra environment, with the sibling terra-baselines structured trainer.
-Updated 2026-10-10. Work through one item at a time; a passing test closes only
+Updated 2026-10-12. Work through one item at a time; a passing test closes only
 the behavior it exercises, not full-bank finishability or physical transfer.
 
 Baseline: Terra `fddedf3e`, baselines `4e6f8ea` (training snapshot `90caf23`).
@@ -12,6 +12,7 @@ Keep current training snapshots unchanged while qualifying local fixes.
 | --- | --- | --- | --- |
 | 1a | Complete locally | Detect a loaded excavator with no executable full-load unload; end the irrecoverable episode instead of waiting to the cap. | Native trapped-load and legal-staging regressions pass; terminal reward/reset checks pass; explicit failure reason in viewer and training. Production adoption remains item 12. |
 | 1b | Bounded probe passed; broader coverage open | Prevent digging into a disposal dead end, if it occurs on real bank states. | 29 saved poses, 144 legal digs/relifts, no trapped loads. Includes nine partially excavated states at 24.7–98.9% completion. Exact post-dig checks include staging; this does not rule out traps elsewhere. |
+| 1c | Implemented and locally tested; policy qualification open | Prevent fresh excavation inside chassis clearance and soil settling inside unreachable inner reach; terminate certified unloaded traps. | Opt-in `precision_safety`, conservative recovery-aware certificate, native geometry and mass checks. No guarantee that every future stance has an exit; detector coverage is unmeasured. |
 | 2 | Complete locally | Qualify exact success, decision cap, disabled time deadline, once-only bonuses and reset/GAE boundaries. | Seven environment/helper tests and two new trainer integration tests pass; shared episode helper keeps play and training math identical. |
 | 3 | Implemented; manual testing open | Match the manual game to the training protocol and make manual failures reproducible. | Candidate game is live on 8768 with shared timing/rewards/map-dependent caps, no time deadline and the new dead-end handling. 20 CPU viewer/protocol tests and 75 JS tests pass; exports preserve protocol and undo. |
 | 4 | Two witnesses; planner update needed | Establish constructive finishability beyond the selected oracle panel. | All nine old successful tapes were replayed with bounded legal reroutes: two complete trench witnesses, seven unresolved route searches. No cap or disposal-dead-end failures. The old nine native successes are not nine structured successes. |
@@ -20,9 +21,9 @@ Keep current training snapshots unchanged while qualifying local fixes.
 | 7 | Queued | Qualify productive inner reach. | Compare native assumptions with field evidence and a bounded sensitivity panel. Poor payload below 4.8 m is not a hard kinematic impossibility. |
 | 8 | Queued | Calibrate travel, setup and per-bucket swing timing. | Fit consistent physical events without counting dumping twice; test effects on successful-plan ranking. |
 | 9 | Queued | Resolve native versus converted material volume. | Choose/document depth and units consistently, check conservation and recompute time references. Current native volume is 14.29% higher than area times 0.5 m. |
-| 10 | Queued | Measure precision reward/advantage balance before tuning. | Per-mode removed volume, raw reward, advantage and completion statistics; equal removed volume currently has about 4–5 times smaller progress reward on the larger precision maps. |
+| 10 | Implemented; behavioral comparison open | Balance precision excavation and actor advantages. | Fixed edges receive half of excavation Q, per-mode actor normalization preserves raw critic targets, and logs expose per-mode advantage moments plus physical excavation independently of bucket load. These moments are not measured gradient shares. |
 | 11 | Runtime baseline verified; mask profile pending | Profile exact DO masks on the production configuration. | Original GH200 probe reached update 3 at 4,057 decisions/s; production update 70 was 3,743/s. No kernel breakdown for GH200 yet. RTX4090 separate-kernel results are not production throughput. |
-| 12 | Pending GPU availability and finishability checks | Validate the corrected environment in a bounded training smoke before any production adoption. | Local 4090 was busy with other work; do not interrupt it. Need finite update, terminal/reset exercise and checkpoint/resume on candidate code. Existing CSCS snapshot remains separate. |
+| 12 | Local numerical qualification passed; finishability open | Validate the corrected environment in a bounded training smoke before any production adoption. | RTX4090 campaign-model update 1 and resume to update 2 passed with finite model/optimizer/runner; 128 lanes reset at a two-decision cap. Saved-checkpoint evaluation passed on 22 starts. No production run launched; complete precision witnesses remain open. |
 | 13 | Fixed baseline; retain regression | No bucket-width constraint in native digging. | Strip gate removed at `8b2037eb`; postprocessing owns trench widening. Do not reintroduce it while fixing finishability. |
 | 14 | Fixed baseline; retain regression | Oblique one-cell translation must not silently become straight motion. | Cardinal-only one-cell requests; native rounding from original pose for longer moves; blocked clipping regression. |
 
@@ -136,3 +137,28 @@ Artifacts and complete action tapes:
 The replay was independently reviewed. It checks exact completion and episode
 limits after every committed action, with float32 time accumulation and native
 material/terrain integrity checks. Planning probes do not spend decisions.
+
+## October 12 precision corrections
+
+The isolated `precision-fixes-20261012` pair carries the earlier work in separate
+baseline commits and adds the environment, termination, reward, optimization,
+observation and logging fixes documented in [structured actions](STRUCTURED_ACTIONS.md).
+The original worktrees and live runs were left untouched.
+
+Validation: 24 native action/episode/reward tests, 18 trainer tests, four precision
+safety tests and 19 benchmark/default checks passed. Observation/dtype and 21
+viewer lifecycle checks passed; all 75 frontend tests and the build passed.
+Independent source review found no remaining blocker. On the audited JAX 0.4.33
+runtime, the 2.40 M parameter campaign model completed two finite PPO updates,
+including a separate-process resume, with 128 lanes and two rollout steps.
+The saved-checkpoint evaluator completed all 22 starts at the same short cap.
+These are numerical and integration checks, not measured policy improvement.
+
+The bounded precision tape check reached 237/480 units dug at decision 75/576,
+then requested an ineffective dig. All committed transitions preserved material
+and terrain; there was no certified-dead-end or cap failure. The old navigation
+repair tool cannot replan work actions, so this is not a complete witness.
+Full-bank finishability and detector coverage remain open.
+
+Commands, logs and runtime failures/time limits are recorded in
+`/home/lorenzo/moleworks/.artifacts/terra_precision_fixes_20261012/VALIDATION.md`.

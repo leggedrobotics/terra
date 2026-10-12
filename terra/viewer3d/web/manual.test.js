@@ -120,6 +120,7 @@ test('structured budget shows seconds and decisions independently of native step
   assert.match(budget.note, /47[.,]5 s remaining/);
   assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'decision_budget' }, { done: true }).note, 'Decision budget reached · episode frozen');
   assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'loaded_no_unload' }, { done: true }).note, 'Loaded with no possible unload — undo or reset · episode frozen');
+  assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'unloaded_dead_end' }, { done: true }).note, 'Unloaded machine is trapped — undo or reset · episode frozen');
   assert.equal(structuredBudget(diagnostics, { done: true, task_done: true }).note, 'Completed within the episode');
   assert.equal(structuredBudget(diagnostics, { done: true }, true).note, 'Exploration · outside the episode budget');
 });
