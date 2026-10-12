@@ -119,6 +119,16 @@ test('structured budget shows seconds and decisions independently of native step
   assert.equal(budget.decisions, '2 / 80');
   assert.match(budget.note, /47[.,]5 s remaining/);
   assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'decision_budget' }, { done: true }).note, 'Decision budget reached · episode frozen');
+  assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'loaded_no_unload' }, { done: true }).note, 'Loaded with no possible unload — undo or reset · episode frozen');
   assert.equal(structuredBudget(diagnostics, { done: true, task_done: true }).note, 'Completed within the episode');
   assert.equal(structuredBudget(diagnostics, { done: true }, true).note, 'Exploration · outside the episode budget');
+});
+test('unlimited structured time is a reference, including after it is exceeded', () => {
+  const diagnostics = { elapsed_time_s: 200, time_budget_s: 150, remaining_time_s: 0, time_limit: false };
+  const budget = structuredBudget(diagnostics);
+  assert.equal(budget.label, 'Time reference');
+  assert.match(budget.note, /No time deadline/);
+  assert.doesNotMatch(budget.note, /remaining|frozen/);
+  assert.equal(structuredBudget({ ...diagnostics, termination_reason: 'decision_budget' }, { done: true }).note,
+    'Decision budget reached · episode frozen');
 });

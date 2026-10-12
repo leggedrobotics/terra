@@ -81,11 +81,13 @@ export function cabinHeadingLabel(heading, current = 0) {
 
 export function structuredBudget(diagnostics = {}, snapshot = {}, exploring = false) {
   const format = value => Number.isFinite(value) ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value) : '—';
-  const reason = { time_budget: 'Time budget reached', decision_budget: 'Decision budget reached', completed: 'Task complete', task_done: 'Task complete' }[diagnostics.termination_reason] || 'Episode ended';
+  const reason = { time_budget: 'Time budget reached', decision_budget: 'Decision budget reached', loaded_no_unload: 'Loaded with no possible unload — undo or reset', completed: 'Task complete', task_done: 'Task complete' }[diagnostics.termination_reason] || 'Episode ended';
   const remaining = diagnostics.remaining_time_s ?? Math.max(0, diagnostics.time_budget_s - diagnostics.elapsed_time_s);
+  const limited = diagnostics.time_limit !== false;
   return {
+    label: limited ? 'Estimated time' : 'Time reference',
     time: `${format(diagnostics.elapsed_time_s)} / ${format(diagnostics.time_budget_s)} s`,
     decisions: `${format(diagnostics.decisions)} / ${format(diagnostics.decision_budget)}`,
-    note: exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? `${reason} · episode frozen` : `${format(remaining)} s remaining`,
+    note: exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? `${reason} · episode frozen` : limited ? `${format(remaining)} s remaining` : 'No time deadline · decision limit still applies',
   };
 }

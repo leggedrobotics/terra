@@ -40,10 +40,30 @@ movement. Larger oblique moves retain the native grid approximation.
 The caller carries `StructuredClock(visit_open, moved)` and elapsed seconds
 alongside the native state. `structured_transition` returns the new native
 state, reward, duration and diagnostics; one call increments `env_steps` once.
-`structured_termination` supplies the shared time/decision-budget result and
-terminal reward. Callers apply that reward once and reset all clocks together.
+`terra.structured_episode` supplies shared map-dependent limits and terminal
+rewards for the trainer and viewer. Callers apply that reward once and reset
+all clocks together. Its lower-level `structured_termination` remains available
+for callers using fixed limits.
 
-The `material_time_v1` reward is the undiscounted material-potential difference,
+`structured_loaded_dead_end(state, do_mask)` recognizes a loaded solo tracked
+excavator with no executable full-load unload at any heading. It consumes the
+already computed exact DO row, including off-zone staging. Pass that result as
+`dead_end` to `structured_termination` to end the episode with -1 and a separate
+dead-end flag; it is not a budget timeout. This detects a trap after it occurs;
+it does not prevent a dig from creating one. Empty-machine planning failures
+are not inferred from this check.
+
+The manual viewer checks the post-action row immediately, reports
+`loaded_no_unload`, and keeps undo/export available. The paired trainer reuses
+its next observation's row and terminates after one zero-duration fallback
+WAIT. That adds one recorded decision compared with immediate manual
+termination but no modeled time. Undiscounted return is unchanged; for lambda
+below one, GAE still includes the value estimate of the intermediate loaded
+state. The trainer saves this option in its checkpoint protocol, preserving
+explicit legacy evaluation/resume behavior. See the
+[ordered fix checklist](ENVIRONMENT_FIXES_20261010.md).
+
+The default `material_time_v1` reward is the undiscounted material-potential difference,
 existing optional behavior costs, and `-3.6 * duration / time_budget`. Success
 adds 6; budget exhaustion adds -1. It bypasses the legacy 450-step reward guard
 and per-action cost. The trainer's discount/GAE settings are a separate choice,
@@ -57,6 +77,8 @@ navigation, relocation and chassis-turn values include assumptions. This is
 modeled time, not a prediction validated across real tasks. Dumping is not
 charged a second per-volume work cost. Effective chassis motion closes the
 current visit, including a move away and back to the same position.
+These are the manual defaults; an explicit protocol replaces all timing
+coefficients, including the dense time-cost coefficient and setup-per-dig flag.
 
 The manual default is a provisional 14,400-second budget and a 450-decision
 cap. Waits and blocked requests have zero modeled duration but consume a
@@ -82,6 +104,43 @@ Exports include replay frames, native states, argument-bearing action records
 and `structured_clock.json`. Reset saves a nonempty recording first. Use
 `--resume-recording /path/to/export_directory` to restore a trusted export
 with its board, complete action history and modeled clock after a restart.
+
+To match a structured training run, supply its saved protocol explicitly:
+
+```bash
+JAX_PLATFORMS=cpu python -m terra.viewer3d \
+  --pull-inspector --structured-actions \
+  --initial-states /path/to/matching_initial_states.pkl \
+  --structured-protocol /path/to/training_run/config.json --port 8768
+```
+
+The JSON can be a trainer `config.json` with a `training` object, or a flat
+object. It must include a complete `timing` object and explicit
+`time_budget_s`, `time_budget_factor`, `time_budget_offset_s`, `decision_limit`,
+`decisions_per_dig_unit`, `success_time_bonus`, `success_decision_bonus`, plus
+`time_limit` (or the trainer's inverse `no_time_limit`). Set
+`terminate_loaded_dead_ends` explicitly; omission preserves old trainer
+behavior with that option disabled. The protocol flag cannot be combined with
+the fixed-budget CLI flags. It does not alter the native geometry saved in
+the initial-state bank; use the same bank/rules as the intended evaluation.
+
+Each reset derives the time reference and decision cap from its selected map.
+The cap is `max(decision_limit, ceil(decisions_per_dig_unit * dig_units))`.
+When time scaling is enabled, the reference is the larger of `time_budget_s` and
+`time_budget_offset_s + time_budget_factor * target_volume * dig_s_per_m3`.
+For `no_time_limit: true`, the display says **Time reference**; exceeding it
+does not end the episode. The reference still scales time-based rewards and
+policy observations. The decision cap still applies. Success-only bonuses are included in the shared terminal
+reward and paid once, including when continuing exploration after completion.
+
+Exports include the resolved episode settings and all timing coefficients in
+replay/native metadata and `structured_clock.json`, alongside each map's
+limits. Restore rejects mismatched protocols or limits. Old exports without
+protocol metadata can only be restored with their fixed budgets and the
+original default timing/reward settings. Recordings from before the dead-end
+fix require `terminate_loaded_dead_ends: false`, inferred from their historical
+diagnostics. Changing protocols requires a fresh
+episode rather than reinterpreting its old clock and rewards.
 
 The structured trainer is `train_structured.py` in the paired
 `terra-baselines` checkout. Its explicit checkpoint/action protocol is

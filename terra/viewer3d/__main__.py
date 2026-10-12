@@ -31,9 +31,11 @@ def main(argv=None):
     parser.add_argument("--start", type=int, default=0, choices=(0, 1))
     parser.add_argument("--structured-actions", action="store_true",
                         help="Opt-in distance, turn amount and work heading controls for the pull inspector.")
-    parser.add_argument("--time-budget-seconds", type=float, default=14400.0,
+    parser.add_argument("--structured-protocol", type=Path,
+                        help="Structured episode/timing JSON, or a trainer config.json containing training settings.")
+    parser.add_argument("--time-budget-seconds", type=float,
                         help="Estimated machine-time budget in structured mode (default: 14400 s).")
-    parser.add_argument("--decision-budget", type=int, default=450,
+    parser.add_argument("--decision-budget", type=int,
                         help="Structured-mode decision cap, including waits (default: 450).")
     parser.add_argument("--resume-recording", type=Path,
                         help="Restore a trusted structured native export directory, including its time history.")
@@ -79,6 +81,10 @@ def main(argv=None):
         parser.error("--structured-actions requires --pull-inspector.")
     if args.resume_recording and not args.structured_actions:
         parser.error("--resume-recording requires --structured-actions.")
+    if args.structured_protocol and not args.structured_actions:
+        parser.error("--structured-protocol requires --structured-actions.")
+    if args.structured_protocol and (args.time_budget_seconds is not None or args.decision_budget is not None):
+        parser.error("--structured-protocol supplies the episode limits; omit --time-budget-seconds and --decision-budget.")
     from .replay import ReplayRecorder, load_replay
     from .server import STATIC_DIR, make_server
 
@@ -110,8 +116,9 @@ def main(argv=None):
             if args.structured_actions:
                 from .structured_session import StructuredPullSession
                 session_class = StructuredPullSession
-                options.update(time_budget_s=args.time_budget_seconds, decision_budget=args.decision_budget,
-                               resume_recording=args.resume_recording)
+                options.update(time_budget_s=14400.0 if args.time_budget_seconds is None else args.time_budget_seconds,
+                               decision_budget=450 if args.decision_budget is None else args.decision_budget,
+                               structured_protocol=args.structured_protocol, resume_recording=args.resume_recording)
             if args.initial_states:
                 options["initial_states"] = args.initial_states
             if args.manual_output:

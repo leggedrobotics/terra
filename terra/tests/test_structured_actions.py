@@ -11,6 +11,7 @@ from terra.actions import TrackedAction
 from terra.structured_actions import (
     StructuredAction, StructuredClock, StructuredTimeConfig,
     structured_action_masks, structured_termination, structured_transition, _move,
+    structured_loaded_dead_end,
 )
 from terra.tests import test_pull_direction_alignment as native_fixtures
 
@@ -155,6 +156,60 @@ class StructuredActionTest(unittest.TestCase):
             self.assertFalse(bool(result.info['action_had_effect']))
             self.assertEqual(float(result.duration_s), 0.)
             self.assertEqual(int(result.state.env_steps), 1)
+
+    def test_loaded_dead_end_uses_full_unloads_and_ends_before_cap(self):
+        world = self.state.world
+        blocked = self.state._replace(world=world._replace(
+            dumpability_mask=world.dumpability_mask._replace(map=jnp.zeros_like(world.dumpability_mask.map)),
+            dumpability_mask_init=world.dumpability_mask_init._replace(map=jnp.zeros_like(world.dumpability_mask_init.map))))
+        # A real admitted dig creates the load; do not fake the trapped state.
+        dig = self.step(blocked, 6, heading=0)
+        self.assertGreater(int(dig.state._get_current_agent_state().loaded[0]), 0)
+        row = self.mask(dig.state)['do_mask']
+        self.assertFalse(np.any(row))
+        dead = structured_loaded_dead_end(dig.state, row)
+        self.assertTrue(bool(dead))
+        waiting = self.step(dig.state, 7)
+        self.assertEqual(float(waiting.duration_s), 0.)
+        np.testing.assert_array_equal(waiting.state.world.action_map.map, dig.state.world.action_map.map)
+        np.testing.assert_array_equal(waiting.state._get_current_agent_state().loaded,
+                                      dig.state._get_current_agent_state().loaded)
+        terminal = structured_termination(waiting.state, 0., time_budget_s=jnp.inf,
+                                          decision_limit=450, dead_end=dead)
+        self.assertTrue(bool(terminal.done))
+        self.assertTrue(bool(terminal.dead_end))
+        self.assertFalse(bool(terminal.timeout))
+        self.assertFalse(bool(terminal.task_done))
+        self.assertEqual(float(terminal.reward), -1.)
+        self.assertFalse(bool(structured_termination(waiting.state, 0., time_budget_s=jnp.inf).done))
+
+    def test_accepted_and_off_zone_unloads_are_not_dead_ends(self):
+        for accepted in (True, False):
+            target = (jnp.ones_like(self.state.world.target_map.map) if accepted else
+                      self.state.world.target_map.map.at[0, 0].set(1))
+            state = self.pose(self.state._replace(world=self.state.world._replace(
+                target_map=self.state.world.target_map._replace(map=target))), loaded=3)
+            row = self.mask(state)['do_mask']
+            self.assertTrue(np.any(row))
+            self.assertFalse(bool(structured_loaded_dead_end(state, row)))
+            dump = self.step(state, 6, heading=int(np.flatnonzero(np.asarray(row))[0]))
+            self.assertEqual(int(dump.state._get_current_agent_state().loaded[0]), 0)
+            delta = np.asarray(dump.state.world.action_map.map - state.world.action_map.map)
+            self.assertEqual(int(delta.sum()), 3)
+            self.assertEqual(int(delta[np.asarray(target) > 0].sum()), 3 if accepted else 0)
+
+    def test_dead_end_detection_excludes_empty_and_unsupported_agents(self):
+        empty = jnp.zeros(12, bool)
+        self.assertFalse(bool(structured_loaded_dead_end(self.state, empty)))
+        loaded = self.pose(self.state, loaded=3)
+        for field, value in (('agent_type', 1), ('action_type', 1)):
+            cur = loaded._get_current_agent_state()
+            other = loaded._set_current_agent_state(cur._replace(
+                **{field: jnp.asarray([value], getattr(cur, field).dtype)}))
+            self.assertFalse(bool(structured_loaded_dead_end(other, empty)))
+        other_bins = loaded._replace(env_cfg=self.cfg._replace(
+            agent=self.cfg.agent._replace(angles_cabin=8)))
+        self.assertFalse(bool(structured_loaded_dead_end(other_bins, empty)))
 
     def test_turn_stops_at_blocked_intermediate_pose(self):
         # A 180-degree endpoint is clear but orientation 10 intersects a cell

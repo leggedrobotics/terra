@@ -29,6 +29,7 @@ terra/tests/__pycache__/
 # Audited dataset and methods reference; keep other scratch docs ignored.
 !/docs/DATASET.md
 !/docs/ENVIRONMENT.md
+!/docs/ENVIRONMENT_FIXES_20261010.md
 !/docs/assets/
 /docs/assets/*
 !/docs/assets/dataset/

@@ -70,6 +70,7 @@ class StructuredTermination(NamedTuple):
     task_done: Array
     timeout: Array
     reward: Array
+    dead_end: Array | bool = False
 
 
 def _cast_like(candidate, original):
@@ -168,6 +169,22 @@ def structured_action_masks(state: State) -> dict[str, Array]:
                               jnp.ones(2, dtype=jnp.bool_),
                               jnp.asarray([jnp.any(do), True])))
     return dict(move_mask=move, turn_mask=turn, do_mask=do, action_mask=action)
+
+
+def structured_loaded_dead_end(state: State, do_mask: Array) -> Array:
+    """A solo tracked load cannot escape if every exact native unload fails.
+
+    Supply the current state's full-load ``structured_action_masks`` DO row.
+    It includes legal off-zone staging and checks storage/containment. The
+    approximate native dump observation is not sufficient for this decision.
+    Cabin turns cannot help: the row already covers all twelve headings.
+    Empty-machine planning dead ends are deliberately not inferred here.
+    """
+    cur = state._get_current_agent_state()
+    supported = ((state.agent.num_agents == 1) & (cur.agent_type[0] == 0)
+                 & (cur.action_type[0] == 0) & (state.env_cfg.agent.angles_base == 12)
+                 & (state.env_cfg.agent.angles_cabin == 12))
+    return supported & (cur.loaded[0] > 0) & ~jnp.any(jnp.asarray(do_mask, bool))
 
 
 def _angle_distance(before, after, bins):
@@ -278,14 +295,16 @@ def structured_transition(
 
 
 def structured_termination(
-    state: State, elapsed_s, *, time_budget_s, decision_limit=450,
+    state: State, elapsed_s, *, time_budget_s, decision_limit=450, dead_end=False,
 ) -> StructuredTermination:
     """Authorize exact completion only within both budgets (boundary allowed).
 
     Actions execute atomically. An action that finishes after the time budget
     expires counts as a timeout, even if its final terrain completes the task.
     Add this reward once on termination; never continue rewarding a terminal
-    state. A decision cap terminates zero-duration blocked/wait loops.
+    state. A decision cap terminates zero-duration blocked/wait loops. The
+    caller may supply a proven loaded dead end from the exact DO mask to end
+    it earlier with the same failure penalty. ``timeout`` stays budget-only.
     """
     elapsed = jnp.asarray(elapsed_s, jnp.float32)
     budget = jnp.asarray(time_budget_s, jnp.float32)
@@ -295,7 +314,9 @@ def structured_termination(
     success = completed & within
     exhausted = (elapsed >= budget) | (state.env_steps >= decision_limit)
     timeout = exhausted & ~success
-    done = success | timeout
+    dead_end = jnp.asarray(dead_end, bool) & ~success
+    failed = timeout | dead_end
+    done = success | failed
     reward = jnp.where(success, jnp.float32(REWARD_V2_SUCCESS_BONUS),
-                       jnp.where(timeout, -jnp.float32(REWARD_V2_HORIZON_FAILURE_PENALTY), jnp.float32(0)))
-    return StructuredTermination(done, success, timeout, reward)
+                       jnp.where(failed, -jnp.float32(REWARD_V2_HORIZON_FAILURE_PENALTY), jnp.float32(0)))
+    return StructuredTermination(done, success, timeout, reward, dead_end)

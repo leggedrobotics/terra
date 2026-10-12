@@ -19,6 +19,7 @@ postprocessed geometric validity and physical execution remain separate results.
 
 ## Canonical environment sources
 
+- [Environment correctness and finishability checklist](docs/ENVIRONMENT_FIXES_20261010.md): ordered fixes, evidence and manual-test follow-up.
 - [Audited dataset reference and terrain figures](docs/DATASET.md)
 - [Audited environment, rewards, and termination](docs/ENVIRONMENT.md)
 - [Paired PPO and evaluation protocol](https://github.com/leggedrobotics/terra-baselines/blob/main/docs/TRAINING_PROTOCOL.md)

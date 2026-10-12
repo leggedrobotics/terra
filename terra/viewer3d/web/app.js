@@ -140,7 +140,7 @@ function updateUI() {
   if (diagnostics) {
     const budget = diagnostics.step_budget ?? 450, exploring = !!diagnostics.exploring || (!imported && index === replay.frames.length - 1 && !!sessionInfo.exploring);
     const structured = structuredMode(replay.metadata), timeBudget = structuredBudget(diagnostics, snapshot, exploring);
-    text('budget-label', structured ? 'Estimated time' : 'Action budget');
+    text('budget-label', structured ? timeBudget.label : 'Action budget');
     text('step-budget', structured ? timeBudget.time : `${snapshot.step} / ${budget}`);
     text('budget-note', structured ? timeBudget.note : exploring ? 'Exploration · outside the episode budget' : snapshot.task_done ? 'Completed within the episode' : snapshot.done ? 'Budget reached · episode frozen' : `${Math.max(0, diagnostics.remaining_steps ?? budget - snapshot.step)} actions left`);
     text('decision-budget', timeBudget.decisions);
