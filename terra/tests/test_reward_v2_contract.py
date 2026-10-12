@@ -352,3 +352,39 @@ def test_reward_v21_replaces_implicit_rent_with_explicit_pace():
                 "reward_v2_success", "reward_v2_horizon_failure"):
         np.testing.assert_array_equal(np.asarray(v21[key]), np.asarray(baseline[key]))
     assert float(v21_reward) > float(baseline_reward)
+
+
+def test_reward_v2_longer_horizon_keeps_the_per_round_rent():
+    """A 900-round episode pays the same rounds and fails only at its own end."""
+    native = _state()
+    longer = native._replace(env_cfg=native.env_cfg._replace(max_steps_in_episode=900))
+    action = np.zeros(SHAPE, dtype=np.int8)
+    action[20, 20] = -1
+    for state in (native, longer):
+        lifted = _with_material(state, action, loaded=1, carry_work=1.0, env_steps=100)
+        reward, components = _reward_v2(lifted, lifted._replace(env_steps=101))
+        assert bool(np.isfinite(reward))
+        if state is native:
+            native_reward = float(reward)
+        else:
+            np.testing.assert_allclose(float(reward), native_reward, rtol=0, atol=1e-7)
+    middle = _reward_v2(longer, longer._replace(env_steps=450))[1]
+    assert float(middle["reward_v2_horizon_failure"]) == 0.0
+    timeout = _reward_v2(longer, longer._replace(env_steps=900))[1]
+    assert float(timeout["reward_v2_horizon_failure"]) == -1.0
+
+    gamma = REWARD_V2_POTENTIAL_GAMMA
+    step = -REWARD_V2_STEP_COST_TOTAL / 450.0
+    phi_reset = REWARD_V2_BETA * REWARD_V2_DISTANCE_BOUND
+    phi_success_min = REWARD_V2_ALPHA + phi_reset
+    phi_failure_max = REWARD_V2_ALPHA + REWARD_V2_BETA * 2.0 * REWARD_V2_DISTANCE_BOUND
+
+    def discounted_return(steps: int, terminal: float, phi_terminal: float) -> float:
+        step_return = step * (1.0 - gamma**steps) / (1.0 - gamma)
+        return step_return + gamma**steps * phi_terminal - phi_reset + gamma ** (steps - 1) * terminal
+
+    minimum_success = min(
+        discounted_return(steps, REWARD_V2_SUCCESS_BONUS, phi_success_min)
+        for steps in range(1, 901)
+    )
+    assert minimum_success > discounted_return(900, -REWARD_V2_HORIZON_FAILURE_PENALTY, phi_failure_max)

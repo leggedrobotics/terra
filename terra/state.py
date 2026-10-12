@@ -5361,7 +5361,9 @@ class State(NamedTuple):
             jnp.logical_and(
                 volume > 0,
                 jnp.logical_and(
-                    self.env_cfg.max_steps_in_episode == 450,
+                    # The per-round rent stays 1/450; a longer horizon only
+                    # adds rounds before the terminal failure penalty.
+                    self.env_cfg.max_steps_in_episode >= 450,
                     r2_embodiment,
                 ),
             ),
