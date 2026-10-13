@@ -3029,6 +3029,13 @@ class State(NamedTuple):
                 self._get_pull_dig_permission,
                 lambda: jnp.ones(target.shape, jnp.bool_),
             )
+            # Opt-in: fresh section cells also need the legacy pose gate; others are untouched (as
+            # _admit_fresh_trench_cells: not a fresh trench cell, or pose-valid).
+            def gated():
+                _, fresh_trench, pose_valid = self._legacy_fresh_trench_pose_valid_cells()
+                return permission & (~fresh_trench | pose_valid)
+
+            permission = jax.lax.cond(jnp.bool_(self.env_cfg.pull_trench_gate), gated, lambda: permission)
             return fresh, fresh, permission
 
         return jax.lax.cond(

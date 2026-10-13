@@ -393,6 +393,10 @@ class EnvConfig(NamedTuple):
     # Protect fresh excavation clearance and keep relaxed soil outside the
     # acting excavator's unreachable inner radius. Existing soil is preserved.
     precision_safety: bool = False
+    # Pull mode also keeps the legacy fresh-trench pose gate on trench-section cells (metadata sections):
+    # chassis within trench_dig_yaw_tolerance_rad of the section and base within trench_dig_max_offset_m of its
+    # line. Cells outside every section only follow the pull rules. Courtyard fine-tune, 13 Oct 2026.
+    pull_trench_gate: bool = False
 
     @classmethod
     def new(cls):
